@@ -38,7 +38,7 @@ _STEP_INTERVAL_SEC          = 0.02   # 50 Hz update rate
 @dataclass
 class ServoConfig:
     """Runtime-overridable servo parameters (loaded from config/servo.yaml)."""
-    channel: int = 0                          # PCA9685 channel
+    channel: int = 15                         # PCA9685 channel (pan servo on ch 15)
     i2c_address: int = 0x40                   # Servo pHAT I²C address
     pulse_min_us: int = _PULSE_MIN_US
     pulse_max_us: int = _PULSE_MAX_US

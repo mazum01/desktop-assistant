@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.1] - 2026-04-25
+
+### Changed
+- `src/motion/servo_controller.py` — default `ServoConfig.channel` changed
+  from 0 to **15** (pan servo is on PCA9685 channel 15).
+- `hardware/servo/DS3218_notes.md` — noted channel 15 assignment and
+  full 0–15 channel range of the SparkFun Pi Servo pHAT.
+
+---
+
 ## [0.2.0] - 2026-04-25
 
 ### Added

@@ -11,7 +11,9 @@
 ## Driver Board
 SparkFun Pi Servo pHAT — PCA9685 I²C PWM controller  
 Default I²C address: **0x40**  
-I²C bus: **1** (pins 3/5 on the Pi header)
+I²C bus: **1** (pins 3/5 on the Pi header)  
+Supported channels: **0–15**  
+**Pan servo connected to channel 15**
 
 ## Wiring
 ```
