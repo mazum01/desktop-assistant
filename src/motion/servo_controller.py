@@ -73,8 +73,17 @@ class ServoController:
                 self._cfg.i2c_address,
                 self._cfg.channel,
             )
-        except Exception:
-            log.warning("Servo hardware not available — running in simulation mode")
+        except ImportError:
+            log.warning(
+                "adafruit-circuitpython-servokit not installed — "
+                "running in SIMULATION MODE (no hardware output)"
+            )
+        except Exception as exc:
+            log.warning(
+                "Servo hardware init failed (%s: %s) — "
+                "running in SIMULATION MODE (no hardware output)",
+                type(exc).__name__, exc,
+            )
 
     # ------------------------------------------------------------------
     # Public API
@@ -129,6 +138,11 @@ class ServoController:
     def position(self) -> float:
         """Current logical position in degrees (1–360)."""
         return self._current_logical
+
+    @property
+    def hardware_ready(self) -> bool:
+        """True if the PCA9685 was successfully initialised."""
+        return self._kit is not None
 
     def stop(self) -> None:
         log.info("Servo stop requested at %.1f°", self._current_logical)

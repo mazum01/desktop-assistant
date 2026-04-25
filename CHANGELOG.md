@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.2] - 2026-04-25
+
+### Fixed
+- `src/motion/servo_controller.py` — split catch-all `except Exception` into
+  separate `ImportError` and `Exception` handlers so the reason for sim-mode
+  fallback is clearly logged. Added `hardware_ready` property.
+- `scripts/test_servo.py` — now **fails with exit code 1** if hardware is not
+  initialised instead of silently passing in sim mode. Added prerequisite
+  checker: I²C bus scan (via `i2cdetect`) and library import check, with
+  actionable error messages pointing to the exact fix needed.
+
+---
+
 ## [0.2.1] - 2026-04-25
 
 ### Changed
