@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.7] - 2026-04-25
+
+### Fixed
+- `scripts/setup_pi.sh`: force-reinstall lgpio via pip inside venv (apt version
+  does not bind correctly on Pi 5 / Bookworm — root cause of fan driver failures)
+- `hardware/thermal/TMP117_fan_notes.md`: documented lgpio venv reinstall requirement
+
+### Notes
+- Phase 1 hardware bring-up complete: TMP117 ✓, servo (channel 15) ✓, fan ✓
+
+---
+
 ## [0.2.6] - 2026-04-25
 
 ### Fixed

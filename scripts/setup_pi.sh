@@ -42,8 +42,10 @@ source ~/.venv-assistant/bin/activate
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pip install --quiet --upgrade pip
+# lgpio must be force-reinstalled via pip — the apt version may not bind
+# correctly inside a venv on Pi 5 / Bookworm.
+pip install --quiet --force-reinstall lgpio
 pip install --quiet -r "$REPO_DIR/requirements.txt"
-pip install --quiet adafruit-circuitpython-servokit
 
 echo "  ✓ Python packages installed"
 

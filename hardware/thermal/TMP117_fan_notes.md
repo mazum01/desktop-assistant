@@ -57,3 +57,9 @@ Pin 4 PWM      →  GPIO13 (hardware PWM1)
 ### Fail-Safe
 If TMP117 read fails, fan is immediately set to **100% duty**.
 Configured in `src/thermal/thermal_manager.py`.
+
+
+### Known Issues / Pi 5 Notes
+- **lgpio must be pip-reinstalled inside the venv** on Pi 5 / Bookworm.
+  The `python3-lgpio` apt package does not bind correctly inside a venv.
+  `setup_pi.sh` handles this with `pip install --force-reinstall lgpio`.
