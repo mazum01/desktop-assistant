@@ -12,20 +12,19 @@ from src.motion.servo_controller import ServoController
 
 
 class TestLogicalToMechanical:
-    def test_logical_min_maps_to_mech_zero(self):
-        assert ServoController.logical_to_mechanical(1.0) == pytest.approx(0.0)
+    def test_logical_min_maps_to_zero(self):
+        assert ServoController.logical_to_kit_angle(1.0) == pytest.approx(0.0)
 
-    def test_logical_max_maps_to_mech_270(self):
-        assert ServoController.logical_to_mechanical(360.0) == pytest.approx(270.0, abs=0.1)
+    def test_logical_max_maps_to_180(self):
+        assert ServoController.logical_to_kit_angle(360.0) == pytest.approx(180.0, abs=0.1)
 
     def test_midpoint(self):
-        # logical 180.5 → roughly 134.5° mechanical
-        mech = ServoController.logical_to_mechanical(180.5)
-        assert 130.0 < mech < 140.0
+        kit = ServoController.logical_to_kit_angle(180.5)
+        assert 88.0 < kit < 92.0
 
     def test_quarter_point(self):
-        mech = ServoController.logical_to_mechanical(90.75)
-        assert mech == pytest.approx((90.75 - 1) * (270 / 359), abs=0.01)
+        kit = ServoController.logical_to_kit_angle(90.75)
+        assert kit == pytest.approx((90.75 - 1) * (180 / 359), abs=0.01)
 
 
 class TestPlanDirection:

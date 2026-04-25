@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.6] - 2026-04-25
+
+### Fixed
+- `servo_controller.py`: removed duplicate old-code block appended at line 192 (caused SyntaxError on import)
+- `tests/test_servo_controller.py`: updated `TestLogicalToMechanical` assertions to match 0–180° kit-angle range (was 0–270° mechanical)
+
+### Changed
+- `requirements.txt`: added `Adafruit-Blinka>=9.0.0` and `adafruit-circuitpython-servokit>=1.3.0`
+- All 17 servo unit tests pass
+
+---
+
 ## [0.2.5] - 2026-04-25
 
 ### Added

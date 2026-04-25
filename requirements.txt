@@ -1,6 +1,10 @@
 # Core / shared
 smbus2>=0.4.3
 
+# Servo pHAT (PCA9685) — requires Adafruit Blinka for board/busio
+Adafruit-Blinka>=9.0.0
+adafruit-circuitpython-servokit>=1.3.0
+
 # GPIO / PWM (Pi 5 compatible, for fan control)
 lgpio>=0.2.2.0
 gpiozero>=2.0
