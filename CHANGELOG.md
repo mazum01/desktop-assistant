@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.1] - 2026-04-25
+
+### Changed
+- Switched license from MIT to Apache 2.0 for patent protection.
+- Updated copyright holder to Mark Mazurkiewicz.
+- Updated README to reflect Apache 2.0 license.
+
+---
+
 ## [0.1.0] - 2026-04-25
 
 ### Added

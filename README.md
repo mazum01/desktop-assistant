@@ -40,4 +40,4 @@ tests/       unit and integration tests
 Phase 0 — project scaffold.
 
 ## License
-MIT
+Apache 2.0 — see [LICENSE](LICENSE)
