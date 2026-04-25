@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.3] - 2026-04-25
+
+### Added
+- `scripts/setup_pi.sh` — one-shot Pi dependency installer: system apt packages,
+  I²C enable check, Python venv creation, all pip requirements including
+  adafruit-circuitpython-servokit, and I²C device scan at the end.
+
+---
+
 ## [0.2.2] - 2026-04-25
 
 ### Fixed
