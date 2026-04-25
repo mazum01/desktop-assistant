@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.5] - 2026-04-25
+
+### Added
+- `scripts/debug_servo_raw.py` — raw PCA9685 register-level diagnostic tool.
+  Bypasses all abstraction, prints every I²C write, sends centre/min/max/centre
+  pulses directly to channel 15. Includes hardware checklist if servo still
+  doesn't move.
+
+---
+
 ## [0.2.4] - 2026-04-25
 
 ### Changed
