@@ -6,6 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.4] - 2026-04-25
+
+### Changed
+- `src/core/pca9685.py` (**new**) — direct PCA9685 I²C driver via smbus2.
+  Replaces Adafruit/Blinka dependency entirely. Handles prescaler, PWM
+  on/off counts, and pulse-width-in-microseconds API.
+- `src/motion/servo_controller.py` — rewired to use `src/core/pca9685.py`
+  instead of `adafruit-circuitpython-servokit`. Added `mechanical_to_pulse_us()`
+  static method and `close()`. `hardware_ready` now reflects PCA9685 init.
+- `requirements.txt` — removed `adafruit-circuitpython-servokit` dependency.
+- `scripts/test_servo.py` — updated prereq check to verify `smbus2` instead
+  of adafruit-servokit.
+
+---
+
 ## [0.2.3] - 2026-04-25
 
 ### Added

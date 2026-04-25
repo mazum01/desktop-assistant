@@ -45,14 +45,12 @@ def check_prerequisites() -> bool:
     except Exception as exc:
         print(f"  I²C scan failed: {exc}")
 
-    # Check Python library
     print("\n── Python library check ──")
     try:
-        import adafruit_servokit  # noqa: F401
-        print("✓ adafruit-circuitpython-servokit is installed")
+        import smbus2  # noqa: F401
+        print("✓ smbus2 is installed (used for PCA9685 direct I²C)")
     except ImportError:
-        print("ERROR: adafruit-circuitpython-servokit is NOT installed.")
-        print("  Run: pip install adafruit-circuitpython-servokit")
+        print("ERROR: smbus2 is NOT installed. Run: pip install smbus2")
         ok = False
 
     print()
