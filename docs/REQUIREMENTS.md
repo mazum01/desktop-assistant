@@ -50,6 +50,16 @@
 - FR-AS2: TTS playback through audio service.
 - FR-AS3: Pluggable skill modules.
 
+### 2.6 Version Reporting
+- FR-VR1: On every startup the assistant **must speak** the current version
+  number via TTS before entering the ready state.
+- FR-VR2: On verbal request (e.g. "what version are you?", "tell me your
+  version"), the assistant must respond with the spoken version string.
+- FR-VR3: The version is sourced exclusively from `src/core/version.py`
+  which reads the `/VERSION` file; no hardcoded version strings in code.
+- FR-VR4: The spoken form converts numeric parts to words
+  (e.g. `0.1.0` → "version zero point one point zero").
+
 ## 3. Non-Functional Requirements
 
 - NFR-1: Cold boot to ready ≤ 60 s.
