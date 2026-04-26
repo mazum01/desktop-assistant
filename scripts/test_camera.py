@@ -2,9 +2,8 @@
 """
 Camera bring-up test — Raspberry Pi Camera Module 3 Wide, slot 0.
 
-Run on the Pi:
-    source ~/.venv-assistant/bin/activate
-    python scripts/test_camera.py
+Run on the Pi (system Python, no venv):
+    python3 scripts/test_camera.py
 
 Saves a test frame to /tmp/camera_test.jpg if the camera is present.
 """
@@ -23,15 +22,14 @@ try:
     from picamera2 import Picamera2
     print("  ✓ picamera2 imported")
 except ImportError:
-    print("  ERROR: picamera2 not visible in this Python environment.")
+    print("  ERROR: picamera2 not found.")
     print()
-    print("  picamera2 must be installed via apt (NOT pip) on Pi 5:")
+    print("  Install it via apt (do NOT use pip — libcamera has no PyPI wheel):")
     print("    sudo apt-get install -y python3-picamera2")
     print()
-    print("  AND the venv must be created with --system-site-packages so")
-    print("  it can see the apt-installed package and its libcamera bindings:")
-    print("    rm -rf ~/.venv-assistant")
-    print("    bash scripts/setup_pi.sh")
+    print("  If you're stuck inside an old venv, deactivate it and run again:")
+    print("    deactivate")
+    print("    python3 scripts/test_camera.py")
     sys.exit(1)
 
 # ── 2. Enumerate cameras ──────────────────────────────────────────────

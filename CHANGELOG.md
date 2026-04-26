@@ -6,6 +6,24 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.10] - 2026-04-26
+
+### Changed
+- **Switched off the venv model.** The project now runs on **system Python 3**
+  on the Pi. Hardware libs (picamera2, libcamera, lgpio) are apt-only on
+  Pi 5 / Bookworm — running them through a venv added friction with no
+  benefit on a dedicated appliance.
+- `scripts/setup_pi.sh`: rewritten to install everything system-wide via
+  apt + `pip3 --break-system-packages` for the few PyPI-only packages
+  (smbus2, Adafruit-Blinka, adafruit-circuitpython-servokit). Final step
+  verifies all key imports.
+- `scripts/test_camera.py`: header and ImportError message reflect
+  system-Python invocation (`python3 scripts/test_camera.py`).
+- `hardware/vision/camera_notes.md`: bring-up command and known-issues
+  updated for system Python.
+
+---
+
 ## [0.2.9] - 2026-04-26
 
 ### Fixed
