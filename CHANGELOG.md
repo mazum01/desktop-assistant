@@ -6,6 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.9] - 2026-04-26
+
+### Fixed
+- `scripts/setup_pi.sh`: create venv with `--system-site-packages` so
+  apt-installed `python3-picamera2` (and its libcamera bindings, which
+  have no PyPI wheel) are visible to the project. **Root cause** of
+  picamera2 ImportError in the venv.
+- `requirements.txt`: removed `picamera2` (cannot be pip-installed on Pi 5);
+  added clarifying comment.
+- `scripts/test_camera.py`: ImportError message now points at the real fix
+  (recreate venv with `--system-site-packages`).
+- `hardware/vision/camera_notes.md`: Known Issues section updated.
+
+---
+
 ## [0.2.8] - 2026-04-26
 
 ### Added

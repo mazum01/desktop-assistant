@@ -45,8 +45,10 @@ libcamera-hello --list-cameras
 
 ### Known Issues
 
-- If `libcamera-hello` works but `picamera2` fails, ensure the venv has the right
-  packages: `pip install picamera2`
+- **picamera2 must be installed via apt, not pip.** It depends on the
+  `libcamera` Python bindings which have no PyPI wheel. The project venv
+  must be created with `--system-site-packages` so it can see the
+  apt-installed `python3-picamera2`. `setup_pi.sh` does this automatically.
 - On Pi 5 the camera port uses 22-pin FPC; **15-pin cables from older Pi models
   will not fit** without an adapter
 

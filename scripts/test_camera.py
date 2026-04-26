@@ -23,9 +23,15 @@ try:
     from picamera2 import Picamera2
     print("  ✓ picamera2 imported")
 except ImportError:
-    print("  ERROR: picamera2 not found.")
-    print("  Run: sudo apt-get install -y python3-picamera2")
-    print("  Or:  pip install picamera2")
+    print("  ERROR: picamera2 not visible in this Python environment.")
+    print()
+    print("  picamera2 must be installed via apt (NOT pip) on Pi 5:")
+    print("    sudo apt-get install -y python3-picamera2")
+    print()
+    print("  AND the venv must be created with --system-site-packages so")
+    print("  it can see the apt-installed package and its libcamera bindings:")
+    print("    rm -rf ~/.venv-assistant")
+    print("    bash scripts/setup_pi.sh")
     sys.exit(1)
 
 # ── 2. Enumerate cameras ──────────────────────────────────────────────

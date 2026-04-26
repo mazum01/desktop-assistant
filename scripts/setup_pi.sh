@@ -37,7 +37,10 @@ fi
 # ── Python venv + pip packages ───────────────────────────────────────
 echo ""
 echo "[3/4] Creating Python venv at ~/.venv-assistant..."
-python3 -m venv ~/.venv-assistant
+# --system-site-packages is REQUIRED so picamera2 (apt-installed) and
+# its libcamera Python bindings are visible inside the venv. libcamera
+# bindings cannot be installed via pip on Pi 5 / Bookworm.
+python3 -m venv --system-site-packages ~/.venv-assistant
 # shellcheck source=/dev/null
 source ~/.venv-assistant/bin/activate
 
@@ -47,6 +50,12 @@ pip install --quiet --upgrade pip
 # correctly inside a venv on Pi 5 / Bookworm.
 pip install --quiet --force-reinstall lgpio
 pip install --quiet -r "$REPO_DIR/requirements.txt"
+
+# Verify picamera2 is visible
+if ! python -c "import picamera2" 2>/dev/null; then
+    echo "  ⚠ picamera2 still not visible in venv. Re-run with venv removed:"
+    echo "    rm -rf ~/.venv-assistant && bash scripts/setup_pi.sh"
+fi
 
 echo "  ✓ Python packages installed"
 

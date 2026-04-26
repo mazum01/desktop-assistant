@@ -15,8 +15,10 @@ soundfile>=0.12.1
 numpy>=1.26
 
 # Camera (Pi Camera Module 3 — libcamera backend)
-# Pre-installed on Pi OS Bookworm; listed here for pip installs on other systems
-picamera2>=0.3.12
+# NOTE: picamera2 must be installed via apt (`python3-picamera2`) on the Pi,
+# not pip. The venv must be created with `--system-site-packages` to see it.
+# It is NOT listed here because pip-installing it on Pi 5 fails on the
+# libcamera Python binding (no PyPI wheel exists).
 
 # Testing
 pytest>=8.0
