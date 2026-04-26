@@ -18,6 +18,7 @@ sudo apt-get install -y \
     python3-smbus \
     i2c-tools \
     python3-lgpio \
+    python3-picamera2 \
     libasound2-dev \
     portaudio19-dev
 
@@ -65,4 +66,5 @@ echo "Then test each device:"
 echo "  python scripts/test_tmp117.py"
 echo "  python scripts/test_servo.py"
 echo "  python scripts/test_fan.py"
+echo "  python scripts/test_camera.py"
 echo "══════════════════════════════════════════════════"

@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.8] - 2026-04-26
+
+### Added
+- `src/vision/camera.py` — `Camera` driver for Pi Camera Module 3 Wide (picamera2/libcamera); sim mode, context manager, `capture_frame()` / `capture_still()`
+- `tests/test_camera.py` — 16 unit tests (all pass, hardware-free via Picamera2 stub)
+- `scripts/test_camera.py` — Pi bring-up script; enumerates cameras, captures frame + JPEG still
+- `hardware/vision/camera_notes.md` — IMX708 specs, wiring, FPC cable notes, known issues
+- `requirements.txt`: added `picamera2>=0.3.12`
+- `scripts/setup_pi.sh`: added `python3-picamera2` apt package + `test_camera.py` to test list
+
+---
+
 ## [0.2.7] - 2026-04-25
 
 ### Fixed

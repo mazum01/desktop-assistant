@@ -14,5 +14,9 @@ sounddevice>=0.4.6
 soundfile>=0.12.1
 numpy>=1.26
 
+# Camera (Pi Camera Module 3 — libcamera backend)
+# Pre-installed on Pi OS Bookworm; listed here for pip installs on other systems
+picamera2>=0.3.12
+
 # Testing
 pytest>=8.0
