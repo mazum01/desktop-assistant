@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.4] - 2026-04-27
+
+### Added
+- Phase 2.5 in `docs/PROJECT_PHASES.md`: migrate fan PWM from `lgpio`
+  software PWM (10 kHz, faintly audible) to the kernel hardware-PWM
+  driver so the NF-A6x25 runs silently at the Noctua-spec 25 kHz.
+  Sits between Phase 2 (core services) and Phase 3 (perception).
+  Tracked as todo `fan-hw-pwm-25khz`.
+
 ## [0.5.3] - 2026-04-27
 
 ### Fixed

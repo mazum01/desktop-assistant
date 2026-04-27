@@ -40,6 +40,22 @@
 
 ---
 
+## Phase 2.5 — Hardware-PWM fan driver (silent operation)
+**Goal:** Move the NF-A6x25 fan from `lgpio` software PWM (10 kHz, faintly
+audible) to the kernel hardware-PWM driver so it runs silently at the
+Noctua-spec 25 kHz.
+**Deliverables:**
+- `dtoverlay=pwm-2chan,pin=13,func=4` (or equivalent) in
+  `/boot/firmware/config.txt`
+- `FanController` reworked to write `/sys/class/pwm/pwmchip0/pwm…/duty_cycle`
+  instead of calling `lgpio.tx_pwm()`; lgpio path retained as fall-back
+- Bring-up script verifies frequency with a scope or `pigs` reading
+- Unit test with `tmp_path` simulating the sysfs nodes
+**Exit Criteria:** Fan inaudible at 100% duty in a quiet room; ThermalService
+still hits its failsafe on simulated sensor failure.
+
+---
+
 ## Phase 3 — Perception
 **Goal:** Real-time vision & audio understanding.
 **Deliverables:**
