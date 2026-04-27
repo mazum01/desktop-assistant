@@ -77,41 +77,44 @@ if args.preview is not None:
         print("    DISPLAY=:0 python3 scripts/test_camera.py --preview")
         print()
 
-    picam2 = Picamera2(args.index)
-    config = picam2.create_preview_configuration(
-        main={"size": (1280, 720), "format": "RGB888"}
-    )
-    picam2.configure(config)
+    # QtGL needs XRGB8888 (4-channel); Qt-software and DRM accept RGB888.
+    # Try backends in order, each with its preferred pixel format.
+    backends = [
+        (Preview.QTGL, "QtGL",          "XRGB8888"),
+        (Preview.QT,   "Qt (software)", "RGB888"),
+        (Preview.DRM,  "DRM (no desktop)", "RGB888"),
+    ]
 
-    # Try QtGL first (best perf), fall back to Qt (software), then DRM
-    preview_started = False
-    for backend, name in [
-        (Preview.QTGL, "QtGL"),
-        (Preview.QT, "Qt (software)"),
-        (Preview.DRM, "DRM (no desktop)"),
-    ]:
+    last_error = None
+    for backend, name, fmt in backends:
+        picam2 = Picamera2(args.index)
+        config = picam2.create_preview_configuration(
+            main={"size": (1280, 720), "format": fmt}
+        )
+        picam2.configure(config)
         try:
             picam2.start_preview(backend)
-            print(f"  ✓ Preview backend: {name}")
-            preview_started = True
-            break
         except Exception as exc:
-            print(f"  · {name} unavailable ({exc.__class__.__name__})")
+            print(f"  · {name} unavailable ({exc.__class__.__name__}: {exc})")
+            picam2.close()
+            last_error = exc
+            continue
 
-    if not preview_started:
-        print("  ERROR: no preview backend worked.")
-        print("  Install:  sudo apt-get install -y python3-pyqt5 python3-pyqt5.qtgl")
+        print(f"  ✓ Preview backend: {name} (format={fmt})")
+        picam2.start()
+        print(f"  Showing live video for {args.preview} s — Ctrl-C to exit early")
+        try:
+            time.sleep(args.preview)
+        except KeyboardInterrupt:
+            print("\n  Interrupted")
+        finally:
+            picam2.stop()
+            picam2.close()
+        break
+    else:
+        print(f"  ERROR: no preview backend worked. Last error: {last_error}")
+        print("  Install:  sudo apt-get install -y python3-pyqt5")
         sys.exit(1)
-
-    picam2.start()
-    print(f"  Showing live video for {args.preview} s — Ctrl-C to exit early")
-    try:
-        time.sleep(args.preview)
-    except KeyboardInterrupt:
-        print("\n  Interrupted")
-    finally:
-        picam2.stop()
-        picam2.close()
 
     print()
     print("══════════════════════════════════════════════════")

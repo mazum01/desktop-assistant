@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.2] - 2026-04-27
+
+### Fixed
+- `scripts/test_camera.py --preview` aborted on QtGL with
+  `RuntimeError: Format RGB888 not supported by QGlPicamera2 preview`.
+  QtGL requires a 4-channel pixel format. Each preview backend now
+  configures the camera with the format it actually supports:
+  - QtGL → `XRGB8888`
+  - Qt (software) → `RGB888`
+  - DRM → `RGB888`
+  Each backend is tried in turn with its own `Picamera2` instance, so
+  a failure in one cleanly closes the camera before trying the next.
+
 ## [0.5.1] - 2026-04-27
 
 ### Changed — split into two systemd units (hybrid isolation)
