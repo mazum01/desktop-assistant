@@ -6,6 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.3] - 2026-04-27
+
+### Fixed
+- **Fan PWM 'bad PWM frequency' error.** `lgpio.tx_pwm()` only accepts
+  software-PWM frequencies up to 10 kHz, but `src/thermal/fan.py` was
+  configured for 25 kHz (Noctua spec). Lowered to 10 kHz so lgpio
+  accepts it. Slight audible whine is the trade-off; for true 25 kHz
+  silent operation we'll move to the kernel hardware-PWM driver later
+  (`dtoverlay=pwm-2chan` + `/sys/class/pwm`). Hardware safety preserved
+  — failsafe still drives 100%% duty on any error.
+- **`ThermalService.run_tick()` TypeError: 'float' object is not callable.**
+  `ThermalManager` exposes `temperature_c`, `fan_duty`, and `sensor_ok`
+  as `@property`, but the service called them like methods. Now reads
+  them as attributes. Updated the test fake to match the real API.
+
 ## [0.5.2] - 2026-04-27
 
 ### Fixed

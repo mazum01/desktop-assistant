@@ -15,17 +15,14 @@ from src.services.av_service import AVService
 
 class _FakeThermalManager:
     def __init__(self, temp=42.0, ok=True, duty=50.0):
-        self._temp = temp
-        self._ok = ok
-        self._duty = duty
+        self.temperature_c = temp
+        self.sensor_ok = ok
+        self.fan_duty = duty
         self.started = False
         self.stopped = False
         self._thresholds = MagicMock(critical_c=75.0)
     def start(self):  self.started = True
     def stop(self):   self.stopped = True
-    def temperature_c(self): return self._temp
-    def sensor_ok(self):     return self._ok
-    def fan_duty(self):      return self._duty
 
 
 def test_thermal_service_publishes_telemetry():
@@ -70,7 +67,7 @@ def test_thermal_service_publishes_critical_once():
 def test_thermal_service_publishes_error_on_no_reading():
     bus = MessageBus()
     fake = _FakeThermalManager()
-    fake.temperature_c = lambda: None
+    fake.temperature_c = None
     svc = ThermalService(bus=bus, manager=fake)
 
     errs = []

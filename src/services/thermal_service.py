@@ -49,9 +49,11 @@ class ThermalService(Service):
         m = self._manager
         if m is None:
             return
-        temp_c = m.temperature_c()
-        ok = m.sensor_ok()
-        duty = m.fan_duty()
+        # ThermalManager exposes temperature_c, fan_duty, sensor_ok as
+        # @property — never call() them.
+        temp_c = m.temperature_c
+        ok = m.sensor_ok
+        duty = m.fan_duty
 
         if temp_c is None:
             self.bus.publish("thermal.error", {"reason": "no_reading"})

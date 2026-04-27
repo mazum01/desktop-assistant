@@ -21,7 +21,11 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
-_PWM_FREQUENCY_HZ = 25_000   # Noctua spec
+_PWM_FREQUENCY_HZ = 10_000   # lgpio software PWM caps at 10 kHz; below
+                             # the audible peak. Noctua spec target is
+                             # 25 kHz — for that we need the kernel
+                             # hardware-PWM driver (dtoverlay=pwm-2chan
+                             # + /sys/class/pwm). Filed for follow-up.
 _DEFAULT_GPIO_PIN  = 13       # Hardware PWM1 on Pi 4/5
 
 
