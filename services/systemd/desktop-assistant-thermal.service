@@ -1,0 +1,36 @@
+[Unit]
+Description=Desktop Assistant — thermal safety service (TMP117 + fan)
+Documentation=https://github.com/mazum01/desktop-assistant
+After=local-fs.target
+# Thermal is safety-critical: no Requires=, no After= on optional services.
+# It must come up first and never wait on anything that can fail.
+
+[Service]
+Type=simple
+User=starter
+Group=starter
+SupplementaryGroups=i2c gpio
+WorkingDirectory=/home/starter/Code/Desktop Assistant
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/home/starter/Code/Desktop Assistant
+ExecStart=/usr/bin/python3 -m src.assistant.thermal_main
+
+# Aggressive restart policy — losing this unit means the device
+# can overheat. Fan driver fails-safe to 100% on its own, but we
+# still want the loop back as fast as possible.
+Restart=always
+RestartSec=2
+StartLimitIntervalSec=0
+
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=multi-user.target

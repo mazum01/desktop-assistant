@@ -6,6 +6,38 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.1] - 2026-04-27
+
+### Changed — split into two systemd units (hybrid isolation)
+- Replaced single `desktop-assistant.service` with two units:
+  - `desktop-assistant-thermal.service` — TMP117 + fan only.
+    `Restart=always`, no rate limit, no dependencies. If anything else
+    on the device crashes, thermal monitoring keeps running.
+  - `desktop-assistant-core.service` — motion + AV (and future
+    perception/dialog). `Restart=on-failure`, rate-limited.
+    `Wants=` and `After=` thermal so it boots in the right order.
+- Added shared `src/assistant/runner.py` — common boot/shutdown/signal
+  handling factored out of the entry points.
+- Added `src/assistant/thermal_main.py` and `src/assistant/core_main.py`
+  as the two process entry points. Each owns its own `MessageBus`;
+  cross-process events will get a transport in Phase 3 if needed.
+- Removed the old single-process `src/assistant/main.py`.
+- Updated `services/systemd/README.md` with the new install/observe
+  commands and rationale for the split.
+- Added `tests/test_entry_points.py` (4 tests) covering runner
+  start/stop/exit-code paths and entry-point importability.
+- Total: **122 / 122** tests passing.
+
+### Why hybrid (and not full per-class split)?
+- Thermal is the only **safety-critical** loop. Splitting it gives the
+  one isolation guarantee that actually matters: an AV/motion crash
+  cannot disable thermal management.
+- Motion + AV stay in the same process so they keep using the cheap
+  in-process `MessageBus`. No IPC, no serialization, no broker.
+- When (if) perception or dialog later prove they need their own
+  failure domain, we'll split them — and at that point we'll add a
+  ZeroMQ transport to `MessageBus` rather than rewriting it now.
+
 ## [0.5.0] - 2026-04-27
 
 ### Added — Phase 2 service layer (started)

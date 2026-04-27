@@ -1,0 +1,35 @@
+[Unit]
+Description=Desktop Assistant — core services (motion, AV, perception)
+Documentation=https://github.com/mazum01/desktop-assistant
+After=network.target sound.target desktop-assistant-thermal.service
+# Wants= (not Requires=): core can run without thermal in dev, but
+# in production thermal will already be up by the time we reach here.
+Wants=desktop-assistant-thermal.service
+
+[Service]
+Type=simple
+User=starter
+Group=starter
+SupplementaryGroups=i2c gpio audio video
+WorkingDirectory=/home/starter/Code/Desktop Assistant
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/home/starter/Code/Desktop Assistant
+ExecStart=/usr/bin/python3 -m src.assistant.core_main
+
+Restart=on-failure
+RestartSec=3
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=multi-user.target
