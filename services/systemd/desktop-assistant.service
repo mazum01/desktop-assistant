@@ -1,0 +1,24 @@
+[Unit]
+Description=Desktop Assistant — main service
+After=network.target sound.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=starter
+Group=starter
+WorkingDirectory=/home/starter/Code/Desktop Assistant
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/home/starter/Code/Desktop Assistant
+ExecStart=/usr/bin/python3 -m src.assistant.main
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+# Hardware safety: failed restarts shouldn't melt the device.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target

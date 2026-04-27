@@ -6,6 +6,52 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.5.0] - 2026-04-27
+
+### Added — Phase 2 service layer (started)
+- `src/core/bus.py` — `MessageBus`, an in-process thread-safe pub/sub.
+  Supports per-topic subscribers, wildcard `*` subscribers, one-shot
+  subscriptions, payload caching (`last(topic)`), and a process-wide
+  `default_bus()` singleton. Subscriber exceptions are isolated.
+- `src/core/service.py` — `Service` base class. Standard lifecycle
+  (`on_start` → daemon thread running `run_tick` → `on_stop`), context-
+  manager support, publishes `service.started` / `service.stopped`.
+- `src/services/thermal_service.py` — wraps `ThermalManager` and
+  publishes `thermal.temp`, `thermal.fan`, `thermal.critical` (edge-
+  triggered), `thermal.error` on the bus.
+- `src/services/motion_service.py` — wraps `ServoController`. Subscribes
+  to `motion.pan_to`, `motion.relax`, `motion.stop`; publishes
+  `motion.position` and `motion.moved` (with planned direction).
+- `src/services/av_service.py` — wraps `AudioOutput`, `TextToSpeech`,
+  and `VersionAnnouncer`. Subscribes to `av.say`, `av.beep`,
+  `av.utterance`, `av.announce_version`. Speaks the version on startup
+  (FR-VR1) and routes verbal version queries via `maybe_handle()`
+  (FR-VR2).
+- `src/assistant/main.py` — top-level boot entry point: starts all
+  services on the shared bus, handles SIGINT/SIGTERM for graceful
+  shutdown.
+- `services/systemd/desktop-assistant.service` — systemd unit; restarts
+  on failure with rate-limit guard, runs as `starter`, logs to journal.
+- `services/systemd/README.md` — install/enable/observe instructions.
+
+### Tests
+- `tests/test_bus.py` — 12 tests covering subscribe, unsubscribe, wildcards,
+  one-shot, last-payload, exception isolation, singleton.
+- `tests/test_service_base.py` — 7 tests covering start/stop lifecycle,
+  tick repetition, double-start safety, context manager, exception
+  swallowing.
+- `tests/test_services.py` — 13 tests for thermal/motion/AV services
+  using `MagicMock` drivers. Verifies bus topic contracts and edge-
+  triggered critical thermal events.
+- Total: **118 / 118** tests passing.
+
+### Changed
+- `scripts/test_camera.py` — added `--preview [SECONDS]` flag for live
+  video. Tries QtGL → Qt → DRM preview backends in order. Default
+  preview duration 15 s, Ctrl-C to exit early. Also added `--null`
+  (skip still capture) and `--index N` (slot select). Default mode
+  (no flags) still captures one still to `/tmp/camera_test.jpg`.
+
 ## [0.4.0] - 2026-04-27
 
 ### Added — Phase 1 audio stack (complete)
