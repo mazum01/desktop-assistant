@@ -6,6 +6,39 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.4.0] - 2026-04-27
+
+### Added — Phase 1 audio stack (complete)
+- `src/audio/output.py` — `AudioOutput` driver; auto-locates the Sabrent USB
+  adapter by name, plays numpy waveforms, generates beep/sweep tones; sim mode.
+- `src/audio/input.py` — `AudioInput` driver; system-default mic by default,
+  named-device override, blocking `record()`; sim mode.
+- `src/audio/tts.py` — `TextToSpeech` wrapper around espeak-ng; renders to WAV
+  and routes through `AudioOutput` so all speech goes out the Sabrent USB; sim
+  mode if espeak-ng missing. Public API stable for future Piper/Mimic 3 swap.
+- `src/audio/version_announcer.py` — fulfils **FR-VR1..VR4**:
+  `announce_startup()`, `announce_on_request()`, `maybe_handle(utterance)`
+  with regex-matched verbal version queries.
+- `tests/test_audio_output.py`, `tests/test_audio_input.py`, `tests/test_tts.py`
+  — 40 new unit tests, fully hardware-free via monkeypatched `sounddevice`.
+- `scripts/test_speaker.py` — left/right/sweep speaker test through Sabrent.
+- `scripts/test_microphone.py` — 5 s recording + dBFS level meter, saves WAV.
+- `scripts/test_tts.py` — greeting + startup announcement + version query.
+- `hardware/audio/audio_notes.md` — Sabrent specs, TRS speaker wiring, espeak-ng,
+  spoken-version mapping to FR-VR1..VR4.
+
+### Changed
+- `scripts/setup_pi.sh`: added `espeak-ng` apt package; verification step now
+  also checks sounddevice, espeak-ng, and (informationally) hailortcli; final
+  command list includes all 8 bring-up scripts.
+
+### Notes
+- 86 / 86 tests passing. Phase 1 hardware bring-up complete.
+  Hardware connection (speakers, mic) deferred to user — drivers and bring-up
+  scripts ready to run as soon as the hardware is wired.
+
+---
+
 ## [0.3.0] - 2026-04-26
 
 ### Added

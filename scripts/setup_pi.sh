@@ -29,7 +29,8 @@ sudo apt-get install -y \
     python3-pytest \
     i2c-tools \
     libasound2-dev \
-    portaudio19-dev
+    portaudio19-dev \
+    espeak-ng
 
 # ── 2. Pip packages (system, --break-system-packages on PEP 668) ─────
 echo ""
@@ -61,6 +62,9 @@ python3 -c "import smbus2; print('  ✓ smbus2 OK')" || echo "  ✗ smbus2 missi
 python3 -c "import lgpio; print('  ✓ lgpio OK')" || echo "  ✗ lgpio missing"
 python3 -c "from adafruit_servokit import ServoKit; print('  ✓ adafruit-servokit OK')" || echo "  ✗ adafruit-servokit missing"
 python3 -c "import numpy; print('  ✓ numpy', numpy.__version__)" || echo "  ✗ numpy missing"
+python3 -c "import sounddevice; print('  ✓ sounddevice OK')" || echo "  ✗ sounddevice missing"
+command -v espeak-ng >/dev/null && echo "  ✓ espeak-ng OK" || echo "  ✗ espeak-ng missing"
+command -v hailortcli >/dev/null && echo "  ✓ hailortcli OK" || echo "  (hailortcli not installed — Hailo accelerator optional)"
 
 echo ""
 echo "I²C device scan (bus 1):"
@@ -75,6 +79,10 @@ echo "  python3 scripts/test_tmp117.py"
 echo "  python3 scripts/test_servo.py"
 echo "  python3 scripts/test_fan.py"
 echo "  python3 scripts/test_camera.py"
+echo "  python3 scripts/test_hailo.py"
+echo "  python3 scripts/test_speaker.py"
+echo "  python3 scripts/test_microphone.py"
+echo "  python3 scripts/test_tts.py"
 echo ""
 echo "If you have an old venv from earlier setup, you can remove it:"
 echo "  rm -rf ~/.venv-assistant"
