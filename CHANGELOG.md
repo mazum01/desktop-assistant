@@ -6,6 +6,25 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.0] - 2026-04-26
+
+### Added
+- `src/perception/hailo_probe.py` — three-layer Hailo-8 readiness probe:
+  PCIe presence (`lspci`), HailoRT CLI installed, firmware identify call.
+  Returns `HailoStatus` dataclass; `fully_ready` and `degrade_reason()`
+  helpers support the project's CPU-fallback safety imperative.
+- `tests/test_hailo_probe.py` — 13 unit tests, fully hardware-free
+  (subprocess runner is injectable; sample `hailortcli` outputs included).
+- `scripts/test_hailo.py` — Pi bring-up probe; exits 0 if ready, 1 if
+  degraded with actionable next steps.
+- `hardware/perception/hailo8_notes.md` — AI HAT+ specs, install steps,
+  PCIe enablement, troubleshooting, project imperative.
+
+### Notes
+- Total tests: 46 / 46 passing. Phase 1 perception groundwork complete.
+
+---
+
 ## [0.2.10] - 2026-04-26
 
 ### Changed
