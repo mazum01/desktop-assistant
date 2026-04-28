@@ -31,7 +31,7 @@ class TTSConfig:
     voice: str = "en-us"          # espeak-ng voice / language
     speed_wpm: int = 165          # words per minute (130-200 sounds natural)
     pitch: int = 50               # 0-99
-    amplitude: int = 100          # 0-200
+    amplitude: int = 200          # 0-200 (max — speakers run unamplified for now)
 
 
 class TextToSpeech:
@@ -99,6 +99,11 @@ class TextToSpeech:
                 n = wf.getnframes()
                 raw = wf.readframes(n)
             samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+            # Peak-normalize to give the unamplified speaker every drop of
+            # gain we can. -1 dBFS leaves a hair of headroom against rounding.
+            peak = float(np.max(np.abs(samples))) if samples.size else 0.0
+            if peak > 0.0:
+                samples = samples * (0.89 / peak)
             return samples, sr
         finally:
             Path(wav_path).unlink(missing_ok=True)

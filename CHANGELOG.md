@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.7] - 2026-04-29
+
+### Changed
+- Pumped software audio gain for unamplified bring-up:
+  - `AudioOutput.chime()` default amplitude 0.25 → 0.9.
+  - `TextToSpeechConfig.amplitude` default 100 → 200 (espeak-ng max).
+  - `TextToSpeech._render_to_array()` now peak-normalizes WAV output to
+    -1 dBFS before handing it to `AudioOutput.play()`.
+- ALSA mixer `Speaker` is already at 97% on the CM108 USB DAC, so the
+  remaining volume increase will come from the PAM8403 amplifier when
+  installed.
+
+---
+
 ## [0.8.6] - 2026-04-29
 
 ### Added

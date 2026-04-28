@@ -176,7 +176,7 @@ class AudioOutput:
         notes: Optional[tuple[float, ...]] = None,
         note_duration: float = 0.18,
         gap: float = 0.04,
-        amplitude: float = 0.25,
+        amplitude: float = 0.9,
     ) -> None:
         """Play an ascending arpeggio "chime" used as the boot signal.
 
