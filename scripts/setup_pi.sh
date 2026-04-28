@@ -26,6 +26,7 @@ sudo apt-get install -y \
     python3-picamera2 \
     python3-sounddevice \
     python3-soundfile \
+    python3-zmq \
     python3-pytest \
     i2c-tools \
     libasound2-dev \

@@ -29,14 +29,20 @@
 
 ---
 
-## Phase 2 — Core Services
+## Phase 2 — Core Services ✅
 **Goal:** Long-running daemons that own each subsystem.
 **Deliverables:**
-- `thermal_service` — reads TMP117, drives fan PWM via control loop
+- `thermal_service` — reads TMP117, drives fan PWM via control loop ✅
 - `motion_service` — exposes pan API; enforces 270° mechanical limits and
-  long-way traversal across the 360°↔1° wrap
-- `av_service` — camera + mic capture, audio out mux
-**Exit Criteria:** Services run under systemd; expose IPC (DBus or ZeroMQ).
+  long-way traversal across the 360°↔1° wrap ✅
+- `av_service` — TTS + audio out through Sabrent ✅
+- `vision_service` — continuous camera capture, frame-ready events ✅
+- `audio_capture_service` — continuous mic capture, level + chunk events ✅
+- `ipc_bridge` — ZeroMQ PUB/REP exposing the in-process bus to external
+  processes; CLI tool `scripts/desktop-assistant` for control ✅
+**Exit Criteria:** Services run under systemd (split into `thermal` and
+`core` units for safety isolation); ZMQ IPC over
+`ipc:///tmp/desktop-assistant.{pub,rep}`. ✅
 
 ---
 

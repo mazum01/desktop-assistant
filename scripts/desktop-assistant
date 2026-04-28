@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""
+desktop-assistant CLI — control the running daemon over ZeroMQ.
+
+Examples:
+    desktop-assistant ping
+    desktop-assistant pan --to 90
+    desktop-assistant say "hello world"
+    desktop-assistant version
+    desktop-assistant topics
+    desktop-assistant last thermal.temp
+    desktop-assistant watch                  # stream all bus events
+    desktop-assistant watch --topic motion   # filter by prefix
+
+Talks to the IPCBridge service over ZMQ at:
+    REP : ipc:///tmp/desktop-assistant.rep
+    PUB : ipc:///tmp/desktop-assistant.pub
+Override with $DA_BUS_PUB_ENDPOINT / $DA_BUS_REP_ENDPOINT.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+
+try:
+    import zmq
+except ImportError:
+    print("pyzmq is required: sudo apt-get install -y python3-zmq", file=sys.stderr)
+    sys.exit(2)
+
+
+PUB_ENDPOINT = os.environ.get("DA_BUS_PUB_ENDPOINT", "ipc:///tmp/desktop-assistant.pub")
+REP_ENDPOINT = os.environ.get("DA_BUS_REP_ENDPOINT", "ipc:///tmp/desktop-assistant.rep")
+
+
+def _request(req: dict, timeout_ms: int = 2000) -> dict:
+    ctx = zmq.Context.instance()
+    sock = ctx.socket(zmq.REQ)
+    sock.setsockopt(zmq.LINGER, 0)
+    sock.setsockopt(zmq.RCVTIMEO, timeout_ms)
+    sock.setsockopt(zmq.SNDTIMEO, timeout_ms)
+    try:
+        sock.connect(REP_ENDPOINT)
+        sock.send_string(json.dumps(req))
+        return json.loads(sock.recv_string())
+    except zmq.error.Again:
+        return {"ok": False, "error": "timeout — is desktop-assistant-core running?"}
+    finally:
+        sock.close(linger=0)
+
+
+def cmd_ping(_args) -> int:
+    r = _request({"cmd": "ping"})
+    print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
+def cmd_topics(_args) -> int:
+    r = _request({"cmd": "topics"})
+    if not r.get("ok"):
+        print(r); return 1
+    for t in r.get("topics", []):
+        print(t)
+    return 0
+
+
+def cmd_last(args) -> int:
+    r = _request({"cmd": "last", "topic": args.topic})
+    print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
+def cmd_publish(args) -> int:
+    payload = json.loads(args.payload) if args.payload else None
+    r = _request({"cmd": "publish", "topic": args.topic, "payload": payload})
+    print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
+def cmd_pan(args) -> int:
+    r = _request({
+        "cmd": "publish",
+        "topic": "motion.pan_to",
+        "payload": {"angle": args.to},
+    })
+    print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
+def cmd_say(args) -> int:
+    r = _request({
+        "cmd": "publish",
+        "topic": "av.say",
+        "payload": {"text": args.text},
+    })
+    print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
+def cmd_version(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "av.announce_version", "payload": None})
+    print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
+def cmd_watch(args) -> int:
+    ctx = zmq.Context.instance()
+    sock = ctx.socket(zmq.SUB)
+    sock.connect(PUB_ENDPOINT)
+    prefix = args.topic or ""
+    sock.setsockopt_string(zmq.SUBSCRIBE, prefix)
+    print(f"# watching {PUB_ENDPOINT} (prefix={prefix!r}) — Ctrl-C to stop")
+    try:
+        while True:
+            topic, payload = sock.recv_multipart()
+            print(f"{topic.decode()}\t{payload.decode()}")
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        sock.close(linger=0)
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(prog="desktop-assistant",
+                                description="Control the running assistant over ZMQ.")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("ping", help="Round-trip check").set_defaults(func=cmd_ping)
+    sub.add_parser("topics", help="List subscribed topics").set_defaults(func=cmd_topics)
+    sub.add_parser("version", help="Speak the version (FR-VR2)").set_defaults(func=cmd_version)
+
+    sp = sub.add_parser("last", help="Most recent payload on a topic")
+    sp.add_argument("topic")
+    sp.set_defaults(func=cmd_last)
+
+    sp = sub.add_parser("publish", help="Publish raw event to bus")
+    sp.add_argument("topic")
+    sp.add_argument("--payload", help="JSON payload (default: null)")
+    sp.set_defaults(func=cmd_publish)
+
+    sp = sub.add_parser("pan", help="Pan the servo to a logical angle")
+    sp.add_argument("--to", type=float, required=True, help="logical degrees 1–360")
+    sp.set_defaults(func=cmd_pan)
+
+    sp = sub.add_parser("say", help="Speak a phrase via TTS")
+    sp.add_argument("text")
+    sp.set_defaults(func=cmd_say)
+
+    sp = sub.add_parser("watch", help="Stream all bus events")
+    sp.add_argument("--topic", default="", help="Topic prefix filter (default: all)")
+    sp.set_defaults(func=cmd_watch)
+
+    args = p.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

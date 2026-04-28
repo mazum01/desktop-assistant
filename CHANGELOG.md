@@ -6,6 +6,48 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.0] - 2026-04-27
+
+### Added — Phase 2 complete
+- `src/services/vision_service.py` — `VisionService`. Owns the
+  `Camera`, runs a 10 fps capture loop, publishes `vision.frame_ready`
+  metadata, and exposes `latest_frame()` to in-process callers.
+  Supports `vision.capture_still` requests over the bus.
+- `src/services/audio_capture_service.py` — `AudioCaptureService`.
+  Continuous mic capture in 250 ms chunks; publishes `audio.level`
+  (dBFS + RMS) and `audio.chunk` metadata; `latest_chunk()` accessor.
+- `src/services/ipc_bridge.py` — `IPCBridge`. ZeroMQ PUB on
+  `ipc:///tmp/desktop-assistant.pub` forwards every bus event to
+  external subscribers (two-frame: topic + JSON payload). REP on
+  `ipc:///tmp/desktop-assistant.rep` accepts `publish` / `last` /
+  `topics` / `ping` commands. pyzmq is a soft dependency — bridge
+  cleanly disables itself if unavailable.
+- `scripts/desktop-assistant` — CLI talking to the IPC bridge.
+  Subcommands: `ping`, `topics`, `last <topic>`, `publish <topic>
+  --payload <json>`, `pan --to <deg>`, `say <text>`, `version`,
+  `watch [--topic <prefix>]` (live event stream).
+- `tests/test_phase2_services.py` — 13 new tests covering vision,
+  audio capture, and the full IPC round-trip (real ZMQ sockets over
+  `tmp_path` IPC endpoints, no mocks).
+
+### Changed
+- `src/assistant/core_main.py` now starts five services in order:
+  motion → vision → audio_capture → av → ipc_bridge. The bridge
+  starts last so external subscribers see the `service.started`
+  events of every other service.
+- `scripts/setup_pi.sh` installs `python3-zmq`.
+
+### Phase 2 exit-criteria status
+- ✅ Services run under systemd (split: `desktop-assistant-thermal` +
+  `desktop-assistant-core`)
+- ✅ External IPC via ZeroMQ (PUB telemetry + REP control)
+- ✅ Camera capture in `vision_service`
+- ✅ Mic capture in `audio_capture_service`
+- ✅ All five services publish/subscribe through the shared bus
+
+### Tests
+- **135 / 135** passing.
+
 ## [0.5.4] - 2026-04-27
 
 ### Added
