@@ -2,6 +2,7 @@
 Description=Desktop Assistant — thermal safety service (TMP117 + fan)
 Documentation=https://github.com/mazum01/desktop-assistant
 After=local-fs.target
+StartLimitIntervalSec=0
 # Thermal is safety-critical: no Requires=, no After= on optional services.
 # It must come up first and never wait on anything that can fail.
 
@@ -12,7 +13,7 @@ Group=starter
 SupplementaryGroups=i2c gpio
 WorkingDirectory=/home/starter/Code/Desktop Assistant
 Environment=PYTHONUNBUFFERED=1
-Environment=PYTHONPATH=/home/starter/Code/Desktop Assistant
+Environment="PYTHONPATH=/home/starter/Code/Desktop Assistant"
 ExecStart=/usr/bin/python3 -m src.assistant.thermal_main
 
 # Aggressive restart policy — losing this unit means the device
@@ -20,17 +21,19 @@ ExecStart=/usr/bin/python3 -m src.assistant.thermal_main
 # still want the loop back as fast as possible.
 Restart=always
 RestartSec=2
-StartLimitIntervalSec=0
 
 StandardOutput=journal
 StandardError=journal
 
 # Hardening
+# Thermal is safety-critical. Keep the surface minimal but allow /tmp
+# writes (lgpio chip handle, pwm sysfs symlinks resolve there on some
+# kernels). PrivateTmp=false so the optional bus bridge can publish.
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
-PrivateTmp=true
-ReadWritePaths=/tmp
+PrivateTmp=false
+ReadWritePaths=/tmp /sys/class/pwm
 
 [Install]
 WantedBy=multi-user.target

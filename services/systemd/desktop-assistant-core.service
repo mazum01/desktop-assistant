@@ -5,6 +5,8 @@ After=network.target sound.target desktop-assistant-thermal.service
 # Wants= (not Requires=): core can run without thermal in dev, but
 # in production thermal will already be up by the time we reach here.
 Wants=desktop-assistant-thermal.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -13,7 +15,7 @@ Group=starter
 SupplementaryGroups=i2c gpio audio video
 WorkingDirectory=/home/starter/Code/Desktop Assistant
 Environment=PYTHONUNBUFFERED=1
-Environment=PYTHONPATH=/home/starter/Code/Desktop Assistant
+Environment="PYTHONPATH=/home/starter/Code/Desktop Assistant"
 ExecStart=/usr/bin/python3 -m src.assistant.core_main
 
 Restart=on-failure
@@ -25,11 +27,14 @@ StandardOutput=journal
 StandardError=journal
 
 # Hardening
+# NOTE: PrivateTmp must be FALSE — the ZMQ ipc:///tmp/desktop-assistant.{pub,rep}
+# sockets are how the `desktop-assistant` CLI talks to us. With PrivateTmp=true
+# the service gets its own /tmp namespace and the CLI cannot reach them.
 NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=read-only
-PrivateTmp=true
-ReadWritePaths=/tmp
+ProtectHome=false
+PrivateTmp=false
+ReadWritePaths=/tmp /home/starter/.local/share/desktop-assistant /home/starter/.cache
 
 [Install]
 WantedBy=multi-user.target

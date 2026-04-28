@@ -6,6 +6,28 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.2] - 2026-04-27
+
+### Fixed
+- systemd units (`desktop-assistant-core.service`,
+  `desktop-assistant-thermal.service`) had `PrivateTmp=true`, which gave
+  the services their own `/tmp` namespace and made the
+  `ipc:///tmp/desktop-assistant.{pub,rep}` sockets invisible to the CLI
+  (every command timed out). Now `PrivateTmp=false` with explicit
+  `ReadWritePaths=` for the telemetry DB and `/sys/class/pwm`.
+- `Environment=PYTHONPATH=...` value containing a space is now properly
+  quoted so systemd no longer logs `Invalid environment assignment`.
+- `StartLimitIntervalSec=` / `StartLimitBurst=` moved from `[Service]`
+  to `[Unit]`, where systemd actually reads them.
+- Removed empty placeholder `desktop-assistant.service` meta unit.
+
+### Changed
+- New `desktop-assistant-thermal.service` allows `ProtectHome=read-only`
+  but no longer denies `/sys/class/pwm` writes (needed by the
+  hardware-PWM backend).
+
+---
+
 ## [0.8.1] - 2026-04-27
 
 ### Fixed
