@@ -18,6 +18,7 @@ from typing import Callable, Optional
 
 from .tmp117 import TMP117, TMP117Error
 from .fan import FanController
+from .fan_tach import FanTach
 
 log = logging.getLogger(__name__)
 
@@ -49,11 +50,14 @@ class ThermalManager:
         on_critical: Optional[Callable[[float], None]] = None,
         i2c_bus: int = 1,
         gpio_pin: int = 13,
+        tach_gpio: int = 6,
+        tach_pulses_per_rev: int = 2,
     ) -> None:
         self._thresh = thresholds or ThermalThresholds()
         self._on_critical = on_critical
         self._sensor = TMP117(bus=i2c_bus)
         self._fan = FanController(gpio_pin=gpio_pin)
+        self._tach = FanTach(gpio=tach_gpio, pulses_per_rev=tach_pulses_per_rev)
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._last_temp_c: Optional[float] = None
@@ -75,6 +79,7 @@ class ThermalManager:
         if self._thread:
             self._thread.join(timeout=5)
         self._fan.close()
+        self._tach.close()
         self._sensor.close()
         log.info("ThermalManager stopped")
 
@@ -85,6 +90,14 @@ class ThermalManager:
     @property
     def fan_duty(self) -> float:
         return self._fan.duty
+
+    @property
+    def fan_rpm(self) -> Optional[int]:
+        return self._tach.rpm
+
+    @property
+    def fan_backend(self) -> str:
+        return self._fan.backend
 
     @property
     def sensor_ok(self) -> bool:

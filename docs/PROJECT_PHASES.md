@@ -46,19 +46,23 @@
 
 ---
 
-## Phase 2.5 — Hardware-PWM fan driver (silent operation)
+## Phase 2.5 — Hardware-PWM fan driver (silent operation) ✅
 **Goal:** Move the NF-A6x25 fan from `lgpio` software PWM (10 kHz, faintly
 audible) to the kernel hardware-PWM driver so it runs silently at the
-Noctua-spec 25 kHz.
+Noctua-spec 25 kHz. Add tach reading.
 **Deliverables:**
-- `dtoverlay=pwm-2chan,pin=13,func=4` (or equivalent) in
-  `/boot/firmware/config.txt`
-- `FanController` reworked to write `/sys/class/pwm/pwmchip0/pwm…/duty_cycle`
-  instead of calling `lgpio.tx_pwm()`; lgpio path retained as fall-back
-- Bring-up script verifies frequency with a scope or `pigs` reading
-- Unit test with `tmp_path` simulating the sysfs nodes
-**Exit Criteria:** Fan inaudible at 100% duty in a quiet room; ThermalService
-still hits its failsafe on simulated sensor failure.
+- `dtoverlay=pwm-2chan,pin=12,func=4,pin2=13,func2=4` in
+  `/boot/firmware/config.txt` (added by `setup_pi.sh`)
+- `FanController` rewritten to drive `/sys/class/pwm/pwmchip0/pwm1`
+  with a 40 000 ns period (25 kHz); lgpio path retained as automatic
+  fall-back until the overlay activates at the next reboot
+- New `FanTach` driver on GPIO6 with a 10 kΩ pull-up; publishes
+  `thermal.rpm` once per second
+- Unit tests with `tmp_path` simulating sysfs nodes + pulse injection
+**Exit Criteria:** Fan inaudible at 100% duty in a quiet room; tach reads
+expected RPM under load; ThermalService still hits its failsafe on
+simulated sensor failure. **(Pending physical verification on Pi after
+reboot.)**
 
 ---
 

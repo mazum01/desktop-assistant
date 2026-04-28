@@ -1,0 +1,30 @@
+# Thermal subsystem configuration.
+#
+# Loaded by ThermalManager / FanController / FanTach.
+
+fan:
+  # Hardware PWM via /sys/class/pwm. After enabling the
+  # `pwm-2chan` dtoverlay (see scripts/setup_pi.sh), GPIO13 is routed
+  # to channel 1 of pwmchip0.
+  pwm_chip:      0
+  pwm_channel:   1
+  pwm_period_ns: 40000      # 25 kHz — Noctua spec
+  # If sysfs PWM is unavailable, fall back to lgpio software PWM on this
+  # GPIO. Same wire — only the backend changes.
+  fallback_gpio: 13
+  fallback_freq_hz: 10000   # lgpio software PWM ceiling
+
+tach:
+  # Noctua NF-A6x25 has an open-collector tach line; needs a 10 kΩ
+  # pull-up to 3.3 V (or use the internal pull-up on the Pi).
+  gpio:               6
+  pulses_per_rev:     2
+  publish_interval_s: 1.0
+
+thresholds:
+  safe_max_c:      50.0
+  warn_max_c:      65.0
+  critical_c:      75.0
+  fan_min_duty:    30.0
+  fan_max_duty:   100.0
+  poll_interval_s: 1.0

@@ -13,7 +13,7 @@ digraph DesktopAssistant {
     ranksep=0.6;
     fontname="Helvetica";
     labelloc="t";
-    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v0.6.1 — Phase 2 complete</font>>;
+    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v0.7.0 — Phase 2 complete · hardware-PWM fan + tach</font>>;
     fontsize=16;
 
     node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin=0.15];
@@ -29,7 +29,7 @@ digraph DesktopAssistant {
         fontsize=11;
 
         hw_tmp117  [label="TMP117\n(I²C 0x48)",       fillcolor="#ffd6a5"];
-        hw_fan     [label="NF-A6x25 PWM Fan\n(GPIO13)", fillcolor="#ffd6a5"];
+        hw_fan     [label="NF-A6x25 PWM Fan\nPWM ← GPIO13 (kernel HW PWM, 25 kHz)\nTACH → GPIO6 (2 ppr)", fillcolor="#ffd6a5"];
         hw_servo   [label="DS3218 Servo\n(PCA9685 ch15)", fillcolor="#ffd6a5"];
         hw_cam     [label="Pi Cam Module 3 Wide\n(CSI-0)", fillcolor="#ffd6a5"];
         hw_mic     [label="USB Microphone",        fillcolor="#ffd6a5"];
@@ -47,7 +47,8 @@ digraph DesktopAssistant {
         fontsize=11;
 
         drv_tmp117 [label="thermal/tmp117.py",          fillcolor="#a5c8ff"];
-        drv_fan    [label="thermal/fan.py\n(lgpio PWM)", fillcolor="#a5c8ff"];
+        drv_fan    [label="thermal/fan.py\n(sysfs HW PWM\n+ lgpio fallback)", fillcolor="#a5c8ff"];
+        drv_tach   [label="thermal/fan_tach.py\n(lgpio edge cb)", fillcolor="#a5c8ff"];
         drv_thmgr  [label="thermal/thermal_manager.py", fillcolor="#a5c8ff"];
         drv_servo  [label="motion/servo_controller.py", fillcolor="#a5c8ff"];
         drv_cam    [label="vision/camera.py\n(picamera2)", fillcolor="#a5c8ff"];
@@ -81,7 +82,7 @@ digraph DesktopAssistant {
         fillcolor="#fde0e0";
         fontsize=11;
 
-        svc_thermal [label="ThermalService\n— thermal.temp\n— thermal.fan\n— thermal.critical\n— thermal.error", fillcolor="#f4a3a3"];
+        svc_thermal [label="ThermalService\n— thermal.temp\n— thermal.fan\n— thermal.rpm\n— thermal.critical\n— thermal.error", fillcolor="#f4a3a3"];
     }
 
     subgraph cluster_svc_core {
@@ -115,6 +116,7 @@ digraph DesktopAssistant {
     // ─────────────────────────────────────────────────────────────────
     hw_tmp117 -> drv_tmp117 [label="I²C"];
     hw_fan    -> drv_fan    [label="PWM"];
+    hw_fan    -> drv_tach   [label="tach"];
     hw_servo  -> drv_servo  [label="I²C/PWM"];
     hw_cam    -> drv_cam    [label="CSI"];
     hw_mic    -> drv_ain    [label="USB"];
@@ -123,6 +125,7 @@ digraph DesktopAssistant {
 
     drv_tmp117 -> drv_thmgr;
     drv_fan    -> drv_thmgr;
+    drv_tach   -> drv_thmgr;
     drv_tts    -> drv_aout  [style=dashed, label="renders to"];
     drv_van    -> drv_tts;
     drv_van    -> core_ver  [style=dashed];

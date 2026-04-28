@@ -6,6 +6,41 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.7.0] - 2026-04-27
+
+### Added — Phase 2.5: hardware-PWM fan + tach
+- `src/thermal/fan.py` rewritten with a sysfs hardware-PWM backend at
+  25 kHz (Noctua spec) on `/sys/class/pwm/pwmchip0/pwm1`. Falls back
+  automatically to the legacy lgpio software PWM (10 kHz) when sysfs is
+  unavailable, so the code keeps working before the overlay is active.
+- `src/thermal/fan_tach.py` — new `FanTach` driver on GPIO6. Counts
+  open-collector tach pulses with an lgpio falling-edge callback and
+  exposes `rpm` over a 1-second sliding window (Noctua: 2 ppr).
+- New bus topic `thermal.rpm` published by `ThermalService`.
+- `thermal.fan` payload now includes `backend` (`sysfs` / `lgpio` / `sim`).
+- `config/thermal.yaml` capturing pin assignments and PWM parameters.
+- `tests/test_fan_and_tach.py` — sysfs PWM tests via `tmp_path`,
+  fallback path, and tach RPM math (5 tests).
+
+### Changed
+- `scripts/setup_pi.sh` now appends
+  `dtoverlay=pwm-2chan,pin=12,func=4,pin2=13,func2=4` to
+  `/boot/firmware/config.txt` (idempotent).
+- `docs/architecture/architecture.dot` updated for the new tach driver,
+  the new bus topic, and the new wiring on GPIO6. Diagram regenerated.
+- `docs/PROJECT_PHASES.md` — Phase 2.5 marked ✅ pending physical
+  verification on the Pi after reboot.
+
+### Pin map (unchanged-ish)
+- **Fan PWM out** — GPIO13 (physical pin 33). Same wire; backend swaps
+  from lgpio software PWM to kernel hardware PWM via the pwm-2chan
+  overlay after reboot.
+- **Fan tach in** — GPIO6 (physical pin 31), 10 kΩ pull-up to 3.3 V.
+- No conflict with I²C-1 (GPIO2/3), UART (14/15), SPI0 (7–11), or any
+  other interface.
+
+---
+
 ## [0.6.1] - 2026-04-27
 
 ### Added

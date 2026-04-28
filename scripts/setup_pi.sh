@@ -55,6 +55,16 @@ else
     echo "  ✓ I²C already enabled"
 fi
 
+# ── 3b. Enable hardware PWM on GPIO12 + GPIO13 ──────────────────────
+PWM_OVERLAY="dtoverlay=pwm-2chan,pin=12,func=4,pin2=13,func2=4"
+if ! grep -qF "$PWM_OVERLAY" /boot/firmware/config.txt 2>/dev/null; then
+    echo "  Enabling hardware PWM (pwm-2chan) for fan on GPIO13..."
+    echo "$PWM_OVERLAY" | sudo tee -a /boot/firmware/config.txt > /dev/null
+    echo "  ⚠ Reboot required for hardware PWM to activate."
+else
+    echo "  ✓ pwm-2chan overlay already present"
+fi
+
 # ── 4. Verify ────────────────────────────────────────────────────────
 echo ""
 echo "[4/4] Verifying installation..."

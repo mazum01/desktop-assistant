@@ -29,7 +29,7 @@ Sources of truth for these are the service modules under `src/services/`.
 Keep this list in sync with the diagram.
 
 * `service.started` / `service.stopped` (all services)
-* **thermal**: `thermal.temp`, `thermal.fan`, `thermal.critical`, `thermal.error`
+* **thermal**: `thermal.temp`, `thermal.fan`, `thermal.rpm`, `thermal.critical`, `thermal.error`
 * **motion** (in): `motion.pan_to`, `motion.relax`, `motion.stop`
 * **motion** (out): `motion.position`, `motion.moved`
 * **vision** (out): `vision.frame_ready`, `vision.error`, `vision.still_saved`

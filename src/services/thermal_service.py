@@ -6,7 +6,8 @@ publishes telemetry on the message bus.
 
 Topics published:
     thermal.temp     {"celsius": float, "fahrenheit": float, "ok": bool}
-    thermal.fan      {"duty": float}
+    thermal.fan      {"duty": float, "backend": str}
+    thermal.rpm      {"rpm": int|None}
     thermal.critical {"celsius": float}        — when temp > critical_c
     thermal.error    {"reason": str}           — sensor failure / failsafe
 
@@ -63,7 +64,11 @@ class ThermalService(Service):
             "thermal.temp",
             {"celsius": temp_c, "fahrenheit": temp_c * 9 / 5 + 32, "ok": ok},
         )
-        self.bus.publish("thermal.fan", {"duty": duty})
+        self.bus.publish(
+            "thermal.fan",
+            {"duty": duty, "backend": getattr(m, "fan_backend", "unknown")},
+        )
+        self.bus.publish("thermal.rpm", {"rpm": getattr(m, "fan_rpm", None)})
 
         critical_c = getattr(m, "_thresholds", None)
         if critical_c is not None:
