@@ -141,7 +141,11 @@ def cmd_status(args) -> int:
     show("motion",   "motion.position",
          lambda v: f"angle={v.get('angle','?')}")
     show("vision",   "vision.frame_ready",
-         lambda v: f"frame#{v.get('frame_id','?')}  {v.get('width','?')}x{v.get('height','?')}")
+         lambda v: (
+             f"frame#{v.get('frame_id', v.get('index', '?'))}  "
+             f"{v.get('width', (v.get('shape') or [None, '?'])[1])}x"
+             f"{v.get('height', (v.get('shape') or ['?'])[0])}"
+         ))
     show("audio",    "audio.level",
          lambda v: f"{v.get('dbfs','?'):.1f} dBFS  rms={v.get('rms','?'):.4f}")
 

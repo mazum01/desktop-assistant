@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.4] - 2026-04-27
+
+### Fixed
+- `desktop-assistant status` showed `vision  frame#?  ?x?` even when
+  the camera was healthy. The CLI formatter was looking for
+  `frame_id`/`width`/`height` keys, but `VisionService` publishes
+  `index` and `shape: [h, w, 3]`. Formatter now handles both.
+
+---
+
 ## [0.8.3] - 2026-04-27
 
 ### Fixed
