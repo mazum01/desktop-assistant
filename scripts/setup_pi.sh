@@ -65,6 +65,21 @@ else
     echo "  ✓ pwm-2chan overlay already present"
 fi
 
+# ── 3c. Symlink CLI onto PATH ────────────────────────────────────────
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CLI_SRC="$REPO_ROOT/scripts/desktop-assistant"
+CLI_DEST="/usr/local/bin/desktop-assistant"
+if [ -x "$CLI_SRC" ]; then
+    if [ "$(readlink -f "$CLI_DEST" 2>/dev/null)" != "$(readlink -f "$CLI_SRC")" ]; then
+        echo "  Linking $CLI_DEST → $CLI_SRC"
+        sudo ln -sfn "$CLI_SRC" "$CLI_DEST"
+    else
+        echo "  ✓ desktop-assistant CLI already on PATH"
+    fi
+else
+    echo "  ⚠ $CLI_SRC missing or not executable — skipping CLI symlink"
+fi
+
 # ── 4. Verify ────────────────────────────────────────────────────────
 echo ""
 echo "[4/4] Verifying installation..."

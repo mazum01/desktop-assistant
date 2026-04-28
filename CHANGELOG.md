@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.1] - 2026-04-27
+
+### Fixed
+- `scripts/setup_pi.sh` now symlinks `desktop-assistant` into
+  `/usr/local/bin` so the CLI is on `PATH` after a fresh install.
+  Previously you had to run it by full path or symlink it manually.
+
+---
+
 ## [0.8.0] - 2026-04-27
 
 ### Added — Pre-Phase-3 hardening
