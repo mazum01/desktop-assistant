@@ -134,11 +134,20 @@ class AudioOutput:
         sample_rate: Optional[int] = None,
         blocking: bool = True,
     ) -> None:
-        """Play a numpy waveform. samples: 1-D mono or 2-D (n_samples, channels)."""
+        """Play a numpy waveform. samples: 1-D mono or 2-D (n_samples, channels).
+
+        If *sample_rate* differs from the device's configured rate, the
+        waveform is linearly resampled — many USB DACs (incl. CM108) only
+        accept 44.1/48 kHz, so we never hand them e.g. espeak's 22050.
+        """
         sr = sample_rate or self._cfg.sample_rate
         if self._sim:
             log.debug("[sim] play() %d samples @ %d Hz", len(samples), sr)
             return
+        target_sr = self._cfg.sample_rate
+        if sr != target_sr:
+            samples = _resample_linear(samples, sr, target_sr)
+            sr = target_sr
         sd.play(samples, samplerate=sr, device=self._device_index)
         if blocking:
             sd.wait()
@@ -161,3 +170,62 @@ class AudioOutput:
         if self._cfg.channels == 2:
             tone = np.column_stack([tone, tone])
         self.play(tone, sample_rate=sr)
+
+    def chime(
+        self,
+        notes: Optional[tuple[float, ...]] = None,
+        note_duration: float = 0.18,
+        gap: float = 0.04,
+        amplitude: float = 0.25,
+    ) -> None:
+        """Play an ascending arpeggio "chime" used as the boot signal.
+
+        Each tone is a sine with a short attack/release envelope to
+        avoid clicks. Duplicated to both channels so a user with only
+        one speaker still hears it. Default notes are C5, E5, G5 — a
+        cheerful major triad.
+        """
+        if notes is None:
+            notes = (523.25, 659.25, 783.99)  # C5, E5, G5
+        sr = self._cfg.sample_rate
+        n_note = int(sr * note_duration)
+        n_gap = int(sr * gap)
+        # 5 ms attack/release envelope
+        env_len = max(1, int(sr * 0.005))
+        env = np.ones(n_note, dtype=np.float32)
+        ramp = np.linspace(0.0, 1.0, env_len, dtype=np.float32)
+        env[:env_len] = ramp
+        env[-env_len:] = ramp[::-1]
+
+        chunks = []
+        t = np.linspace(0, note_duration, n_note, endpoint=False, dtype=np.float32)
+        for i, freq in enumerate(notes):
+            tone = amplitude * np.sin(2 * np.pi * freq * t).astype(np.float32) * env
+            chunks.append(tone)
+            if i < len(notes) - 1 and n_gap > 0:
+                chunks.append(np.zeros(n_gap, dtype=np.float32))
+        wave = np.concatenate(chunks)
+        if self._cfg.channels == 2:
+            wave = np.column_stack([wave, wave])
+        self.play(wave, sample_rate=sr)
+
+
+def _resample_linear(samples: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
+    """Cheap linear resampler. Sufficient for speech and short tones; we
+    don't want a scipy/librosa dep just for boot audio.
+    """
+    if src_sr == dst_sr or len(samples) == 0:
+        return samples
+    samples = np.asarray(samples)
+    n_src = samples.shape[0]
+    n_dst = int(round(n_src * dst_sr / src_sr))
+    if n_dst <= 0:
+        return samples[:0]
+    src_x = np.linspace(0.0, 1.0, n_src, dtype=np.float64)
+    dst_x = np.linspace(0.0, 1.0, n_dst, dtype=np.float64)
+    if samples.ndim == 1:
+        return np.interp(dst_x, src_x, samples).astype(np.float32)
+    out = np.empty((n_dst, samples.shape[1]), dtype=np.float32)
+    for c in range(samples.shape[1]):
+        out[:, c] = np.interp(dst_x, src_x, samples[:, c])
+    return out

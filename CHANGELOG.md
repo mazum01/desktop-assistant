@@ -6,6 +6,31 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.6] - 2026-04-29
+
+### Added
+- Boot startup chime: `AudioOutput.chime()` plays a short C5-E5-G5
+  ascending arpeggio (with 5 ms attack/release envelopes to avoid clicks).
+  Mono signal is duplicated to both channels so it's audible with only
+  one speaker wired.
+- New bus topic `av.chime` (and reply `av.chimed`) — `AVService` plays
+  the chime via `AudioOutput.chime()`. Optional payload overrides
+  `notes`, `note_duration`, `gap`, `amplitude`.
+- `runner._run_boot_self_test()` now publishes `av.chime` from the core
+  process before the spoken summary. A success uses the C-major triad;
+  a failure uses a descending E5-C5-G4 motif before the failure speech.
+- `scripts/test_chime.py` — manual test script that plays the chime
+  then speaks the version, useful during bring-up.
+
+### Fixed
+- `AudioOutput.play()` now linearly resamples to the device's configured
+  rate before handing off to PortAudio. The CM108-based USB DACs (incl.
+  the Unitek Y-247A) refuse non-48 kHz input, which crashed
+  `TextToSpeech.say(output=...)` with `Invalid sample rate [-9997]`
+  (espeak-ng emits 22050 Hz WAV).
+
+---
+
 ## [0.8.5] - 2026-04-28
 
 ### Changed

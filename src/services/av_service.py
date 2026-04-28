@@ -7,12 +7,15 @@ Owns: AudioOutput, TextToSpeech, VersionAnnouncer.
 Topics subscribed:
     av.say                {"text": str}            — speak the given text
     av.beep               {"freq": float, "duration": float}  (optional)
+    av.chime              {} or {notes/note_duration/gap/amplitude} —
+                           plays the boot arpeggio (C5-E5-G5 by default)
     av.utterance          {"text": str}            — user said something;
                                                      handle version queries
     av.announce_version   None                     — speak the current version
 
 Topics published:
     av.spoke              {"text": str}
+    av.chimed             {}
     av.version_announced  {"version": str}
 """
 
@@ -59,6 +62,7 @@ class AVService(Service):
 
         self._unsubs.append(self.bus.subscribe("av.say", self._on_say))
         self._unsubs.append(self.bus.subscribe("av.beep", self._on_beep))
+        self._unsubs.append(self.bus.subscribe("av.chime", self._on_chime))
         self._unsubs.append(self.bus.subscribe("av.utterance", self._on_utterance))
         self._unsubs.append(
             self.bus.subscribe("av.announce_version", self._on_announce_version)
@@ -114,6 +118,20 @@ class AVService(Service):
             )
         except Exception:
             log.exception("beep failed")
+
+    def _on_chime(self, _topic, payload) -> None:
+        kwargs = {}
+        if isinstance(payload, dict):
+            if "notes" in payload:
+                kwargs["notes"] = tuple(float(n) for n in payload["notes"])
+            for k in ("note_duration", "gap", "amplitude"):
+                if k in payload:
+                    kwargs[k] = float(payload[k])
+        try:
+            self._audio.chime(**kwargs)
+            self.bus.publish("av.chimed", {})
+        except Exception:
+            log.exception("chime failed")
 
     def _on_utterance(self, _topic, payload) -> None:
         text = (payload or {}).get("text", "") if isinstance(payload, dict) else ""

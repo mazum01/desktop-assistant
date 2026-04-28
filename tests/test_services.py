@@ -237,6 +237,29 @@ def test_av_service_beep():
         svc.stop()
 
 
+def test_av_service_chime_default():
+    bus = MessageBus()
+    svc, audio, _, _ = _make_av(bus)
+    svc.start()
+    try:
+        bus.publish("av.chime", {})
+        audio.chime.assert_called_once_with()
+        assert bus.last("av.chimed") == {}
+    finally:
+        svc.stop()
+
+
+def test_av_service_chime_with_overrides():
+    bus = MessageBus()
+    svc, audio, _, _ = _make_av(bus)
+    svc.start()
+    try:
+        bus.publish("av.chime", {"notes": [440, 550], "note_duration": 0.1})
+        audio.chime.assert_called_once_with(notes=(440.0, 550.0), note_duration=0.1)
+    finally:
+        svc.stop()
+
+
 def test_av_service_say_ignores_empty():
     bus = MessageBus()
     svc, _, tts, _ = _make_av(bus)

@@ -110,11 +110,20 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
             log.warning("[%s] boot self-test found %d issue(s):", unit_name, len(problems))
             for p in problems:
                 log.warning("  - %s", p)
+            # Lower descending tones for failure
+            if unit_name == "core":
+                bus.publish("av.chime", {
+                    "notes": [659.25, 523.25, 392.00],  # E5, C5, G4
+                    "note_duration": 0.22,
+                })
             bus.publish("av.say", {
                 "text": "Boot self test failed. " + "; ".join(problems),
             })
         else:
             log.info("[%s] boot self-test OK", unit_name)
+            # Chime only from the core process (thermal has no AV).
+            if unit_name == "core":
+                bus.publish("av.chime", {})
             bus.publish("av.say", {"text": "All systems nominal."})
 
     threading.Thread(

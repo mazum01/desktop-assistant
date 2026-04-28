@@ -68,17 +68,17 @@ def stereo_tone(freq, duration, channel: str):
 
 # ── Test 1: Left channel ──────────────────────────────────────────────
 print("  → 440 Hz beep on LEFT channel (1 second)")
-out.play(stereo_tone(440, 1.0, "left"))
+out.play(stereo_tone(440, 5.0, "both"))
 time.sleep(0.3)
 
 # ── Test 2: Right channel ─────────────────────────────────────────────
 print("  → 880 Hz beep on RIGHT channel (1 second)")
-out.play(stereo_tone(880, 1.0, "right"))
+out.play(stereo_tone(880, 5.0, "both"))
 time.sleep(0.3)
 
 # ── Test 3: Stereo sweep ──────────────────────────────────────────────
-print("  → Stereo sweep 200 → 2000 Hz (2 seconds)")
-t = np.linspace(0, 2.0, int(sr * 2.0), endpoint=False)
+print("  → Stereo sweep 200 → 2000 Hz (5 seconds)")
+t = np.linspace(0, 5.0, int(sr * 5.0), endpoint=False)
 freq = np.linspace(200, 2000, len(t))
 phase = np.cumsum(2 * np.pi * freq / sr)
 tone = (0.2 * np.sin(phase)).astype(np.float32)
