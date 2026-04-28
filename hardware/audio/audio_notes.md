@@ -1,14 +1,22 @@
 # Audio Hardware Notes
 
-## Output: Sabrent USB Audio Adapter (AU-MMSA / AU-EMAC)
+## Output: USB Audio Adapter (CM108-class)
 
-| Property       | Value                                |
-|----------------|--------------------------------------|
-| Interface      | USB 2.0 (standard UAC1)              |
-| Sample rates   | 44.1 / 48 kHz                        |
-| Output         | 3.5 mm TRS stereo                    |
-| Driver         | Kernel `snd-usb-audio` (auto-loaded) |
-| ALSA name      | "USB PnP Sound Device" / "Sabrent"   |
+Two adapters are known-good and interchangeable:
+
+| Adapter                                  | USB ID    | ALSA descriptor                    |
+|------------------------------------------|-----------|------------------------------------|
+| Sabrent AU-MMSA / AU-EMAC                | 0bda:*    | `USB PnP Sound Device`             |
+| Unitek Y-247A (C-Media CM108)            | 0d8c:*    | `USB Audio Device`                 |
+
+| Property       | Value                                       |
+|----------------|---------------------------------------------|
+| Interface      | USB 2.0 (standard UAC1)                     |
+| Sample rates   | 44.1 / 48 kHz                               |
+| Output         | 3.5 mm TRS stereo                           |
+| Driver         | Kernel `snd-usb-audio` (auto-loaded)        |
+| Match strategy | `find_output_device()` matches any of:      |
+|                | "USB Audio", "C-Media", "Sabrent"           |
 
 ### Speaker wiring (3-pin TRS, pre-wired)
 
@@ -18,16 +26,16 @@
 | Red        | Ring   | Right speaker (+)             |
 | Black      | Sleeve | Both speakers' (−) joined     |
 
-8 Ω speakers will be quiet directly from the Sabrent. A small **PAM8403**
+8 Ω speakers will be quiet directly from a USB DAC. A small **PAM8403**
 class-D amp module between adapter and speakers fixes this.
 
 ### Verifying
 
 ```bash
-lsusb | grep -i sabrent          # should show 0bda:* or similar
-aplay -l                          # list playback devices
-arecord -l                        # list capture devices
-python3 scripts/test_speaker.py   # left / right / sweep test tones
+lsusb | grep -iE 'audio|sabrent|c-media|unitek'   # adapter present?
+aplay -l                                          # list playback devices
+arecord -l                                        # list capture devices
+python3 scripts/test_speaker.py                   # left / right / sweep test tones
 ```
 
 ## Input: Microphones (TBD)
@@ -50,8 +58,9 @@ sudo apt-get install -y espeak-ng
 ```
 
 The driver (`src/audio/tts.py`) renders to WAV and plays through
-`AudioOutput`, so all TTS is automatically routed through the Sabrent
-adapter when present.
+`AudioOutput`, so all TTS is automatically routed through the USB
+adapter when present (Sabrent, C-Media/Unitek, or any device whose
+ALSA name contains "USB Audio").
 
 ```bash
 python3 scripts/test_tts.py

@@ -31,14 +31,16 @@ print(f"  Project version : {get_version()}")
 print(f"  Spoken form     : {spoken_version()}")
 print()
 
-# Use Sabrent USB if present, else system default
+# Use a USB audio adapter if present, else system default
 out = None
-idx = find_output_device("Sabrent")
+idx = find_output_device(("USB Audio", "C-Media", "Sabrent"))
 if idx is not None:
     out = AudioOutput()
-    print(f"  Audio routed through device {idx} (Sabrent)")
+    import sounddevice as sd
+    name = sd.query_devices(idx).get("name", "?")
+    print(f"  Audio routed through device {idx} ({name})")
 else:
-    print("  Audio routed through ALSA default (no Sabrent detected)")
+    print("  Audio routed through ALSA default (no USB DAC detected)")
 
 tts = TextToSpeech()
 if not tts.hardware_ready:

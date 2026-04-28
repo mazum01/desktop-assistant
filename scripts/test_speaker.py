@@ -24,23 +24,27 @@ print("║   Desktop Assistant — Speaker bring-up test     ║")
 print("╚══════════════════════════════════════════════════╝")
 print()
 
+_NEEDLES = ("USB Audio", "C-Media", "Sabrent")
+_NEEDLES_LC = tuple(n.lower() for n in _NEEDLES)
+
 # ── Enumerate output devices ──────────────────────────────────────────
 print("── Output devices ──")
 try:
     import sounddevice as sd
     for idx, dev in enumerate(sd.query_devices()):
         if dev["max_output_channels"] > 0:
-            tag = "  ← Sabrent" if "sabrent" in dev["name"].lower() else ""
+            name_lc = dev["name"].lower()
+            tag = "  ← USB DAC" if any(n in name_lc for n in _NEEDLES_LC) else ""
             print(f"  [{idx:2}] {dev['name']}{tag}")
 except Exception as exc:
     print(f"  ERROR querying devices: {exc}")
     sys.exit(1)
 
-idx = find_output_device("Sabrent")
+idx = find_output_device(_NEEDLES)
 if idx is None:
     print()
-    print("  ✗ No Sabrent device found.")
-    print("    Check: lsusb | grep -i sabrent")
+    print("  ✗ No USB audio adapter found.")
+    print("    Check: lsusb | grep -iE 'audio|sabrent|c-media|unitek'")
     print("    The adapter must be plugged in BEFORE the script runs.")
     sys.exit(1)
 

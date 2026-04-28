@@ -29,19 +29,34 @@ except (ImportError, OSError) as exc:
 
 @dataclass
 class AudioOutputConfig:
-    # Substring matched against device names; first match wins.
-    device_name: str = "Sabrent"
-    # Explicit override; if set, device_name is ignored.
+    # Substrings matched against device names; any match wins. Covers
+    # Sabrent (Realtek), C-Media (Unitek Y-247A and other generic CM108
+    # adapters), and the kernel's generic "USB Audio Device" descriptor.
+    device_names: tuple[str, ...] = ("USB Audio", "C-Media", "Sabrent")
+    # Explicit override; if set, device_names is ignored.
     device_index: Optional[int] = None
-    sample_rate: int = 48000  # Sabrent USB Audio supports 48 kHz natively
+    sample_rate: int = 48000  # 48 kHz is supported by every common USB DAC
     channels: int = 2
+
+    # Back-compat: callers may still pass device_name="Foo".
+    device_name: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        # If a legacy single-string device_name was supplied, it REPLACES
+        # the multi-name default (preserving old "match exactly this and
+        # nothing else" semantics).
+        if self.device_name:
+            self.device_names = (self.device_name,)
 
 
 def find_output_device(
-    name_substring: str = "Sabrent",
+    name_substring: str | tuple[str, ...] | list[str] = (
+        "USB Audio", "C-Media", "Sabrent",
+    ),
 ) -> Optional[int]:
     """Return the index of the first output device whose name contains
-    *name_substring* (case-insensitive). None if nothing matches."""
+    any of *name_substring* (case-insensitive). None if nothing matches.
+    Accepts a single string for back-compat."""
     if not _SD_AVAILABLE:
         return None
     try:
@@ -49,11 +64,15 @@ def find_output_device(
     except Exception as exc:
         log.warning("query_devices failed: %s", exc)
         return None
-    needle = name_substring.lower()
+    if isinstance(name_substring, str):
+        needles = (name_substring.lower(),)
+    else:
+        needles = tuple(s.lower() for s in name_substring)
     for idx, dev in enumerate(devices):
         if dev.get("max_output_channels", 0) <= 0:
             continue
-        if needle in dev.get("name", "").lower():
+        name = dev.get("name", "").lower()
+        if any(n in name for n in needles):
             return idx
     return None
 
@@ -79,12 +98,12 @@ class AudioOutput:
         if self._cfg.device_index is not None:
             self._device_index = self._cfg.device_index
         else:
-            self._device_index = find_output_device(self._cfg.device_name)
+            self._device_index = find_output_device(self._cfg.device_names)
 
         if self._device_index is None:
             log.warning(
-                "[sim] No output device matched '%s' — sim mode",
-                self._cfg.device_name,
+                "[sim] No output device matched any of %s — sim mode",
+                self._cfg.device_names,
             )
             self._sim = True
 

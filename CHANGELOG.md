@@ -6,6 +6,24 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.5] - 2026-04-28
+
+### Changed
+- `AudioOutput` now matches USB audio adapters by ALSA-name substring
+  list instead of a single hardcoded "Sabrent". Default needles:
+  `("USB Audio", "C-Media", "Sabrent")`, which covers Sabrent
+  AU-MMSA/AU-EMAC, Unitek Y-247A (C-Media CM108), and any other generic
+  USB DAC the kernel labels "USB Audio Device".
+- `AudioOutputConfig.device_name` (singular) is preserved for back-compat;
+  when set it becomes the sole match needle.
+- `find_output_device()` accepts a string or a sequence of strings.
+- `scripts/test_speaker.py` and `scripts/test_tts.py` updated to enumerate
+  any USB DAC, not just Sabrent.
+- `hardware/audio/audio_notes.md` documents both adapters and the new
+  match strategy.
+
+---
+
 ## [0.8.4] - 2026-04-27
 
 ### Fixed
