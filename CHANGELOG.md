@@ -6,6 +6,30 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.3] - 2026-04-27
+
+### Fixed
+- `desktop-assistant status` now sees thermal telemetry. Thermal runs in
+  its own systemd unit with its own in-process `MessageBus`, so events
+  it published (`thermal.temp`, `thermal.fan`, `thermal.rpm`) never
+  reached the core process — the CLI showed `temp —`.
+
+### Added
+- `IPCBridge` accepts an `upstream_endpoints=[...]` list (or env var
+  `DA_BUS_UPSTREAM_ENDPOINTS`, comma-separated) and SUBscribes to those
+  ZMQ PUB sockets, re-emitting incoming events onto the local bus.
+  Loop-safe: events injected from upstream are not re-forwarded back
+  out on the local PUB.
+- The thermal process now runs its own `IPCBridge` on
+  `ipc:///tmp/desktop-assistant-thermal.{pub,rep}` so its bus is visible
+  cross-process.
+- `core_main` connects upstream to the thermal bridge — the CLI now
+  shows live temperature, fan duty, and (once wired) tach RPM.
+- Test `test_ipc_bridge_forwards_upstream_to_local_bus` covers the
+  cross-process path. 145/145 tests pass.
+
+---
+
 ## [0.8.2] - 2026-04-27
 
 ### Fixed

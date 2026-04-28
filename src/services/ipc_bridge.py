@@ -79,6 +79,7 @@ class IPCBridge(Service):
         bus: Optional[MessageBus] = None,
         pub_endpoint: Optional[str] = None,
         rep_endpoint: Optional[str] = None,
+        upstream_endpoints: Optional[list[str]] = None,
     ) -> None:
         super().__init__(bus=bus)
         self._pub_endpoint = pub_endpoint or os.environ.get(
@@ -87,6 +88,17 @@ class IPCBridge(Service):
         self._rep_endpoint = rep_endpoint or os.environ.get(
             "DA_BUS_REP_ENDPOINT", _DEFAULT_REP
         )
+        # Upstream PUB endpoints (other processes' IPCBridges) we should
+        # SUBscribe to and forward into our own bus. Events received this
+        # way are tagged so they don't get re-forwarded back upstream by
+        # _forward_to_pub (avoids loops if upstreams ever cross-link).
+        if upstream_endpoints is None:
+            env = os.environ.get("DA_BUS_UPSTREAM_ENDPOINTS", "")
+            upstream_endpoints = [s.strip() for s in env.split(",") if s.strip()]
+        self._upstream_endpoints = list(upstream_endpoints)
+        self._sub = None
+        self._sub_thread: Optional[threading.Thread] = None
+        self._injecting = threading.local()
         self._ctx = None
         self._pub = None
         self._rep = None
@@ -138,6 +150,26 @@ class IPCBridge(Service):
 
         self._unsub = self.bus.subscribe("*", self._forward_to_pub)
 
+        # Optional: subscribe to upstream IPCBridge PUB sockets and
+        # re-emit incoming events onto our own bus. This is how the core
+        # process sees telemetry from the thermal process.
+        if self._upstream_endpoints:
+            try:
+                self._sub = self._ctx.socket(zmq.SUB)
+                self._sub.setsockopt(zmq.SUBSCRIBE, b"")
+                for ep in self._upstream_endpoints:
+                    self._sub.connect(ep)
+                self._sub_thread = threading.Thread(
+                    target=self._sub_loop, name="ipc-sub", daemon=True
+                )
+                self._sub_thread.start()
+                log.info(
+                    "IPCBridge subscribing to upstream: %s",
+                    ", ".join(self._upstream_endpoints),
+                )
+            except Exception:
+                log.exception("upstream SUB setup failed")
+
         self._rep_stop.clear()
         self._rep_thread = threading.Thread(
             target=self._rep_loop, name="ipc-rep", daemon=True
@@ -164,6 +196,15 @@ class IPCBridge(Service):
                     pass
         self._unsub_started = self._unsub_stopped = None
         self._rep_stop.set()
+        if self._sub_thread is not None:
+            self._sub_thread.join(timeout=2.0)
+            self._sub_thread = None
+        if self._sub is not None:
+            try:
+                self._sub.close(linger=0)
+            except Exception:
+                pass
+            self._sub = None
         if self._rep_thread is not None:
             self._rep_thread.join(timeout=2.0)
             self._rep_thread = None
@@ -190,6 +231,10 @@ class IPCBridge(Service):
     def _forward_to_pub(self, topic: str, payload) -> None:
         if self._pub is None:
             return
+        # Skip events we just injected from an upstream SUB — avoids
+        # forming a loop if upstream/downstream are ever cross-linked.
+        if getattr(self._injecting, "active", False):
+            return
         try:
             with self._pub_lock:
                 self._pub.send_multipart(
@@ -198,6 +243,36 @@ class IPCBridge(Service):
                 )
         except Exception:
             log.debug("PUB forward failed for topic=%s", topic, exc_info=True)
+
+    def _sub_loop(self) -> None:
+        poller = zmq.Poller()
+        poller.register(self._sub, zmq.POLLIN)
+        while not self._rep_stop.is_set():
+            try:
+                events = dict(poller.poll(timeout=200))
+            except Exception:
+                if self._rep_stop.is_set():
+                    break
+                log.exception("SUB poll error")
+                continue
+            if self._sub not in events:
+                continue
+            try:
+                frames = self._sub.recv_multipart(flags=zmq.NOBLOCK)
+            except Exception:
+                continue
+            if len(frames) < 2:
+                continue
+            try:
+                topic = frames[0].decode("utf-8")
+                payload = json.loads(frames[1].decode("utf-8"))
+            except Exception:
+                continue
+            self._injecting.active = True
+            try:
+                self.bus.publish(topic, payload)
+            finally:
+                self._injecting.active = False
 
     def _rep_loop(self) -> None:
         poller = zmq.Poller()

@@ -13,7 +13,7 @@ digraph DesktopAssistant {
     ranksep=0.6;
     fontname="Helvetica";
     labelloc="t";
-    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v0.8.0 — telemetry + status + CI</font>>;
+    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v0.8.3 — cross-process bus bridge</font>>;
     fontsize=16;
 
     node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin=0.15];
@@ -68,9 +68,10 @@ digraph DesktopAssistant {
         fillcolor="#e7e3fb";
         fontsize=11;
 
-        core_bus    [label="MessageBus\n(in-process pub/sub)", fillcolor="#bdb1f5"];
-        core_svc    [label="Service base\n(start/tick/stop)",  fillcolor="#bdb1f5"];
-        core_ver    [label="version.py\n(reads /VERSION)",     fillcolor="#bdb1f5"];
+        core_bus     [label="core MessageBus\n(in-process pub/sub)", fillcolor="#bdb1f5"];
+        thermal_bus  [label="thermal MessageBus\n(in-process pub/sub)", fillcolor="#bdb1f5"];
+        core_svc     [label="Service base\n(start/tick/stop)",  fillcolor="#bdb1f5"];
+        core_ver     [label="version.py\n(reads /VERSION)",     fillcolor="#bdb1f5"];
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -83,6 +84,7 @@ digraph DesktopAssistant {
         fontsize=11;
 
         svc_thermal [label="ThermalService\n— thermal.temp\n— thermal.fan\n— thermal.rpm\n— thermal.critical\n— thermal.error", fillcolor="#f4a3a3"];
+        svc_thermal_ipc [label="IPCBridge (thermal)\nPUB ipc:///tmp/desktop-assistant-thermal.pub\nREP ipc:///tmp/desktop-assistant-thermal.rep", fillcolor="#f4a3a3"];
     }
 
     subgraph cluster_svc_core {
@@ -96,7 +98,7 @@ digraph DesktopAssistant {
         svc_audio   [label="AudioCaptureService\n→ audio.level / chunk\n+ latest_chunk()",                          fillcolor="#a8d88d"];
         svc_av      [label="AVService\n← av.say / beep / utterance / announce_version\n→ av.spoke / version_announced", fillcolor="#a8d88d"];
         svc_telemetry [label="TelemetryService\n← thermal.* / motion.position / audio.level\n→ telemetry.flush\nSQLite ring buffer", fillcolor="#a8d88d"];
-        svc_ipc     [label="IPCBridge\nZMQ PUB ipc:///tmp/desktop-assistant.pub\nZMQ REP ipc:///tmp/desktop-assistant.rep\ncmds: ping / topics / last / publish / status", fillcolor="#a8d88d"];
+        svc_ipc     [label="IPCBridge (core)\nPUB ipc:///tmp/desktop-assistant.pub\nREP ipc:///tmp/desktop-assistant.rep\nSUB ← thermal.pub (upstream)\ncmds: ping / topics / last / publish / status", fillcolor="#a8d88d"];
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -146,7 +148,11 @@ digraph DesktopAssistant {
     // ─────────────────────────────────────────────────────────────────
     // Services ↔ bus
     // ─────────────────────────────────────────────────────────────────
-    svc_thermal -> core_bus [color="#cc3333"];
+    svc_thermal -> thermal_bus [color="#cc3333"];
+    thermal_bus -> svc_thermal_ipc [color="#cc3333"];
+    svc_thermal_ipc -> svc_ipc [label="ZMQ PUB→SUB\n(cross-process)", color="#aa6600", style=bold];
+    svc_ipc -> core_bus [color="#226622", label="re-emit"];
+
     core_bus -> svc_motion  [color="#226622"];
     svc_motion -> core_bus  [color="#226622"];
     core_bus -> svc_vision  [color="#226622"];
@@ -161,6 +167,7 @@ digraph DesktopAssistant {
     svc_ipc  -> core_bus    [color="#226622"];
 
     svc_thermal -> core_svc [style=dotted, label="extends"];
+    svc_thermal_ipc -> core_svc [style=dotted];
     svc_motion  -> core_svc [style=dotted];
     svc_vision  -> core_svc [style=dotted];
     svc_audio   -> core_svc [style=dotted];

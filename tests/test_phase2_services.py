@@ -216,6 +216,49 @@ def test_ipc_bridge_forwards_bus_events_to_pub(ipc_endpoints):
         svc.stop()
 
 
+def test_ipc_bridge_forwards_upstream_to_local_bus(tmp_path):
+    """Two IPCBridges: 'remote' publishes, 'local' is subscribed via
+    upstream_endpoints and re-emits onto its own bus. Models the
+    thermal → core handoff."""
+    remote_pub = f"ipc://{tmp_path}/remote-pub"
+    remote_rep = f"ipc://{tmp_path}/remote-rep"
+    local_pub = f"ipc://{tmp_path}/local-pub"
+    local_rep = f"ipc://{tmp_path}/local-rep"
+
+    remote_bus = MessageBus()
+    local_bus = MessageBus()
+
+    remote = IPCBridge(
+        bus=remote_bus, pub_endpoint=remote_pub, rep_endpoint=remote_rep,
+    )
+    local = IPCBridge(
+        bus=local_bus, pub_endpoint=local_pub, rep_endpoint=local_rep,
+        upstream_endpoints=[remote_pub],
+    )
+
+    received: list[tuple[str, object]] = []
+    local_bus.subscribe(
+        "thermal.temp", lambda t, p: received.append((t, p)),
+    )
+
+    remote.start()
+    local.start()
+    try:
+        time.sleep(0.3)  # let SUB connect (slow-joiner)
+        remote_bus.publish("thermal.temp", {"celsius": 22.5, "ok": True})
+        # poll up to 1 s for the message to arrive on the local bus
+        deadline = time.time() + 1.0
+        while time.time() < deadline and not received:
+            time.sleep(0.02)
+        assert received, "upstream event never reached local bus"
+        topic, payload = received[0]
+        assert topic == "thermal.temp"
+        assert payload["celsius"] == 22.5
+    finally:
+        local.stop()
+        remote.stop()
+
+
 def test_ipc_bridge_handles_publish_request(ipc_endpoints):
     pub_ep, rep_ep = ipc_endpoints
     bus = MessageBus()
