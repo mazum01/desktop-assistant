@@ -100,6 +100,88 @@ def cmd_say(args) -> int:
     return 0 if r.get("ok") else 1
 
 
+def cmd_status(args) -> int:
+    r = _request({"cmd": "status"}, timeout_ms=2000)
+    if not r.get("ok"):
+        print(json.dumps(r, indent=2))
+        return 2
+    if args.json:
+        print(json.dumps(r["status"], indent=2))
+        return 0 if _is_healthy(r["status"]) else 1
+
+    s = r["status"]
+    print(f"desktop-assistant v{s.get('version','?')}  "
+          f"(up {_fmt_uptime(s.get('uptime_s', 0))})")
+    print(f"endpoints: pub={s['endpoints']['pub']}  rep={s['endpoints']['rep']}")
+    print()
+    print("services:")
+    if not s["services"]:
+        print("  (none reported)")
+    for name, info in sorted(s["services"].items()):
+        mark = "✓" if info.get("running") else "✗"
+        print(f"  {mark} {name}")
+
+    print()
+    print("latest telemetry:")
+    last = s.get("last", {})
+
+    def show(label, topic, fmt=None):
+        v = last.get(topic)
+        if v is None:
+            print(f"  {label:<14} —")
+            return
+        print(f"  {label:<14} {fmt(v) if fmt else json.dumps(v)}")
+
+    show("temp",     "thermal.temp",
+         lambda v: f"{v.get('celsius','?'):.1f} °C  ({v.get('fahrenheit','?'):.1f} °F)  ok={v.get('ok')}")
+    show("fan",      "thermal.fan",
+         lambda v: f"{v.get('duty','?'):.0f}%  backend={v.get('backend','?')}")
+    show("rpm",      "thermal.rpm",
+         lambda v: f"{v.get('rpm','—')}")
+    show("motion",   "motion.position",
+         lambda v: f"angle={v.get('angle','?')}")
+    show("vision",   "vision.frame_ready",
+         lambda v: f"frame#{v.get('frame_id','?')}  {v.get('width','?')}x{v.get('height','?')}")
+    show("audio",    "audio.level",
+         lambda v: f"{v.get('dbfs','?'):.1f} dBFS  rms={v.get('rms','?'):.4f}")
+
+    err_temp = last.get("thermal.error")
+    if err_temp:
+        print(f"\n⚠ thermal.error: {err_temp}")
+    err_vis  = last.get("vision.error")
+    if err_vis:
+        print(f"⚠ vision.error: {err_vis}")
+    err_aud  = last.get("audio.error")
+    if err_aud:
+        print(f"⚠ audio.error: {err_aud}")
+
+    return 0 if _is_healthy(s) else 1
+
+
+def _is_healthy(status: dict) -> bool:
+    last = status.get("last", {})
+    if last.get("thermal.error"):
+        return False
+    temp = last.get("thermal.temp") or {}
+    if temp.get("ok") is False:
+        return False
+    for name, info in (status.get("services") or {}).items():
+        if not info.get("running", False):
+            return False
+    return True
+
+
+def _fmt_uptime(seconds: float) -> str:
+    s = int(seconds)
+    h, s = divmod(s, 3600)
+    m, s = divmod(s, 60)
+    if h:
+        return f"{h}h{m:02d}m{s:02d}s"
+    if m:
+        return f"{m}m{s:02d}s"
+    return f"{s}s"
+
+
 def cmd_version(_args) -> int:
     r = _request({"cmd": "publish", "topic": "av.announce_version", "payload": None})
     print(json.dumps(r, indent=2))
@@ -131,6 +213,10 @@ def main() -> int:
     sub.add_parser("ping", help="Round-trip check").set_defaults(func=cmd_ping)
     sub.add_parser("topics", help="List subscribed topics").set_defaults(func=cmd_topics)
     sub.add_parser("version", help="Speak the version (FR-VR2)").set_defaults(func=cmd_version)
+
+    sp = sub.add_parser("status", help="Show health/telemetry dashboard")
+    sp.add_argument("--json", action="store_true", help="Emit raw JSON")
+    sp.set_defaults(func=cmd_status)
 
     sp = sub.add_parser("last", help="Most recent payload on a topic")
     sp.add_argument("topic")

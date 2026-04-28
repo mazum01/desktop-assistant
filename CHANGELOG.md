@@ -6,6 +6,36 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.0] - 2026-04-27
+
+### Added — Pre-Phase-3 hardening
+- `src/services/telemetry_service.py` — new `TelemetryService` persists
+  `thermal.temp / fan / rpm`, `motion.position`, `audio.level` to a
+  SQLite ring buffer at `~/.local/share/desktop-assistant/telemetry.db`
+  (200k rows/topic cap; flushed every 5 s; `telemetry.flush` event
+  published per flush). `recent(topic, limit)` and `row_count()`
+  accessors for tooling.
+- `IPCBridge` now answers a new `cmd: "status"` returning
+  `{version, uptime_s, services, last (per-topic), endpoints}`. It
+  also tracks `service.started`/`service.stopped` events.
+- `desktop-assistant status` (and `--json`) — pretty health/telemetry
+  dashboard. Exit code is non-zero if anything is red, so it doubles
+  as a probe for monit/systemd healthchecks.
+- **Boot self-test** in `src/assistant/runner.py` — three seconds after
+  services start, checks every service, plus thermal/vision/audio
+  errors, and TTS-announces "All systems nominal." or the failure list.
+- `.github/workflows/ci.yml` — GitHub Actions workflow runs the test
+  suite on Python 3.11/3.12/3.13 plus a non-blocking ruff lint pass.
+  Hardware-only deps (lgpio, picamera2, etc.) stay un-imported on
+  Ubuntu runners thanks to existing simulation fall-backs.
+
+### Changed
+- `src/assistant/core_main.py` now also runs `TelemetryService`.
+- Architecture diagram updated for the new service, new topic, new CLI
+  command, and the on-disk telemetry DB.
+
+---
+
 ## [0.7.0] - 2026-04-27
 
 ### Added — Phase 2.5: hardware-PWM fan + tach

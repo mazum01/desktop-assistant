@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import signal
+import threading
 import time
 from typing import List
 
@@ -53,6 +54,11 @@ def run_services(services: List[Service], unit_name: str) -> int:
 
     log.info("[%s] %d service(s) running — entering main loop",
              unit_name, len(started))
+
+    # Boot self-test: a few seconds after services are up, sample telemetry
+    # for obvious problems. If anything is red, ask the AV layer to speak.
+    _run_boot_self_test(started, unit_name)
+
     try:
         while not stopping["flag"]:
             time.sleep(0.5)
@@ -65,3 +71,54 @@ def run_services(services: List[Service], unit_name: str) -> int:
 
     log.info("[%s] exited cleanly", unit_name)
     return 0
+
+
+def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
+    """Wait briefly for first telemetry samples, then announce health."""
+    if not started:
+        return
+
+    bus = started[0].bus
+
+    def _check_after_grace():
+        time.sleep(3.0)   # let services produce their first samples
+        problems: List[str] = []
+
+        # Service liveness — anything that didn't reach service.started is bad.
+        for svc in started:
+            if not svc.is_running():
+                problems.append(f"{svc.name} did not start")
+
+        # Topic-specific health
+        thermal_err = bus.last("thermal.error")
+        if thermal_err:
+            problems.append(f"thermal error: {thermal_err}")
+
+        temp = bus.last("thermal.temp") or {}
+        if isinstance(temp, dict) and temp.get("ok") is False:
+            problems.append("temperature sensor offline")
+
+        vis_err = bus.last("vision.error")
+        if vis_err:
+            problems.append("vision subsystem error")
+
+        aud_err = bus.last("audio.error")
+        if aud_err:
+            problems.append("audio capture error")
+
+        if problems:
+            log.warning("[%s] boot self-test found %d issue(s):", unit_name, len(problems))
+            for p in problems:
+                log.warning("  - %s", p)
+            bus.publish("av.say", {
+                "text": "Boot self test failed. " + "; ".join(problems),
+            })
+        else:
+            log.info("[%s] boot self-test OK", unit_name)
+            bus.publish("av.say", {"text": "All systems nominal."})
+
+    threading.Thread(
+        target=_check_after_grace,
+        name="boot-self-test",
+        daemon=True,
+    ).start()

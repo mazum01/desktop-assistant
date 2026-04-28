@@ -95,8 +95,29 @@ class IPCBridge(Service):
         self._unsub = None
         self._enabled = False
         self._pub_lock = threading.Lock()
+        self._service_status: dict[str, dict] = {}
+        self._unsub_started = None
+        self._unsub_stopped = None
+        self._start_time = 0.0
 
     def on_start(self) -> None:
+        import time as _time
+        self._start_time = _time.time()
+
+        # Track service.started / stopped for the status command.
+        def _on_started(_topic, payload):
+            if isinstance(payload, dict) and payload.get("name"):
+                self._service_status[payload["name"]] = {
+                    "running": True, "ts": _time.time(),
+                }
+        def _on_stopped(_topic, payload):
+            if isinstance(payload, dict) and payload.get("name"):
+                self._service_status[payload["name"]] = {
+                    "running": False, "ts": _time.time(),
+                }
+        self._unsub_started = self.bus.subscribe("service.started", _on_started)
+        self._unsub_stopped = self.bus.subscribe("service.stopped", _on_stopped)
+
         if not _ZMQ_AVAILABLE:
             log.warning(
                 "pyzmq not installed — IPC bridge disabled "
@@ -135,6 +156,13 @@ class IPCBridge(Service):
             except Exception:
                 pass
             self._unsub = None
+        for u in (self._unsub_started, self._unsub_stopped):
+            if u is not None:
+                try:
+                    u()
+                except Exception:
+                    pass
+        self._unsub_started = self._unsub_stopped = None
         self._rep_stop.set()
         if self._rep_thread is not None:
             self._rep_thread.join(timeout=2.0)
@@ -216,4 +244,31 @@ class IPCBridge(Service):
             return {"ok": True, "topics": self.bus.topics()}
         if cmd == "ping":
             return {"ok": True, "pong": True}
+        if cmd == "status":
+            return {"ok": True, "status": self._build_status()}
         return {"ok": False, "error": f"unknown_cmd:{cmd}"}
+
+    def _build_status(self) -> dict:
+        import time as _time
+        from src.core.version import get_version
+
+        # Topics we want to surface in the dashboard.
+        snapshot_topics = (
+            "thermal.temp", "thermal.fan", "thermal.rpm", "thermal.error",
+            "motion.position",
+            "vision.frame_ready", "vision.error",
+            "audio.level", "audio.error",
+            "telemetry.flush",
+        )
+        last = {t: self.bus.last(t) for t in snapshot_topics}
+
+        return {
+            "version":   get_version(),
+            "uptime_s":  max(0.0, _time.time() - self._start_time),
+            "services":  dict(self._service_status),
+            "last":      last,
+            "endpoints": {
+                "pub": self._pub_endpoint,
+                "rep": self._rep_endpoint,
+            },
+        }

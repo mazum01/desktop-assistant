@@ -13,7 +13,7 @@ digraph DesktopAssistant {
     ranksep=0.6;
     fontname="Helvetica";
     labelloc="t";
-    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v0.7.0 — Phase 2 complete · hardware-PWM fan + tach</font>>;
+    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v0.8.0 — telemetry + status + CI</font>>;
     fontsize=16;
 
     node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin=0.15];
@@ -95,7 +95,8 @@ digraph DesktopAssistant {
         svc_vision  [label="VisionService\n→ vision.frame_ready\n← vision.capture_still\n+ latest_frame()",        fillcolor="#a8d88d"];
         svc_audio   [label="AudioCaptureService\n→ audio.level / chunk\n+ latest_chunk()",                          fillcolor="#a8d88d"];
         svc_av      [label="AVService\n← av.say / beep / utterance / announce_version\n→ av.spoke / version_announced", fillcolor="#a8d88d"];
-        svc_ipc     [label="IPCBridge\nZMQ PUB ipc:///tmp/desktop-assistant.pub\nZMQ REP ipc:///tmp/desktop-assistant.rep", fillcolor="#a8d88d"];
+        svc_telemetry [label="TelemetryService\n← thermal.* / motion.position / audio.level\n→ telemetry.flush\nSQLite ring buffer", fillcolor="#a8d88d"];
+        svc_ipc     [label="IPCBridge\nZMQ PUB ipc:///tmp/desktop-assistant.pub\nZMQ REP ipc:///tmp/desktop-assistant.rep\ncmds: ping / topics / last / publish / status", fillcolor="#a8d88d"];
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -107,8 +108,9 @@ digraph DesktopAssistant {
         fillcolor="#fff7c2";
         fontsize=11;
 
-        ext_cli [label="scripts/desktop-assistant\n(CLI: pan / say / watch / ...)", fillcolor="#ffe375"];
+        ext_cli [label="scripts/desktop-assistant\n(CLI: ping / status / pan / say / watch / ...)", fillcolor="#ffe375"];
         ext_3p  [label="3rd-party subscribers\n(dashboards, future ML pipelines)", fillcolor="#ffe375", style="rounded,filled,dashed"];
+        ext_db  [label="~/.local/share/desktop-assistant/\ntelemetry.db (SQLite ring)", fillcolor="#ffe375"];
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -153,6 +155,8 @@ digraph DesktopAssistant {
     svc_audio -> core_bus   [color="#226622"];
     core_bus -> svc_av      [color="#226622"];
     svc_av   -> core_bus    [color="#226622"];
+    core_bus -> svc_telemetry [color="#226622"];
+    svc_telemetry -> core_bus [color="#226622"];
     core_bus -> svc_ipc     [color="#226622"];
     svc_ipc  -> core_bus    [color="#226622"];
 
@@ -161,6 +165,7 @@ digraph DesktopAssistant {
     svc_vision  -> core_svc [style=dotted];
     svc_audio   -> core_svc [style=dotted];
     svc_av      -> core_svc [style=dotted];
+    svc_telemetry -> core_svc [style=dotted];
     svc_ipc     -> core_svc [style=dotted];
 
     // ─────────────────────────────────────────────────────────────────
@@ -168,9 +173,10 @@ digraph DesktopAssistant {
     // ─────────────────────────────────────────────────────────────────
     ext_cli -> svc_ipc [label="ZMQ REQ/SUB", color="#aa6600"];
     ext_3p  -> svc_ipc [label="ZMQ SUB",     color="#aa6600", style=dashed];
+    svc_telemetry -> ext_db [label="writes", color="#aa6600"];
 
     // ─────────────────────────────────────────────────────────────────
     // Boot ordering
     // ─────────────────────────────────────────────────────────────────
-    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_av; svc_ipc;}
+    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_av; svc_telemetry; svc_ipc;}
 }

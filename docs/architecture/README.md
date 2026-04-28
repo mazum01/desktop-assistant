@@ -37,6 +37,7 @@ Keep this list in sync with the diagram.
 * **audio**: `audio.level`, `audio.chunk`, `audio.error`
 * **av** (in): `av.say`, `av.beep`, `av.utterance`, `av.announce_version`
 * **av** (out): `av.spoke`, `av.version_announced`
+* **telemetry**: `telemetry.flush` (out)
 
 ## Regenerating the diagram
 

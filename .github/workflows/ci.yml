@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install system deps (zmq)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libzmq3-dev
+
+      - name: Install Python deps
+        # Pi-only packages (lgpio, picamera2, sounddevice with PortAudio,
+        # adafruit-blinka, etc.) won't all install cleanly on a generic
+        # Ubuntu runner, but the codebase is built so missing imports
+        # gracefully fall back to simulation. We install the cross-platform
+        # dependencies and let the rest stay un-importable.
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pyzmq numpy soundfile sounddevice || true
+          # Install only what loads on Ubuntu CI; failures are tolerated.
+          pip install smbus2 || true
+
+      - name: Pytest
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python -m pytest tests/ -q
+
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff
+      - name: ruff check (non-blocking warnings)
+        run: ruff check src/ tests/ scripts/ || true
+      - name: ruff format --check (non-blocking)
+        run: ruff format --check src/ tests/ scripts/ || true

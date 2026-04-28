@@ -283,3 +283,35 @@ def test_ipc_bridge_handles_unknown_command(ipc_endpoints):
         assert "nope" in reply["error"]
     finally:
         svc.stop()
+
+
+def test_ipc_bridge_status_reports_services_and_telemetry(ipc_endpoints):
+    pub_ep, rep_ep = ipc_endpoints
+    bus = MessageBus()
+    svc = IPCBridge(bus=bus, pub_endpoint=pub_ep, rep_endpoint=rep_ep)
+    svc.start()
+    try:
+        bus.publish("service.started", {"name": "thermal"})
+        bus.publish("service.started", {"name": "motion"})
+        bus.publish("thermal.temp", {"celsius": 38.5, "fahrenheit": 101.3, "ok": True})
+        bus.publish("motion.position", {"angle": 75.0})
+
+        ctx = zmq.Context.instance()
+        req = ctx.socket(zmq.REQ)
+        req.setsockopt(zmq.RCVTIMEO, 2000)
+        req.connect(rep_ep)
+        req.send_string(json.dumps({"cmd": "status"}))
+        reply = json.loads(req.recv_string())
+        req.close(linger=0)
+
+        assert reply["ok"] is True
+        s = reply["status"]
+        assert "version" in s
+        assert s["uptime_s"] >= 0.0
+        assert s["services"]["thermal"]["running"] is True
+        assert s["services"]["motion"]["running"] is True
+        assert s["last"]["thermal.temp"]["celsius"] == 38.5
+        assert s["last"]["motion.position"]["angle"] == 75.0
+        assert s["endpoints"]["pub"] == pub_ep
+    finally:
+        svc.stop()

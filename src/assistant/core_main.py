@@ -20,6 +20,7 @@ from src.services.audio_capture_service import AudioCaptureService
 from src.services.av_service import AVService
 from src.services.ipc_bridge import IPCBridge
 from src.services.motion_service import MotionService
+from src.services.telemetry_service import TelemetryService
 from src.services.vision_service import VisionService
 
 
@@ -31,6 +32,7 @@ def main() -> int:
             VisionService(bus=bus),
             AudioCaptureService(bus=bus),
             AVService(bus=bus),
+            TelemetryService(bus=bus),
             IPCBridge(bus=bus),  # last so all earlier services emit
                                   # service.started events on the wire
         ],
