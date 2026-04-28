@@ -6,6 +6,24 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.6.1] - 2026-04-27
+
+### Added
+- `docs/architecture/architecture.dot` — Graphviz source of truth for the
+  system architecture diagram. Renders to `architecture.pdf`,
+  `architecture.svg`, and `architecture.png`.
+- `docs/architecture/build.sh` — one-shot regenerator for all three
+  rendered formats. Requires `graphviz`.
+- `docs/architecture/README.md` — narrative explanation of the diagram,
+  process model, bus topics, and update rules.
+- New agent imperative **#7 — Architecture Diagram** in
+  `.github/copilot-instructions.md`. Mandates that any change to
+  services, drivers, hardware, systemd units, cross-service bus topics,
+  external interfaces, or process boundaries must be reflected in the
+  diagram (both `.dot` source and rendered outputs) in the same commit.
+
+---
+
 ## [0.6.0] - 2026-04-27
 
 ### Added — Phase 2 complete

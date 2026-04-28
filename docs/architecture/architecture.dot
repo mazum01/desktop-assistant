@@ -1,0 +1,173 @@
+// Desktop Assistant — System Architecture
+//
+// This file is the source of truth for docs/architecture/architecture.pdf.
+// Regenerate with:  bash docs/architecture/build.sh
+//
+// Per agent imperative #7: this diagram MUST be updated whenever a service,
+// driver, hardware item, or topic is added/removed/renamed.
+
+digraph DesktopAssistant {
+    rankdir=TB;
+    splines=true;
+    nodesep=0.4;
+    ranksep=0.6;
+    fontname="Helvetica";
+    labelloc="t";
+    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v0.6.1 — Phase 2 complete</font>>;
+    fontsize=16;
+
+    node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin=0.15];
+    edge  [fontname="Helvetica", fontsize=8, color="#555555"];
+
+    // ─────────────────────────────────────────────────────────────────
+    // Hardware layer
+    // ─────────────────────────────────────────────────────────────────
+    subgraph cluster_hw {
+        label="Hardware (Raspberry Pi 5)";
+        style="filled,rounded";
+        fillcolor="#f5e9d8";
+        fontsize=11;
+
+        hw_tmp117  [label="TMP117\n(I²C 0x48)",       fillcolor="#ffd6a5"];
+        hw_fan     [label="NF-A6x25 PWM Fan\n(GPIO13)", fillcolor="#ffd6a5"];
+        hw_servo   [label="DS3218 Servo\n(PCA9685 ch15)", fillcolor="#ffd6a5"];
+        hw_cam     [label="Pi Cam Module 3 Wide\n(CSI-0)", fillcolor="#ffd6a5"];
+        hw_mic     [label="USB Microphone",        fillcolor="#ffd6a5"];
+        hw_spk     [label="Sabrent USB Audio →\n8 Ω stereo speakers", fillcolor="#ffd6a5"];
+        hw_hailo   [label="Hailo-8 AI HAT+\n(26 TOPS, PCIe)",  fillcolor="#ffd6a5"];
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Driver layer (src/...)
+    // ─────────────────────────────────────────────────────────────────
+    subgraph cluster_drv {
+        label="Drivers (src/)";
+        style="filled,rounded";
+        fillcolor="#dfeefc";
+        fontsize=11;
+
+        drv_tmp117 [label="thermal/tmp117.py",          fillcolor="#a5c8ff"];
+        drv_fan    [label="thermal/fan.py\n(lgpio PWM)", fillcolor="#a5c8ff"];
+        drv_thmgr  [label="thermal/thermal_manager.py", fillcolor="#a5c8ff"];
+        drv_servo  [label="motion/servo_controller.py", fillcolor="#a5c8ff"];
+        drv_cam    [label="vision/camera.py\n(picamera2)", fillcolor="#a5c8ff"];
+        drv_aout   [label="audio/output.py",            fillcolor="#a5c8ff"];
+        drv_ain    [label="audio/input.py",             fillcolor="#a5c8ff"];
+        drv_tts    [label="audio/tts.py\n(espeak-ng)",  fillcolor="#a5c8ff"];
+        drv_van    [label="audio/version_announcer.py", fillcolor="#a5c8ff"];
+        drv_hailo  [label="perception/hailo_probe.py",  fillcolor="#a5c8ff", style="rounded,filled,dashed"];
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Core
+    // ─────────────────────────────────────────────────────────────────
+    subgraph cluster_core {
+        label="Core (src/core/)";
+        style="filled,rounded";
+        fillcolor="#e7e3fb";
+        fontsize=11;
+
+        core_bus    [label="MessageBus\n(in-process pub/sub)", fillcolor="#bdb1f5"];
+        core_svc    [label="Service base\n(start/tick/stop)",  fillcolor="#bdb1f5"];
+        core_ver    [label="version.py\n(reads /VERSION)",     fillcolor="#bdb1f5"];
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Services
+    // ─────────────────────────────────────────────────────────────────
+    subgraph cluster_svc_thermal {
+        label="systemd: desktop-assistant-thermal.service";
+        style="filled,rounded";
+        fillcolor="#fde0e0";
+        fontsize=11;
+
+        svc_thermal [label="ThermalService\n— thermal.temp\n— thermal.fan\n— thermal.critical\n— thermal.error", fillcolor="#f4a3a3"];
+    }
+
+    subgraph cluster_svc_core {
+        label="systemd: desktop-assistant-core.service";
+        style="filled,rounded";
+        fillcolor="#e2f5d8";
+        fontsize=11;
+
+        svc_motion  [label="MotionService\n← motion.pan_to / relax / stop\n→ motion.position / moved", fillcolor="#a8d88d"];
+        svc_vision  [label="VisionService\n→ vision.frame_ready\n← vision.capture_still\n+ latest_frame()",        fillcolor="#a8d88d"];
+        svc_audio   [label="AudioCaptureService\n→ audio.level / chunk\n+ latest_chunk()",                          fillcolor="#a8d88d"];
+        svc_av      [label="AVService\n← av.say / beep / utterance / announce_version\n→ av.spoke / version_announced", fillcolor="#a8d88d"];
+        svc_ipc     [label="IPCBridge\nZMQ PUB ipc:///tmp/desktop-assistant.pub\nZMQ REP ipc:///tmp/desktop-assistant.rep", fillcolor="#a8d88d"];
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // External
+    // ─────────────────────────────────────────────────────────────────
+    subgraph cluster_ext {
+        label="External processes";
+        style="filled,rounded";
+        fillcolor="#fff7c2";
+        fontsize=11;
+
+        ext_cli [label="scripts/desktop-assistant\n(CLI: pan / say / watch / ...)", fillcolor="#ffe375"];
+        ext_3p  [label="3rd-party subscribers\n(dashboards, future ML pipelines)", fillcolor="#ffe375", style="rounded,filled,dashed"];
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Edges — hardware → drivers
+    // ─────────────────────────────────────────────────────────────────
+    hw_tmp117 -> drv_tmp117 [label="I²C"];
+    hw_fan    -> drv_fan    [label="PWM"];
+    hw_servo  -> drv_servo  [label="I²C/PWM"];
+    hw_cam    -> drv_cam    [label="CSI"];
+    hw_mic    -> drv_ain    [label="USB"];
+    hw_spk    -> drv_aout   [label="USB"];
+    hw_hailo  -> drv_hailo  [label="PCIe"];
+
+    drv_tmp117 -> drv_thmgr;
+    drv_fan    -> drv_thmgr;
+    drv_tts    -> drv_aout  [style=dashed, label="renders to"];
+    drv_van    -> drv_tts;
+    drv_van    -> core_ver  [style=dashed];
+
+    // ─────────────────────────────────────────────────────────────────
+    // Drivers → services
+    // ─────────────────────────────────────────────────────────────────
+    drv_thmgr -> svc_thermal;
+    drv_servo -> svc_motion;
+    drv_cam   -> svc_vision;
+    drv_ain   -> svc_audio;
+    drv_aout  -> svc_av;
+    drv_tts   -> svc_av;
+    drv_van   -> svc_av;
+
+    // ─────────────────────────────────────────────────────────────────
+    // Services ↔ bus
+    // ─────────────────────────────────────────────────────────────────
+    svc_thermal -> core_bus [color="#cc3333"];
+    core_bus -> svc_motion  [color="#226622"];
+    svc_motion -> core_bus  [color="#226622"];
+    core_bus -> svc_vision  [color="#226622"];
+    svc_vision -> core_bus  [color="#226622"];
+    core_bus -> svc_audio   [color="#226622"];
+    svc_audio -> core_bus   [color="#226622"];
+    core_bus -> svc_av      [color="#226622"];
+    svc_av   -> core_bus    [color="#226622"];
+    core_bus -> svc_ipc     [color="#226622"];
+    svc_ipc  -> core_bus    [color="#226622"];
+
+    svc_thermal -> core_svc [style=dotted, label="extends"];
+    svc_motion  -> core_svc [style=dotted];
+    svc_vision  -> core_svc [style=dotted];
+    svc_audio   -> core_svc [style=dotted];
+    svc_av      -> core_svc [style=dotted];
+    svc_ipc     -> core_svc [style=dotted];
+
+    // ─────────────────────────────────────────────────────────────────
+    // External
+    // ─────────────────────────────────────────────────────────────────
+    ext_cli -> svc_ipc [label="ZMQ REQ/SUB", color="#aa6600"];
+    ext_3p  -> svc_ipc [label="ZMQ SUB",     color="#aa6600", style=dashed];
+
+    // ─────────────────────────────────────────────────────────────────
+    // Boot ordering
+    // ─────────────────────────────────────────────────────────────────
+    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_av; svc_ipc;}
+}

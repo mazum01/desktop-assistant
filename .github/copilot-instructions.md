@@ -59,3 +59,26 @@ The agent must follow them unconditionally.
   `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
 - Push to `main` after every logical unit of work.
 - Never force-push to `main`.
+
+## 7. Architecture Diagram — Mandatory on Every Architectural Change
+
+- The system architecture diagram lives at `docs/architecture/architecture.pdf`.
+- The Graphviz source is `docs/architecture/architecture.dot` (the source of
+  truth — never hand-edit the rendered outputs).
+- Regenerate **all three** rendered outputs (`.pdf`, `.svg`, `.png`) via
+  `bash docs/architecture/build.sh` and commit them alongside the `.dot`
+  edit in the same commit.
+- The diagram **must** be updated whenever any of these is added, removed,
+  or renamed:
+  1. A service (anything under `src/services/`)
+  2. A driver subsystem (e.g., a new `src/<subsystem>/`)
+  3. A hardware component
+  4. A systemd unit (under `services/systemd/`)
+  5. A bus topic that has a cross-service consumer
+  6. An external interface (CLI, ZMQ socket, HTTP, MQTT, …)
+  7. A process boundary (splitting/merging units)
+- The diagram's title block contains the version string. Bump it together
+  with `/VERSION` per imperative #1.
+- If a PR/commit changes architecture without updating the diagram, the
+  change is incomplete — fix it before merging.
+
