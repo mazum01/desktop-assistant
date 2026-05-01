@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.10] - 2026-05-01
+
+### Fixed
+- `AudioInput.__init__()` now probes the chosen input device with
+  `sd.check_input_settings()` and falls back to sim mode if the probe
+  fails. Without this, the unwired mic on the CM108 USB DAC was
+  causing PortAudio to `SIGABRT` the whole core process every ~3 s,
+  triggering systemd restart loops. With this, the boot self-test
+  reports the mic as offline cleanly and core stays up.
+
+---
+
 ## [0.8.9] - 2026-05-01
 
 ### Fixed

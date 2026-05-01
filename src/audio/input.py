@@ -86,6 +86,26 @@ class AudioInput:
                 self._sim = True
         # else: leave None → sounddevice uses system default
 
+        # Probe the chosen device with the configured sample rate. Many
+        # USB DACs (e.g. CM108) advertise output but not input, or only
+        # support 44.1/48 kHz. If the probe fails, drop to sim mode
+        # rather than letting PortAudio repeatedly SIGABRT the process.
+        if not self._sim and hasattr(sd, "check_input_settings"):
+            try:
+                sd.check_input_settings(
+                    device=self._device_index,
+                    channels=self._cfg.channels,
+                    samplerate=self._cfg.sample_rate,
+                    dtype="float32",
+                )
+            except Exception as exc:
+                log.warning(
+                    "[sim] Input device probe failed (device=%s @ %d Hz): %s — "
+                    "audio input disabled until mic is wired",
+                    self._device_index, self._cfg.sample_rate, exc,
+                )
+                self._sim = True
+
     @property
     def hardware_ready(self) -> bool:
         return not self._sim
