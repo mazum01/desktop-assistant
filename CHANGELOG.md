@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.13] - 2026-05-01
+### Changed
+- Replaced espeak-ng TTS backend with **Piper** neural TTS (en_US-amy-medium
+  voice, 22 kHz). Speech now sounds natural and modern rather than robotic.
+  Voice model lives at `config/piper/en_US-amy-medium.onnx`. espeak-ng is
+  retained as an automatic fallback if the model is absent.
+- `TTSConfig` gains Piper-specific fields: `piper_voice_name`, `piper_model`,
+  `piper_length_scale`, `piper_noise_scale`, `piper_noise_w`.
+- `say()` with no `output` argument now plays via sounddevice instead of
+  spawning espeak subprocess directly (consistent code path).
+- Updated TTS unit tests to reflect new backend-detection contract.
+
+---
+
 ## [0.8.12] - 2026-05-01
 
 ### Fixed

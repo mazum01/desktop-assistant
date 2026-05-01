@@ -19,15 +19,17 @@ from src.audio.version_announcer import (
 
 class TestTextToSpeech:
     def test_sim_when_binary_missing(self):
-        with patch("src.audio.tts.shutil.which", return_value=None):
+        with patch("src.audio.tts.shutil.which", return_value=None), \
+             patch("src.audio.tts.TextToSpeech._resolve_piper_model", return_value=None):
             tts = TextToSpeech()
         assert tts.hardware_ready is False
-        # say() in sim mode must not raise
         tts.say("hello world")
 
     def test_say_invokes_espeak(self):
         with patch("src.audio.tts.shutil.which", return_value="/usr/bin/espeak-ng"), \
-             patch("src.audio.tts.subprocess.run") as mock_run:
+             patch("src.audio.tts.TextToSpeech._resolve_piper_model", return_value=None), \
+             patch("src.audio.tts.subprocess.run") as mock_run, \
+             patch("src.audio.tts.sounddevice") as mock_sd:
             tts = TextToSpeech()
             tts.say("hello")
         assert mock_run.called
@@ -38,7 +40,9 @@ class TestTextToSpeech:
     def test_voice_and_speed_passed_to_espeak(self):
         cfg = TTSConfig(voice="en-gb", speed_wpm=180, pitch=60, amplitude=120)
         with patch("src.audio.tts.shutil.which", return_value="/usr/bin/espeak-ng"), \
-             patch("src.audio.tts.subprocess.run") as mock_run:
+             patch("src.audio.tts.TextToSpeech._resolve_piper_model", return_value=None), \
+             patch("src.audio.tts.subprocess.run") as mock_run, \
+             patch("src.audio.tts.sounddevice"):
             tts = TextToSpeech(cfg)
             tts.say("test")
         cmd = mock_run.call_args[0][0]
@@ -47,14 +51,18 @@ class TestTextToSpeech:
         assert "60" in cmd
         assert "120" in cmd
 
-    def test_render_to_wav_uses_w_flag(self):
+    def test_render_to_wav_calls_espeak(self):
+        """render_to_wav renders via espeak then writes a wav at the given path."""
+        import numpy as np
+        import wave
+        fake_samples = (np.zeros(100, dtype=np.float32), 22050)
         with patch("src.audio.tts.shutil.which", return_value="/usr/bin/espeak-ng"), \
-             patch("src.audio.tts.subprocess.run") as mock_run:
+             patch("src.audio.tts.TextToSpeech._resolve_piper_model", return_value=None), \
+             patch("src.audio.tts.TextToSpeech._render_to_array", return_value=fake_samples) as mock_render, \
+             patch("wave.open"):
             tts = TextToSpeech()
             tts.render_to_wav("hi", "/tmp/x.wav")
-        cmd = mock_run.call_args[0][0]
-        assert "-w" in cmd
-        assert "/tmp/x.wav" in cmd
+        mock_render.assert_called_once_with("hi")
 
 
 # ---------------------------------------------------------------------------
