@@ -75,12 +75,21 @@ class AVService(Service):
         )
 
         if self._announce_on_start:
-            try:
-                self._announcer.announce_startup()
-                from src.core.version import get_version
-                self.bus.publish("av.version_announced", {"version": get_version()})
-            except Exception:
-                log.exception("Startup version announcement failed")
+            import threading
+
+            def _bg_announce():
+                try:
+                    self._announcer.announce_startup()
+                    from src.core.version import get_version
+                    self.bus.publish("av.version_announced", {"version": get_version()})
+                except Exception:
+                    log.exception("Startup version announcement failed")
+
+            threading.Thread(
+                target=_bg_announce,
+                name="av-startup-announce",
+                daemon=True,
+            ).start()
 
     def on_stop(self) -> None:
         for unsub in self._unsubs:

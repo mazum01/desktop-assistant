@@ -62,12 +62,27 @@ class AudioCaptureService(Service):
     def run_tick(self) -> None:
         if self._mic is None:
             return
+        # If we've already failed many times in a row, back off to avoid
+        # hammering PortAudio (which can wedge the shared output stream
+        # when the input stream keeps erroring). Bring-up: mic isn't
+        # always wired yet.
+        if getattr(self, "_consecutive_failures", 0) >= 3:
+            return
         try:
             chunk = self._mic.record(self._chunk_seconds)
         except Exception:
-            log.exception("mic.record failed")
+            self._consecutive_failures = getattr(self, "_consecutive_failures", 0) + 1
+            if self._consecutive_failures <= 3:
+                log.exception("mic.record failed")
+            if self._consecutive_failures == 3:
+                log.warning(
+                    "mic.record failed 3x; suppressing further attempts "
+                    "until service restart (mic likely unplugged or "
+                    "sample-rate mismatch)"
+                )
             self.bus.publish("audio.error", {"reason": "record_failed"})
             return
+        self._consecutive_failures = 0
 
         # Mono float32 expected. If multi-channel, mix to mono for level.
         if chunk.ndim > 1:

@@ -6,6 +6,24 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.9] - 2026-05-01
+
+### Fixed
+- `AVService.on_start()` now runs `announce_startup()` on a daemon
+  thread instead of blocking the main service-startup thread. With
+  v0.8.8's `audio_output=` fix, the synchronous TTS playback was
+  blocking on `sd.wait()` (which never returned because the parallel
+  `AudioCaptureService` was hammering PortAudio with input-stream
+  errors). Result: `ipc_bridge` never started and the CLI timed out
+  for the entire process lifetime.
+- `AudioCaptureService.run_tick()` now backs off after 3 consecutive
+  `mic.record` failures and stops trying until the service restarts.
+  Without a mic wired, the previous behaviour was to keep opening &
+  closing failing PortAudio input streams 4×/s, which can wedge the
+  shared USB-DAC output stream.
+
+---
+
 ## [0.8.8] - 2026-05-01
 
 ### Fixed
