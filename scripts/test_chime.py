@@ -18,7 +18,7 @@ from src.audio.version_announcer import VersionAnnouncer
 def main() -> int:
     out = AudioOutput()
     print(f"hardware_ready={out.hardware_ready} device={getattr(out, '_device_index', '?')}")
-    print("Playing boot chime (C5-E5-G5)…")
+    print("Playing boot chime (A5-C#6-E6)…")
     out.chime()
     time.sleep(0.2)
     print("Speaking version…")

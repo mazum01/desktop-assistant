@@ -6,6 +6,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.11] - 2026-05-01
+
+### Changed
+- Two more software loudness wins for the unamplified bring-up speaker:
+  - `AudioOutput.play()` now applies a `tanh()` soft-clipping
+    waveshaper (drive default 3.0) to every output. Pushes RMS up
+    while keeping peaks bounded at -0.4 dBFS — adds ~5-6 dB perceived
+    loudness on speech, ~3 dB on tones, with mild harmonic distortion.
+    Configurable via `AudioOutputConfig.loudness_boost` (1.0 disables).
+  - Boot chime moved up an octave: A5/C#6/E6 (880/1109/1319 Hz)
+    instead of C5/E5/G5. Sits in the small-speaker resonance band
+    (1-3 kHz) and the ear's most sensitive band (Fletcher-Munson),
+    so it's audibly louder on the same DAC level.
+
+### Notes
+- ALSA `Speaker Playback Volume` on the CM108 is at 36/37 (≈ -1 dB),
+  so all remaining mixer headroom is spoken for. Real loudness fix
+  remains the PAM8403 amplifier.
+
+---
+
 ## [0.8.10] - 2026-05-01
 
 ### Fixed

@@ -38,6 +38,11 @@ class AudioOutputConfig:
     sample_rate: int = 48000  # 48 kHz is supported by every common USB DAC
     channels: int = 2
 
+    # Soft-clipping waveshaper drive — pumps perceived loudness on the
+    # unamplified bring-up speaker. 1.0 = off (linear). 2.0-4.0 typical;
+    # higher = louder + more harmonic distortion. 0 disables.
+    loudness_boost: float = 3.0
+
     # Back-compat: callers may still pass device_name="Foo".
     device_name: Optional[str] = None
 
@@ -148,6 +153,9 @@ class AudioOutput:
         if sr != target_sr:
             samples = _resample_linear(samples, sr, target_sr)
             sr = target_sr
+        drive = self._cfg.loudness_boost
+        if drive and drive > 1.0:
+            samples = _soft_clip(samples, drive)
         sd.play(samples, samplerate=sr, device=self._device_index)
         if blocking:
             sd.wait()
@@ -182,11 +190,13 @@ class AudioOutput:
 
         Each tone is a sine with a short attack/release envelope to
         avoid clicks. Duplicated to both channels so a user with only
-        one speaker still hears it. Default notes are C5, E5, G5 — a
-        cheerful major triad.
+        one speaker still hears it. Default notes are A5, C#6, E6 — an
+        A-major arpeggio sitting in the small-speaker resonance band
+        (1-3 kHz) and the ear's most sensitive band, so it's
+        substantially louder than a lower-pitched chime.
         """
         if notes is None:
-            notes = (523.25, 659.25, 783.99)  # C5, E5, G5
+            notes = (880.0, 1108.73, 1318.51)  # A5, C#6, E6
         sr = self._cfg.sample_rate
         n_note = int(sr * note_duration)
         n_gap = int(sr * gap)
@@ -229,3 +239,21 @@ def _resample_linear(samples: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarra
     for c in range(samples.shape[1]):
         out[:, c] = np.interp(dst_x, src_x, samples[:, c])
     return out
+
+
+def _soft_clip(samples: np.ndarray, drive: float) -> np.ndarray:
+    """tanh waveshaper. Pushes RMS up while keeping peaks <= 1.0.
+    drive=1 is linear; 2-4 is the useful range for unamplified speech.
+    Output is renormalized so peak == drive's natural ceiling, giving
+    real loudness gain (not just shape change).
+    """
+    samples = np.asarray(samples, dtype=np.float32)
+    if samples.size == 0 or drive <= 1.0:
+        return samples
+    peak = float(np.max(np.abs(samples)))
+    if peak <= 0.0:
+        return samples
+    # Drive into tanh, then scale so peak ≈ 0.95 (leave a hair of headroom).
+    shaped = np.tanh(drive * (samples / peak)).astype(np.float32)
+    shaped *= 0.95 / float(np.tanh(drive))
+    return shaped
