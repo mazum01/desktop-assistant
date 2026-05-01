@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.8] - 2026-05-01
+
+### Fixed
+- `AVService.on_start()` crashed building `VersionAnnouncer(output=...)`
+  with `TypeError: unexpected keyword argument 'output'` (correct kwarg
+  is `audio_output`). Result: the boot startup announcement never ran
+  and the boot self-test reported the AV service as unhealthy, firing
+  the *failure* chime + "Boot self test failed" speech on every boot.
+
+---
+
 ## [0.8.7] - 2026-04-29
 
 ### Changed

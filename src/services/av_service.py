@@ -58,7 +58,7 @@ class AVService(Service):
             self._tts = TextToSpeech()
         if self._announcer is None:
             from src.audio.version_announcer import VersionAnnouncer
-            self._announcer = VersionAnnouncer(tts=self._tts, output=self._audio)
+            self._announcer = VersionAnnouncer(tts=self._tts, audio_output=self._audio)
 
         self._unsubs.append(self.bus.subscribe("av.say", self._on_say))
         self._unsubs.append(self.bus.subscribe("av.beep", self._on_beep))

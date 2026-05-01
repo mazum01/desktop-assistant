@@ -77,9 +77,9 @@ out.play(stereo_tone(880, 5.0, "both"))
 time.sleep(0.3)
 
 # ── Test 3: Stereo sweep ──────────────────────────────────────────────
-print("  → Stereo sweep 200 → 2000 Hz (5 seconds)")
+print("  → Stereo sweep 200 → 10000 Hz (5 seconds)")
 t = np.linspace(0, 5.0, int(sr * 5.0), endpoint=False)
-freq = np.linspace(200, 2000, len(t))
+freq = np.linspace(200, 10000, len(t))
 phase = np.cumsum(2 * np.pi * freq / sr)
 tone = (0.2 * np.sin(phase)).astype(np.float32)
 out.play(np.column_stack([tone, tone]))
