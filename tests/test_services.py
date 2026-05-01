@@ -187,6 +187,7 @@ def test_av_service_say_routes_to_tts():
         spoke = []
         bus.subscribe("av.spoke", lambda t, p: spoke.append(p))
         bus.publish("av.say", {"text": "hello world"})
+        svc.wait_idle()
         tts.say.assert_called_once_with("hello world", output=audio)
         assert spoke and spoke[0]["text"] == "hello world"
     finally:
@@ -198,6 +199,7 @@ def test_av_service_announces_version_on_startup():
     svc, _, _, announcer = _make_av(bus, announce_on_start=True)
     svc.start()
     try:
+        svc.wait_idle()
         announcer.announce_startup.assert_called_once()
     finally:
         svc.stop()
@@ -210,6 +212,7 @@ def test_av_service_utterance_invokes_version_announcer():
     svc.start()
     try:
         bus.publish("av.utterance", {"text": "what version are you"})
+        svc.wait_idle()
         announcer.maybe_handle.assert_called_with("what version are you")
     finally:
         svc.stop()
@@ -221,6 +224,7 @@ def test_av_service_announce_version_topic():
     svc.start()
     try:
         bus.publish("av.announce_version", None)
+        svc.wait_idle()
         announcer.announce_on_request.assert_called_once()
     finally:
         svc.stop()
@@ -232,6 +236,7 @@ def test_av_service_beep():
     svc.start()
     try:
         bus.publish("av.beep", {"freq": 440, "duration": 0.1})
+        svc.wait_idle()
         audio.beep.assert_called_once_with(freq=440.0, duration=0.1)
     finally:
         svc.stop()
@@ -243,6 +248,7 @@ def test_av_service_chime_default():
     svc.start()
     try:
         bus.publish("av.chime", {})
+        svc.wait_idle()
         audio.chime.assert_called_once_with()
         assert bus.last("av.chimed") == {}
     finally:
@@ -255,6 +261,7 @@ def test_av_service_chime_with_overrides():
     svc.start()
     try:
         bus.publish("av.chime", {"notes": [440, 550], "note_duration": 0.1})
+        svc.wait_idle()
         audio.chime.assert_called_once_with(notes=(440.0, 550.0), note_duration=0.1)
     finally:
         svc.stop()

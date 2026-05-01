@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.12] - 2026-05-01
+
+### Fixed
+- AVService now serializes all audio output through a single-threaded
+  worker queue. Previously the boot self-test chime, fired ~3 s after
+  startup, would cut into the still-playing version announcement
+  because both ran on independent threads sharing the DAC. Now
+  `say` / `chime` / `beep` / `announce_version` events all queue and
+  play strictly in order. Added `AVService.wait_idle()` for callers
+  (and tests) that need to know the queue has drained.
+
+---
+
 ## [0.8.11] - 2026-05-01
 
 ### Changed
