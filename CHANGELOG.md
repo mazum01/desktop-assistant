@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.14] - 2026-05-02
+### Changed
+- Default TTS voice changed to **en_US-lessac-high** with TNG-computer
+  tuning (`length_scale=1.15`, `noise_scale=0.3`, `noise_w=0.5`).
+  Delivery is now measured, flat, and authoritative.
+
+---
+
 ## [0.8.13] - 2026-05-01
 ### Changed
 - Replaced espeak-ng TTS backend with **Piper** neural TTS (en_US-amy-medium

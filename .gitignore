@@ -12,3 +12,6 @@ dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Piper voice models (large binaries — download via scripts/download_voices.sh)
+config/piper/*.onnx

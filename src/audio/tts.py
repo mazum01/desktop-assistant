@@ -37,11 +37,11 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 @dataclass
 class TTSConfig:
     # ── Piper settings ──────────────────────────────────────────────────
-    piper_voice_name: str = "en_US-amy-medium"
+    piper_voice_name: str = "en_US-lessac-high"
     piper_model: Optional[str] = None   # override with explicit .onnx path
-    piper_length_scale: float = 1.0     # >1 = slower, <1 = faster
-    piper_noise_scale: float = 0.667    # prosody variation
-    piper_noise_w: float = 0.8          # phoneme duration variation
+    piper_length_scale: float = 1.15    # slightly slower — TNG-computer pacing
+    piper_noise_scale: float = 0.3      # flatter prosody — measured computer delivery
+    piper_noise_w: float = 0.5          # tighter phoneme timing
 
     # ── espeak-ng fallback settings ──────────────────────────────────────
     voice: str = "en-us"
