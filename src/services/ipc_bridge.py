@@ -111,6 +111,7 @@ class IPCBridge(Service):
         self._unsub_started = None
         self._unsub_stopped = None
         self._start_time = 0.0
+        self._rpc_handlers: dict[str, callable] = {}
 
     def on_start(self) -> None:
         import time as _time
@@ -297,6 +298,13 @@ class IPCBridge(Service):
             except Exception:
                 log.exception("REP send failed")
 
+    def register_rpc(self, cmd: str, handler) -> None:
+        """Register a custom RPC handler for ``cmd``.
+
+        ``handler`` receives the full request dict and must return a dict.
+        """
+        self._rpc_handlers[cmd] = handler
+
     def _handle_request(self, raw: bytes) -> dict:
         try:
             msg = json.loads(raw.decode("utf-8"))
@@ -321,6 +329,11 @@ class IPCBridge(Service):
             return {"ok": True, "pong": True}
         if cmd == "status":
             return {"ok": True, "status": self._build_status()}
+        if cmd in self._rpc_handlers:
+            try:
+                return self._rpc_handlers[cmd](msg)
+            except Exception as exc:
+                return {"ok": False, "error": f"rpc_error:{exc}"}
         return {"ok": False, "error": f"unknown_cmd:{cmd}"}
 
     def _build_status(self) -> dict:

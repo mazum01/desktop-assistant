@@ -48,6 +48,7 @@ class HailoInference:
         self._vdevice = None
         self._network_group = None
         self._infer_pipeline = None
+        self._activate_ctx = None
         self._input_info: list = []
         self._output_info: list = []
         self._sim = not _HAILO_AVAILABLE
@@ -81,6 +82,11 @@ class HailoInference:
             self._infer_pipeline = hp.InferVStreams(
                 self._network_group, inp_params, out_params
             )
+            # Enter both context managers once and hold open for the lifetime
+            # of this object; __exit__ is called in _cleanup().
+            self._infer_pipeline.__enter__()
+            self._activate_ctx = self._network_group.activate()
+            self._activate_ctx.__enter__()
             log.info(
                 "HailoInference loaded: %s  inputs=%s  outputs=%s",
                 self._hef_path.name,
@@ -157,8 +163,7 @@ class HailoInference:
         }
 
         try:
-            with self._network_group.activate():
-                outputs = self._infer_pipeline.infer(batched)
+            outputs = self._infer_pipeline.infer(batched)
         except Exception as exc:
             log.error("infer() failed: %s", exc)
             return {}
@@ -172,7 +177,7 @@ class HailoInference:
         self._cleanup()
 
     def _cleanup(self) -> None:
-        for attr in ("_infer_pipeline", "_vdevice"):
+        for attr in ("_activate_ctx", "_infer_pipeline", "_vdevice"):
             obj = getattr(self, attr, None)
             if obj is not None:
                 try:

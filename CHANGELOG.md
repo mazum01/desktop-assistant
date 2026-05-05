@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.1] - 2026-05-04
+### Changed
+- Boot self-test success greeting now says "Good morning / Good afternoon /
+  Good evening" based on the current hour, followed by "All systems nominal."
+  — replaces the ascending chime tones.
+- Boot self-test failure now speaks "Warning. Boot self test failed." without
+  the descending chime, keeping the spoken error description.
+
 ## [0.9.0] - 2025-07-10
 ### Added
 - **Phase 3: Hailo-8 face detection pipeline**

@@ -16,6 +16,7 @@ import logging
 import signal
 import threading
 import time
+from datetime import datetime
 from typing import List
 
 from src.core.service import Service
@@ -73,6 +74,16 @@ def run_services(services: List[Service], unit_name: str) -> int:
     return 0
 
 
+def _time_of_day_greeting() -> str:
+    """Return 'Good morning', 'Good afternoon', or 'Good evening'."""
+    hour = datetime.now().hour
+    if hour < 12:
+        return "Good morning"
+    if hour < 17:
+        return "Good afternoon"
+    return "Good evening"
+
+
 def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
     """Wait briefly for first telemetry samples, then announce health."""
     if not started:
@@ -110,21 +121,21 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
             log.warning("[%s] boot self-test found %d issue(s):", unit_name, len(problems))
             for p in problems:
                 log.warning("  - %s", p)
-            # Lower descending tones for failure
             if unit_name == "core":
-                bus.publish("av.chime", {
-                    "notes": [659.25, 523.25, 392.00],  # E5, C5, G4
-                    "note_duration": 0.22,
+                bus.publish("av.say", {
+                    "text": "Warning. Boot self test failed. " + "; ".join(problems),
                 })
-            bus.publish("av.say", {
-                "text": "Boot self test failed. " + "; ".join(problems),
-            })
+            else:
+                bus.publish("av.say", {
+                    "text": "Boot self test failed. " + "; ".join(problems),
+                })
         else:
             log.info("[%s] boot self-test OK", unit_name)
-            # Chime only from the core process (thermal has no AV).
             if unit_name == "core":
-                bus.publish("av.chime", {})
-            bus.publish("av.say", {"text": "All systems nominal."})
+                greeting = _time_of_day_greeting()
+                bus.publish("av.say", {"text": f"{greeting}. All systems nominal."})
+            else:
+                bus.publish("av.say", {"text": "All systems nominal."})
 
     threading.Thread(
         target=_check_after_grace,
