@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.4] - 2026-05-05
+### Fixed
+- Boot diagnostics: services with `hardware_ready=False` now say
+  "not connected" instead of "available, simulation mode".
+
 ## [0.9.3] - 2026-05-05
 ### Changed
 - Boot diagnostics: replaced "online" with "available" and "offline" with

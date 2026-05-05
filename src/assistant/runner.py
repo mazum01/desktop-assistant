@@ -120,7 +120,7 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
             if not running:
                 status_lines.append(f"{label}: failed to start")
             elif hw is False:
-                status_lines.append(f"{label}: available, simulation mode")
+                status_lines.append(f"{label}: not connected")
             else:
                 status_lines.append(f"{label}: available")
 
