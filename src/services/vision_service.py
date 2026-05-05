@@ -68,6 +68,10 @@ class VisionService(Service):
             getattr(self._camera, "hardware_ready", False),
         )
 
+    @property
+    def hardware_ready(self) -> bool:
+        return bool(getattr(self._camera, "hardware_ready", False))
+
     def run_tick(self) -> None:
         if self._camera is None:
             return

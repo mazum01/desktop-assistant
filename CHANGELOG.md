@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.5] - 2026-05-05
+### Fixed
+- Boot diagnostic readout now correctly reports "not connected" for hardware-absent
+  services (Camera, Microphone, Audio output, Face detection, Motion system).
+  Added `hardware_ready` property to `VisionService`, `AudioCaptureService`,
+  `MotionService`, `PerceptionService`, and `AVService`; previously
+  `getattr(svc, "hardware_ready", None)` always returned `None` because the
+  attribute lived only on the inner driver, not the service wrapper.
+
 ## [0.9.4] - 2026-05-05
 ### Fixed
 - Boot diagnostics: services with `hardware_ready=False` now say

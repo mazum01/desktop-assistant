@@ -82,6 +82,10 @@ class PerceptionService(Service):
             self._cfg.max_fps,
         )
 
+    @property
+    def hardware_ready(self) -> bool:
+        return self._detector is not None and self._detector.backend == "hailo"
+
     def on_stop(self) -> None:
         for unsub in self._unsubs:
             try:

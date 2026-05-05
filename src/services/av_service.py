@@ -98,6 +98,10 @@ class AVService(Service):
         if self._announce_on_start:
             self._enqueue(self._do_announce_startup, label="announce_startup")
 
+    @property
+    def hardware_ready(self) -> bool:
+        return bool(getattr(self._audio, "hardware_ready", False))
+
     def on_stop(self) -> None:
         for unsub in self._unsubs:
             try:

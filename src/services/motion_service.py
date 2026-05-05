@@ -44,6 +44,10 @@ class MotionService(Service):
         log.info("MotionService started; hardware_ready=%s",
                  getattr(self._controller, "hardware_ready", False))
 
+    @property
+    def hardware_ready(self) -> bool:
+        return bool(getattr(self._controller, "hardware_ready", False))
+
     def run_tick(self) -> None:
         if self._controller is None:
             return

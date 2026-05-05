@@ -59,6 +59,10 @@ class AudioCaptureService(Service):
             self._chunk_seconds,
         )
 
+    @property
+    def hardware_ready(self) -> bool:
+        return bool(getattr(self._mic, "hardware_ready", False))
+
     def run_tick(self) -> None:
         if self._mic is None:
             return
