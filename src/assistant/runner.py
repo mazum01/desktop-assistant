@@ -91,16 +91,40 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
 
     bus = started[0].bus
 
+    # Human-friendly labels for service names
+    _SERVICE_LABELS = {
+        "motion":        "Motion system",
+        "vision":        "Camera",
+        "audio_capture": "Microphone",
+        "av":            "Audio output",
+        "perception":    "Face detection",
+        "telemetry":     "Telemetry",
+        "thermal":       "Thermal management",
+        "ipc_bridge":    "Communications bridge",
+    }
+
     def _check_after_grace():
         time.sleep(3.0)   # let services produce their first samples
         problems: List[str] = []
+        status_lines: List[str] = []
 
-        # Service liveness — anything that didn't reach service.started is bad.
+        # ── Service liveness ────────────────────────────────────────────
         for svc in started:
-            if not svc.is_running():
+            label = _SERVICE_LABELS.get(svc.name, svc.name)
+            running = svc.is_running()
+            if not running:
                 problems.append(f"{svc.name} did not start")
 
-        # Topic-specific health
+            # Check hardware_ready if the service exposes it
+            hw = getattr(svc, "hardware_ready", None)
+            if not running:
+                status_lines.append(f"{label}: failed to start")
+            elif hw is False:
+                status_lines.append(f"{label}: online, simulation mode")
+            else:
+                status_lines.append(f"{label}: online")
+
+        # ── Topic-specific health ────────────────────────────────────────
         thermal_err = bus.last("thermal.error")
         if thermal_err:
             problems.append(f"thermal error: {thermal_err}")
@@ -108,6 +132,13 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
         temp = bus.last("thermal.temp") or {}
         if isinstance(temp, dict) and temp.get("ok") is False:
             problems.append("temperature sensor offline")
+            status_lines.append("Temperature sensor: offline")
+        else:
+            temp_c = temp.get("temp_c") if isinstance(temp, dict) else None
+            if temp_c is not None:
+                status_lines.append(f"Temperature sensor: online, {temp_c:.1f} degrees")
+            else:
+                status_lines.append("Temperature sensor: no reading yet")
 
         vis_err = bus.last("vision.error")
         if vis_err:
@@ -117,25 +148,32 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
         if aud_err:
             problems.append("audio capture error")
 
+        # ── Announce results ─────────────────────────────────────────────
+        if unit_name != "core":
+            if problems:
+                log.warning("[%s] boot self-test found %d issue(s):", unit_name, len(problems))
+                for p in problems:
+                    log.warning("  - %s", p)
+                bus.publish("av.say", {"text": "Boot self test failed. " + "; ".join(problems)})
+            else:
+                log.info("[%s] boot self-test OK", unit_name)
+                bus.publish("av.say", {"text": "All systems nominal."})
+            return
+
+        # Core unit — full spoken readout
+        readout = "Running diagnostics. " + ". ".join(status_lines) + ". "
+
         if problems:
             log.warning("[%s] boot self-test found %d issue(s):", unit_name, len(problems))
             for p in problems:
                 log.warning("  - %s", p)
-            if unit_name == "core":
-                bus.publish("av.say", {
-                    "text": "Warning. Boot self test failed. " + "; ".join(problems),
-                })
-            else:
-                bus.publish("av.say", {
-                    "text": "Boot self test failed. " + "; ".join(problems),
-                })
+            readout += "Warning: " + "; ".join(problems) + "."
+            bus.publish("av.say", {"text": readout})
         else:
             log.info("[%s] boot self-test OK", unit_name)
-            if unit_name == "core":
-                greeting = _time_of_day_greeting()
-                bus.publish("av.say", {"text": f"{greeting}. All systems nominal."})
-            else:
-                bus.publish("av.say", {"text": "All systems nominal."})
+            greeting = _time_of_day_greeting()
+            readout += f"{greeting}. I'm ready."
+            bus.publish("av.say", {"text": readout})
 
     threading.Thread(
         target=_check_after_grace,

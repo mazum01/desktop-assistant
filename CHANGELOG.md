@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.2] - 2026-05-05
+### Changed
+- Boot self-test (core unit) now speaks a full per-system status readout:
+  "Running diagnostics. Motion system: online. Camera: online, simulation
+  mode. ..." with temperature reading when available.
+- On success: ends with time-of-day greeting + "I'm ready."
+- On failure: reads all system statuses then "Warning: <problems>."
+- Services without real hardware report "online, simulation mode".
+
 ## [0.9.1] - 2026-05-04
 ### Changed
 - Boot self-test success greeting now says "Good morning / Good afternoon /
