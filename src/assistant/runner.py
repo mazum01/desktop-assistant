@@ -120,9 +120,9 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
             if not running:
                 status_lines.append(f"{label}: failed to start")
             elif hw is False:
-                status_lines.append(f"{label}: online, simulation mode")
+                status_lines.append(f"{label}: available, simulation mode")
             else:
-                status_lines.append(f"{label}: online")
+                status_lines.append(f"{label}: available")
 
         # ── Topic-specific health ────────────────────────────────────────
         thermal_err = bus.last("thermal.error")
@@ -132,11 +132,11 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
         temp = bus.last("thermal.temp") or {}
         if isinstance(temp, dict) and temp.get("ok") is False:
             problems.append("temperature sensor offline")
-            status_lines.append("Temperature sensor: offline")
+            status_lines.append("Temperature sensor: not responding")
         else:
             temp_c = temp.get("temp_c") if isinstance(temp, dict) else None
             if temp_c is not None:
-                status_lines.append(f"Temperature sensor: online, {temp_c:.1f} degrees")
+                status_lines.append(f"Temperature sensor: available, {temp_c:.1f} degrees")
             else:
                 status_lines.append("Temperature sensor: no reading yet")
 

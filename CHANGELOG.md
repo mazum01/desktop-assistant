@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.3] - 2026-05-05
+### Changed
+- Boot diagnostics: replaced "online" with "available" and "offline" with
+  "not responding" to avoid TTS pronunciation ambiguity.
+
 ## [0.9.2] - 2026-05-05
 ### Changed
 - Boot self-test (core unit) now speaks a full per-system status readout:
