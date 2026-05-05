@@ -20,6 +20,7 @@ from src.services.audio_capture_service import AudioCaptureService
 from src.services.av_service import AVService
 from src.services.ipc_bridge import IPCBridge
 from src.services.motion_service import MotionService
+from src.services.perception_service import PerceptionService
 from src.services.telemetry_service import TelemetryService
 from src.services.vision_service import VisionService
 
@@ -31,18 +32,26 @@ _THERMAL_PUB = "ipc:///tmp/desktop-assistant-thermal.pub"
 
 def main() -> int:
     bus = MessageBus()
+    av = AVService(bus=bus)
+    vis = VisionService(bus=bus)
+    ipc = IPCBridge(
+        bus=bus,
+        upstream_endpoints=[_THERMAL_PUB],
+    )
+    ipc.register_rpc("tts_duration", lambda msg: {
+        "ok": True,
+        "duration_s": av.tts_duration_rpc(msg.get("text", "")),
+    })
     return run_services(
         services=[
             MotionService(bus=bus),
-            VisionService(bus=bus),
+            vis,
             AudioCaptureService(bus=bus),
-            AVService(bus=bus),
+            av,
+            PerceptionService(bus=bus, vision_service=vis),
             TelemetryService(bus=bus),
-            IPCBridge(
-                bus=bus,
-                upstream_endpoints=[_THERMAL_PUB],
-            ),  # last so all earlier services emit
-                # service.started events on the wire
+            ipc,  # last so all earlier services emit
+                  # service.started events on the wire
         ],
         unit_name="core",
     )

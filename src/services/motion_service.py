@@ -4,7 +4,7 @@ Motion service.
 Wraps `ServoController` and exposes pan commands over the message bus.
 
 Topics subscribed:
-    motion.pan_to     {"angle": float}            — move pan servo to logical angle
+    motion.pan_to     {"angle": float, "move_time_ms"?: float}  — move pan servo to logical angle
     motion.relax      None                        — release torque
     motion.stop       None                        — stop any in-progress sweep
 
@@ -76,12 +76,30 @@ class MotionService(Service):
             return
         angle = float(payload["angle"])
         before = float(self._controller.position)
+
+        move_time_ms = payload.get("move_time_ms")
+        speed_deg_per_sec = None
+        if move_time_ms is not None:
+            try:
+                move_time_ms = float(move_time_ms)
+                if move_time_ms <= 0:
+                    raise ValueError("move_time_ms must be > 0")
+                delta_deg = abs(angle - before)
+                # Convert requested travel time to speed for ServoController.
+                speed_deg_per_sec = max((delta_deg * 1000.0) / move_time_ms, 0.001)
+            except Exception:
+                log.warning("motion.pan_to ignored: bad move_time_ms in payload %r", payload)
+                return
+
         try:
             direction = self._controller.plan_direction(before, angle)
         except Exception:
             direction = "?"
         try:
-            self._controller.move_to(angle)
+            kwargs = {}
+            if speed_deg_per_sec is not None:
+                kwargs["speed_deg_per_sec"] = speed_deg_per_sec
+            self._controller.move_to(angle, **kwargs)
         except Exception:
             log.exception("move_to(%s) failed", angle)
             return

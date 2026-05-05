@@ -15,3 +15,4 @@ dist/
 
 # Piper voice models (large binaries — download via scripts/download_voices.sh)
 config/piper/*.onnx
+config/hailo/*.hef

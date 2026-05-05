@@ -13,7 +13,7 @@ digraph DesktopAssistant {
     ranksep=0.6;
     fontname="Helvetica";
     labelloc="t";
-    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v0.8.3 — cross-process bus bridge</font>>;
+    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v0.9.0 — Hailo-8 face detection pipeline</font>>;
     fontsize=16;
 
     node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin=0.15];
@@ -56,7 +56,8 @@ digraph DesktopAssistant {
         drv_ain    [label="audio/input.py",             fillcolor="#a5c8ff"];
         drv_tts    [label="audio/tts.py\n(espeak-ng)",  fillcolor="#a5c8ff"];
         drv_van    [label="audio/version_announcer.py", fillcolor="#a5c8ff"];
-        drv_hailo  [label="perception/hailo_probe.py",  fillcolor="#a5c8ff", style="rounded,filled,dashed"];
+        drv_hailo  [label="perception/hailo_inference.py\n(VDevice wrapper)",  fillcolor="#a5c8ff"];
+        drv_facedet [label="perception/face_detector.py\n(SCRFD decode + Haar fallback)", fillcolor="#a5c8ff"];
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -97,6 +98,7 @@ digraph DesktopAssistant {
         svc_vision  [label="VisionService\n→ vision.frame_ready\n← vision.capture_still\n+ latest_frame()",        fillcolor="#a8d88d"];
         svc_audio   [label="AudioCaptureService\n→ audio.level / chunk\n+ latest_chunk()",                          fillcolor="#a8d88d"];
         svc_av      [label="AVService\n← av.say / beep / utterance / announce_version\n→ av.spoke / version_announced", fillcolor="#a8d88d"];
+        svc_perception [label="PerceptionService\n← vision.frame_ready\n→ perception.faces / perception.error\n+ max_fps throttle", fillcolor="#a8d88d"];
         svc_telemetry [label="TelemetryService\n← thermal.* / motion.position / audio.level\n→ telemetry.flush\nSQLite ring buffer", fillcolor="#a8d88d"];
         svc_ipc     [label="IPCBridge (core)\nPUB ipc:///tmp/desktop-assistant.pub\nREP ipc:///tmp/desktop-assistant.rep\nSUB ← thermal.pub (upstream)\ncmds: ping / topics / last / publish / status", fillcolor="#a8d88d"];
     }
@@ -127,6 +129,8 @@ digraph DesktopAssistant {
     hw_spk    -> drv_aout   [label="USB"];
     hw_hailo  -> drv_hailo  [label="PCIe"];
 
+    drv_hailo -> drv_facedet;
+
     drv_tmp117 -> drv_thmgr;
     drv_fan    -> drv_thmgr;
     drv_tach   -> drv_thmgr;
@@ -139,6 +143,7 @@ digraph DesktopAssistant {
     // ─────────────────────────────────────────────────────────────────
     drv_thmgr -> svc_thermal;
     drv_servo -> svc_motion;
+    drv_facedet -> svc_perception;
     drv_cam   -> svc_vision;
     drv_ain   -> svc_audio;
     drv_aout  -> svc_av;
@@ -161,6 +166,9 @@ digraph DesktopAssistant {
     svc_audio -> core_bus   [color="#226622"];
     core_bus -> svc_av      [color="#226622"];
     svc_av   -> core_bus    [color="#226622"];
+    core_bus -> svc_perception [color="#226622"];
+    svc_perception -> core_bus [color="#226622"];
+    svc_vision -> svc_perception [label="latest_frame()", style=dashed, color="#888888"];
     core_bus -> svc_telemetry [color="#226622"];
     svc_telemetry -> core_bus [color="#226622"];
     core_bus -> svc_ipc     [color="#226622"];
@@ -172,6 +180,7 @@ digraph DesktopAssistant {
     svc_vision  -> core_svc [style=dotted];
     svc_audio   -> core_svc [style=dotted];
     svc_av      -> core_svc [style=dotted];
+    svc_perception -> core_svc [style=dotted];
     svc_telemetry -> core_svc [style=dotted];
     svc_ipc     -> core_svc [style=dotted];
 
@@ -185,5 +194,5 @@ digraph DesktopAssistant {
     // ─────────────────────────────────────────────────────────────────
     // Boot ordering
     // ─────────────────────────────────────────────────────────────────
-    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_av; svc_telemetry; svc_ipc;}
+    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_av; svc_perception; svc_telemetry; svc_ipc;}
 }

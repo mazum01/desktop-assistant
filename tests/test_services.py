@@ -88,10 +88,12 @@ class _FakeServo:
         self.position = start_pos
         self.hardware_ready = True
         self.moves = []
+        self.move_kwargs = []
         self.relaxed = False
         self.stopped_count = 0
     def move_to(self, angle, **kw):
         self.moves.append(angle)
+        self.move_kwargs.append(kw)
         self.position = angle
     def relax(self):    self.relaxed = True
     def stop(self):     self.stopped_count += 1
@@ -110,8 +112,40 @@ def test_motion_service_handles_pan_to():
         bus.subscribe("motion.moved", lambda t, p: moved.append(p))
         bus.publish("motion.pan_to", {"angle": 90.0})
         assert fake.moves == [90.0]
+        assert fake.move_kwargs == [{}]
         assert moved and moved[0]["to"] == 90.0
         assert moved[0]["direction"] == "forward"
+    finally:
+        svc.stop()
+
+
+def test_motion_service_pan_to_with_move_time_sets_speed():
+    bus = MessageBus()
+    fake = _FakeServo(start_pos=10.0)
+    svc = MotionService(bus=bus, controller=fake)
+    svc.tick_seconds = 1.0
+    svc.start()
+    try:
+        bus.publish("motion.pan_to", {"angle": 90.0, "move_time_ms": 2000})
+        assert fake.moves == [90.0]
+        assert fake.move_kwargs
+        # 80 degrees in 2 s = 40 deg/s
+        assert fake.move_kwargs[0]["speed_deg_per_sec"] == pytest.approx(40.0)
+    finally:
+        svc.stop()
+
+
+def test_motion_service_pan_to_with_invalid_move_time_is_ignored():
+    bus = MessageBus()
+    fake = _FakeServo(start_pos=10.0)
+    svc = MotionService(bus=bus, controller=fake)
+    svc.tick_seconds = 1.0
+    svc.start()
+    try:
+        bus.publish("motion.pan_to", {"angle": 90.0, "move_time_ms": 0})
+        bus.publish("motion.pan_to", {"angle": 90.0, "move_time_ms": -10})
+        bus.publish("motion.pan_to", {"angle": 90.0, "move_time_ms": "bad"})
+        assert fake.moves == []
     finally:
         svc.stop()
 

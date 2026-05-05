@@ -5,6 +5,7 @@ desktop-assistant CLI — control the running daemon over ZeroMQ.
 Examples:
     desktop-assistant ping
     desktop-assistant pan --to 90
+    desktop-assistant move-servo 90 1500
     desktop-assistant say "hello world"
     desktop-assistant version
     desktop-assistant topics
@@ -24,6 +25,8 @@ import argparse
 import json
 import os
 import sys
+import time
+import uuid
 
 try:
     import zmq
@@ -34,6 +37,7 @@ except ImportError:
 
 PUB_ENDPOINT = os.environ.get("DA_BUS_PUB_ENDPOINT", "ipc:///tmp/desktop-assistant.pub")
 REP_ENDPOINT = os.environ.get("DA_BUS_REP_ENDPOINT", "ipc:///tmp/desktop-assistant.rep")
+_ANNOUNCE_OVERLAP_SEC = 0.22
 
 
 def _request(req: dict, timeout_ms: int = 2000) -> dict:
@@ -50,6 +54,76 @@ def _request(req: dict, timeout_ms: int = 2000) -> dict:
         return {"ok": False, "error": "timeout — is desktop-assistant-core running?"}
     finally:
         sock.close(linger=0)
+
+
+def _estimate_tts_duration_s(text: str) -> float:
+    """Query the daemon for exact TTS render duration; fall back to a
+    word/char heuristic when the daemon is not reachable."""
+    r = _request({"cmd": "tts_duration", "text": text}, timeout_ms=10000)
+    if r.get("ok") and isinstance(r.get("duration_s"), (int, float)):
+        return float(r["duration_s"])
+    # Offline heuristic fallback
+    words = max(1, len(text.split()))
+    return max(0.75, 0.16 * words + 0.018 * len(text) + 0.2)
+
+
+def _wait_for_spoken_text(expected_text: str, timeout_s: float, request_id: str | None = None) -> bool:
+    """Wait until av.spoke confirms the requested text (or request id)."""
+    ctx = zmq.Context.instance()
+    sub = ctx.socket(zmq.SUB)
+    sub.setsockopt(zmq.LINGER, 0)
+    sub.setsockopt_string(zmq.SUBSCRIBE, "av.spoke")
+    sub.connect(PUB_ENDPOINT)
+
+    # Allow the SUB socket to join before the matching av.say is published.
+    time.sleep(0.15)
+
+    deadline = time.monotonic() + timeout_s
+    poller = zmq.Poller()
+    poller.register(sub, zmq.POLLIN)
+
+    try:
+        while time.monotonic() < deadline:
+            remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
+            events = dict(poller.poll(timeout=remaining_ms))
+            if sub not in events:
+                continue
+            try:
+                topic, raw_payload = sub.recv_multipart(flags=zmq.NOBLOCK)
+            except zmq.error.Again:
+                continue
+            if topic.decode("utf-8") != "av.spoke":
+                continue
+            try:
+                payload = json.loads(raw_payload.decode("utf-8"))
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            if request_id is not None and payload.get("request_id") == request_id:
+                return True
+            if payload.get("text") == expected_text:
+                return True
+    finally:
+        sub.close(linger=0)
+
+    # Backward-compatible fallback when PUB/SUB delivery misses due to
+    # join timing or older services only expose the most recent payload.
+    baseline = _request({"cmd": "last", "topic": "av.spoke"}, timeout_ms=1500)
+    baseline_payload = baseline.get("payload") if baseline.get("ok") else None
+
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        r = _request({"cmd": "last", "topic": "av.spoke"}, timeout_ms=1500)
+        if r.get("ok"):
+            payload = r.get("payload")
+            if isinstance(payload, dict):
+                if request_id is not None and payload.get("request_id") == request_id:
+                    return True
+                if payload.get("text") == expected_text and payload != baseline_payload:
+                    return True
+        time.sleep(0.05)
+    return False
 
 
 def cmd_ping(_args) -> int:
@@ -81,11 +155,57 @@ def cmd_publish(args) -> int:
 
 
 def cmd_pan(args) -> int:
+    payload = {"angle": args.to}
+    timeout_ms = 2000
+    if args.move_time_ms is not None:
+        payload["move_time_ms"] = args.move_time_ms
+        timeout_ms = max(2000, int(float(args.move_time_ms)) + 3000)
     r = _request({
         "cmd": "publish",
         "topic": "motion.pan_to",
-        "payload": {"angle": args.to},
-    })
+        "payload": payload,
+    }, timeout_ms=timeout_ms)
+    print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
+def cmd_move_servo(args) -> int:
+    timeout_ms = max(2000, int(float(args.move_time_ms)) + 3000)
+
+    if args.announce_start:
+        start_text = f"Starting servo move to {args.position:.1f} degrees."
+        start_req = _request({
+            "cmd": "publish",
+            "topic": "av.say",
+            "payload": {
+                "text": start_text,
+                "request_id": str(uuid.uuid4()),
+            },
+        })
+        if not start_req.get("ok"):
+            print(json.dumps(start_req, indent=2))
+            return 1
+        lead_time_s = max(0.0, _estimate_tts_duration_s(start_text) - _ANNOUNCE_OVERLAP_SEC)
+        time.sleep(lead_time_s)
+
+    r = _request({
+        "cmd": "publish",
+        "topic": "motion.pan_to",
+        "payload": {
+            "angle": args.position,
+            "move_time_ms": args.move_time_ms,
+        },
+    }, timeout_ms=timeout_ms)
+
+    if r.get("ok") and args.announce_finish:
+        _request({
+            "cmd": "publish",
+            "topic": "av.say",
+            "payload": {
+                "text": f"Servo move stopped at {args.position:.1f} degrees.",
+            },
+        })
+
     print(json.dumps(r, indent=2))
     return 0 if r.get("ok") else 1
 
@@ -233,7 +353,22 @@ def main() -> int:
 
     sp = sub.add_parser("pan", help="Pan the servo to a logical angle")
     sp.add_argument("--to", type=float, required=True, help="logical degrees 1–360")
+    sp.add_argument(
+        "--move-time-ms",
+        type=float,
+        default=None,
+        help="Optional target move time in milliseconds",
+    )
     sp.set_defaults(func=cmd_pan)
+
+    sp = sub.add_parser("move-servo", help="Move servo: position and move time (ms)")
+    sp.add_argument("position", type=float, help="logical degrees 1–360")
+    sp.add_argument("move_time_ms", type=float, help="target move time in milliseconds")
+    sp.add_argument("-as", "--announce-start", action="store_true",
+                    help="Speak when move starts")
+    sp.add_argument("-af", "--announce-finish", action="store_true",
+                    help="Speak when move finishes")
+    sp.set_defaults(func=cmd_move_servo)
 
     sp = sub.add_parser("say", help="Speak a phrase via TTS")
     sp.add_argument("text")

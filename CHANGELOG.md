@@ -6,6 +6,154 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.0] - 2025-07-10
+### Added
+- **Phase 3: Hailo-8 face detection pipeline**
+- `src/perception/hailo_inference.py` — generic HEF model wrapper; loads
+  any `.hef` model, runs batched inference via `hailo_platform`; falls back
+  to sim mode when accelerator is unavailable.
+- `src/perception/face_detector.py` — SCRFD-10G face detector with
+  full output decode (bbox, confidence, 5-pt landmarks) + CPU Haar cascade
+  fallback + sim mode. Auto-discovers HEF at `config/hailo/scrfd_10g.hef`
+  or system path.
+- `src/services/perception_service.py` — `PerceptionService` subscribes
+  `vision.frame_ready`, throttles via `max_fps`, publishes `perception.faces`
+  (count, face list with bbox/confidence/centroid/landmarks) and
+  `perception.error` on failure.
+- `tests/test_perception.py` — 15 unit tests covering HailoInference sim
+  mode, FaceDetector preprocess/decode/fallback, and PerceptionService bus
+  wiring + rate limiting + error propagation.
+- `config/hailo/*.hef` added to `.gitignore` (large binary files).
+- `config/hailo/` directory created for HEF model files.
+- `PerceptionService` wired into `src/assistant/core_main.py` after
+  `VisionService`.
+- Architecture diagram updated with `PerceptionService`, `HailoInference`,
+  `FaceDetector` nodes and `perception.faces` / `perception.error` topics.
+### Fixed
+- `FaceDetector._init_backend()`: `hef` path kept as `str`; `Path(hef).name`
+  used in log message instead of `hef.name` to avoid `AttributeError`.
+- `FaceDetector._init_backend()`: Haar cascade search uses known system
+  path (`/usr/share/opencv4/haarcascades/`) with fallback to `cv2.data`
+  attribute, avoiding `ModuleNotFoundError` on systems where `cv2.data`
+  is not a sub-module.
+
+## [0.8.18] - 2026-05-04
+### Changed
+- `desktop-assistant move-servo -as` now waits for the start speech to
+  complete (observed via `av.spoke`) before publishing `motion.pan_to`.
+- `desktop-assistant move-servo -af` now announces that the move has
+  stopped only after the move request has completed.
+
+### Fixed
+- If `-as` is set and speech completion is not observed in time, the CLI now
+  exits with `{"ok": false, "error": "start_announcement_timeout"}` and does
+  not start servo motion.
+
+---
+
+## [0.8.23] - 2026-05-04
+### Added
+- `TextToSpeech.render_duration(text) -> float` — returns exact playback
+  duration in seconds by running the full Piper render pipeline (no audio
+  output). Falls back to a word/char heuristic in sim mode.
+- `AVService.tts_duration_rpc(text)` — thread-safe wrapper that lazy-
+  initialises TTS if the service hasn't started yet.
+- `IPCBridge.register_rpc(cmd, fn)` — lets services attach custom REP
+  command handlers without editing the bridge directly.
+- New REP command `tts_duration` wired in `core_main` so the CLI can
+  query the exact duration of any phrase.
+
+### Changed
+- `desktop-assistant move-servo -as` now queries `tts_duration` over the
+  REP socket for the exact rendered speech duration before computing the
+  motion lead time, replacing the word/char heuristic. Falls back to the
+  heuristic if the daemon is unreachable.
+
+---
+
+## [0.8.22] - 2026-05-04
+### Changed
+- `desktop-assistant move-servo -as` now starts motion slightly before the
+  end of the start announcement instead of waiting for full `av.spoke`
+  completion. The CLI uses a conservative speech-duration estimate and a
+  220 ms overlap window to reduce perceived lag.
+
+---
+
+## [0.8.21] - 2026-05-04
+### Changed
+- `desktop-assistant move-servo -as` now waits on the live `av.spoke` PUB
+  event stream instead of polling `last av.spoke` over REP, reducing the
+  gap between the start announcement finishing and motion beginning.
+
+### Fixed
+- Kept the older `last av.spoke` fallback for compatibility if PUB/SUB
+  delivery misses due to ZeroMQ slow-joiner timing.
+
+---
+
+## [0.8.20] - 2026-05-04
+### Changed
+- `av.say` now accepts optional `request_id`, and `av.spoke` echoes it,
+  allowing the CLI to wait for the exact announcement instance to finish.
+- `desktop-assistant move-servo -as` now waits on that correlation before
+  issuing motion, so movement starts only after start speech completes.
+
+### Fixed
+- Added backward-compatible fallback when older running AV services do not
+  emit correlated `av.spoke` payloads, preventing false
+  `start_announcement_timeout` failures.
+
+---
+
+## [0.8.19] - 2026-05-04
+### Changed
+- `desktop-assistant move-servo -as` now waits for a new `av.spoke` event
+  before issuing `motion.pan_to`, ensuring the start announcement finishes
+  before movement begins.
+- `av.spoke` payload now includes `ts` to allow reliable detection of new
+  speech events from the CLI.
+
+### Fixed
+- Start-announcement waiting no longer falsely succeeds on stale `av.spoke`
+  payloads from earlier commands.
+
+---
+
+## [0.8.17] - 2026-05-04
+### Fixed
+- `desktop-assistant move-servo` and `desktop-assistant pan --move-time-ms`
+  now use a request timeout derived from move duration (`move_time_ms + 3s`
+  floor at 2s), preventing false CLI timeouts on valid longer moves.
+
+---
+
+## [0.8.16] - 2026-05-04
+### Added
+- `desktop-assistant move-servo` now supports `-as` / `--announce-start` to
+  speak when the servo move request starts.
+- `desktop-assistant move-servo` now supports `-af` / `--announce-finish` to
+  speak after a successful move request is accepted.
+
+---
+
+## [0.8.15] - 2026-05-04
+### Added
+- New CLI command `desktop-assistant move-servo <position> <move_time_ms>` to
+  request a servo move with explicit target position and travel time.
+
+### Changed
+- `motion.pan_to` now accepts optional `move_time_ms` and converts it to
+  `speed_deg_per_sec` for `ServoController.move_to(...)`.
+- Existing `desktop-assistant pan --to ...` command now also accepts optional
+  `--move-time-ms`.
+
+### Fixed
+- Motion service now validates `move_time_ms` and ignores invalid values
+  (non-numeric or <= 0) rather than attempting an unsafe move call.
+
+---
+
 ## [0.8.14] - 2026-05-02
 ### Changed
 - Default TTS voice changed to **en_US-lessac-high** with TNG-computer

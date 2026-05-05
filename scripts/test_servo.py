@@ -92,7 +92,7 @@ def main() -> int:
     # --- Test 1: full forward sweep ---
     print("\n[1] Full forward sweep: 1° → 360°")
     ctrl.move_to(1.0)
-    time.sleep(0.5)
+    time.sleep(5)
     ctrl.move_to(360.0)
     print(f"    Position after sweep: {ctrl.position:.1f}°")
 
