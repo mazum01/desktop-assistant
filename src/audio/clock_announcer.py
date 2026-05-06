@@ -84,6 +84,8 @@ def _spoken_time(dt: datetime) -> str:
     def _num(n: int) -> str:
         if n == 0:
             return "o'clock"
+        if 1 <= n <= 9:
+            return "oh " + _ONES[n]   # "oh seven" not "seven"
         if n < 20:
             return _ONES[n]
         tens, ones = divmod(n, 10)

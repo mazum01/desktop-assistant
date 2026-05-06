@@ -6,7 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.9.7] - 2026-05-06
+## [0.9.8] - 2026-05-06
+### Fixed
+- Single-digit minutes now spoken as "oh X" (e.g. "six oh eight") instead
+  of the unnatural "six eight". Updated test coverage.
+
+
 ### Added
 - `ClockAnnouncer` (`src/audio/clock_announcer.py`): background thread that
   fires spoken time announcements at :00 and :30 of every hour. At the top

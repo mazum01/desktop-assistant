@@ -49,6 +49,10 @@ class TestSpokenTime:
         dt = datetime(2024, 1, 1, 12, 30, 0)
         assert _spoken_time(dt) == "It is twelve thirty PM."
 
+    def test_single_digit_minute_uses_oh(self):
+        dt = datetime(2024, 1, 1, 9, 7, 0)
+        assert _spoken_time(dt) == "It is nine oh seven AM."
+
 
 # ---------------------------------------------------------------------------
 # _next_half_hour
