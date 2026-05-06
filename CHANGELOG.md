@@ -6,7 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.9.6] - 2026-05-06
+## [0.9.7] - 2026-05-06
+### Added
+- `ClockAnnouncer` (`src/audio/clock_announcer.py`): background thread that
+  fires spoken time announcements at :00 and :30 of every hour. At the top
+  of the hour a dad joke follows. 25-joke pool with no-immediate-repeat shuffle.
+- `ClockService` (`src/services/clock_service.py`): Service wrapper; publishes
+  `av.say` on the bus. Enabled/disabled at runtime via `.clock_enabled`.
+- `config/assistant.yaml`: `clock_announcements.enabled` toggle (default: true).
+- 23 new tests in `tests/test_clock_announcer.py`.
+
+
 ### Fixed
 - Boot diagnostic now reads temperature directly from TMP117 at startup
   instead of waiting for the thermal bus topic (which lives in a separate

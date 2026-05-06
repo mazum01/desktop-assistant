@@ -18,6 +18,7 @@ from src.assistant.runner import run_services
 from src.core.bus import MessageBus
 from src.services.audio_capture_service import AudioCaptureService
 from src.services.av_service import AVService
+from src.services.clock_service import ClockService
 from src.services.ipc_bridge import IPCBridge
 from src.services.motion_service import MotionService
 from src.services.perception_service import PerceptionService
@@ -31,6 +32,12 @@ _THERMAL_PUB = "ipc:///tmp/desktop-assistant-thermal.pub"
 
 
 def main() -> int:
+    import yaml
+    from pathlib import Path
+    _cfg_path = Path(__file__).parents[2] / "config" / "assistant.yaml"
+    _cfg = yaml.safe_load(_cfg_path.read_text()) if _cfg_path.exists() else {}
+    _clock_enabled = _cfg.get("clock_announcements", {}).get("enabled", True)
+
     bus = MessageBus()
     av = AVService(bus=bus)
     vis = VisionService(bus=bus)
@@ -50,6 +57,7 @@ def main() -> int:
             av,
             PerceptionService(bus=bus, vision_service=vis),
             TelemetryService(bus=bus),
+            ClockService(bus=bus, enabled=_clock_enabled),
             ipc,  # last so all earlier services emit
                   # service.started events on the wire
         ],

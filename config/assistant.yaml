@@ -1,0 +1,7 @@
+# Desktop Assistant — core configuration.
+
+clock_announcements:
+  # Spoken time at :00 and :30 of every hour.
+  # At the top of the hour a dad joke follows the time.
+  # Set to false to silence completely.
+  enabled: true
