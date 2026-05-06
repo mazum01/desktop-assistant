@@ -6,7 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.0.1] - 2025-05-06
+## [1.0.2] - 2025-05-06
+### Changed
+- **`desktop-assistant status`** overhauled into a sectioned dashboard:
+  - **Header**: version, uptime, overall health (OK / DEGRADED)
+  - **Services**: every service with running/stopped mark and start timestamp
+  - **Hardware / Thermal**: temperature (°C + °F), fan duty %, RPM, backend
+  - **Vision / Perception**: camera frame count + resolution, detected face
+    count, identified names, detection backend, payload age
+  - **Identity / Head Tracking**: last recognized person (name, short ID,
+    match score or "new"), servo angle
+  - **Audio / Speech**: microphone level (dBFS + RMS), last spoken phrase
+    with age; error warnings for each subsystem
+- `_is_healthy()` extended to include `vision.error` and `audio.error`.
+- `IPCBridge._build_status()` now snapshots additional topics:
+  `perception.faces`, `perception.error`, `face.identified`, `av.spoke`.
+
+
 ### Added
 - **`desktop-assistant help`** subcommand: prints a formatted command reference
   table with one-line descriptions of every subcommand plus endpoint info.

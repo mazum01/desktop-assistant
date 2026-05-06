@@ -310,61 +310,172 @@ def cmd_status(args) -> int:
         return 0 if _is_healthy(r["status"]) else 1
 
     s = r["status"]
-    print(f"desktop-assistant v{s.get('version','?')}  "
-          f"(up {_fmt_uptime(s.get('uptime_s', 0))})")
-    print(f"endpoints: pub={s['endpoints']['pub']}  rep={s['endpoints']['rep']}")
-    print()
-    print("services:")
-    if not s["services"]:
-        print("  (none reported)")
-    for name, info in sorted(s["services"].items()):
-        mark = "✓" if info.get("running") else "✗"
-        print(f"  {mark} {name}")
-
-    print()
-    print("latest telemetry:")
     last = s.get("last", {})
+    svcs = s.get("services", {})
+    healthy = _is_healthy(s)
 
-    def show(label, topic, fmt=None):
-        v = last.get(topic)
-        if v is None:
-            print(f"  {label:<14} —")
-            return
-        print(f"  {label:<14} {fmt(v) if fmt else json.dumps(v)}")
+    # ── Header ─────────────────────────────────────────────────────────
+    status_tag = "● OK" if healthy else "✗ DEGRADED"
+    print(f"\ndesktop-assistant  v{s.get('version','?')}   "
+          f"uptime: {_fmt_uptime(s.get('uptime_s', 0))}   {status_tag}")
+    print(f"  pub  {s['endpoints']['pub']}")
+    print(f"  rep  {s['endpoints']['rep']}")
 
-    show("temp",     "thermal.temp",
-         lambda v: f"{v.get('celsius','?'):.1f} °C  ({v.get('fahrenheit','?'):.1f} °F)  ok={v.get('ok')}")
-    show("fan",      "thermal.fan",
-         lambda v: f"{v.get('duty','?'):.0f}%  backend={v.get('backend','?')}")
-    show("rpm",      "thermal.rpm",
-         lambda v: f"{v.get('rpm','—')}")
-    show("motion",   "motion.position",
-         lambda v: f"angle={v.get('angle','?')}")
-    show("vision",   "vision.frame_ready",
-         lambda v: (
-             f"frame#{v.get('frame_id', v.get('index', '?'))}  "
-             f"{v.get('width', (v.get('shape') or [None, '?'])[1])}x"
-             f"{v.get('height', (v.get('shape') or ['?'])[0])}"
-         ))
-    show("audio",    "audio.level",
-         lambda v: f"{v.get('dbfs','?'):.1f} dBFS  rms={v.get('rms','?'):.4f}")
+    # ── Services ───────────────────────────────────────────────────────
+    print()
+    print("┌─ Services " + "─" * 49)
+    if not svcs:
+        print("│  (none reported)")
+    for name, info in sorted(svcs.items()):
+        mark = "✓" if info.get("running") else "✗"
+        ts   = info.get("ts")
+        age  = f"  (since {_fmt_ts(ts)})" if ts else ""
+        print(f"│  {mark}  {name}{age}")
+
+    # ── Hardware / Thermal ─────────────────────────────────────────────
+    print("├─ Hardware / Thermal " + "─" * 38)
+    temp = last.get("thermal.temp") or {}
+    if temp:
+        ok_sym = "✓" if temp.get("ok") else "✗"
+        print(f"│  {ok_sym}  temperature   "
+              f"{_safe_float(temp,'celsius'):.1f} °C  "
+              f"({_safe_float(temp,'fahrenheit'):.1f} °F)")
+    else:
+        print("│  —  temperature   no data")
+
+    fan = last.get("thermal.fan") or {}
+    rpm = last.get("thermal.rpm") or {}
+    if fan:
+        duty    = _safe_float(fan, "duty")
+        backend = fan.get("backend", "?")
+        rpm_val = rpm.get("rpm", "—") if rpm else "—"
+        print(f"│     fan           {duty:.0f}% duty   {rpm_val} RPM   backend={backend}")
+    else:
+        print("│  —  fan           no data")
 
     err_temp = last.get("thermal.error")
     if err_temp:
-        print(f"\n⚠ thermal.error: {err_temp}")
-    err_vis  = last.get("vision.error")
-    if err_vis:
-        print(f"⚠ vision.error: {err_vis}")
-    err_aud  = last.get("audio.error")
-    if err_aud:
-        print(f"⚠ audio.error: {err_aud}")
+        print(f"│  ⚠  thermal error: {err_temp}")
 
-    return 0 if _is_healthy(s) else 1
+    # ── Vision / Perception ────────────────────────────────────────────
+    print("├─ Vision / Perception " + "─" * 37)
+    frame = last.get("vision.frame_ready") or {}
+    if frame:
+        fid = frame.get("frame_id", frame.get("index", "?"))
+        w   = frame.get("width")  or (frame.get("shape") or [None, "?"])[1]
+        h   = frame.get("height") or (frame.get("shape") or ["?"])[0]
+        print(f"│  ✓  camera        frame #{fid}   {w}×{h}")
+    else:
+        print("│  —  camera        no frames yet")
+
+    pf = last.get("perception.faces") or {}
+    if pf:
+        count   = pf.get("count", 0)
+        backend = pf.get("backend", "?")
+        faces   = pf.get("faces") or []
+        names   = [f.get("name") or "unknown" for f in faces if f.get("face_id")]
+        age_s   = _payload_age(pf)
+        face_str = (", ".join(names) if names else "no identified faces") if count else "none"
+        print(f"│  ✓  faces         {count} detected   [{face_str}]   "
+              f"backend={backend}   {age_s}")
+    else:
+        print("│  —  faces         no detection data")
+
+    err_vis = last.get("vision.error")
+    err_prc = last.get("perception.error")
+    if err_vis:
+        print(f"│  ⚠  vision error: {err_vis}")
+    if err_prc:
+        print(f"│  ⚠  perception error: {err_prc}")
+
+    # ── Identity / Head Tracking ───────────────────────────────────────
+    print("├─ Identity / Head Tracking " + "─" * 32)
+    fi = last.get("face.identified") or {}
+    if fi:
+        name  = fi.get("name", "?")
+        fid   = fi.get("face_id", "?")
+        score = fi.get("score", 0.0)
+        is_new = fi.get("is_new", False)
+        label = "new" if is_new else f"score={score:.2f}"
+        age_s = _payload_age(fi)
+        print(f"│  ✓  last identity  {name!r}  (id={fid[:8]}…  {label})  {age_s}")
+    else:
+        print("│  —  last identity  no face recognized yet")
+
+    motion = last.get("motion.position") or {}
+    if motion:
+        angle = motion.get("angle", "?")
+        print(f"│     servo angle   {angle}°")
+    else:
+        print("│  —  servo angle   no data")
+
+    # ── Audio / Speech ─────────────────────────────────────────────────
+    print("├─ Audio / Speech " + "─" * 42)
+    audio = last.get("audio.level") or {}
+    if audio:
+        dbfs = _safe_float(audio, "dbfs")
+        rms  = _safe_float(audio, "rms")
+        print(f"│  ✓  microphone    {dbfs:.1f} dBFS   rms={rms:.4f}")
+    else:
+        print("│  —  microphone    no data")
+
+    spoke = last.get("av.spoke") or {}
+    if spoke:
+        text   = spoke.get("text", "")
+        snip   = (text[:50] + "…") if len(text) > 50 else text
+        age_s  = _payload_age(spoke)
+        print(f"│  ✓  last spoken   \"{snip}\"  {age_s}")
+    else:
+        print("│  —  last spoken   (nothing spoken yet)")
+
+    err_aud = last.get("audio.error")
+    if err_aud:
+        print(f"│  ⚠  audio error: {err_aud}")
+
+    print("└" + "─" * 59)
+    print()
+    return 0 if healthy else 1
+
+
+def _safe_float(d: dict, key: str, default: float = 0.0) -> float:
+    v = d.get(key, default)
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _payload_age(payload: dict) -> str:
+    """Return a human-readable age string from a payload's 'ts' field."""
+    ts = payload.get("ts")
+    if ts is None:
+        return ""
+    age = time.time() - float(ts)
+    if age < 2:
+        return "(just now)"
+    if age < 60:
+        return f"({age:.0f}s ago)"
+    if age < 3600:
+        return f"({age/60:.0f}m ago)"
+    return f"({age/3600:.1f}h ago)"
+
+
+def _fmt_ts(ts) -> str:
+    """Format a Unix timestamp as HH:MM:SS."""
+    try:
+        import datetime
+        return datetime.datetime.fromtimestamp(float(ts)).strftime("%H:%M:%S")
+    except Exception:
+        return str(ts)
 
 
 def _is_healthy(status: dict) -> bool:
     last = status.get("last", {})
     if last.get("thermal.error"):
+        return False
+    if last.get("vision.error"):
+        return False
+    if last.get("audio.error"):
         return False
     temp = last.get("thermal.temp") or {}
     if temp.get("ok") is False:
