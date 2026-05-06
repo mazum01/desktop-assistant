@@ -231,6 +231,75 @@ def cmd_say(args) -> int:
     return 0 if r.get("ok") else 1
 
 
+def cmd_help(args) -> int:
+    """Print a formatted command reference, or detailed help for one command."""
+    commands = {
+        "ping":        "Round-trip latency check — confirms the daemon is reachable.",
+        "status":      "Health and telemetry dashboard (temp, fan, servo, vision, audio).\n"
+                       "               --json  Emit raw JSON instead of the human-readable table.",
+        "topics":      "List every bus topic that has at least one active subscriber.",
+        "last":        "Show the most recent payload published on a given topic.\n"
+                       "               Usage: last <topic>",
+        "watch":       "Stream live bus events to stdout (Ctrl-C to stop).\n"
+                       "               --topic <prefix>  Filter to topics starting with <prefix>.",
+        "say":         "Speak a phrase through the speakers via neural TTS.\n"
+                       "               Usage: say \"<text>\"",
+        "version":     "Have the assistant speak its current version number.",
+        "pan":         "Pan the servo head to a logical angle (1–360°).\n"
+                       "               --to <deg>            Target angle (required).\n"
+                       "               --move-time-ms <ms>   Optional movement duration.",
+        "move-servo":  "Move servo with explicit position and move time.\n"
+                       "               Usage: move-servo <deg> <ms>\n"
+                       "               -as  Announce before moving.\n"
+                       "               -af  Announce when finished.",
+        "meet":        "Assign a name to the most recently seen face.\n"
+                       "               Usage: meet \"<Name>\"",
+        "publish":     "Publish a raw JSON event onto the internal bus (advanced).\n"
+                       "               Usage: publish <topic> [--payload '{...}']",
+        "help":        "Show this command reference, or help for a specific command.\n"
+                       "               Usage: help [command]",
+    }
+
+    if hasattr(args, "command") and args.command:
+        name = args.command
+        if name not in commands:
+            print(f"Unknown command: {name!r}\n")
+            print("Available commands: " + ", ".join(commands))
+            return 1
+        print(f"\ndesktop-assistant {name}")
+        print("─" * (len(name) + 21))
+        print(commands[name])
+        print(f"\nFor argument details: desktop-assistant {name} --help\n")
+        return 0
+
+    width = max(len(k) for k in commands) + 2
+    print()
+    print("desktop-assistant — control the running assistant over ZMQ")
+    print("=" * 60)
+    print(f"  Daemon REP : {REP_ENDPOINT}")
+    print(f"  Daemon PUB : {PUB_ENDPOINT}")
+    print("  Override   : $DA_BUS_REP_ENDPOINT / $DA_BUS_PUB_ENDPOINT")
+    print()
+    print("Commands")
+    print("─" * 60)
+    for cmd, desc in commands.items():
+        first_line = desc.split("\n")[0]
+        print(f"  {cmd:<{width}}{first_line}")
+    print()
+    print("Tip: desktop-assistant <command> --help  for full argument details.")
+    print()
+    return 0
+
+
+    r = _request({
+        "cmd": "publish",
+        "topic": "av.say",
+        "payload": {"text": args.text},
+    })
+    print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
 def cmd_status(args) -> int:
     r = _request({"cmd": "status"}, timeout_ms=2000)
     if not r.get("ok"):
@@ -341,9 +410,15 @@ def cmd_watch(args) -> int:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(prog="desktop-assistant",
-                                description="Control the running assistant over ZMQ.")
-    sub = p.add_subparsers(dest="cmd", required=True)
+    p = argparse.ArgumentParser(
+        prog="desktop-assistant",
+        description="Control the running assistant over ZMQ.",
+    )
+    sub = p.add_subparsers(dest="cmd")
+
+    sp = sub.add_parser("help", help="Show command reference or help for a specific command")
+    sp.add_argument("command", nargs="?", default=None, help="Command name to get help for")
+    sp.set_defaults(func=cmd_help)
 
     sub.add_parser("ping", help="Round-trip check").set_defaults(func=cmd_ping)
     sub.add_parser("topics", help="List subscribed topics").set_defaults(func=cmd_topics)
@@ -394,6 +469,10 @@ def main() -> int:
     sp.set_defaults(func=cmd_watch)
 
     args = p.parse_args()
+    if args.cmd is None:
+        # No subcommand → show help
+        args.command = None
+        return cmd_help(args)
     return args.func(args)
 
 

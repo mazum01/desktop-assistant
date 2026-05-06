@@ -6,7 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.0.0] - 2025-05-06
+## [1.0.1] - 2025-05-06
+### Added
+- **`desktop-assistant help`** subcommand: prints a formatted command reference
+  table with one-line descriptions of every subcommand plus endpoint info.
+  `desktop-assistant help <command>` shows the full description for that
+  specific command and reminds how to get argparse argument details.
+- Running `desktop-assistant` with no subcommand now shows the same help
+  instead of an argparse error.
+
+
 ### Added
 - **Face recognition**: `PerceptionService` now runs ArcFace MobileFaceNet (Hailo-8)
   on detected faces. Each face in `perception.faces` payloads now includes `face_id`,
