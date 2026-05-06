@@ -6,7 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.9.5] - 2026-05-05
+## [0.9.6] - 2026-05-06
+### Fixed
+- Boot diagnostic now reads temperature directly from TMP117 at startup
+  instead of waiting for the thermal bus topic (which lives in a separate
+  process and may not arrive in time). Falls back gracefully to
+  "not connected" if the sensor is absent.
+- Fixed key mismatch: ThermalService publishes `"celsius"` but runner was
+  reading `"temp_c"` — temperature would never appear even with thermal
+  process running.
+- Temperature spoken as Fahrenheit for clarity.
+### Added
+- Fan speed control status added to boot diagnostic readout. Uses a
+  non-destructive sysfs probe (`/sys/class/pwm/pwmchip0`) so it doesn't
+  conflict with the thermal process owning the FanController.
+
+
 ### Fixed
 - Boot diagnostic readout now correctly reports "not connected" for hardware-absent
   services (Camera, Microphone, Audio output, Face detection, Motion system).

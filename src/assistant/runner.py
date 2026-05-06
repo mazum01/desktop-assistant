@@ -129,16 +129,51 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
         if thermal_err:
             problems.append(f"thermal error: {thermal_err}")
 
-        temp = bus.last("thermal.temp") or {}
-        if isinstance(temp, dict) and temp.get("ok") is False:
+        # Temperature: try bus first (populated when thermal process is up),
+        # then fall back to a direct TMP117 read so the core unit always has
+        # a value at boot even when running standalone.
+        temp_bus = bus.last("thermal.temp") or {}
+        temp_c: float | None = None
+        if isinstance(temp_bus, dict) and temp_bus.get("ok") is False:
             problems.append("temperature sensor offline")
             status_lines.append("Temperature sensor: not responding")
         else:
-            temp_c = temp.get("temp_c") if isinstance(temp, dict) else None
+            # Key published by ThermalService is "celsius"
+            temp_c = temp_bus.get("celsius") if isinstance(temp_bus, dict) else None
+            if temp_c is None:
+                # Thermal unit not running or IPC bridge hasn't forwarded yet —
+                # read the sensor directly.
+                try:
+                    from src.thermal.tmp117 import TMP117
+                    _sensor = TMP117()
+                    temp_c = _sensor.read_temperature_c()
+                    _sensor.close()
+                except Exception:
+                    temp_c = None
             if temp_c is not None:
-                status_lines.append(f"Temperature sensor: available, {temp_c:.1f} degrees")
+                temp_f = temp_c * 9.0 / 5.0 + 32.0
+                status_lines.append(
+                    f"Temperature sensor: {temp_f:.0f} degrees Fahrenheit"
+                )
             else:
-                status_lines.append("Temperature sensor: no reading yet")
+                status_lines.append("Temperature sensor: not connected")
+
+        # Fan: probe sysfs/lgpio non-destructively (avoids conflicting with
+        # the thermal process which may own the FanController).
+        try:
+            from pathlib import Path as _Path
+            _chip = _Path("/sys/class/pwm/pwmchip0")
+            if _chip.is_dir():
+                fan_status = "available"
+            else:
+                try:
+                    import lgpio as _lgpio  # noqa: F401
+                    fan_status = "available, software mode"
+                except ImportError:
+                    fan_status = "not connected"
+        except Exception:
+            fan_status = "not connected"
+        status_lines.append(f"Fan speed control: {fan_status}")
 
         vis_err = bus.last("vision.error")
         if vis_err:
