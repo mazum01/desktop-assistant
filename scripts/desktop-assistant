@@ -210,6 +210,17 @@ def cmd_move_servo(args) -> int:
     return 0 if r.get("ok") else 1
 
 
+def cmd_meet(args) -> int:
+    """Name the most recently seen face."""
+    r = _request({
+        "cmd": "publish",
+        "topic": "face.meet",
+        "payload": {"name": args.name},
+    })
+    print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
 def cmd_say(args) -> int:
     r = _request({
         "cmd": "publish",
@@ -373,6 +384,10 @@ def main() -> int:
     sp = sub.add_parser("say", help="Speak a phrase via TTS")
     sp.add_argument("text")
     sp.set_defaults(func=cmd_say)
+
+    sp = sub.add_parser("meet", help="Name the most recently seen face")
+    sp.add_argument("name", help="Name to assign (e.g. 'Alice')")
+    sp.set_defaults(func=cmd_meet)
 
     sp = sub.add_parser("watch", help="Stream all bus events")
     sp.add_argument("--topic", default="", help="Topic prefix filter (default: all)")

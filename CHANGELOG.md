@@ -6,6 +6,39 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.0] - 2025-05-06
+### Added
+- **Face recognition**: `PerceptionService` now runs ArcFace MobileFaceNet (Hailo-8)
+  on detected faces. Each face in `perception.faces` payloads now includes `face_id`,
+  `name`, `is_new`, and `match_score` fields.
+- **`FaceEmbedder`** (`src/perception/face_embedder.py`): aligns face crops to ArcFace
+  canonical 112×112 using SCRFD 5-point landmarks, embeds via MobileFaceNet, returns
+  L2-normalized 512-dim vectors. Gracefully degrades to zero vectors when Hailo-8 is
+  unavailable.
+- **`FaceRegistry`** (`src/perception/face_registry.py`): SQLite identity store at
+  `~/.local/share/desktop-assistant/faces.db`. Stores embeddings with cosine-similarity
+  matching (threshold ≥ 0.45). New faces auto-assigned "Guest N"; names set via CLI.
+- **`FaceService`** (`src/services/face_service.py`): greets new faces with a fixed
+  introduction; re-greets known people after a 5-minute absence with varied phrases (8-pool,
+  no immediate repeat). Handles `face.meet` bus event for CLI name assignment.
+- **`TrackingService`** (`src/services/tracking_service.py`): 20 Hz servo tracking loop
+  following the highest-confidence face using a spring-damper model. Publishes
+  `motion.pan_to` with natural overshoot/settle motion.
+- **`HeadTracker`** (`src/motion/head_tracker.py`): spring-damper controller
+  (spring_k=6.0, damping=2.5) with dead zone, micro-saccades (±1.5° Gaussian every
+  3–7 s while tracking), and idle random-gaze state machine when no face is visible.
+- **`desktop-assistant meet <name>`** CLI subcommand: publishes `face.meet` to name
+  the most recently seen face.
+- **`config/assistant.yaml`**: added `head_tracking` and `face_recognition` sections.
+- **Tests**: `tests/test_face_registry.py` (11 tests), `tests/test_head_tracker.py`
+  (6 tests), `tests/test_face_service.py` (6 tests). Total suite: 214 tests.
+- **Architecture diagram** updated: FaceService, TrackingService, FaceRegistry,
+  faces.db, and new bus topics added.
+### Fixed
+- **`_pick_phrase` no-repeat bug**: `FaceService._pick_phrase()` previously stored the
+  formatted phrase (with name substituted) but compared against raw templates, so the
+  no-repeat guard never fired. Now stores the template string.
+
 ## [0.9.9] - 2026-05-06
 ### Fixed
 - **Audio jitter / USB DAC click-pop**: Replaced `sd.play()` + `sd.wait()` (which

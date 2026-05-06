@@ -5,3 +5,18 @@ clock_announcements:
   # At the top of the hour a dad joke follows the time.
   # Set to false to silence completely.
   enabled: true
+
+head_tracking:
+  # Natural spring-damper servo tracking following detected faces.
+  # Idle mode: slow random gaze when no face is visible.
+  enabled: true
+  fov_degrees: 100.0        # IMX708 wide horizontal field of view estimate
+  spring_k: 6.0             # tracking stiffness (higher = snappier)
+  damping: 2.5              # motion damping (underdamped for natural overshoot)
+  max_speed_deg_s: 80.0     # max tracking speed cap
+
+face_recognition:
+  # ArcFace MobileFaceNet identity recognition on the Hailo-8.
+  # New faces are auto-assigned "Guest N"; name them with: desktop-assistant meet "Name"
+  enabled: true
+  greeting_cooldown_s: 300  # re-greet a known person after this many seconds away

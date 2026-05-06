@@ -32,6 +32,18 @@ except (ImportError, OSError) as _exc:
     _HAILO_AVAILABLE = False
     log.warning("hailo_platform not available — inference in sim mode (%s)", _exc)
 
+# One VDevice is shared across all HailoInference instances in this process.
+# Hailo-8 allows multiple configured network groups on a single VDevice; creating
+# two VDevices fails with HAILO_OUT_OF_PHYSICAL_DEVICES.
+_shared_vdevice = None
+
+
+def _get_shared_vdevice():
+    global _shared_vdevice
+    if _shared_vdevice is None:
+        _shared_vdevice = hp.VDevice()
+    return _shared_vdevice
+
 
 class HailoInference:
     """
@@ -63,7 +75,7 @@ class HailoInference:
             return
 
         try:
-            self._vdevice = hp.VDevice()
+            self._vdevice = _get_shared_vdevice()
             hef = hp.HEF(str(self._hef_path))
             configured = self._vdevice.configure(hef)
             self._network_group = configured[0]
@@ -177,7 +189,9 @@ class HailoInference:
         self._cleanup()
 
     def _cleanup(self) -> None:
-        for attr in ("_activate_ctx", "_infer_pipeline", "_vdevice"):
+        # Do NOT close the shared VDevice — other HailoInference instances may still
+        # be using it. Only clean up our own pipeline and activation context.
+        for attr in ("_activate_ctx", "_infer_pipeline"):
             obj = getattr(self, attr, None)
             if obj is not None:
                 try:
@@ -185,6 +199,7 @@ class HailoInference:
                 except Exception:
                     pass
                 setattr(self, attr, None)
+        self._vdevice = None
 
     def __enter__(self) -> "HailoInference":
         return self
