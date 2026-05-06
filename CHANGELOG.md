@@ -6,7 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.0.2] - 2025-05-06
+## [1.0.3] - 2025-05-06
+### Added
+- **`da` alias**: `/usr/local/bin/da` is now a symlink to `desktop-assistant`.
+  All commands work as `da status`, `da say "hello"`, `da meet "Alice"`, etc.
+- `scripts/setup_pi.sh` updated to create the `da` symlink on fresh installs.
+
+
 ### Changed
 - **`desktop-assistant status`** overhauled into a sectioned dashboard:
   - **Header**: version, uptime, overall health (OK / DEGRADED)

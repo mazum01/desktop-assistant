@@ -69,12 +69,20 @@ fi
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_SRC="$REPO_ROOT/scripts/desktop-assistant"
 CLI_DEST="/usr/local/bin/desktop-assistant"
+CLI_ALIAS="/usr/local/bin/da"
 if [ -x "$CLI_SRC" ]; then
     if [ "$(readlink -f "$CLI_DEST" 2>/dev/null)" != "$(readlink -f "$CLI_SRC")" ]; then
         echo "  Linking $CLI_DEST → $CLI_SRC"
         sudo ln -sfn "$CLI_SRC" "$CLI_DEST"
     else
         echo "  ✓ desktop-assistant CLI already on PATH"
+    fi
+    # Always ensure the short alias exists
+    if [ "$(readlink -f "$CLI_ALIAS" 2>/dev/null)" != "$CLI_DEST" ]; then
+        echo "  Linking $CLI_ALIAS → $CLI_DEST"
+        sudo ln -sf "$CLI_DEST" "$CLI_ALIAS"
+    else
+        echo "  ✓ da alias already on PATH"
     fi
 else
     echo "  ⚠ $CLI_SRC missing or not executable — skipping CLI symlink"
