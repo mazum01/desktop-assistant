@@ -41,7 +41,7 @@ class AudioOutputConfig:
     # Soft-clipping waveshaper drive — pumps perceived loudness on the
     # unamplified bring-up speaker. 1.0 = off (linear). 2.0-4.0 typical;
     # higher = louder + more harmonic distortion. 0 disables.
-    loudness_boost: float = 3.0
+    loudness_boost: float = 2.0
 
     # Back-compat: callers may still pass device_name="Foo".
     device_name: Optional[str] = None
@@ -96,6 +96,7 @@ class AudioOutput:
         self._cfg = config or AudioOutputConfig()
         self._sim = not _SD_AVAILABLE
         self._device_index: Optional[int] = None
+        self._stream: Optional["sd.OutputStream"] = None  # persistent stream
 
         if self._sim:
             return
@@ -131,6 +132,89 @@ class AudioOutput:
         except Exception:
             return None
 
+    # ── Persistent stream ────────────────────────────────────────────────
+
+    def _ensure_stream(self) -> "sd.OutputStream":
+        """Open (or reopen) the persistent output stream with high latency.
+
+        Keeping the stream open between utterances prevents the USB DAC from
+        auto-suspending (which causes audible clicks/pops on resume) and
+        eliminates PortAudio stream-open overhead at the start of each phrase.
+        """
+        if self._stream is not None and self._stream.active:
+            return self._stream
+        if self._stream is not None:
+            try:
+                self._stream.close()
+            except Exception:
+                pass
+            self._stream = None
+        log.debug(
+            "Opening persistent audio stream device=%s %dHz %dch",
+            self._device_index, self._cfg.sample_rate, self._cfg.channels,
+        )
+        self._stream = sd.OutputStream(
+            samplerate=self._cfg.sample_rate,
+            channels=self._cfg.channels,
+            device=self._device_index,
+            dtype="float32",
+            latency="high",             # large OS buffer — prevents underruns
+            blocksize=int(self._cfg.sample_rate * 0.05),  # 50 ms callback blocks
+        )
+        self._stream.start()
+        return self._stream
+
+    def write_chunk(
+        self,
+        samples: np.ndarray,
+        sample_rate: Optional[int] = None,
+    ) -> None:
+        """Write a chunk of audio to the persistent stream.
+
+        Blocks until the chunk has been accepted into the ring buffer (NOT
+        until playback completes). Call ``flush()`` after the last chunk to
+        wait for audio to fully play through. This streaming path is used by
+        the TTS layer so synthesis and playback can be pipelined.
+        """
+        if self._sim:
+            return
+        sr = sample_rate or self._cfg.sample_rate
+        if sr != self._cfg.sample_rate:
+            samples = _resample_linear(samples, sr, self._cfg.sample_rate)
+        drive = self._cfg.loudness_boost
+        if drive and drive > 1.0:
+            samples = _soft_clip(samples, drive)
+        if self._cfg.channels == 2 and samples.ndim == 1:
+            samples = np.column_stack([samples, samples])
+        self._ensure_stream().write(samples.astype(np.float32))
+
+    def flush(self) -> None:
+        """Wait for all previously written chunks to finish playing.
+
+        Writes a silence pad equal to twice the stream latency. Since
+        ``sd.OutputStream.write()`` blocks when the ring buffer is full,
+        this forces the ring buffer to drain (i.e. all audio plays through)
+        before returning.  The silence itself also keeps the USB DAC active
+        so the next utterance starts cleanly.
+        """
+        if self._sim or self._stream is None:
+            return
+        latency_s = max(0.2, self._stream.latency)
+        pad_frames = int(self._cfg.sample_rate * latency_s * 2)
+        shape = (pad_frames, self._cfg.channels) if self._cfg.channels > 1 else pad_frames
+        silence = np.zeros(shape, dtype=np.float32)
+        self._stream.write(silence)
+
+    def close(self) -> None:
+        """Release the persistent stream (call when the service shuts down)."""
+        if self._stream is not None:
+            try:
+                self._stream.stop()
+                self._stream.close()
+            except Exception:
+                pass
+            self._stream = None
+
     # ── Playback ────────────────────────────────────────────────────────
 
     def play(
@@ -139,31 +223,33 @@ class AudioOutput:
         sample_rate: Optional[int] = None,
         blocking: bool = True,
     ) -> None:
-        """Play a numpy waveform. samples: 1-D mono or 2-D (n_samples, channels).
+        """Play a numpy waveform through the persistent output stream.
 
-        If *sample_rate* differs from the device's configured rate, the
-        waveform is linearly resampled — many USB DACs (incl. CM108) only
-        accept 44.1/48 kHz, so we never hand them e.g. espeak's 22050.
+        samples: 1-D mono or 2-D (n_samples, channels).
+        Resamples if sample_rate differs from the device rate.
         """
-        sr = sample_rate or self._cfg.sample_rate
         if self._sim:
+            sr = sample_rate or self._cfg.sample_rate
             log.debug("[sim] play() %d samples @ %d Hz", len(samples), sr)
             return
-        target_sr = self._cfg.sample_rate
-        if sr != target_sr:
-            samples = _resample_linear(samples, sr, target_sr)
-            sr = target_sr
-        drive = self._cfg.loudness_boost
-        if drive and drive > 1.0:
-            samples = _soft_clip(samples, drive)
-        sd.play(samples, samplerate=sr, device=self._device_index)
+        self.write_chunk(samples, sample_rate=sample_rate)
         if blocking:
-            sd.wait()
+            self.flush()
 
     def stop(self) -> None:
+        """Abort any ongoing playback immediately."""
         if self._sim:
             return
-        sd.stop()
+        if self._stream is not None:
+            try:
+                self._stream.abort()
+            except Exception:
+                pass
+            self._stream = None  # will reopen on next use
+        try:
+            sd.stop()
+        except Exception:
+            pass
 
     def beep(
         self,

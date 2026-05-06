@@ -120,8 +120,9 @@ class AVService(Service):
         try:
             if self._audio is not None:
                 self._audio.stop()
+                self._audio.close()
         except Exception:
-            log.exception("audio.stop failed")
+            log.exception("audio.stop/close failed")
         log.info("AVService stopped")
 
     # ── Worker queue ───────────────────────────────────────────────────

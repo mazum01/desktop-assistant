@@ -6,6 +6,30 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.9.9] - 2026-05-06
+### Fixed
+- **Audio jitter / USB DAC click-pop**: Replaced `sd.play()` + `sd.wait()` (which
+  opened/closed the PortAudio stream on every utterance, causing the USB DAC to
+  auto-suspend between phrases) with a **persistent `sd.OutputStream`** (`latency="high"`,
+  50 ms callback blocks). The stream stays open for the lifetime of `AVService`,
+  eliminating the pop/click on resume.
+- **Buffer underruns under CPU load**: `latency="high"` provides a generous OS buffer
+  so Hailo/camera/perception activity no longer causes audio dropouts.
+- **Loudness distortion**: Reduced `loudness_boost` default from `3.0` → `2.0`
+  (tanh waveshaper now clips far less of the waveform → cleaner sound).
+
+### Changed
+- **Piper TTS now streams**: `tts.say()` iterates the Piper synthesis generator and
+  writes each chunk to `output.write_chunk()` as it arrives (pipeline: first sentence
+  plays while remaining sentences are still being synthesized). `output.flush()` is
+  called after the last chunk to drain the ring buffer.
+- `AudioOutput` gains `write_chunk()`, `flush()`, `close()`, and `_ensure_stream()`
+  methods. `play()` now delegates to `write_chunk()` + `flush()`.
+- `AVService.on_stop()` now calls `audio.close()` to cleanly release the stream.
+- Test suite updated (`tests/test_audio_output.py`): added `FakeOutputStream` class
+  and 3 new tests (`test_write_chunk_streams_to_persistent_stream`,
+  `test_close_clears_stream`, `test_flush_writes_silence`). 191 tests passing.
+
 ## [0.9.8] - 2026-05-06
 ### Fixed
 - Single-digit minutes now spoken as "oh X" (e.g. "six oh eight") instead
