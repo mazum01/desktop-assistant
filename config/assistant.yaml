@@ -17,6 +17,13 @@ head_tracking:
 
 face_recognition:
   # ArcFace MobileFaceNet identity recognition on the Hailo-8.
-  # New faces are auto-assigned "Guest N"; name them with: desktop-assistant meet "Name"
+  # New faces are auto-assigned "Guest N"; name them with: da meet "Name"
   enabled: true
   greeting_cooldown_s: 300  # re-greet a known person after this many seconds away
+
+web_dashboard:
+  # Live browser dashboard served on the local network.
+  # Access at http://<pi-ip>:8080
+  enabled: true
+  port: 8080
+  host: "0.0.0.0"

@@ -183,6 +183,21 @@ class FaceRegistry:
         ).fetchone()
         return dict(row) if row else None
 
+    def list_faces(self) -> list[dict]:
+        """Return all known faces sorted by last_seen descending."""
+        rows = self._conn.execute(
+            "SELECT id, name, first_seen, last_seen, last_greeted, seen_count "
+            "FROM faces ORDER BY last_seen DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_face(self, face_id: str) -> bool:
+        """Remove a face and all its embeddings. Returns True if found."""
+        cur = self._conn.execute("DELETE FROM face_embeddings WHERE face_id = ?", (face_id,))
+        cur2 = self._conn.execute("DELETE FROM faces WHERE id = ?", (face_id,))
+        self._conn.commit()
+        return cur2.rowcount > 0
+
     def get_current_face_id(self) -> Optional[str]:
         """Return the most recently seen face_id (useful for CLI name assignment)."""
         row = self._conn.execute(

@@ -6,6 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.0] - 2025-05-06
+### Added
+- **Live web dashboard** (FastAPI + dark-theme SPA) served on port 8080 (`WebService`).
+  - Dashboard sections: live status telemetry, MJPEG camera stream (20 fps), face
+    registry management (rename / delete inline), controls (say text, pan servo,
+    speak version), real-time event log (WebSocket push, last 20 events).
+  - REST API: `GET /api/faces`, `PUT /api/faces/{id}`, `DELETE /api/faces/{id}`,
+    `POST /api/say`, `POST /api/pan`, `POST /api/version`, `GET /api/status`.
+  - WebSocket `/ws` pushes status snapshot + event log every 1 second.
+  - Dark theme: `#0d1117` background, `#4ecca3`-inspired accent palette.
+- `FaceRegistry.list_faces()` and `FaceRegistry.delete_face()` methods.
+- `web_dashboard` section added to `config/assistant.yaml` (enabled, port, host).
+- `fastapi`, `uvicorn[standard]`, `python-multipart` added to `requirements.txt`.
+- 11 new tests in `tests/test_web_service.py` covering all REST endpoints.
+- Architecture diagram updated with `WebService` node and `ext_web` browser client.
+
 ## [1.0.3] - 2025-05-06
 ### Added
 - **`da` alias**: `/usr/local/bin/da` is now a symlink to `desktop-assistant`.

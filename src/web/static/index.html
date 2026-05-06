@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Desktop Assistant</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <!-- ── Header ──────────────────────────────────────────────── -->
+  <header>
+    <div class="header-left">
+      <span class="logo">🤖</span>
+      <div>
+        <h1>Desktop Assistant</h1>
+        <span id="version-uptime" class="subtext">connecting…</span>
+      </div>
+    </div>
+    <div id="health-badge" class="badge badge-unknown">⬤ connecting</div>
+  </header>
+
+  <main>
+    <!-- ── Camera + Faces ──────────────────────────────────────── -->
+    <section class="card camera-card">
+      <h2>Camera Feed</h2>
+      <div class="camera-wrap">
+        <img id="camera-stream" src="/stream" alt="camera stream" />
+        <span id="face-overlay" class="face-overlay">0 faces</span>
+      </div>
+    </section>
+
+    <!-- ── Status Grid ─────────────────────────────────────────── -->
+    <section class="card">
+      <h2>Telemetry</h2>
+      <div class="grid-4">
+        <div class="stat-box">
+          <div class="stat-label">Temperature</div>
+          <div id="stat-temp" class="stat-value">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Fan</div>
+          <div id="stat-fan" class="stat-value">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Servo Angle</div>
+          <div id="stat-servo" class="stat-value">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Microphone</div>
+          <div id="stat-audio" class="stat-value">—</div>
+        </div>
+      </div>
+      <div class="spoken-line">
+        <span class="stat-label">Last spoken: </span>
+        <span id="stat-spoken" class="spoken-text">—</span>
+      </div>
+    </section>
+
+    <!-- ── Services ────────────────────────────────────────────── -->
+    <section class="card">
+      <h2>Services</h2>
+      <div id="services-container" class="pill-row">
+        <span class="pill pill-unknown">loading…</span>
+      </div>
+    </section>
+
+    <!-- ── Face Registry ───────────────────────────────────────── -->
+    <section class="card">
+      <h2>Face Registry</h2>
+      <div id="face-registry-wrap">
+        <table id="face-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>First Seen</th>
+              <th>Last Seen</th>
+              <th>Seen</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="face-tbody">
+            <tr><td colspan="5" class="empty-row">Loading…</td></tr>
+          </tbody>
+        </table>
+        <button class="btn btn-secondary" onclick="loadFaces()">↺ Refresh</button>
+      </div>
+    </section>
+
+    <!-- ── Controls ────────────────────────────────────────────── -->
+    <section class="card">
+      <h2>Controls</h2>
+      <div class="controls-grid">
+
+        <div class="control-group">
+          <label>Say something</label>
+          <div class="row-input">
+            <input type="text" id="say-input" placeholder="Enter text to speak…" />
+            <button class="btn btn-primary" onclick="doSay()">Speak</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Pan servo  <span id="pan-angle-display">180°</span></label>
+          <div class="row-input">
+            <input type="range" id="pan-slider" min="1" max="360" value="180"
+                   oninput="document.getElementById('pan-angle-display').textContent=this.value+'°'" />
+            <button class="btn btn-primary" onclick="doPan()">Go</button>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>System</label>
+          <div class="row-input">
+            <button class="btn btn-secondary" onclick="doVersion()">Speak Version</button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Event Log ───────────────────────────────────────────── -->
+    <section class="card">
+      <h2>Event Log <span class="subtext">(last 20)</span></h2>
+      <div id="event-log" class="event-log"></div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

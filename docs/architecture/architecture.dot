@@ -13,7 +13,7 @@ digraph DesktopAssistant {
     ranksep=0.6;
     fontname="Helvetica";
     labelloc="t";
-    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v1.0.0 — Face recognition + natural head tracking</font>>;
+    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v1.1.0 — Web dashboard (FastAPI, dark-theme SPA on port 8080)</font>>;
     fontsize=16;
 
     node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin=0.15];
@@ -103,6 +103,7 @@ digraph DesktopAssistant {
         svc_ipc     [label="IPCBridge (core)\nPUB ipc:///tmp/desktop-assistant.pub\nREP ipc:///tmp/desktop-assistant.rep\nSUB ← thermal.pub (upstream)\ncmds: ping / topics / last / publish / status", fillcolor="#a8d88d"];
         svc_face    [label="FaceService\n← perception.faces / face.meet\n→ av.say (greetings)\n→ face.identified\ncooldown-based re-greet", fillcolor="#a8d88d"];
         svc_track   [label="TrackingService\n← perception.faces\n→ motion.pan_to\n20Hz spring-damper tracking\nidle random gaze", fillcolor="#a8d88d"];
+        svc_web     [label="WebService (FastAPI)\nGET / — dashboard SPA\nGET /stream — MJPEG feed\nWS /ws — live JSON status\nGET|PUT|DEL /api/faces\nPOST /api/say|pan|version\nport 8080", fillcolor="#a8d88d"];
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -115,6 +116,7 @@ digraph DesktopAssistant {
         fontsize=11;
 
         ext_cli [label="scripts/desktop-assistant\n(CLI: ping / status / pan / say / watch / ...)", fillcolor="#ffe375"];
+        ext_web [label="Web Browser\nhttp://<pi>:8080", fillcolor="#ffe375"];
         ext_3p  [label="3rd-party subscribers\n(dashboards, future ML pipelines)", fillcolor="#ffe375", style="rounded,filled,dashed"];
         ext_db  [label="~/.local/share/desktop-assistant/\ntelemetry.db (SQLite ring)\nfaces.db (identity registry)", fillcolor="#ffe375"];
     }
@@ -179,6 +181,8 @@ digraph DesktopAssistant {
     svc_face -> core_bus    [color="#226622"];
     core_bus -> svc_track   [color="#226622"];
     svc_track -> core_bus   [color="#226622"];
+    core_bus -> svc_web     [color="#226622"];
+    svc_vision -> svc_web   [label="latest_frame()", style=dashed, color="#888888"];
 
     svc_thermal -> core_svc [style=dotted, label="extends"];
     svc_thermal_ipc -> core_svc [style=dotted];
@@ -191,17 +195,19 @@ digraph DesktopAssistant {
     svc_ipc     -> core_svc [style=dotted];
     svc_face    -> core_svc [style=dotted];
     svc_track   -> core_svc [style=dotted];
+    // (WebService does not extend Service base class)
 
     // ─────────────────────────────────────────────────────────────────
     // External
     // ─────────────────────────────────────────────────────────────────
     ext_cli -> svc_ipc [label="ZMQ REQ/SUB", color="#aa6600"];
     ext_3p  -> svc_ipc [label="ZMQ SUB",     color="#aa6600", style=dashed];
+    ext_web -> svc_web [label="HTTP/WS :8080", color="#aa6600"];
     svc_telemetry -> ext_db [label="writes telemetry.db", color="#aa6600"];
     svc_perception -> ext_db [label="writes faces.db", color="#aa6600", style=dashed];
 
     // ─────────────────────────────────────────────────────────────────
     // Boot ordering
     // ─────────────────────────────────────────────────────────────────
-    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_av; svc_perception; svc_telemetry; svc_ipc; svc_face; svc_track;}
+    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_av; svc_perception; svc_telemetry; svc_ipc; svc_face; svc_track; svc_web;}
 }

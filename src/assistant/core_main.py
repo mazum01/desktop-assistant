@@ -26,6 +26,7 @@ from src.services.perception_service import PerceptionService
 from src.services.telemetry_service import TelemetryService
 from src.services.tracking_service import TrackingService
 from src.services.vision_service import VisionService
+from src.services.web_service import WebService
 
 # The thermal service runs in a separate process. Its IPCBridge PUBs on
 # this endpoint; we SUBscribe to it from the core IPCBridge and re-emit
@@ -57,6 +58,11 @@ def main() -> int:
     )
     _perc_cfg = PerceptionConfig(recognition_enabled=_recognition_enabled)
 
+    _web_cfg = _cfg.get("web_dashboard", {})
+    _web_enabled = _web_cfg.get("enabled", True)
+    _web_port = int(_web_cfg.get("port", 8080))
+    _web_host = _web_cfg.get("host", "0.0.0.0")
+
     bus = MessageBus()
     av = AVService(bus=bus)
     vis = VisionService(bus=bus)
@@ -68,21 +74,25 @@ def main() -> int:
         "ok": True,
         "duration_s": av.tts_duration_rpc(msg.get("text", "")),
     })
-    return run_services(
-        services=[
-            MotionService(bus=bus),
-            vis,
-            AudioCaptureService(bus=bus),
-            av,
-            PerceptionService(bus=bus, vision_service=vis, config=_perc_cfg),
-            TelemetryService(bus=bus),
-            ClockService(bus=bus, enabled=_clock_enabled),
-            FaceService(bus=bus, greeting_cooldown_s=_greeting_cooldown),
-            TrackingService(bus=bus, config=_tracker_cfg, enabled=_tracking_enabled),
-            ipc,
-        ],
-        unit_name="core",
-    )
+
+    services = [
+        MotionService(bus=bus),
+        vis,
+        AudioCaptureService(bus=bus),
+        av,
+        PerceptionService(bus=bus, vision_service=vis, config=_perc_cfg),
+        TelemetryService(bus=bus),
+        ClockService(bus=bus, enabled=_clock_enabled),
+        FaceService(bus=bus, greeting_cooldown_s=_greeting_cooldown),
+        TrackingService(bus=bus, config=_tracker_cfg, enabled=_tracking_enabled),
+        ipc,
+    ]
+    if _web_enabled:
+        services.append(
+            WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis)
+        )
+
+    return run_services(services=services, unit_name="core")
 
 
 if __name__ == "__main__":

@@ -20,5 +20,10 @@ numpy>=1.26
 # It is NOT listed here because pip-installing it on Pi 5 fails on the
 # libcamera Python binding (no PyPI wheel exists).
 
+# Web dashboard
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+
 # Testing
 pytest>=8.0
