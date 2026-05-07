@@ -178,12 +178,24 @@ class PerceptionService(Service):
                         entry["name"] = name
                         entry["is_new"] = False
                         entry["match_score"] = round(score, 3)
+                        self._update_pos_cache(face_id, name, f.centroid[0], f.centroid[1])
                     else:
-                        face_id, auto_name = self._registry.register(emb)
-                        entry["face_id"] = face_id
-                        entry["name"] = auto_name
-                        entry["is_new"] = True
-                        entry["match_score"] = 0.0
+                        # Before registering, check position cache for same physical face.
+                        cached = self._find_cached_face(f.centroid[0], f.centroid[1])
+                        if cached:
+                            face_id, name = cached
+                            self._registry.update_seen(face_id)
+                            entry["face_id"] = face_id
+                            entry["name"] = name
+                            entry["is_new"] = False
+                            entry["match_score"] = 0.0
+                        else:
+                            face_id, auto_name = self._registry.register(emb)
+                            entry["face_id"] = face_id
+                            entry["name"] = auto_name
+                            entry["is_new"] = True
+                            entry["match_score"] = 0.0
+                            self._update_pos_cache(face_id, auto_name, f.centroid[0], f.centroid[1])
                 except Exception:
                     log.exception("face recognition failed for one face")
 
@@ -200,6 +212,28 @@ class PerceptionService(Service):
         )
 
     # ── Internal ──────────────────────────────────────────────────────
+
+    def _find_cached_face(self, cx: float, cy: float):
+        """Return (face_id, name) from position cache if a nearby face was seen recently."""
+        now = time.monotonic()
+        self._pos_cache = [e for e in self._pos_cache if now - e["ts"] < self._cache_ttl]
+        best = None
+        best_dist = float("inf")
+        for entry in self._pos_cache:
+            dist = ((cx - entry["cx"]) ** 2 + (cy - entry["cy"]) ** 2) ** 0.5
+            if dist < self._cache_dist and dist < best_dist:
+                best_dist = dist
+                best = entry
+        return (best["face_id"], best["name"]) if best else None
+
+    def _update_pos_cache(self, face_id: str, name: str, cx: float, cy: float) -> None:
+        """Add or refresh a face entry in the position cache."""
+        now = time.monotonic()
+        for entry in self._pos_cache:
+            if entry["face_id"] == face_id:
+                entry.update({"cx": cx, "cy": cy, "name": name, "ts": now})
+                return
+        self._pos_cache.append({"face_id": face_id, "name": name, "cx": cx, "cy": cy, "ts": now})
 
     def _get_frame(self):
         if self._vision_svc is not None:

@@ -68,7 +68,7 @@ def _pick_joke() -> str:
 # Time formatting
 # ---------------------------------------------------------------------------
 
-def _spoken_time(dt: datetime) -> str:
+def _spoken_time(dt: datetime, prefix: str = "It is") -> str:
     """Return a natural spoken time string, e.g. 'It is three thirty PM'."""
     hour_12 = dt.hour % 12 or 12
     minute = dt.minute
@@ -95,10 +95,10 @@ def _spoken_time(dt: datetime) -> str:
     min_word = _num(minute)
 
     if minute == 0:
-        return f"It is {hour_word} o'clock {ampm}."
+        return f"{prefix} {hour_word} o'clock {ampm}."
     if minute == 30:
-        return f"It is {hour_word} thirty {ampm}."
-    return f"It is {hour_word} {min_word} {ampm}."
+        return f"{prefix} {hour_word} thirty {ampm}."
+    return f"{prefix} {hour_word} {min_word} {ampm}."
 
 
 # ---------------------------------------------------------------------------
@@ -184,8 +184,8 @@ class ClockAnnouncer:
             log.exception("ClockAnnouncer: say_fn raised")
 
     def announce_time_now(self) -> None:
-        """Speak the current time immediately (no joke)."""
-        text = _spoken_time(datetime.now())
+        """Speak the current time immediately (no joke), using 'The time is …'."""
+        text = _spoken_time(datetime.now(), prefix="The time is")
         log.info("ClockAnnouncer: on-demand time → %s", text)
         try:
             self._say(text)

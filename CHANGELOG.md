@@ -6,7 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.1.1] - 2026-05-06
+## [1.1.3] - 2026-05-06
+### Fixed
+- **Face recognition loop**: same physical face was being re-registered as a new
+  identity on every frame when embeddings didn't match (angle changes, sim mode).
+  `PerceptionService` now maintains an 8-second position cache — if a face centroid
+  is within 150 px of a recently-seen identity, the existing `face_id` is reused
+  instead of creating a new `Guest N` entry.
+- **Repeated name prompts**: `FaceService` now tracks which `face_id`s have been
+  greeted as new this session; subsequent frames with the same ID are silently
+  skipped, preventing the "Can I have your name?" loop.
+
+## [1.1.2] - 2026-05-06
+### Changed
+- `da time` now says **"The time is …"** instead of "It is …".
+  Scheduled half-hour announcements retain the "It is …" phrasing.
+
+
 ### Added
 - **`da joke`** CLI command — have the assistant tell a random dad joke on demand.
 - **`da time`** CLI command — have the assistant announce the current time on demand.

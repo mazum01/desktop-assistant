@@ -71,6 +71,7 @@ class FaceService(Service):
         self._cooldown = greeting_cooldown_s
         self._unsubs: list = []
         self._last_phrase: Optional[str] = None   # avoid immediate repeat
+        self._greeted_new_ids: set[str] = set()  # session-level guard: greet each new face only once
 
     def on_start(self) -> None:
         if self._registry is None:
@@ -155,6 +156,9 @@ class FaceService(Service):
     # ── Greeting helpers ─────────────────────────────────────────────────
 
     def _greet_new(self, face_id: str, name: str) -> None:
+        if face_id in self._greeted_new_ids:
+            return  # already introduced this face this session
+        self._greeted_new_ids.add(face_id)
         self._registry.mark_greeted(face_id)
         log.info("Greeting new face %s (%s)", face_id[:8], name)
         self.bus.publish("av.say", {"text": _NEW_FACE_PHRASE})
