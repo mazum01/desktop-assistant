@@ -200,7 +200,7 @@ def cmd_servo_status(_args) -> int:
     return 0
 
 
-
+def cmd_move_servo(args) -> int:
     timeout_ms = max(2000, int(float(args.move_time_ms)) + 3000)
 
     if args.announce_start:
