@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.7] - 2026-05-07
+### Fixed
+- `PerceptionService`: `_pos_cache`, `_cache_ttl`, and `_cache_dist` were used in `_find_cached_face` / `_update_pos_cache` but never initialized in `__init__`, causing `AttributeError` on every face-recognition frame and spamming the log.
+
 ## [1.1.6] - 2026-05-06
 ### Added
 - **Quiet Hours** feature: silences greetings, clock/joke announcements, and servo motion during a configurable time window (default 9 PM – 6 AM).

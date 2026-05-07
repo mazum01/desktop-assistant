@@ -71,6 +71,9 @@ class PerceptionService(Service):
         self._min_interval = 1.0 / max(self._cfg.max_fps, 0.1)
         self._last_detect_ts: float = 0.0
         self._unsubs: list = []
+        self._pos_cache: list = []
+        self._cache_ttl: float = 5.0   # seconds before a position cache entry expires
+        self._cache_dist: float = 80.0 # pixel radius to consider "same face"
 
     # ── Lifecycle ─────────────────────────────────────────────────────
 
