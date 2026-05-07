@@ -83,8 +83,12 @@ class WebService:
         self._ws_clients: list = []
         self._event_log: list[dict] = []             # recent bus events (capped)
         self._unsubs: list = []
+        self._running = False
 
     # ── Service lifecycle ─────────────────────────────────────────────
+
+    def is_running(self) -> bool:
+        return self._running and self._thread is not None and self._thread.is_alive()
 
     def start(self) -> None:
         if self._registry is None:
@@ -109,11 +113,13 @@ class WebService:
 
         self._thread = threading.Thread(target=self._run_server, daemon=True, name="web-server")
         self._thread.start()
+        self._running = True
         log.info("WebService started on http://%s:%d", self._host, self._port)
         if self.bus:
             self.bus.publish("service.started", {"name": self.name, "ts": time.time()})
 
     def stop(self) -> None:
+        self._running = False
         for unsub in self._unsubs:
             try:
                 unsub()

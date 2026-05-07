@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.0] - 2026-05-07
+### Fixed
+- **WebService**: Added `is_running()` method (inherited by convention but class doesn't subclass `Service`) — eliminated `AttributeError: 'WebService' object has no attribute 'is_running'` on every boot self-test.
+
 ## [1.1.9] - 2026-05-07
 ### Fixed
 - **PerceptionService blocking tick**: Face detection ran synchronously inside the VisionService tick thread, blocking it for 5–10 s per frame (only ~4 frames/minute). Now runs in a dedicated background thread using a 1-slot queue. VisionService tick returns immediately; the worker picks up the latest frame when it's free.
