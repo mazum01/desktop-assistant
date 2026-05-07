@@ -224,6 +224,43 @@ async function deleteFace(faceId) {
   } catch (e) { /* ignore */ }
 }
 
+async function loadQuietHours() {
+  try {
+    const r = await fetch("/api/settings/quiet-hours");
+    if (!r.ok) return;
+    const d = await r.json();
+    el("qh-enabled").checked = !!d.enabled;
+    el("qh-start").value = d.start || "21:00";
+    el("qh-end").value = d.end || "06:00";
+  } catch (e) { /* ignore */ }
+}
+
+async function saveQuietHours() {
+  const enabled = el("qh-enabled").checked;
+  const start = el("qh-start").value;
+  const end = el("qh-end").value;
+  const status = el("qh-status");
+  try {
+    const r = await fetch("/api/settings/quiet-hours", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled, start, end }),
+    });
+    if (r.ok) {
+      status.className = "qh-status";
+      status.textContent = "Saved ✓";
+    } else {
+      const d = await r.json().catch(() => ({}));
+      status.className = "qh-status error";
+      status.textContent = d.detail || "Error saving";
+    }
+  } catch (e) {
+    status.className = "qh-status error";
+    status.textContent = "Network error";
+  }
+  setTimeout(() => { status.textContent = ""; }, 3000);
+}
+
 async function deleteAllFaces() {
   if (!confirm("Delete ALL known faces from the registry? This cannot be undone.")) return;
   try {
@@ -231,6 +268,7 @@ async function deleteAllFaces() {
     if (r.ok) {
       const data = await r.json();
       loadFaces();
+  loadQuietHours();
       const log = el("event-log");
       const row = document.createElement("div");
       row.className = "event-row";

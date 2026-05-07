@@ -27,3 +27,11 @@ web_dashboard:
   enabled: true
   port: 8080
   host: "0.0.0.0"
+
+quiet_hours:
+  # Silence the assistant during these hours.
+  # start/end are 24-hour HH:MM strings; overnight ranges work (e.g. 21:00–06:00).
+  # Can also be changed live from the web dashboard.
+  enabled: true
+  start: "21:00"
+  end: "06:00"

@@ -31,6 +31,7 @@ import random
 from typing import Optional
 
 from src.core.bus import MessageBus
+from src.core.quiet_hours import QuietHours
 from src.core.service import Service
 
 log = logging.getLogger(__name__)
@@ -65,10 +66,12 @@ class FaceService(Service):
         bus: Optional[MessageBus] = None,
         registry=None,
         greeting_cooldown_s: float = _DEFAULT_COOLDOWN_S,
+        quiet_hours: Optional[QuietHours] = None,
     ) -> None:
         super().__init__(bus=bus)
         self._registry = registry
         self._cooldown = greeting_cooldown_s
+        self._quiet_hours = quiet_hours
         self._unsubs: list = []
         self._last_phrase: Optional[str] = None   # avoid immediate repeat
         self._greeted_new_ids: set[str] = set()  # session-level guard: greet each new face only once
@@ -159,11 +162,17 @@ class FaceService(Service):
         if face_id in self._greeted_new_ids:
             return  # already introduced this face this session
         self._greeted_new_ids.add(face_id)
+        if self._quiet_hours and self._quiet_hours.is_quiet():
+            log.debug("FaceService: new-face greeting suppressed — quiet hours active")
+            return
         self._registry.mark_greeted(face_id)
         log.info("Greeting new face %s (%s)", face_id[:8], name)
         self.bus.publish("av.say", {"text": _NEW_FACE_PHRASE})
 
     def _greet_returning(self, face_id: str, name: str) -> None:
+        if self._quiet_hours and self._quiet_hours.is_quiet():
+            log.debug("FaceService: returning-face greeting suppressed — quiet hours active")
+            return
         self._registry.mark_greeted(face_id)
         phrase = self._pick_phrase(name)
         log.info("Re-greeting %s (%s): %r", face_id[:8], name, phrase)

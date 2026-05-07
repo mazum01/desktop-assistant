@@ -119,9 +119,11 @@ class ClockAnnouncer:
         self,
         say_fn: Callable[[str], None],
         enabled: bool = True,
+        is_quiet_fn: Optional[Callable[[], bool]] = None,
     ) -> None:
         self._say = say_fn
         self.enabled = enabled
+        self._is_quiet = is_quiet_fn or (lambda: False)
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
@@ -168,6 +170,9 @@ class ClockAnnouncer:
         if not self.enabled:
             log.debug("ClockAnnouncer: skipping (disabled)")
             return
+        if self._is_quiet():
+            log.debug("ClockAnnouncer: skipping — quiet hours active")
+            return
 
         time_str = _spoken_time(dt)
         log.info("ClockAnnouncer: %s", time_str)
@@ -185,6 +190,9 @@ class ClockAnnouncer:
 
     def announce_time_now(self) -> None:
         """Speak the current time immediately (no joke), using 'The time is …'."""
+        if self._is_quiet():
+            log.debug("ClockAnnouncer: on-demand time suppressed — quiet hours active")
+            return
         text = _spoken_time(datetime.now(), prefix="The time is")
         log.info("ClockAnnouncer: on-demand time → %s", text)
         try:
@@ -194,6 +202,9 @@ class ClockAnnouncer:
 
     def tell_joke_now(self) -> None:
         """Speak a random dad joke immediately."""
+        if self._is_quiet():
+            log.debug("ClockAnnouncer: on-demand joke suppressed — quiet hours active")
+            return
         joke = _pick_joke()
         log.info("ClockAnnouncer: on-demand joke → %s", joke)
         try:

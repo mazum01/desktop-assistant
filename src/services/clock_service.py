@@ -19,6 +19,7 @@ from typing import Optional
 
 from src.audio.clock_announcer import ClockAnnouncer
 from src.core.bus import MessageBus
+from src.core.quiet_hours import QuietHours
 from src.core.service import Service
 
 log = logging.getLogger(__name__)
@@ -32,9 +33,11 @@ class ClockService(Service):
         self,
         bus: Optional[MessageBus] = None,
         enabled: bool = True,
+        quiet_hours: Optional[QuietHours] = None,
     ) -> None:
         super().__init__(bus=bus)
         self._enabled = enabled
+        self._quiet_hours = quiet_hours
         self._announcer: Optional[ClockAnnouncer] = None
 
     # ------------------------------------------------------------------
@@ -61,7 +64,8 @@ class ClockService(Service):
         def _say(text: str) -> None:
             self.bus.publish("av.say", {"text": text})
 
-        self._announcer = ClockAnnouncer(say_fn=_say, enabled=self._enabled)
+        _is_quiet_fn = self._quiet_hours.is_quiet if self._quiet_hours else None
+        self._announcer = ClockAnnouncer(say_fn=_say, enabled=self._enabled, is_quiet_fn=_is_quiet_fn)
         self._announcer.start()
 
         self.bus.subscribe("av.tell_joke",      self._on_tell_joke)

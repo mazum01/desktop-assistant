@@ -118,7 +118,31 @@
       </div>
     </section>
 
-    <!-- ── Event Log ───────────────────────────────────────────── -->
+    <!-- ── Quiet Hours ────────────────────────────────────────── -->
+    <section class="card">
+      <h2>🌙 Quiet Hours</h2>
+      <div class="qh-form">
+        <label class="qh-toggle">
+          <input type="checkbox" id="qh-enabled" />
+          <span>Enable quiet hours</span>
+        </label>
+        <div class="qh-times">
+          <label>
+            Start
+            <input type="time" id="qh-start" value="21:00" />
+          </label>
+          <span class="qh-sep">→</span>
+          <label>
+            End
+            <input type="time" id="qh-end" value="06:00" />
+          </label>
+        </div>
+        <button class="btn btn-primary" onclick="saveQuietHours()">Save</button>
+        <span id="qh-status" class="qh-status"></span>
+      </div>
+    </section>
+
+        <!-- ── Event Log ───────────────────────────────────────────── -->
     <section class="card">
       <h2>Event Log <span class="subtext">(last 20)</span></h2>
       <div id="event-log" class="event-log"></div>

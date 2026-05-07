@@ -26,6 +26,7 @@ from src.services.perception_service import PerceptionService
 from src.services.telemetry_service import TelemetryService
 from src.services.tracking_service import TrackingService
 from src.services.vision_service import VisionService
+from src.core.quiet_hours import QuietHours
 from src.services.web_service import WebService
 
 # The thermal service runs in a separate process. Its IPCBridge PUBs on
@@ -63,6 +64,11 @@ def main() -> int:
     _web_port = int(_web_cfg.get("port", 8080))
     _web_host = _web_cfg.get("host", "0.0.0.0")
 
+    _qh = QuietHours.from_config(
+        cfg_dir=_cfg_path.parent,
+        yaml_defaults=_cfg.get("quiet_hours", {}),
+    )
+
     bus = MessageBus()
     av = AVService(bus=bus)
     vis = VisionService(bus=bus)
@@ -76,20 +82,20 @@ def main() -> int:
     })
 
     services = [
-        MotionService(bus=bus),
+        MotionService(bus=bus, quiet_hours=_qh),
         vis,
         AudioCaptureService(bus=bus),
         av,
         PerceptionService(bus=bus, vision_service=vis, config=_perc_cfg),
         TelemetryService(bus=bus),
-        ClockService(bus=bus, enabled=_clock_enabled),
-        FaceService(bus=bus, greeting_cooldown_s=_greeting_cooldown),
+        ClockService(bus=bus, enabled=_clock_enabled, quiet_hours=_qh),
+        FaceService(bus=bus, greeting_cooldown_s=_greeting_cooldown, quiet_hours=_qh),
         TrackingService(bus=bus, config=_tracker_cfg, enabled=_tracking_enabled),
         ipc,
     ]
     if _web_enabled:
         services.append(
-            WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis)
+            WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis, quiet_hours=_qh)
         )
 
     return run_services(services=services, unit_name="core")

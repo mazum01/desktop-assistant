@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.6] - 2026-05-06
+### Added
+- **Quiet Hours** feature: silences greetings, clock/joke announcements, and servo motion during a configurable time window (default 9 PM – 6 AM).
+- `src/core/quiet_hours.py` — `QuietHours` class with overnight-range support; persists settings to `config/quiet_hours.json`.
+- `config/assistant.yaml` — new `quiet_hours` section (enabled by default, 21:00–06:00).
+- Web dashboard — 🌙 Quiet Hours settings card: toggle, start/end time pickers, Save button (updates live without daemon restart).
+- REST endpoints `GET /api/settings/quiet-hours` and `PUT /api/settings/quiet-hours`.
+- 12 new unit tests for `QuietHours` (boundary, overnight, same-day, persistence).
+
 ## [1.1.5] - 2026-05-06
 ### Fixed
 - Camera sim-mode frame is now a visible dark-slate placeholder with "CAMERA SIM MODE" and a live clock overlay instead of a pure black frame — makes it clear when no real camera is detected.

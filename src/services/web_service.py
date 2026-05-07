@@ -28,6 +28,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from src.core.quiet_hours import QuietHours
+
 from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
@@ -37,6 +39,12 @@ _STATIC_DIR = Path(__file__).parent.parent / "web" / "static"
 
 class _RenameBody(BaseModel):
     name: str
+
+
+class _QuietHoursBody(BaseModel):
+    enabled: bool
+    start: str
+    end: str
 
 
 class _SayBody(BaseModel):
@@ -59,12 +67,14 @@ class WebService:
         port: int = 8080,
         registry=None,
         vision_service=None,
+        quiet_hours: Optional[QuietHours] = None,
     ) -> None:
         self.bus = bus
         self._host = host
         self._port = port
         self._registry = registry
         self._vision_svc = vision_service
+        self._quiet_hours = quiet_hours
         self._server = None
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -266,6 +276,26 @@ class WebService:
             if self.bus:
                 self.bus.publish("face.registry_cleared", {"count": count})
             return {"ok": True, "deleted": count}
+
+        # ── Quiet-hours settings ───────────────────────────────────────
+
+        @app.get("/api/settings/quiet-hours")
+        async def api_get_quiet_hours():
+            if self._quiet_hours is None:
+                return {"enabled": False, "start": "21:00", "end": "06:00"}
+            return self._quiet_hours.as_dict()
+
+        @app.put("/api/settings/quiet-hours")
+        async def api_put_quiet_hours(body: _QuietHoursBody):
+            if self._quiet_hours is None:
+                raise HTTPException(503, "quiet hours not configured")
+            try:
+                self._quiet_hours.update(body.enabled, body.start, body.end)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc))
+            if self.bus:
+                self.bus.publish("settings.quiet_hours_updated", self._quiet_hours.as_dict())
+            return {"ok": True, **self._quiet_hours.as_dict()}
 
         @app.put("/api/faces/{face_id}")
         async def api_rename_face(face_id: str, body: _RenameBody):

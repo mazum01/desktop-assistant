@@ -19,6 +19,7 @@ import logging
 from typing import Optional
 
 from src.core.bus import MessageBus
+from src.core.quiet_hours import QuietHours
 from src.core.service import Service
 
 log = logging.getLogger(__name__)
@@ -28,9 +29,11 @@ class MotionService(Service):
     name = "motion"
     tick_seconds = 0.5
 
-    def __init__(self, bus: Optional[MessageBus] = None, controller=None) -> None:
+    def __init__(self, bus: Optional[MessageBus] = None, controller=None,
+                 quiet_hours: Optional[QuietHours] = None) -> None:
         super().__init__(bus=bus)
         self._controller = controller
+        self._quiet_hours = quiet_hours
         self._unsubs = []
 
     def on_start(self) -> None:
@@ -75,6 +78,9 @@ class MotionService(Service):
     # ── Bus handlers ───────────────────────────────────────────────────
 
     def _on_pan_to(self, _topic: str, payload) -> None:
+        if self._quiet_hours and self._quiet_hours.is_quiet():
+            log.debug("MotionService: pan_to suppressed — quiet hours active")
+            return
         if not isinstance(payload, dict) or "angle" not in payload:
             log.warning("motion.pan_to ignored: bad payload %r", payload)
             return

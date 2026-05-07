@@ -248,3 +248,21 @@ main {
   main { grid-template-columns: 1fr; }
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ── Quiet Hours ──────────────────────────────────────────────── */
+.qh-form { display: flex; flex-direction: column; gap: .75rem; }
+.qh-toggle { display: flex; align-items: center; gap: .5rem; cursor: pointer; font-size: .95rem; }
+.qh-toggle input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: var(--blue); cursor: pointer; }
+.qh-times { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.qh-times label { display: flex; flex-direction: column; gap: .2rem; font-size: .85rem; color: var(--fg-muted); }
+.qh-times input[type="time"] {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  padding: .35rem .6rem;
+  font-size: .95rem;
+}
+.qh-sep { font-size: 1.2rem; color: var(--fg-muted); margin-top: 1rem; }
+.qh-status { font-size: .85rem; color: var(--green); margin-left: .5rem; }
+.qh-status.error { color: var(--red); }
