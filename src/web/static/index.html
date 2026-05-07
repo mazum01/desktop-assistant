@@ -109,6 +109,16 @@
         </div>
 
         <div class="control-group">
+          <label>Servo</label>
+          <div class="row-input">
+            <label class="qh-toggle" style="margin:0">
+              <input type="checkbox" id="servo-enabled" onchange="saveServoEnabled(this.checked)" />
+              <span>Enable servo motion</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="control-group">
           <label>System</label>
           <div class="row-input">
             <button class="btn btn-secondary" onclick="doVersion()">Speak Version</button>

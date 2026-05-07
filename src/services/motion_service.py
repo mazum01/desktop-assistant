@@ -4,13 +4,15 @@ Motion service.
 Wraps `ServoController` and exposes pan commands over the message bus.
 
 Topics subscribed:
-    motion.pan_to     {"angle": float, "move_time_ms"?: float}  — move pan servo to logical angle
-    motion.relax      None                        — release torque
-    motion.stop       None                        — stop any in-progress sweep
+    motion.pan_to         {"angle": float, "move_time_ms"?: float}
+    motion.relax          None
+    motion.stop           None
+    motion.set_enabled    {"enabled": bool}   — enable/disable servo motion
 
 Topics published:
-    motion.position   {"angle": float}            — every tick
-    motion.moved      {"from": float, "to": float, "direction": str}
+    motion.position       {"angle": float}    — every tick
+    motion.moved          {"from": float, "to": float, "direction": str}
+    motion.enabled_changed {"enabled": bool}  — when enabled state changes
 """
 
 from __future__ import annotations
@@ -30,11 +32,17 @@ class MotionService(Service):
     tick_seconds = 0.5
 
     def __init__(self, bus: Optional[MessageBus] = None, controller=None,
-                 quiet_hours: Optional[QuietHours] = None) -> None:
+                 quiet_hours: Optional[QuietHours] = None,
+                 servo_enabled: bool = True) -> None:
         super().__init__(bus=bus)
         self._controller = controller
         self._quiet_hours = quiet_hours
+        self._servo_enabled = servo_enabled
         self._unsubs = []
+
+    @property
+    def servo_enabled(self) -> bool:
+        return self._servo_enabled
 
     def on_start(self) -> None:
         if self._controller is None:
@@ -44,8 +52,9 @@ class MotionService(Service):
         self._unsubs.append(self.bus.subscribe("motion.pan_to", self._on_pan_to))
         self._unsubs.append(self.bus.subscribe("motion.relax", self._on_relax))
         self._unsubs.append(self.bus.subscribe("motion.stop", self._on_stop_cmd))
-        log.info("MotionService started; hardware_ready=%s",
-                 getattr(self._controller, "hardware_ready", False))
+        self._unsubs.append(self.bus.subscribe("motion.set_enabled", self._on_set_enabled))
+        log.info("MotionService started; hardware_ready=%s  servo_enabled=%s",
+                 getattr(self._controller, "hardware_ready", False), self._servo_enabled)
 
     @property
     def hardware_ready(self) -> bool:
@@ -77,7 +86,25 @@ class MotionService(Service):
 
     # ── Bus handlers ───────────────────────────────────────────────────
 
+    def _on_set_enabled(self, _topic: str, payload) -> None:
+        if not isinstance(payload, dict) or "enabled" not in payload:
+            return
+        new_state = bool(payload["enabled"])
+        if new_state == self._servo_enabled:
+            return
+        self._servo_enabled = new_state
+        log.info("MotionService: servo %s", "enabled" if new_state else "disabled")
+        if not new_state and self._controller is not None:
+            try:
+                self._controller.stop()
+            except Exception:
+                pass
+        self.bus.publish("motion.enabled_changed", {"enabled": new_state})
+
     def _on_pan_to(self, _topic: str, payload) -> None:
+        if not self._servo_enabled:
+            log.debug("MotionService: pan_to suppressed — servo disabled")
+            return
         if self._quiet_hours and self._quiet_hours.is_quiet():
             log.debug("MotionService: pan_to suppressed — quiet hours active")
             return
@@ -95,7 +122,6 @@ class MotionService(Service):
                 if move_time_ms <= 0:
                     raise ValueError("move_time_ms must be > 0")
                 delta_deg = abs(angle - before)
-                # Convert requested travel time to speed for ServoController.
                 speed_deg_per_sec = max((delta_deg * 1000.0) / move_time_ms, 0.001)
             except Exception:
                 log.warning("motion.pan_to ignored: bad move_time_ms in payload %r", payload)

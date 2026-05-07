@@ -169,7 +169,38 @@ def cmd_pan(args) -> int:
     return 0 if r.get("ok") else 1
 
 
-def cmd_move_servo(args) -> int:
+def cmd_servo_enable(_args) -> int:
+    r = _request({
+        "cmd": "publish",
+        "topic": "motion.set_enabled",
+        "payload": {"enabled": True},
+    })
+    print("Servo enabled." if r.get("ok") else json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
+def cmd_servo_disable(_args) -> int:
+    r = _request({
+        "cmd": "publish",
+        "topic": "motion.set_enabled",
+        "payload": {"enabled": False},
+    })
+    print("Servo disabled." if r.get("ok") else json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
+def cmd_servo_status(_args) -> int:
+    r = _request({"cmd": "last", "topic": "motion.enabled_changed"})
+    pos = _request({"cmd": "last", "topic": "motion.position"})
+    payload = r.get("payload") or {}
+    pos_payload = pos.get("payload") or {}
+    enabled = payload.get("enabled", True)
+    angle = pos_payload.get("angle", "?")
+    print(f"Servo: {'enabled' if enabled else 'disabled'}  |  angle: {angle}°")
+    return 0
+
+
+
     timeout_ms = max(2000, int(float(args.move_time_ms)) + 3000)
 
     if args.announce_start:
@@ -598,6 +629,10 @@ def main() -> int:
     sub.add_parser("joke", help="Tell a random dad joke").set_defaults(func=cmd_joke)
     sub.add_parser("forget-faces", help="Delete ALL faces from the registry").set_defaults(func=cmd_forget_faces)
     sub.add_parser("time", help="Announce the current time").set_defaults(func=cmd_time)
+
+    sub.add_parser("servo-enable", help="Enable servo motion").set_defaults(func=cmd_servo_enable)
+    sub.add_parser("servo-disable", help="Disable servo motion").set_defaults(func=cmd_servo_disable)
+    sub.add_parser("servo-status", help="Show servo enabled state and current angle").set_defaults(func=cmd_servo_status)
 
     sp = sub.add_parser("meet", help="Name the most recently seen face")
     sp.add_argument("name", help="Name to assign (e.g. 'Alice')")

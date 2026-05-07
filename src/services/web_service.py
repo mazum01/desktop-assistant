@@ -16,6 +16,8 @@ DEL  /api/faces/{id}      Delete a face and all its embeddings
 POST /api/say             Speak text   body: {"text": "hello"}
 POST /api/pan             Pan servo    body: {"angle": 180.0}
 POST /api/version         Speak version number
+GET  /api/settings/servo  Get servo enabled state
+PUT  /api/settings/servo  Set servo enabled state  body: {"enabled": bool}
 """
 
 from __future__ import annotations
@@ -56,6 +58,10 @@ class _PanBody(BaseModel):
     angle: float
 
 
+class _ServoBody(BaseModel):
+    enabled: bool
+
+
 class WebService:
     """Async FastAPI server running in a background thread."""
 
@@ -69,6 +75,7 @@ class WebService:
         registry=None,
         vision_service=None,
         quiet_hours: Optional[QuietHours] = None,
+        motion_service=None,
     ) -> None:
         self.bus = bus
         self._host = host
@@ -76,6 +83,7 @@ class WebService:
         self._registry = registry
         self._vision_svc = vision_service
         self._quiet_hours = quiet_hours
+        self._motion_svc = motion_service
         self._server = None
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -361,6 +369,19 @@ class WebService:
             if not ok:
                 raise HTTPException(404, "face not found")
             return {"ok": True}
+
+        # ── Servo settings ─────────────────────────────────────────────
+
+        @app.get("/api/settings/servo")
+        async def api_get_servo():
+            enabled = self._motion_svc.servo_enabled if self._motion_svc else True
+            return {"enabled": enabled}
+
+        @app.put("/api/settings/servo")
+        async def api_put_servo(body: _ServoBody):
+            if self.bus:
+                self.bus.publish("motion.set_enabled", {"enabled": body.enabled})
+            return {"ok": True, "enabled": body.enabled}
 
         # ── REST: controls ────────────────────────────────────────────
 

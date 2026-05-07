@@ -281,6 +281,27 @@ async function deleteAllFaces() {
   } catch (e) { /* ignore */ }
 }
 
+// ── Servo enable/disable ──────────────────────────────────────────
+
+async function loadServoEnabled() {
+  try {
+    const r = await fetch("/api/settings/servo");
+    if (!r.ok) return;
+    const d = await r.json();
+    el("servo-enabled").checked = !!d.enabled;
+  } catch (e) { /* ignore */ }
+}
+
+async function saveServoEnabled(enabled) {
+  try {
+    await fetch("/api/settings/servo", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+  } catch (e) { /* ignore */ }
+}
+
 // ── Controls ──────────────────────────────────────────────────────
 
 async function doSay() {
@@ -315,6 +336,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   loadFaces();
   loadQuietHours();
+  loadServoEnabled();
   connectWS();
   // Refresh face registry every 30s
   setInterval(loadFaces, 30000);

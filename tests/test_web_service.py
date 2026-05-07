@@ -213,3 +213,52 @@ def test_index_returns_html(app_client):
     assert r.status_code == 200
     assert "Desktop Assistant" in r.text
     assert "<html" in r.text.lower()
+
+
+# ── Servo settings API ────────────────────────────────────────────────────────
+
+@pytest.fixture
+def app_client_with_motion():
+    bus = MessageBus()
+    motion = MagicMock()
+    motion.servo_enabled = True
+    svc = WebService(bus=bus, port=18080, registry=_mock_registry(), motion_service=motion)
+    app = svc._build_app()
+    return TestClient(app), bus, svc, motion
+
+
+def test_get_servo_enabled(app_client_with_motion):
+    client, bus, svc, motion = app_client_with_motion
+    r = client.get("/api/settings/servo")
+    assert r.status_code == 200
+    assert r.json()["enabled"] is True
+
+
+def test_put_servo_disabled_publishes_to_bus(app_client_with_motion):
+    client, bus, svc, motion = app_client_with_motion
+    events = []
+    bus.subscribe("motion.set_enabled", lambda t, p: events.append(p))
+    r = client.put("/api/settings/servo", json={"enabled": False})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert any(not e.get("enabled") for e in events)
+
+
+def test_put_servo_enabled_publishes_to_bus(app_client_with_motion):
+    client, bus, svc, motion = app_client_with_motion
+    motion.servo_enabled = False
+    events = []
+    bus.subscribe("motion.set_enabled", lambda t, p: events.append(p))
+    r = client.put("/api/settings/servo", json={"enabled": True})
+    assert r.status_code == 200
+    assert any(e.get("enabled") for e in events)
+
+
+def test_get_servo_no_motion_svc_defaults_true():
+    bus = MessageBus()
+    svc = WebService(bus=bus, port=18080)
+    app = svc._build_app()
+    client = TestClient(app)
+    r = client.get("/api/settings/servo")
+    assert r.status_code == 200
+    assert r.json()["enabled"] is True

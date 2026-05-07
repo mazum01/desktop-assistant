@@ -15,6 +15,12 @@ head_tracking:
   damping: 2.5              # motion damping (underdamped for natural overshoot)
   max_speed_deg_s: 80.0     # max tracking speed cap
 
+servo:
+  # Enable/disable all servo motion (head pan).
+  # When disabled the servo holds its current position; the web
+  # dashboard and CLI can change this at runtime.
+  enabled: true
+
 face_recognition:
   # ArcFace MobileFaceNet identity recognition on the Hailo-8.
   # New faces are auto-assigned "Guest N"; name them with: da meet "Name"

@@ -46,6 +46,7 @@ def main() -> int:
     _greeting_cooldown = float(
         _cfg.get("face_recognition", {}).get("greeting_cooldown_s", 300.0)
     )
+    _servo_enabled = _cfg.get("servo", {}).get("enabled", True)
 
     from src.motion.head_tracker import HeadTrackerConfig
     from src.services.perception_service import PerceptionConfig
@@ -81,8 +82,10 @@ def main() -> int:
         "duration_s": av.tts_duration_rpc(msg.get("text", "")),
     })
 
+    motion_svc = MotionService(bus=bus, quiet_hours=_qh, servo_enabled=_servo_enabled)
+
     services = [
-        MotionService(bus=bus, quiet_hours=_qh),
+        motion_svc,
         vis,
         AudioCaptureService(bus=bus),
         av,
@@ -95,7 +98,8 @@ def main() -> int:
     ]
     if _web_enabled:
         services.append(
-            WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis, quiet_hours=_qh)
+            WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
+                       quiet_hours=_qh, motion_service=motion_svc)
         )
 
     return run_services(services=services, unit_name="core")

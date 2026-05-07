@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.3] - 2026-05-07
+### Added
+- **Servo enable/disable**: New `motion.set_enabled {enabled: bool}` bus topic lets any service stop/resume servo motion at runtime. `MotionService` now reads `servo.enabled` from `config/assistant.yaml` (default `true`) and publishes `motion.enabled_changed` when state changes.
+- **CLI servo commands**: `da servo-enable`, `da servo-disable`, `da servo-status` — instantly toggle servo motion from the terminal.
+- **Web UI servo toggle**: "Enable servo motion" checkbox in the Controls section; loads current state on page load via `GET /api/settings/servo`; immediately applies on change via `PUT /api/settings/servo`.
+- **WebService servo API**: `GET /api/settings/servo` returns `{enabled: bool}`; `PUT /api/settings/servo` publishes to `motion.set_enabled` bus and returns new state.
+- **WebService tests**: 22 → 26 tests; added servo GET, PUT enable, PUT disable, and no-motion-service default.
+
+### Fixed
+- **Face detection sim-mode deadlock**: When ArcFace runs in sim mode (Hailo-8 busy with SCRFD), the v1.2.1 guard skipped all registration, causing a circular deadlock — position cache is only populated after registration, but registration was skipped if the cache was empty. Fix: in sim mode, still register the face (with zero embedding) on first position-cache miss; position cache handles re-identification from that point.
+
+
 ## [1.2.2] - 2026-05-07
 ### Added
 - **WebService tests**: Expanded `test_web_service.py` from 9 → 18 tests covering all new endpoints: `DELETE /api/faces` (delete-all), `GET /api/faces/{id}/thumb` (thumbnail 200/404), `GET|PUT /api/settings/quiet-hours` (including invalid-time 400), and `has_thumb` field in faces list response.

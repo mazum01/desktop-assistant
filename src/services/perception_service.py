@@ -208,21 +208,14 @@ class PerceptionService(Service):
                 if self._embedder and self._registry and f.landmarks and len(f.landmarks) >= 5:
                     try:
                         emb = self._embedder.embed(frame, f.landmarks)
-                        # Skip recognition when embedder is in sim mode (zero vector)
-                        if not self._embedder.hardware_ready or not emb.any():
-                            cached = self._find_cached_face(f.centroid[0], f.centroid[1])
-                            if cached:
-                                face_id, name = cached
-                                self._registry.update_seen(face_id)
-                                entry["face_id"] = face_id
-                                entry["name"] = name
-                                entry["is_new"] = False
-                        else:
+                        embedder_ok = self._embedder.hardware_ready and emb.any()
+
+                        if embedder_ok:
+                            # ── Hardware ArcFace path ──────────────────────────
                             match = self._registry.find_match(emb)
                             if match:
                                 face_id, name, score = match
                                 self._registry.update_seen(face_id)
-                                # Accumulate embedding so recognition improves over time
                                 self._registry.add_embedding_if_needed(face_id, emb)
                                 entry["face_id"] = face_id
                                 entry["name"] = name
@@ -230,12 +223,10 @@ class PerceptionService(Service):
                                 entry["match_score"] = round(score, 3)
                                 self._update_pos_cache(face_id, name, f.centroid[0], f.centroid[1])
                             else:
-                                # Before registering, check position cache for same physical face.
                                 cached = self._find_cached_face(f.centroid[0], f.centroid[1])
                                 if cached:
                                     face_id, name = cached
                                     self._registry.update_seen(face_id)
-                                    # Add this embedding to the cached identity as a new sample
                                     self._registry.add_embedding_if_needed(face_id, emb)
                                     entry["face_id"] = face_id
                                     entry["name"] = name
@@ -243,7 +234,6 @@ class PerceptionService(Service):
                                     entry["match_score"] = 0.0
                                 else:
                                     face_id, auto_name = self._registry.register(emb)
-                                    # Save thumbnail from bbox crop for web UI
                                     try:
                                         x1, y1, x2, y2 = (int(v) for v in f.bbox)
                                         crop = frame[max(0, y1):y2, max(0, x1):x2]
@@ -256,6 +246,32 @@ class PerceptionService(Service):
                                     entry["is_new"] = True
                                     entry["match_score"] = 0.0
                                     self._update_pos_cache(face_id, auto_name, f.centroid[0], f.centroid[1])
+                        else:
+                            # ── Sim mode (ArcFace unavailable) — position-cache ID ──
+                            # Re-identify by position; register on first encounter so the
+                            # face appears in the registry and can be named by the user.
+                            cached = self._find_cached_face(f.centroid[0], f.centroid[1])
+                            if cached:
+                                face_id, name = cached
+                                self._registry.update_seen(face_id)
+                                entry["face_id"] = face_id
+                                entry["name"] = name
+                                entry["is_new"] = False
+                                entry["match_score"] = 0.0
+                            else:
+                                face_id, auto_name = self._registry.register(emb)
+                                try:
+                                    x1, y1, x2, y2 = (int(v) for v in f.bbox)
+                                    crop = frame[max(0, y1):y2, max(0, x1):x2]
+                                    if crop.size > 0:
+                                        self._registry.save_thumbnail(face_id, crop)
+                                except Exception:
+                                    pass
+                                entry["face_id"] = face_id
+                                entry["name"] = auto_name
+                                entry["is_new"] = True
+                                entry["match_score"] = 0.0
+                                self._update_pos_cache(face_id, auto_name, f.centroid[0], f.centroid[1])
                     except Exception:
                         log.exception("face recognition failed for one face")
 
