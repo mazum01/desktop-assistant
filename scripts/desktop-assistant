@@ -243,6 +243,15 @@ def cmd_time(_args) -> int:
     return 0 if r.get("ok") else 1
 
 
+def cmd_forget_faces(_args) -> int:
+    from src.perception.face_registry import FaceRegistry
+    reg = FaceRegistry()
+    count = reg.delete_all_faces()
+    reg.close()
+    print(f"Deleted {count} face(s) from the registry.")
+    return 0
+
+
 def cmd_help(args) -> int:
     """Print a formatted command reference, or detailed help for one command."""
     commands = {
@@ -270,6 +279,7 @@ def cmd_help(args) -> int:
                        "               Usage: meet \"<Name>\"",
         "publish":     "Publish a raw JSON event onto the internal bus (advanced).\n"
                        "               Usage: publish <topic> [--payload '{...}']",
+        "forget-faces": "Delete ALL known faces from the registry permanently.",
         "help":        "Show this command reference, or help for a specific command.\n"
                        "               Usage: help [command]",
     }
@@ -586,6 +596,7 @@ def main() -> int:
     sp.set_defaults(func=cmd_say)
 
     sub.add_parser("joke", help="Tell a random dad joke").set_defaults(func=cmd_joke)
+    sub.add_parser("forget-faces", help="Delete ALL faces from the registry").set_defaults(func=cmd_forget_faces)
     sub.add_parser("time", help="Announce the current time").set_defaults(func=cmd_time)
 
     sp = sub.add_parser("meet", help="Name the most recently seen face")

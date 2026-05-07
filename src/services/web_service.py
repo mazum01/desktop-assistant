@@ -258,6 +258,15 @@ class WebService:
             faces = self._registry.list_faces()
             return JSONResponse({"faces": faces})
 
+        @app.delete("/api/faces")
+        async def api_delete_all_faces():
+            if not self._registry:
+                raise HTTPException(503, "registry unavailable")
+            count = self._registry.delete_all_faces()
+            if self.bus:
+                self.bus.publish("face.registry_cleared", {"count": count})
+            return {"ok": True, "deleted": count}
+
         @app.put("/api/faces/{face_id}")
         async def api_rename_face(face_id: str, body: _RenameBody):
             if not self._registry:

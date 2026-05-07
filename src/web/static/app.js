@@ -224,6 +224,22 @@ async function deleteFace(faceId) {
   } catch (e) { /* ignore */ }
 }
 
+async function deleteAllFaces() {
+  if (!confirm("Delete ALL known faces from the registry? This cannot be undone.")) return;
+  try {
+    const r = await fetch("/api/faces", { method: "DELETE" });
+    if (r.ok) {
+      const data = await r.json();
+      loadFaces();
+      const log = el("event-log");
+      const row = document.createElement("div");
+      row.className = "event-row";
+      row.innerHTML = `<span class="event-ts">${new Date().toLocaleTimeString()}</span><span class="event-topic" style="color:var(--red)">face.registry_cleared</span><span class="event-body">Deleted ${data.deleted} face(s)</span>`;
+      log.prepend(row);
+    }
+  } catch (e) { /* ignore */ }
+}
+
 // ── Controls ──────────────────────────────────────────────────────
 
 async function doSay() {

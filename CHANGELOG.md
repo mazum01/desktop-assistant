@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.4] - 2026-05-06
+### Added
+- **`da forget-faces`** CLI command — deletes all known faces from the registry immediately.
+- **"🗑 Delete All" button** in the web dashboard Face Registry section.
+- `DELETE /api/faces` REST endpoint in WebService (deletes entire registry).
+- `FaceRegistry.delete_all_faces()` method returns count of deleted faces.
+
 ## [1.1.3] - 2026-05-06
 ### Fixed
 - **Face recognition loop**: same physical face was being re-registered as a new

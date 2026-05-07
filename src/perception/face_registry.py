@@ -191,6 +191,16 @@ class FaceRegistry:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def delete_all_faces(self) -> int:
+        """Remove every face and all embeddings. Returns count of faces deleted."""
+        cur = self._conn.execute("SELECT COUNT(*) as n FROM faces").fetchone()
+        count = cur["n"] if cur else 0
+        self._conn.execute("DELETE FROM face_embeddings")
+        self._conn.execute("DELETE FROM faces")
+        self._conn.commit()
+        log.info("Deleted all %d face(s) from registry", count)
+        return count
+
     def delete_face(self, face_id: str) -> bool:
         """Remove a face and all its embeddings. Returns True if found."""
         cur = self._conn.execute("DELETE FROM face_embeddings WHERE face_id = ?", (face_id,))
