@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.1] - 2026-05-07
+### Fixed
+- **Face re-registration loop**: Repeated identity creation for the same person was caused by having only one stored embedding per face. When lighting or head angle varied, cosine similarity dropped below the match threshold and a new Guest entry was created. Fixed by: (a) lowering match threshold 0.45 → 0.40 (ArcFace MobileFaceNet practical range), (b) accumulating up to 20 embeddings per identity via online learning — every successful match adds the new embedding (oldest pruned), so recognition improves over successive visits.
+- **Embedder sim-mode skip**: When ArcFace runs in CPU sim mode (returns zero vectors), recognition is skipped entirely — position cache is used as sole fallback instead of triggering new registrations.
+### Added
+- **Face thumbnails in web UI**: A 64×64 JPEG crop is saved to `~/.local/share/desktop-assistant/thumbs/<face_id>.jpg` when a new face is first registered. New endpoint `GET /api/faces/{id}/thumb` serves the JPEG. Face registry table now shows the thumbnail next to each name input. Faces without a thumbnail display a "?" placeholder. Thumbnails are deleted along with their face entry.
+
 ## [1.2.0] - 2026-05-07
 ### Fixed
 - **WebService**: Added `is_running()` method (inherited by convention but class doesn't subclass `Service`) — eliminated `AttributeError: 'WebService' object has no attribute 'is_running'` on every boot self-test.

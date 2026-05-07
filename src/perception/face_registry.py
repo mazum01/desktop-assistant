@@ -37,8 +37,10 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 _DEFAULT_DB = Path.home() / ".local" / "share" / "desktop-assistant" / "faces.db"
-_MATCH_THRESHOLD = 0.45      # cosine similarity ≥ this → same person
+_DEFAULT_THUMBS = Path.home() / ".local" / "share" / "desktop-assistant" / "thumbs"
+_MATCH_THRESHOLD = 0.40      # cosine similarity ≥ this → same person
 _EMBED_DIM = 512
+_EMBED_CAP = 20              # max embeddings stored per identity (sliding window)
 
 
 class FaceRegistry:
@@ -52,6 +54,7 @@ class FaceRegistry:
     def __init__(
         self,
         db_path: Optional[str | Path] = None,
+        thumbs_dir: Optional[str | Path] = None,
         match_threshold: float = _MATCH_THRESHOLD,
     ) -> None:
         path = Path(db_path) if db_path else _DEFAULT_DB
@@ -60,6 +63,8 @@ class FaceRegistry:
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._ensure_schema()
+        self._thumbs_dir = Path(thumbs_dir) if thumbs_dir else _DEFAULT_THUMBS
+        self._thumbs_dir.mkdir(parents=True, exist_ok=True)
         log.info("FaceRegistry opened: %s", path)
 
     # ── Schema ───────────────────────────────────────────────────────────
@@ -195,6 +200,12 @@ class FaceRegistry:
         """Remove every face and all embeddings. Returns count of faces deleted."""
         cur = self._conn.execute("SELECT COUNT(*) as n FROM faces").fetchone()
         count = cur["n"] if cur else 0
+        # Remove all thumbnails
+        for p in self._thumbs_dir.glob("*.jpg"):
+            try:
+                p.unlink()
+            except Exception:
+                pass
         self._conn.execute("DELETE FROM face_embeddings")
         self._conn.execute("DELETE FROM faces")
         self._conn.commit()
@@ -206,6 +217,7 @@ class FaceRegistry:
         cur = self._conn.execute("DELETE FROM face_embeddings WHERE face_id = ?", (face_id,))
         cur2 = self._conn.execute("DELETE FROM faces WHERE id = ?", (face_id,))
         self._conn.commit()
+        self.delete_thumbnail(face_id)
         return cur2.rowcount > 0
 
     def get_current_face_id(self) -> Optional[str]:
@@ -223,6 +235,60 @@ class FaceRegistry:
             (str(uuid.uuid4()), face_id, embedding.tobytes(), time.time()),
         )
         self._conn.commit()
+
+    def add_embedding_if_needed(
+        self, face_id: str, embedding: np.ndarray, cap: int = _EMBED_CAP
+    ) -> bool:
+        """Add a new embedding sample for *face_id* unless the cap is reached.
+
+        Old embeddings are pruned (oldest first) to keep the total ≤ *cap*.
+        Returns True if an embedding was added.
+        """
+        if np.all(embedding == 0):
+            return False
+        rows = self._conn.execute(
+            "SELECT id, created_at FROM face_embeddings WHERE face_id = ? "
+            "ORDER BY created_at ASC",
+            (face_id,),
+        ).fetchall()
+        if len(rows) >= cap:
+            # Prune oldest to make room
+            oldest_id = rows[0]["id"]
+            self._conn.execute(
+                "DELETE FROM face_embeddings WHERE id = ?", (oldest_id,)
+            )
+        self._conn.execute(
+            "INSERT INTO face_embeddings (id, face_id, embedding, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (str(uuid.uuid4()), face_id, embedding.tobytes(), time.time()),
+        )
+        self._conn.commit()
+        return True
+
+    def save_thumbnail(self, face_id: str, crop: np.ndarray) -> bool:
+        """Save a face crop as a JPEG thumbnail.  Returns True on success."""
+        try:
+            import cv2
+            thumb_path = self._thumbs_dir / f"{face_id}.jpg"
+            small = cv2.resize(crop, (64, 64), interpolation=cv2.INTER_AREA)
+            cv2.imwrite(str(thumb_path), small, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            return True
+        except Exception as exc:
+            log.warning("save_thumbnail(%s): %s", face_id[:8], exc)
+            return False
+
+    def thumbnail_path(self, face_id: str) -> Optional[Path]:
+        """Return the Path to the thumbnail JPEG, or None if it doesn't exist."""
+        p = self._thumbs_dir / f"{face_id}.jpg"
+        return p if p.exists() else None
+
+    def delete_thumbnail(self, face_id: str) -> None:
+        """Remove the thumbnail for *face_id* if present."""
+        p = self._thumbs_dir / f"{face_id}.jpg"
+        try:
+            p.unlink(missing_ok=True)
+        except Exception:
+            pass
 
     def close(self) -> None:
         try:

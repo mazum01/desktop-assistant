@@ -10,6 +10,7 @@ GET  /stream              MJPEG camera stream (from bus vision.frame_ready frame
 WS   /ws                  Live JSON status + event tail (pushes every ~1 s)
 GET  /api/status          One-shot status snapshot
 GET  /api/faces           List all known faces
+GET  /api/faces/{id}/thumb  Face thumbnail JPEG
 PUT  /api/faces/{id}      Rename a face  body: {"name": "Alice"}
 DEL  /api/faces/{id}      Delete a face and all its embeddings
 POST /api/say             Speak text   body: {"text": "hello"}
@@ -297,7 +298,20 @@ class WebService:
             if not self._registry:
                 return JSONResponse({"faces": []})
             faces = self._registry.list_faces()
+            # Annotate each face with whether a thumbnail is available
+            for f in faces:
+                f["has_thumb"] = self._registry.thumbnail_path(f["id"]) is not None
             return JSONResponse({"faces": faces})
+
+        @app.get("/api/faces/{face_id}/thumb")
+        async def api_face_thumb(face_id: str):
+            if not self._registry:
+                raise HTTPException(503, "registry unavailable")
+            path = self._registry.thumbnail_path(face_id)
+            if path is None:
+                raise HTTPException(404, "thumbnail not found")
+            from fastapi.responses import FileResponse
+            return FileResponse(str(path), media_type="image/jpeg")
 
         @app.delete("/api/faces")
         async def api_delete_all_faces():

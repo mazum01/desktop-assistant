@@ -176,10 +176,14 @@ function makeFaceRow(face) {
   const firstSeen = face.first_seen ? fmtTime(face.first_seen) : "—";
   const lastSeen  = face.last_seen  ? fmtAge(face.last_seen)   : "—";
   const count     = face.seen_count ?? "—";
-  const shortId   = (face.id || "").slice(0, 8);
+
+  const thumbHtml = face.has_thumb
+    ? `<img src="/api/faces/${esc(face.id)}/thumb" class="face-thumb" alt="face" />`
+    : `<div class="face-thumb face-thumb-placeholder">?</div>`;
 
   tr.innerHTML = `
     <td class="name-cell">
+      ${thumbHtml}
       <input class="name-input" type="text" value="${esc(face.name || "")}"
              id="name-${esc(face.id)}" title="id: ${esc(face.id)}" />
       <button class="btn btn-save btn-sm" onclick="saveName('${esc(face.id)}')">Save</button>
