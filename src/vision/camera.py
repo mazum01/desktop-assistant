@@ -154,9 +154,18 @@ class Camera:
         if not self._running:
             raise RuntimeError("Camera.start() must be called before capture_frame()")
         if self._sim:
-            return np.zeros(
-                (self._cfg.height, self._cfg.width, 3), dtype=np.uint8
+            import cv2, time as _time
+            frame = np.full(
+                (self._cfg.height, self._cfg.width, 3), 40, dtype=np.uint8
             )
+            ts = _time.strftime("%H:%M:%S")
+            cv2.putText(frame, "CAMERA  SIM  MODE", (50, self._cfg.height // 2 - 40),
+                        cv2.FONT_HERSHEY_DUPLEX, 2.0, (100, 160, 220), 3, cv2.LINE_AA)
+            cv2.putText(frame, ts, (50, self._cfg.height // 2 + 40),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.4, (180, 180, 180), 2, cv2.LINE_AA)
+            cv2.rectangle(frame, (20, 20), (self._cfg.width - 20, self._cfg.height - 20),
+                          (60, 80, 100), 2)
+            return frame
         return self._cam.capture_array("main")
 
     def capture_still(self, path: str) -> None:

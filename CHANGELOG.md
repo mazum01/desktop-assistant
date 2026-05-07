@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.5] - 2026-05-06
+### Fixed
+- Camera sim-mode frame is now a visible dark-slate placeholder with "CAMERA SIM MODE" and a live clock overlay instead of a pure black frame — makes it clear when no real camera is detected.
+
 ## [1.1.4] - 2026-05-06
 ### Added
 - **`da forget-faces`** CLI command — deletes all known faces from the registry immediately.
