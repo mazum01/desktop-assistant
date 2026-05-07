@@ -13,7 +13,7 @@ digraph DesktopAssistant {
     ranksep=0.6;
     fontname="Helvetica";
     labelloc="t";
-    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v1.1.0 — Web dashboard (FastAPI, dark-theme SPA on port 8080)</font>>;
+    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v1.2.1 — Quiet hours · Face thumbnails · ClockService · Online embedding accumulation</font>>;
     fontsize=16;
 
     node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin=0.15];
@@ -73,6 +73,7 @@ digraph DesktopAssistant {
         thermal_bus  [label="thermal MessageBus\n(in-process pub/sub)", fillcolor="#bdb1f5"];
         core_svc     [label="Service base\n(start/tick/stop)",  fillcolor="#bdb1f5"];
         core_ver     [label="version.py\n(reads /VERSION)",     fillcolor="#bdb1f5"];
+        core_qh      [label="QuietHours\n(enabled / start / end\nloaded from config/quiet_hours.yaml)", fillcolor="#bdb1f5"];
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -103,7 +104,8 @@ digraph DesktopAssistant {
         svc_ipc     [label="IPCBridge (core)\nPUB ipc:///tmp/desktop-assistant.pub\nREP ipc:///tmp/desktop-assistant.rep\nSUB ← thermal.pub (upstream)\ncmds: ping / topics / last / publish / status", fillcolor="#a8d88d"];
         svc_face    [label="FaceService\n← perception.faces / face.meet\n→ av.say (greetings)\n→ face.identified\ncooldown-based re-greet", fillcolor="#a8d88d"];
         svc_track   [label="TrackingService\n← perception.faces\n→ motion.pan_to\n20Hz spring-damper tracking\nidle random gaze", fillcolor="#a8d88d"];
-        svc_web     [label="WebService (FastAPI)\nGET / — dashboard SPA\nGET /stream — MJPEG feed\nWS /ws — live JSON status\nGET|PUT|DEL /api/faces\nPOST /api/say|pan|version\nport 8080", fillcolor="#a8d88d"];
+        svc_web     [label="WebService (FastAPI)\nGET / — dashboard SPA\nGET /stream — MJPEG 640×360 feed\nWS /ws — live JSON status\nGET /api/faces — list (has_thumb flag)\nGET /api/faces/{id}/thumb — face JPEG\nPUT /api/faces/{id} — rename\nDEL /api/faces/{id} — delete one\nDEL /api/faces — delete all\nGET|PUT /api/settings/quiet-hours\nPOST /api/say|pan|version\nport 8080", fillcolor="#a8d88d"];
+        svc_clock   [label="ClockService\n+ ClockAnnouncer\n→ av.say (hourly/half-hourly)\nrespects QuietHours", fillcolor="#a8d88d"];
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -118,7 +120,7 @@ digraph DesktopAssistant {
         ext_cli [label="scripts/desktop-assistant\n(CLI: ping / status / pan / say / watch / ...)", fillcolor="#ffe375"];
         ext_web [label="Web Browser\nhttp://<pi>:8080", fillcolor="#ffe375"];
         ext_3p  [label="3rd-party subscribers\n(dashboards, future ML pipelines)", fillcolor="#ffe375", style="rounded,filled,dashed"];
-        ext_db  [label="~/.local/share/desktop-assistant/\ntelemetry.db (SQLite ring)\nfaces.db (identity registry)", fillcolor="#ffe375"];
+        ext_db  [label="~/.local/share/desktop-assistant/\ntelemetry.db (SQLite ring)\nfaces.db (identity registry)\nthumbs/ (64×64 JPEG face crops)", fillcolor="#ffe375"];
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -183,6 +185,12 @@ digraph DesktopAssistant {
     svc_track -> core_bus   [color="#226622"];
     core_bus -> svc_web     [color="#226622"];
     svc_vision -> svc_web   [label="latest_frame()", style=dashed, color="#888888"];
+    core_bus -> svc_clock   [color="#226622"];
+    svc_clock -> core_bus   [color="#226622"];
+
+    core_qh -> svc_clock    [label="suppresses\nannouncements", style=dashed, color="#888888"];
+    core_qh -> svc_face     [label="suppresses\ngreetings",     style=dashed, color="#888888"];
+    core_qh -> svc_web      [label="config R/W",               style=dashed, color="#888888"];
 
     svc_thermal -> core_svc [style=dotted, label="extends"];
     svc_thermal_ipc -> core_svc [style=dotted];
@@ -195,6 +203,7 @@ digraph DesktopAssistant {
     svc_ipc     -> core_svc [style=dotted];
     svc_face    -> core_svc [style=dotted];
     svc_track   -> core_svc [style=dotted];
+    svc_clock   -> core_svc [style=dotted];
     // (WebService does not extend Service base class)
 
     // ─────────────────────────────────────────────────────────────────
@@ -209,5 +218,5 @@ digraph DesktopAssistant {
     // ─────────────────────────────────────────────────────────────────
     // Boot ordering
     // ─────────────────────────────────────────────────────────────────
-    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_av; svc_perception; svc_telemetry; svc_ipc; svc_face; svc_track; svc_web;}
+    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_av; svc_perception; svc_telemetry; svc_ipc; svc_face; svc_track; svc_web; svc_clock;}
 }

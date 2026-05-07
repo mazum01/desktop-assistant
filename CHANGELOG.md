@@ -6,7 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.2.1] - 2026-05-07
+## [1.2.2] - 2026-05-07
+### Added
+- **WebService tests**: Expanded `test_web_service.py` from 9 → 18 tests covering all new endpoints: `DELETE /api/faces` (delete-all), `GET /api/faces/{id}/thumb` (thumbnail 200/404), `GET|PUT /api/settings/quiet-hours` (including invalid-time 400), and `has_thumb` field in faces list response.
+- **Architecture diagram updated** to v1.2.1: added `ClockService`, `QuietHours` core component with suppression edges to FaceService and ClockService, expanded WebService endpoint list, updated `ext_db` to show `thumbs/` directory.
+- **Restart skill** (`restart-da-daemon.prompt.md`): VS Code agent prompt that finds, kills, and relaunches the core daemon with boot verification.
+
+
 ### Fixed
 - **Face re-registration loop**: Repeated identity creation for the same person was caused by having only one stored embedding per face. When lighting or head angle varied, cosine similarity dropped below the match threshold and a new Guest entry was created. Fixed by: (a) lowering match threshold 0.45 → 0.40 (ArcFace MobileFaceNet practical range), (b) accumulating up to 20 embeddings per identity via online learning — every successful match adds the new embedding (oldest pruned), so recognition improves over successive visits.
 - **Embedder sim-mode skip**: When ArcFace runs in CPU sim mode (returns zero vectors), recognition is skipped entirely — position cache is used as sole fallback instead of triggering new registrations.

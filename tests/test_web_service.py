@@ -1,16 +1,18 @@
 """Tests for WebService REST endpoints using FastAPI TestClient."""
 import time
 import pytest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from src.services.web_service import WebService
 from src.core.bus import MessageBus
+from src.core.quiet_hours import QuietHours
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
-def _mock_registry():
+def _mock_registry(thumb_exists=False):
     r = MagicMock()
     r.list_faces.return_value = [
         {
@@ -24,6 +26,8 @@ def _mock_registry():
     ]
     r.set_name.return_value = True
     r.delete_face.return_value = True
+    r.delete_all_faces.return_value = 1
+    r.thumbnail_path.return_value = Path("/tmp/fake.jpg") if thumb_exists else None
     return r
 
 
@@ -31,9 +35,17 @@ def _mock_registry():
 def app_client():
     bus = MessageBus()
     svc = WebService(bus=bus, port=18080, registry=_mock_registry())
-    # Build the app directly (without running uvicorn)
     app = svc._build_app()
     return TestClient(app), bus, svc
+
+
+@pytest.fixture
+def app_client_with_quiet(tmp_path):
+    bus = MessageBus()
+    qh = QuietHours(enabled=False, start="21:00", end="06:00")
+    svc = WebService(bus=bus, port=18080, registry=_mock_registry(), quiet_hours=qh)
+    app = svc._build_app()
+    return TestClient(app), bus, svc, qh
 
 
 # ── Faces API ────────────────────────────────────────────────────────────────
@@ -46,6 +58,15 @@ def test_get_faces_returns_list(app_client):
     assert "faces" in data
     assert len(data["faces"]) == 1
     assert data["faces"][0]["name"] == "Alice"
+
+
+def test_get_faces_includes_has_thumb(app_client):
+    client, bus, svc = app_client
+    # thumbnail_path returns None by default → has_thumb = False
+    r = client.get("/api/faces")
+    assert r.status_code == 200
+    assert "has_thumb" in r.json()["faces"][0]
+    assert r.json()["faces"][0]["has_thumb"] is False
 
 
 def test_rename_face_ok(app_client):
@@ -76,6 +97,72 @@ def test_delete_face_not_found(app_client):
     svc._registry.delete_face.return_value = False
     r = client.delete("/api/faces/bad-id")
     assert r.status_code == 404
+
+
+def test_delete_all_faces(app_client):
+    client, bus, svc = app_client
+    r = client.delete("/api/faces")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["deleted"] == 1
+    svc._registry.delete_all_faces.assert_called_once()
+
+
+def test_face_thumb_not_found(app_client):
+    client, bus, svc = app_client
+    # thumbnail_path returns None → 404
+    r = client.get("/api/faces/aaaa-1111/thumb")
+    assert r.status_code == 404
+
+
+def test_face_thumb_found(tmp_path):
+    """Thumbnail endpoint returns JPEG when file exists."""
+    bus = MessageBus()
+    fake_thumb = tmp_path / "aaaa-1111.jpg"
+    fake_thumb.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 16)  # minimal JPEG header
+    reg = _mock_registry(thumb_exists=True)
+    reg.thumbnail_path.return_value = fake_thumb
+    svc = WebService(bus=bus, port=18080, registry=reg)
+    client = TestClient(svc._build_app())
+    r = client.get("/api/faces/aaaa-1111/thumb")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/jpeg")
+
+
+# ── Quiet-hours API ───────────────────────────────────────────────────────────
+
+def test_get_quiet_hours(app_client_with_quiet):
+    client, bus, svc, qh = app_client_with_quiet
+    r = client.get("/api/settings/quiet-hours")
+    assert r.status_code == 200
+    data = r.json()
+    assert "enabled" in data
+    assert "start" in data
+    assert "end" in data
+
+
+def test_get_quiet_hours_no_config(app_client):
+    client, bus, svc = app_client
+    # No quiet_hours configured → returns defaults
+    r = client.get("/api/settings/quiet-hours")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["enabled"] is False
+
+
+def test_put_quiet_hours(app_client_with_quiet):
+    client, bus, svc, qh = app_client_with_quiet
+    r = client.put("/api/settings/quiet-hours", json={"enabled": True, "start": "22:00", "end": "07:00"})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert qh.enabled
+
+
+def test_put_quiet_hours_invalid_time(app_client_with_quiet):
+    client, bus, svc, qh = app_client_with_quiet
+    r = client.put("/api/settings/quiet-hours", json={"enabled": True, "start": "99:99", "end": "07:00"})
+    assert r.status_code == 400
 
 
 # ── Controls API ──────────────────────────────────────────────────────────────
