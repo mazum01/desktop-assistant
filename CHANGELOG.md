@@ -6,7 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.1.0] - 2025-05-06
+## [1.1.1] - 2026-05-06
+### Added
+- **`da joke`** CLI command — have the assistant tell a random dad joke on demand.
+- **`da time`** CLI command — have the assistant announce the current time on demand.
+- `ClockAnnouncer.tell_joke_now()` and `announce_time_now()` methods.
+- `ClockService` subscribes to `av.tell_joke` and `av.announce_time` bus topics.
+
+
 ### Added
 - **Live web dashboard** (FastAPI + dark-theme SPA) served on port 8080 (`WebService`).
   - Dashboard sections: live status telemetry, MJPEG camera stream (20 fps), face

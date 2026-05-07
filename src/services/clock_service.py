@@ -63,6 +63,10 @@ class ClockService(Service):
 
         self._announcer = ClockAnnouncer(say_fn=_say, enabled=self._enabled)
         self._announcer.start()
+
+        self.bus.subscribe("av.tell_joke",      self._on_tell_joke)
+        self.bus.subscribe("av.announce_time",  self._on_announce_time)
+
         log.info("ClockService started (enabled=%s)", self._enabled)
 
     def run_tick(self) -> None:
@@ -72,3 +76,15 @@ class ClockService(Service):
         if self._announcer is not None:
             self._announcer.stop()
         log.info("ClockService stopped")
+
+    # ------------------------------------------------------------------
+    # On-demand handlers
+    # ------------------------------------------------------------------
+
+    def _on_tell_joke(self, _topic, _payload) -> None:
+        if self._announcer:
+            self._announcer.tell_joke_now()
+
+    def _on_announce_time(self, _topic, _payload) -> None:
+        if self._announcer:
+            self._announcer.announce_time_now()

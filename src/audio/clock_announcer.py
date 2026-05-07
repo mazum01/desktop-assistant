@@ -183,6 +183,24 @@ class ClockAnnouncer:
         except Exception:
             log.exception("ClockAnnouncer: say_fn raised")
 
+    def announce_time_now(self) -> None:
+        """Speak the current time immediately (no joke)."""
+        text = _spoken_time(datetime.now())
+        log.info("ClockAnnouncer: on-demand time → %s", text)
+        try:
+            self._say(text)
+        except Exception:
+            log.exception("ClockAnnouncer: say_fn raised")
+
+    def tell_joke_now(self) -> None:
+        """Speak a random dad joke immediately."""
+        joke = _pick_joke()
+        log.info("ClockAnnouncer: on-demand joke → %s", joke)
+        try:
+            self._say(joke)
+        except Exception:
+            log.exception("ClockAnnouncer: say_fn raised")
+
 
 # ---------------------------------------------------------------------------
 # Helper

@@ -231,6 +231,18 @@ def cmd_say(args) -> int:
     return 0 if r.get("ok") else 1
 
 
+def cmd_joke(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "av.tell_joke", "payload": None})
+    print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
+def cmd_time(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "av.announce_time", "payload": None})
+    print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
 def cmd_help(args) -> int:
     """Print a formatted command reference, or detailed help for one command."""
     commands = {
@@ -244,6 +256,8 @@ def cmd_help(args) -> int:
                        "               --topic <prefix>  Filter to topics starting with <prefix>.",
         "say":         "Speak a phrase through the speakers via neural TTS.\n"
                        "               Usage: say \"<text>\"",
+        "joke":        "Have the assistant tell a random dad joke.",
+        "time":        "Have the assistant announce the current time.",
         "version":     "Have the assistant speak its current version number.",
         "pan":         "Pan the servo head to a logical angle (1–360°).\n"
                        "               --to <deg>            Target angle (required).\n"
@@ -570,6 +584,9 @@ def main() -> int:
     sp = sub.add_parser("say", help="Speak a phrase via TTS")
     sp.add_argument("text")
     sp.set_defaults(func=cmd_say)
+
+    sub.add_parser("joke", help="Tell a random dad joke").set_defaults(func=cmd_joke)
+    sub.add_parser("time", help="Announce the current time").set_defaults(func=cmd_time)
 
     sp = sub.add_parser("meet", help="Name the most recently seen face")
     sp.add_argument("name", help="Name to assign (e.g. 'Alice')")
