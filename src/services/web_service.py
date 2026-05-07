@@ -20,8 +20,6 @@ GET  /api/settings/servo  Get servo enabled state
 PUT  /api/settings/servo  Set servo enabled state  body: {"enabled": bool}
 """
 
-from __future__ import annotations
-
 import asyncio
 import io
 import json

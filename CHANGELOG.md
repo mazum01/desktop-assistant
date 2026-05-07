@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.4] - 2026-05-07
+### Fixed
+- **WebSocket telemetry (403 Forbidden)**: `from __future__ import annotations` in `web_service.py` caused all type annotations in the file to become lazy `ForwardRef` strings. FastAPI's dependency injection couldn't resolve `ws: WebSocket` to the actual class, so it treated the parameter as a query param and failed before accepting the connection, returning 403. Removed the future import to restore eager annotation evaluation.
+
+### Changed
+- **Servo CLI consolidation**: Replaced flat `pan`, `move-servo`, `servo-enable`, `servo-disable`, `servo-status` top-level commands with a single `da servo <subcommand>` parent. Subcommands: `enable`, `disable`, `status`, `pan --to <deg>`, `move <pos> <ms>`.
+- **Web UI servo section**: Merged the separate "Pan servo" slider and "Servo" enable checkbox into a single unified control group.
+
 ## [1.2.3] - 2026-05-07
 ### Added
 - **Servo enable/disable**: New `motion.set_enabled {enabled: bool}` bus topic lets any service stop/resume servo motion at runtime. `MotionService` now reads `servo.enabled` from `config/assistant.yaml` (default `true`) and publishes `motion.enabled_changed` when state changes.

@@ -106,11 +106,7 @@
                    oninput="document.getElementById('pan-angle-display').textContent=this.value+'°'" />
             <button class="btn btn-primary" onclick="doPan()">Go</button>
           </div>
-        </div>
-
-        <div class="control-group">
-          <label>Servo</label>
-          <div class="row-input">
+          <div class="row-input" style="margin-top:6px">
             <label class="qh-toggle" style="margin:0">
               <input type="checkbox" id="servo-enabled" onchange="saveServoEnabled(this.checked)" />
               <span>Enable servo motion</span>

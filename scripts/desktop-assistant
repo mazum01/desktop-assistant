@@ -603,25 +603,6 @@ def main() -> int:
     sp.add_argument("--payload", help="JSON payload (default: null)")
     sp.set_defaults(func=cmd_publish)
 
-    sp = sub.add_parser("pan", help="Pan the servo to a logical angle")
-    sp.add_argument("--to", type=float, required=True, help="logical degrees 1–360")
-    sp.add_argument(
-        "--move-time-ms",
-        type=float,
-        default=None,
-        help="Optional target move time in milliseconds",
-    )
-    sp.set_defaults(func=cmd_pan)
-
-    sp = sub.add_parser("move-servo", help="Move servo: position and move time (ms)")
-    sp.add_argument("position", type=float, help="logical degrees 1–360")
-    sp.add_argument("move_time_ms", type=float, help="target move time in milliseconds")
-    sp.add_argument("-as", "--announce-start", action="store_true",
-                    help="Speak when move starts")
-    sp.add_argument("-af", "--announce-finish", action="store_true",
-                    help="Speak when move finishes")
-    sp.set_defaults(func=cmd_move_servo)
-
     sp = sub.add_parser("say", help="Speak a phrase via TTS")
     sp.add_argument("text")
     sp.set_defaults(func=cmd_say)
@@ -630,9 +611,29 @@ def main() -> int:
     sub.add_parser("forget-faces", help="Delete ALL faces from the registry").set_defaults(func=cmd_forget_faces)
     sub.add_parser("time", help="Announce the current time").set_defaults(func=cmd_time)
 
-    sub.add_parser("servo-enable", help="Enable servo motion").set_defaults(func=cmd_servo_enable)
-    sub.add_parser("servo-disable", help="Disable servo motion").set_defaults(func=cmd_servo_disable)
-    sub.add_parser("servo-status", help="Show servo enabled state and current angle").set_defaults(func=cmd_servo_status)
+    # ── Consolidated servo subcommands ───────────────────────────────
+    servo_sp = sub.add_parser("servo", help="Servo control (enable/disable/status/pan/move)")
+    servo_sub = servo_sp.add_subparsers(dest="servo_cmd", metavar="<servo-command>")
+    servo_sub.required = True
+
+    servo_sub.add_parser("enable",  help="Enable servo motion").set_defaults(func=cmd_servo_enable)
+    servo_sub.add_parser("disable", help="Disable servo motion").set_defaults(func=cmd_servo_disable)
+    servo_sub.add_parser("status",  help="Show servo state and current angle").set_defaults(func=cmd_servo_status)
+
+    ssp = servo_sub.add_parser("pan", help="Pan servo to a logical angle (1–360°)")
+    ssp.add_argument("--to", type=float, required=True, help="logical degrees 1–360")
+    ssp.add_argument("--move-time-ms", type=float, default=None,
+                     help="Optional target move time in ms")
+    ssp.set_defaults(func=cmd_pan)
+
+    ssp = servo_sub.add_parser("move", help="Move servo: position and move time (ms)")
+    ssp.add_argument("position", type=float, help="logical degrees 1–360")
+    ssp.add_argument("move_time_ms", type=float, help="target move time in ms")
+    ssp.add_argument("-as", "--announce-start", action="store_true",
+                     help="Speak when move starts")
+    ssp.add_argument("-af", "--announce-finish", action="store_true",
+                     help="Speak when move finishes")
+    ssp.set_defaults(func=cmd_move_servo)
 
     sp = sub.add_parser("meet", help="Name the most recently seen face")
     sp.add_argument("name", help="Name to assign (e.g. 'Alice')")
