@@ -268,7 +268,6 @@ async function deleteAllFaces() {
     if (r.ok) {
       const data = await r.json();
       loadFaces();
-  loadQuietHours();
       const log = el("event-log");
       const row = document.createElement("div");
       row.className = "event-row";
@@ -311,6 +310,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Enter") doSay();
   });
   loadFaces();
+  loadQuietHours();
   connectWS();
   // Refresh face registry every 30s
   setInterval(loadFaces, 30000);

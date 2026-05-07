@@ -32,6 +32,8 @@ attempted (default 10). Frames arriving faster than this are skipped.
 from __future__ import annotations
 
 import logging
+import queue
+import threading
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -44,8 +46,8 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class PerceptionConfig:
-    max_fps: float = 10.0          # detection frequency cap
-    conf_threshold: float = 0.45   # face confidence threshold
+    max_fps: float = 2.0           # detection FPS — CPU face-detect is slow; 2 fps is plenty
+    conf_threshold: float = 0.65   # raised from 0.45 to cut false positives on real frames
     nms_threshold: float = 0.4     # NMS IoU threshold
     recognition_enabled: bool = True  # enable ArcFace identity recognition
 
@@ -72,8 +74,12 @@ class PerceptionService(Service):
         self._last_detect_ts: float = 0.0
         self._unsubs: list = []
         self._pos_cache: list = []
-        self._cache_ttl: float = 5.0   # seconds before a position cache entry expires
-        self._cache_dist: float = 80.0 # pixel radius to consider "same face"
+        self._cache_ttl: float = 8.0    # seconds before a position cache entry expires
+        self._cache_dist: float = 160.0 # pixel radius to consider "same face" (wider tolerance)
+        # Detection runs in its own thread so it never blocks the VisionService tick.
+        self._frame_queue: queue.Queue = queue.Queue(maxsize=1)
+        self._worker: Optional[threading.Thread] = None
+        self._stop_evt = threading.Event()
 
     # ── Lifecycle ─────────────────────────────────────────────────────
 
@@ -99,6 +105,12 @@ class PerceptionService(Service):
                 except Exception as exc:
                     log.warning("FaceRegistry init failed (%s) — recognition disabled", exc)
 
+        self._stop_evt.clear()
+        self._worker = threading.Thread(
+            target=self._detection_loop, daemon=True, name="perception-worker"
+        )
+        self._worker.start()
+
         self._unsubs.append(
             self.bus.subscribe("vision.frame_ready", self._on_frame_ready)
         )
@@ -120,6 +132,10 @@ class PerceptionService(Service):
             except Exception:
                 pass
         self._unsubs.clear()
+        self._stop_evt.set()
+        if self._worker is not None:
+            self._worker.join(timeout=5.0)
+            self._worker = None
         if self._detector is not None:
             try:
                 self._detector.close()
@@ -137,82 +153,101 @@ class PerceptionService(Service):
                 pass
         log.info("PerceptionService stopped")
 
-    # ── Bus handler ───────────────────────────────────────────────────
+    # ── Bus handler (non-blocking — just signals the worker) ──────────
 
     def _on_frame_ready(self, _topic, _payload) -> None:
-        now = time.monotonic()
-        if now - self._last_detect_ts < self._min_interval:
+        # Skip detection on sim frames to avoid false positives from placeholder graphics.
+        if self._vision_svc is not None and not self._vision_svc.hardware_ready:
             return
-        self._last_detect_ts = now
-
-        frame = self._get_frame()
-        if frame is None:
-            return
-
+        # Non-blocking put; drop the signal if the worker is still busy with the previous frame.
         try:
-            faces = self._detector.detect(frame)
-        except Exception:
-            log.exception("face detection failed")
-            self.bus.publish("perception.error", {"reason": "detect_failed"})
-            return
+            self._frame_queue.put_nowait(True)
+        except queue.Full:
+            pass  # worker still processing — skip this frame
 
-        face_list = []
-        for f in faces:
-            entry = {
-                "bbox": list(f.bbox),
-                "centroid": list(f.centroid),
-                "confidence": round(f.confidence, 3),
-                "landmarks": [list(pt) for pt in f.landmarks] if f.landmarks else None,
-                "face_id": None,
-                "name": None,
-                "is_new": False,
-                "match_score": 0.0,
-            }
+    # ── Detection worker (runs in its own thread) ──────────────────────
 
-            # Identity recognition — only when landmarks are available for alignment
-            if self._embedder and self._registry and f.landmarks and len(f.landmarks) >= 5:
-                try:
-                    emb = self._embedder.embed(frame, f.landmarks)
-                    match = self._registry.find_match(emb)
-                    if match:
-                        face_id, name, score = match
-                        self._registry.update_seen(face_id)
-                        entry["face_id"] = face_id
-                        entry["name"] = name
-                        entry["is_new"] = False
-                        entry["match_score"] = round(score, 3)
-                        self._update_pos_cache(face_id, name, f.centroid[0], f.centroid[1])
-                    else:
-                        # Before registering, check position cache for same physical face.
-                        cached = self._find_cached_face(f.centroid[0], f.centroid[1])
-                        if cached:
-                            face_id, name = cached
+    def _detection_loop(self) -> None:
+        """Consume frame signals from the queue and run detection + recognition."""
+        while not self._stop_evt.is_set():
+            try:
+                self._frame_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+
+            now = time.monotonic()
+            if now - self._last_detect_ts < self._min_interval:
+                continue
+            self._last_detect_ts = now
+
+            frame = self._get_frame()
+            if frame is None:
+                continue
+
+            try:
+                faces = self._detector.detect(frame)
+            except Exception:
+                log.exception("face detection failed")
+                self.bus.publish("perception.error", {"reason": "detect_failed"})
+                continue
+
+            face_list = []
+            for f in faces:
+                entry = {
+                    "bbox": list(f.bbox),
+                    "centroid": list(f.centroid),
+                    "confidence": round(f.confidence, 3),
+                    "landmarks": [list(pt) for pt in f.landmarks] if f.landmarks else None,
+                    "face_id": None,
+                    "name": None,
+                    "is_new": False,
+                    "match_score": 0.0,
+                }
+
+                # Identity recognition — only when landmarks are available for alignment
+                if self._embedder and self._registry and f.landmarks and len(f.landmarks) >= 5:
+                    try:
+                        emb = self._embedder.embed(frame, f.landmarks)
+                        match = self._registry.find_match(emb)
+                        if match:
+                            face_id, name, score = match
                             self._registry.update_seen(face_id)
                             entry["face_id"] = face_id
                             entry["name"] = name
                             entry["is_new"] = False
-                            entry["match_score"] = 0.0
+                            entry["match_score"] = round(score, 3)
+                            self._update_pos_cache(face_id, name, f.centroid[0], f.centroid[1])
                         else:
-                            face_id, auto_name = self._registry.register(emb)
-                            entry["face_id"] = face_id
-                            entry["name"] = auto_name
-                            entry["is_new"] = True
-                            entry["match_score"] = 0.0
-                            self._update_pos_cache(face_id, auto_name, f.centroid[0], f.centroid[1])
-                except Exception:
-                    log.exception("face recognition failed for one face")
+                            # Before registering, check position cache for same physical face.
+                            cached = self._find_cached_face(f.centroid[0], f.centroid[1])
+                            if cached:
+                                face_id, name = cached
+                                self._registry.update_seen(face_id)
+                                entry["face_id"] = face_id
+                                entry["name"] = name
+                                entry["is_new"] = False
+                                entry["match_score"] = 0.0
+                            else:
+                                face_id, auto_name = self._registry.register(emb)
+                                entry["face_id"] = face_id
+                                entry["name"] = auto_name
+                                entry["is_new"] = True
+                                entry["match_score"] = 0.0
+                                self._update_pos_cache(face_id, auto_name, f.centroid[0], f.centroid[1])
+                    except Exception:
+                        log.exception("face recognition failed for one face")
 
-            face_list.append(entry)
+                face_list.append(entry)
 
-        self.bus.publish(
-            "perception.faces",
-            {
-                "count": len(face_list),
-                "faces": face_list,
-                "backend": self._detector.backend,
-                "ts": time.time(),
-            },
-        )
+            self.bus.publish(
+                "perception.faces",
+                {
+                    "count": len(face_list),
+                    "faces": face_list,
+                    "backend": self._detector.backend,
+                    "ts": time.time(),
+                },
+            )
 
     # ── Internal ──────────────────────────────────────────────────────
 

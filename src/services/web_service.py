@@ -133,8 +133,11 @@ class WebService:
 
     # ── Internal bus handlers ─────────────────────────────────────────
 
+    _STREAM_WIDTH  = 640
+    _STREAM_HEIGHT = 360
+
     def _on_frame(self, _topic, payload) -> None:
-        """Grab the latest frame from VisionService and cache it as JPEG bytes."""
+        """Grab the latest frame from VisionService, resize for stream, cache as JPEG."""
         if self._vision_svc is None:
             return
         try:
@@ -142,13 +145,21 @@ class WebService:
             if frame is None:
                 return
             import cv2
-            ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            small = cv2.resize(frame, (self._STREAM_WIDTH, self._STREAM_HEIGHT),
+                               interpolation=cv2.INTER_LINEAR)
+            ok, buf = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 65])
             if ok:
                 self._latest_frame = bytes(buf)
         except Exception:
             pass
 
     def _on_event(self, topic: str, payload) -> None:
+        # Strip the heavy per-face array from perception events so the
+        # WebSocket message stays small enough for the browser to handle.
+        if topic == "perception.faces" and isinstance(payload, dict):
+            payload = {"count": payload.get("count", 0),
+                       "backend": payload.get("backend"),
+                       "ts": payload.get("ts")}
         entry = {"topic": topic, "ts": time.time(), "payload": payload}
         self._event_log.append(entry)
         if len(self._event_log) > 100:
@@ -188,6 +199,20 @@ class WebService:
                 last[t] = self.bus.last(t) if self.bus else None
             except Exception:
                 last[t] = None
+
+        # Strip per-face detail from perception.faces so the WS payload stays small.
+        pf = last.get("perception.faces")
+        if isinstance(pf, dict) and "faces" in pf:
+            last["perception.faces"] = {
+                "count":   pf.get("count", 0),
+                "backend": pf.get("backend"),
+                "ts":      pf.get("ts"),
+                "faces": [
+                    {"name": f.get("name"), "face_id": f.get("face_id"),
+                     "centroid": f.get("centroid"), "confidence": f.get("confidence")}
+                    for f in (pf.get("faces") or [])
+                ],
+            }
 
         from src.core.version import get_version
         return {

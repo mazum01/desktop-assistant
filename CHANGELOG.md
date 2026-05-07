@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.9] - 2026-05-07
+### Fixed
+- **PerceptionService blocking tick**: Face detection ran synchronously inside the VisionService tick thread, blocking it for 5–10 s per frame (only ~4 frames/minute). Now runs in a dedicated background thread using a 1-slot queue. VisionService tick returns immediately; the worker picks up the latest frame when it's free.
+- **False face registrations**: Raised detection confidence threshold from 0.45 → 0.65 to eliminate false positives on real camera frames.
+- **Position cache too tight**: Increased `_cache_dist` from 80 px → 160 px and `_cache_ttl` from 5 s → 8 s so a stationary person's face isn't re-registered if the detector centroid shifts slightly between frames.
+- **`max_fps` default lowered** from 10 → 2 fps (CPU-based face detection is slow; 2 fps is plenty for real-time use and avoids saturating the Pi).
+
+## [1.1.8] - 2026-05-07
+### Fixed
+- **PerceptionService**: skip face detection entirely when camera is in sim mode — the placeholder frame's text/shapes triggered hundreds of false-positive detections per frame, flooding the face registry and blocking the VisionService tick for 10+ seconds per frame.
+- **WebService stream**: resize camera frame to 640×360 before JPEG encoding (was 1280×720); reduces JPEG size and encode time significantly.
+- **WebService telemetry**: strip per-face landmark/bbox detail from `perception.faces` in both the WebSocket snapshot and the event log. The full payload (250 faces × landmarks) was ~1 MB per WS message, silently preventing the browser from parsing telemetry updates.
+- **Web dashboard**: `loadQuietHours()` was never called on page load — Quiet Hours toggle/times now correctly reflect saved settings on first visit. Removed erroneous `loadQuietHours()` call inside `deleteAllFaces()`.
+
 ## [1.1.7] - 2026-05-07
 ### Fixed
 - `PerceptionService`: `_pos_cache`, `_cache_ttl`, and `_cache_dist` were used in `_find_cached_face` / `_update_pos_cache` but never initialized in `__init__`, causing `AttributeError` on every face-recognition frame and spamming the log.
