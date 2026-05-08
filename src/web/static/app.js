@@ -438,6 +438,44 @@ async function saveServoEnabled(enabled) {
   } catch (e) { /* ignore */ }
 }
 
+async function loadFaceTrackingEnabled() {
+  try {
+    const r = await fetch("/api/settings/face-tracking");
+    if (!r.ok) return;
+    const d = await r.json();
+    el("face-tracking-enabled").checked = !!d.enabled;
+  } catch (e) { /* ignore */ }
+}
+
+async function saveFaceTrackingEnabled(enabled) {
+  try {
+    await fetch("/api/settings/face-tracking", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+  } catch (e) { /* ignore */ }
+}
+
+async function loadRandomMotionEnabled() {
+  try {
+    const r = await fetch("/api/settings/random-motion");
+    if (!r.ok) return;
+    const d = await r.json();
+    el("random-motion-enabled").checked = !!d.enabled;
+  } catch (e) { /* ignore */ }
+}
+
+async function saveRandomMotionEnabled(enabled) {
+  try {
+    await fetch("/api/settings/random-motion", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+  } catch (e) { /* ignore */ }
+}
+
 // ── Controls ──────────────────────────────────────────────────────
 
 async function doSay() {
@@ -473,6 +511,8 @@ document.addEventListener("DOMContentLoaded", () => {
   loadFaces();
   loadQuietHours();
   loadServoEnabled();
+  loadFaceTrackingEnabled();
+  loadRandomMotionEnabled();
   connectWS();
   // Refresh face registry every 30s
   setInterval(loadFaces, 30000);

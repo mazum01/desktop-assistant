@@ -21,6 +21,10 @@ POST /api/pan             Pan servo    body: {"angle": 180.0}
 POST /api/version         Speak version number
 GET  /api/settings/servo  Get servo enabled state
 PUT  /api/settings/servo  Set servo enabled state  body: {"enabled": bool}
+GET  /api/settings/face-tracking  Get face tracking enabled state
+PUT  /api/settings/face-tracking  Set face tracking  body: {"enabled": bool}
+GET  /api/settings/random-motion  Get random motion enabled state
+PUT  /api/settings/random-motion  Set random motion  body: {"enabled": bool}
 """
 
 import asyncio
@@ -82,6 +86,7 @@ class WebService:
         vision_service=None,
         quiet_hours: Optional[QuietHours] = None,
         motion_service=None,
+        tracking_service=None,
     ) -> None:
         self.bus = bus
         self._host = host
@@ -90,6 +95,7 @@ class WebService:
         self._vision_svc = vision_service
         self._quiet_hours = quiet_hours
         self._motion_svc = motion_service
+        self._tracking_svc = tracking_service
         self._server = None
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -415,6 +421,28 @@ class WebService:
         async def api_put_servo(body: _ServoBody):
             if self.bus:
                 self.bus.publish("motion.set_enabled", {"enabled": body.enabled})
+            return {"ok": True, "enabled": body.enabled}
+
+        @app.get("/api/settings/face-tracking")
+        async def api_get_face_tracking():
+            enabled = self._tracking_svc.face_tracking_enabled if self._tracking_svc else True
+            return {"enabled": enabled}
+
+        @app.put("/api/settings/face-tracking")
+        async def api_put_face_tracking(body: _ServoBody):
+            if self.bus:
+                self.bus.publish("tracking.set_face_tracking", {"enabled": body.enabled})
+            return {"ok": True, "enabled": body.enabled}
+
+        @app.get("/api/settings/random-motion")
+        async def api_get_random_motion():
+            enabled = self._tracking_svc.random_motion_enabled if self._tracking_svc else True
+            return {"enabled": enabled}
+
+        @app.put("/api/settings/random-motion")
+        async def api_put_random_motion(body: _ServoBody):
+            if self.bus:
+                self.bus.publish("tracking.set_random_motion", {"enabled": body.enabled})
             return {"ok": True, "enabled": body.enabled}
 
         # ── REST: controls ────────────────────────────────────────────

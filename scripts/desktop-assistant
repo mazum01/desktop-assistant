@@ -200,6 +200,50 @@ def cmd_servo_status(_args) -> int:
     return 0
 
 
+def cmd_face_tracking_enable(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "tracking.set_face_tracking",
+                  "payload": {"enabled": True}})
+    print("Face tracking enabled." if r.get("ok") else f"Error: {r}")
+    return 0 if r.get("ok") else 1
+
+
+def cmd_face_tracking_disable(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "tracking.set_face_tracking",
+                  "payload": {"enabled": False}})
+    print("Face tracking disabled." if r.get("ok") else f"Error: {r}")
+    return 0 if r.get("ok") else 1
+
+
+def cmd_face_tracking_status(_args) -> int:
+    r = _request({"cmd": "last", "topic": "tracking.face_tracking_changed"})
+    payload = r.get("payload") or {}
+    enabled = payload.get("enabled", True)
+    print(f"Face tracking: {'enabled' if enabled else 'disabled'}")
+    return 0
+
+
+def cmd_random_motion_enable(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "tracking.set_random_motion",
+                  "payload": {"enabled": True}})
+    print("Random motion enabled." if r.get("ok") else f"Error: {r}")
+    return 0 if r.get("ok") else 1
+
+
+def cmd_random_motion_disable(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "tracking.set_random_motion",
+                  "payload": {"enabled": False}})
+    print("Random motion disabled." if r.get("ok") else f"Error: {r}")
+    return 0 if r.get("ok") else 1
+
+
+def cmd_random_motion_status(_args) -> int:
+    r = _request({"cmd": "last", "topic": "tracking.random_motion_changed"})
+    payload = r.get("payload") or {}
+    enabled = payload.get("enabled", True)
+    print(f"Random motion: {'enabled' if enabled else 'disabled'}")
+    return 0
+
+
 def cmd_move_servo(args) -> int:
     timeout_ms = max(2000, int(float(args.move_time_ms)) + 3000)
 
@@ -363,6 +407,14 @@ def cmd_help(args) -> int:
                          "                 [--move-time-ms <ms>]  Optional movement duration.\n"
                          "               servo move <deg> <ms>    Move to position with explicit time.\n"
                          "                 [-as]  Announce before moving.  [-af]  Announce when done.",
+        "face-tracking": "Enable/disable servo tracking of detected faces. Sub-commands:\n"
+                         "               face-tracking enable    Head follows detected faces.\n"
+                         "               face-tracking disable   Head does not follow faces.\n"
+                         "               face-tracking status    Show current state.",
+        "random-motion": "Enable/disable random idle head movement. Sub-commands:\n"
+                         "               random-motion enable    Idle gaze drifts when no face visible.\n"
+                         "               random-motion disable   Head stays still when no face visible.\n"
+                         "               random-motion status    Show current state.",
         "meet":          "Assign a name to the most recently seen face.\n"
                          "               Usage: meet \"<Name>\"",
         "publish":       "Publish a raw JSON event onto the internal bus (advanced).\n"
@@ -693,6 +745,22 @@ def main() -> int:
     ssp.add_argument("-af", "--announce-finish", action="store_true",
                      help="Speak when move finishes")
     ssp.set_defaults(func=cmd_move_servo)
+
+    # ── Face tracking subcommands ────────────────────────────────────
+    ft_sp = sub.add_parser("face-tracking", help="Enable/disable face-following servo behavior")
+    ft_sub = ft_sp.add_subparsers(dest="ft_cmd", metavar="<subcommand>")
+    ft_sub.required = True
+    ft_sub.add_parser("enable",  help="Head follows detected faces").set_defaults(func=cmd_face_tracking_enable)
+    ft_sub.add_parser("disable", help="Head does not follow faces").set_defaults(func=cmd_face_tracking_disable)
+    ft_sub.add_parser("status",  help="Show current face tracking state").set_defaults(func=cmd_face_tracking_status)
+
+    # ── Random motion subcommands ────────────────────────────────────
+    rm_sp = sub.add_parser("random-motion", help="Enable/disable idle random head movement")
+    rm_sub = rm_sp.add_subparsers(dest="rm_cmd", metavar="<subcommand>")
+    rm_sub.required = True
+    rm_sub.add_parser("enable",  help="Idle gaze drifts when no face visible").set_defaults(func=cmd_random_motion_enable)
+    rm_sub.add_parser("disable", help="Head stays still when no face visible").set_defaults(func=cmd_random_motion_disable)
+    rm_sub.add_parser("status",  help="Show current random motion state").set_defaults(func=cmd_random_motion_status)
 
     sp = sub.add_parser("meet", help="Name the most recently seen face")
     sp.add_argument("name", help="Name to assign (e.g. 'Alice')")

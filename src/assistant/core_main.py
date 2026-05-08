@@ -42,6 +42,8 @@ def main() -> int:
     _cfg = yaml.safe_load(_cfg_path.read_text()) if _cfg_path.exists() else {}
     _clock_enabled = _cfg.get("clock_announcements", {}).get("enabled", True)
     _tracking_enabled = _cfg.get("head_tracking", {}).get("enabled", True)
+    _face_tracking_enabled = _cfg.get("head_tracking", {}).get("face_tracking_enabled", True)
+    _random_motion_enabled = _cfg.get("head_tracking", {}).get("random_motion_enabled", True)
     _recognition_enabled = _cfg.get("face_recognition", {}).get("enabled", True)
     _greeting_cooldown = float(
         _cfg.get("face_recognition", {}).get("greeting_cooldown_s", 300.0)
@@ -93,13 +95,19 @@ def main() -> int:
         TelemetryService(bus=bus),
         ClockService(bus=bus, enabled=_clock_enabled, quiet_hours=_qh),
         FaceService(bus=bus, greeting_cooldown_s=_greeting_cooldown, quiet_hours=_qh),
-        TrackingService(bus=bus, config=_tracker_cfg, enabled=_tracking_enabled),
-        ipc,
     ]
+    tracking_svc = TrackingService(
+        bus=bus, config=_tracker_cfg, enabled=_tracking_enabled,
+        face_tracking_enabled=_face_tracking_enabled,
+        random_motion_enabled=_random_motion_enabled,
+    )
+    services.append(tracking_svc)
+    services.append(ipc)
     if _web_enabled:
         services.append(
             WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
-                       quiet_hours=_qh, motion_service=motion_svc)
+                       quiet_hours=_qh, motion_service=motion_svc,
+                       tracking_service=tracking_svc)
         )
 
     return run_services(services=services, unit_name="core")

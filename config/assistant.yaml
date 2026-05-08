@@ -10,6 +10,8 @@ head_tracking:
   # Natural spring-damper servo tracking following detected faces.
   # Idle mode: slow random gaze when no face is visible.
   enabled: true
+  face_tracking_enabled: true    # servo follows detected faces
+  random_motion_enabled: true    # idle random gaze when no face visible
   fov_degrees: 100.0        # IMX708 wide horizontal field of view estimate
   spring_k: 6.0             # tracking stiffness (higher = snappier)
   damping: 2.5              # motion damping (underdamped for natural overshoot)

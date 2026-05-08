@@ -6,6 +6,26 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.0] - 2026-05-08
+### Added
+- **Face tracking toggle**: enable/disable the servo following detected faces at runtime.
+  - `da face-tracking enable|disable|status`
+  - Web UI checkbox "Face tracking (servo follows detected face)"
+  - `PUT /api/settings/face-tracking`  `GET /api/settings/face-tracking`
+  - Bus topics: `tracking.set_face_tracking` → `tracking.face_tracking_changed`
+- **Random motion toggle**: enable/disable idle gaze drifts when no face is visible.
+  - `da random-motion enable|disable|status`
+  - Web UI checkbox "Random motion (idle gaze when no face)"
+  - `PUT /api/settings/random-motion`  `GET /api/settings/random-motion`
+  - Bus topics: `tracking.set_random_motion` → `tracking.random_motion_changed`
+- Config keys `head_tracking.face_tracking_enabled` and `head_tracking.random_motion_enabled` in `config/assistant.yaml` (both default `true`).
+- `TrackingService` now accepts `face_tracking_enabled` and `random_motion_enabled` constructor args and exposes read-only properties.
+- `WebService` now accepts optional `tracking_service` arg for querying current tracking state.
+
+### Changed
+- When face tracking is disabled, the head ignores `perception.faces` events.
+- When random motion is disabled AND no face is visible, the head holds its current position (no idle drift).
+
 ## [1.2.9] - 2026-05-08
 ### Fixed
 - `FaceRegistry.list_faces()`, `list_named_faces()`, and `delete_guest_faces()` were accidentally omitted from the class when `find_match_by_crop()` was inserted in v1.2.8, causing `AttributeError: 'FaceRegistry' object has no attribute 'list_faces'` on the `/api/faces` endpoint. Also removed duplicate method definitions that were left behind.

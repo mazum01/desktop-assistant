@@ -118,6 +118,18 @@
               <span>Enable servo motion</span>
             </label>
           </div>
+          <div class="row-input" style="margin-top:4px">
+            <label class="qh-toggle" style="margin:0">
+              <input type="checkbox" id="face-tracking-enabled" onchange="saveFaceTrackingEnabled(this.checked)" />
+              <span>Face tracking (servo follows detected face)</span>
+            </label>
+          </div>
+          <div class="row-input" style="margin-top:4px">
+            <label class="qh-toggle" style="margin:0">
+              <input type="checkbox" id="random-motion-enabled" onchange="saveRandomMotionEnabled(this.checked)" />
+              <span>Random motion (idle gaze when no face)</span>
+            </label>
+          </div>
         </div>
 
         <div class="control-group">
