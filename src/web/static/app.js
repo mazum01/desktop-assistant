@@ -497,6 +497,19 @@ async function doVersion() {
   await fetch("/api/version", { method: "POST" });
 }
 
+async function restartDaemon() {
+  if (!confirm("Restart the desktop-assistant-core service?")) return;
+  const btn = document.querySelector('[onclick="restartDaemon()"]');
+  if (btn) { btn.disabled = true; btn.textContent = "⟳ Restarting…"; }
+  try {
+    await fetch("/api/restart", { method: "POST" });
+  } catch (e) { /* connection drops as service restarts — expected */ }
+  // Re-enable button after a delay so the user can retry if needed
+  setTimeout(() => {
+    if (btn) { btn.disabled = false; btn.textContent = "⟳ Restart Daemon"; }
+  }, 8000);
+}
+
 // ── Say on enter key ──────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {

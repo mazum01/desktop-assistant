@@ -383,10 +383,26 @@ def cmd_merge_faces(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_restart(_args) -> int:
+    """Restart the desktop-assistant-core systemd service."""
+    import subprocess
+    print("Restarting desktop-assistant-core.service …")
+    result = subprocess.run(
+        ["sudo", "systemctl", "restart", "desktop-assistant-core.service"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        print(f"Error: {result.stderr.strip() or 'unknown error'}")
+        return 1
+    print("Service restarted. Use 'da ping' to confirm it is back up.")
+    return 0
+
+
 def cmd_help(args) -> int:
     """Print a formatted command reference, or detailed help for one command."""
     commands = {
         "ping":          "Round-trip latency check — confirms the daemon is reachable.",
+        "restart":       "Restart the desktop-assistant-core systemd service.",
         "status":        "Health and telemetry dashboard (temp, fan, servo, vision, audio).\n"
                          "               --json  Emit raw JSON instead of the human-readable table.",
         "topics":        "List every bus topic that has at least one active subscriber.",
@@ -692,6 +708,7 @@ def main() -> int:
     sp.set_defaults(func=cmd_help)
 
     sub.add_parser("ping", help="Round-trip check").set_defaults(func=cmd_ping)
+    sub.add_parser("restart", help="Restart desktop-assistant-core systemd service").set_defaults(func=cmd_restart)
     sub.add_parser("topics", help="List subscribed topics").set_defaults(func=cmd_topics)
     sub.add_parser("version", help="Speak the version (FR-VR2)").set_defaults(func=cmd_version)
 

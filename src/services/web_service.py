@@ -486,4 +486,19 @@ class WebService:
             self.bus.publish("av.announce_version", None)
             return {"ok": True}
 
+        @app.post("/api/restart")
+        async def api_restart():
+            import asyncio
+            import subprocess
+
+            async def _do_restart():
+                await asyncio.sleep(0.4)
+                subprocess.Popen(
+                    ["sudo", "systemctl", "restart", "desktop-assistant-core.service"],
+                    close_fds=True,
+                )
+
+            asyncio.ensure_future(_do_restart())
+            return {"ok": True, "message": "Restarting daemon…"}
+
         return app

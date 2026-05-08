@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.2] - 2026-05-08
+### Added
+- **`da restart`**: CLI command to restart `desktop-assistant-core.service` via
+  `sudo systemctl restart`. Prints confirmation and instructs user to `da ping`.
+- **"⟳ Restart Daemon" button** in web UI Services panel — calls `POST /api/restart`
+  which fires a 0.4s-delayed subprocess restart so the HTTP response is delivered
+  first; button disables for 8s while service restarts.
+- **`POST /api/restart`** FastAPI endpoint in `WebService`.
+- **`restart-daemon` agent skill** (`.github/skills/restart-daemon/SKILL.md`) —
+  agent now auto-restarts the daemon after code changes.
+
 ## [1.3.1] - 2026-05-08
 ### Fixed
 - **Services panel stuck on "loading…"**: `WebService` now subscribes to
