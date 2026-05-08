@@ -295,34 +295,35 @@ def cmd_forget_guests(_args) -> int:
 def cmd_help(args) -> int:
     """Print a formatted command reference, or detailed help for one command."""
     commands = {
-        "ping":        "Round-trip latency check — confirms the daemon is reachable.",
-        "status":      "Health and telemetry dashboard (temp, fan, servo, vision, audio).\n"
-                       "               --json  Emit raw JSON instead of the human-readable table.",
-        "topics":      "List every bus topic that has at least one active subscriber.",
-        "last":        "Show the most recent payload published on a given topic.\n"
-                       "               Usage: last <topic>",
-        "watch":       "Stream live bus events to stdout (Ctrl-C to stop).\n"
-                       "               --topic <prefix>  Filter to topics starting with <prefix>.",
-        "say":         "Speak a phrase through the speakers via neural TTS.\n"
-                       "               Usage: say \"<text>\"",
-        "joke":        "Have the assistant tell a random dad joke.",
-        "time":        "Have the assistant announce the current time.",
-        "version":     "Have the assistant speak its current version number.",
-        "pan":         "Pan the servo head to a logical angle (1–360°).\n"
-                       "               --to <deg>            Target angle (required).\n"
-                       "               --move-time-ms <ms>   Optional movement duration.",
-        "move-servo":  "Move servo with explicit position and move time.\n"
-                       "               Usage: move-servo <deg> <ms>\n"
-                       "               -as  Announce before moving.\n"
-                       "               -af  Announce when finished.",
-        "meet":        "Assign a name to the most recently seen face.\n"
-                       "               Usage: meet \"<Name>\"",
-        "publish":     "Publish a raw JSON event onto the internal bus (advanced).\n"
-                       "               Usage: publish <topic> [--payload '{...}']",
-        "forget-faces": "Delete ALL known faces from the registry permanently.",
+        "ping":          "Round-trip latency check — confirms the daemon is reachable.",
+        "status":        "Health and telemetry dashboard (temp, fan, servo, vision, audio).\n"
+                         "               --json  Emit raw JSON instead of the human-readable table.",
+        "topics":        "List every bus topic that has at least one active subscriber.",
+        "last":          "Show the most recent payload published on a given topic.\n"
+                         "               Usage: last <topic>",
+        "watch":         "Stream live bus events to stdout (Ctrl-C to stop).\n"
+                         "               --topic <prefix>  Filter to topics starting with <prefix>.",
+        "say":           "Speak a phrase through the speakers via neural TTS.\n"
+                         "               Usage: say \"<text>\"",
+        "joke":          "Have the assistant tell a random dad joke.",
+        "time":          "Have the assistant announce the current time.",
+        "version":       "Have the assistant speak its current version number.",
+        "servo":         "Servo control. Sub-commands:\n"
+                         "               servo enable             Enable servo motion.\n"
+                         "               servo disable            Disable servo motion.\n"
+                         "               servo status             Show servo state and current angle.\n"
+                         "               servo pan --to <deg>     Pan to logical angle 1–360°.\n"
+                         "                 [--move-time-ms <ms>]  Optional movement duration.\n"
+                         "               servo move <deg> <ms>    Move to position with explicit time.\n"
+                         "                 [-as]  Announce before moving.  [-af]  Announce when done.",
+        "meet":          "Assign a name to the most recently seen face.\n"
+                         "               Usage: meet \"<Name>\"",
+        "publish":       "Publish a raw JSON event onto the internal bus (advanced).\n"
+                         "               Usage: publish <topic> [--payload '{...}']",
+        "forget-faces":  "Delete ALL known faces from the registry permanently.",
         "forget-guests": "Delete only Guest-named faces, keeping named identities.",
-        "help":        "Show this command reference, or help for a specific command.\n"
-                       "               Usage: help [command]",
+        "help":          "Show this command reference, or help for a specific command.\n"
+                         "               Usage: help [command]",
     }
 
     if hasattr(args, "command") and args.command:
@@ -354,15 +355,6 @@ def cmd_help(args) -> int:
     print("Tip: desktop-assistant <command> --help  for full argument details.")
     print()
     return 0
-
-
-    r = _request({
-        "cmd": "publish",
-        "topic": "av.say",
-        "payload": {"text": args.text},
-    })
-    print(json.dumps(r, indent=2))
-    return 0 if r.get("ok") else 1
 
 
 def cmd_status(args) -> int:

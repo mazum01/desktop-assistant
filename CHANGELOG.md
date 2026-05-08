@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.7] - 2026-05-08
+### Fixed
+- `da help` now lists all current commands accurately: removed stale `pan` and `move-servo` top-level entries, added `servo` with full sub-command descriptions.
+- Removed unreachable dead code block in `cmd_help()`.
+
+### Changed
+- `da help servo` now shows all sub-commands (`enable`, `disable`, `status`, `pan`, `move`) with argument details.
+
+### Added
+- Agent Imperative #8: CLI Consistency — mandates that `cmd_help()` is updated in the same commit as any CLI command addition, removal, or rename.
+
 ## [1.2.6] - 2026-05-08
 ### Fixed
 - Face registry duplicates: in sim mode (ArcFace unavailable), if exactly one named person exists and the position cache misses, the detection is now matched back to that named person instead of creating a new "Guest N" entry. Applies to both the hardware-embed fallback path and the full sim path.

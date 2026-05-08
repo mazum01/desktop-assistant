@@ -82,3 +82,30 @@ The agent must follow them unconditionally.
 - If a PR/commit changes architecture without updating the diagram, the
   change is incomplete — fix it before merging.
 
+## 8. CLI Consistency — Mandatory on Every CLI Change
+
+The CLI entry point is `scripts/desktop-assistant` (symlinked to `/usr/local/bin/da`).
+
+**Any time a CLI command is added, removed, renamed, or its arguments change:**
+
+1. **Update `cmd_help()`** — the `commands` dict inside `cmd_help()` must exactly match
+   every top-level command registered with `sub.add_parser()`. No stale entries, no
+   missing entries.
+   - For commands with subcommands (e.g. `servo`), list all sub-commands in the
+     description string under the parent key.
+   - The `help=` string on `add_parser()` and the `commands` dict entry must be
+     consistent.
+
+2. **Remove dead code** — if a handler function or parser registration is removed, delete
+   the corresponding function definition too. Unreachable code after a `return` statement
+   must be removed immediately.
+
+3. **Verify `da help` renders cleanly** — run `python3 scripts/desktop-assistant help`
+   and confirm every command appears with an accurate one-line summary before committing.
+
+4. **`da help <command>`** — every entry in the `commands` dict must support the
+   single-command lookup path (`da help servo`, `da help meet`, etc.).
+
+Failure to keep `cmd_help()` in sync with the registered subparsers is a bug, not a
+style issue. Fix it in the same commit as the CLI change.
+
