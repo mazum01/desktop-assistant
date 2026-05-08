@@ -472,7 +472,8 @@ class WebService:
         @app.get("/api/settings/servo/limits")
         async def api_get_servo_limits():
             if self._motion_svc:
-                mn, mx = self._motion_svc.travel_limits
+                mn = self._motion_svc.soft_min_deg
+                mx = self._motion_svc.soft_max_deg
             else:
                 mn, mx = 135.0, 215.0
             return {"min_deg": mn, "max_deg": mx}
@@ -480,10 +481,10 @@ class WebService:
         @app.put("/api/settings/servo/limits")
         async def api_put_servo_limits(body: _ServoLimitsBody):
             if body.min_deg < 1 or body.max_deg > 360 or body.min_deg >= body.max_deg:
-                raise HTTPException(422, "min_deg must be ≥ 1, max_deg ≤ 360, and min < max")
+                raise HTTPException(422, "min_deg must be >= 1, max_deg <= 360, and min < max")
             if self.bus:
                 self.bus.publish(
-                    "motion.set_travel_limits",
+                    "motion.set_limits",
                     {"min_deg": body.min_deg, "max_deg": body.max_deg},
                 )
             return {"ok": True, "min_deg": body.min_deg, "max_deg": body.max_deg}

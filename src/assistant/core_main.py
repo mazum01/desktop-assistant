@@ -66,11 +66,11 @@ def main() -> int:
         _cfg.get("servo", {}).get("enabled", True),
     )
     _servo_cfg = _cfg.get("servo", {})
-    _travel_min = float(_rt.get("servo", {}).get(
-        "travel_min", _servo_cfg.get("travel_min", 135.0)
+    _soft_min_deg = float(_rt.get("servo", {}).get(
+        "soft_min_deg", _servo_cfg.get("soft_min_deg", 135.0)
     ))
-    _travel_max = float(_rt.get("servo", {}).get(
-        "travel_max", _servo_cfg.get("travel_max", 215.0)
+    _soft_max_deg = float(_rt.get("servo", {}).get(
+        "soft_max_deg", _servo_cfg.get("soft_max_deg", 215.0)
     ))
 
     from src.motion.head_tracker import HeadTrackerConfig
@@ -101,8 +101,8 @@ def main() -> int:
     _rt_state: dict = {
         "servo": {
             "enabled": _servo_enabled,
-            "travel_min": _travel_min,
-            "travel_max": _travel_max,
+            "soft_min_deg": _soft_min_deg,
+            "soft_max_deg": _soft_max_deg,
         },
         "head_tracking": {
             "face_tracking_enabled": _face_tracking_enabled,
@@ -115,12 +115,12 @@ def main() -> int:
             _rt_state["servo"]["enabled"] = bool(payload["enabled"])
             _save_runtime(_rt_state)
 
-    def _on_travel_limits_changed(_t, payload):
+    def _on_limits_changed(_t, payload):
         if isinstance(payload, dict):
             if "min_deg" in payload:
-                _rt_state["servo"]["travel_min"] = float(payload["min_deg"])
+                _rt_state["servo"]["soft_min_deg"] = float(payload["min_deg"])
             if "max_deg" in payload:
-                _rt_state["servo"]["travel_max"] = float(payload["max_deg"])
+                _rt_state["servo"]["soft_max_deg"] = float(payload["max_deg"])
             _save_runtime(_rt_state)
 
     def _on_face_tracking_changed(_t, payload):
@@ -134,7 +134,7 @@ def main() -> int:
             _save_runtime(_rt_state)
 
     bus.subscribe("motion.enabled_changed",         _on_servo_changed)
-    bus.subscribe("motion.travel_limits_changed",   _on_travel_limits_changed)
+    bus.subscribe("motion.limits_changed",          _on_limits_changed)
     bus.subscribe("tracking.face_tracking_changed", _on_face_tracking_changed)
     bus.subscribe("tracking.random_motion_changed", _on_random_motion_changed)
 
@@ -152,8 +152,8 @@ def main() -> int:
     motion_svc = MotionService(
         bus=bus, quiet_hours=_qh,
         servo_enabled=_servo_enabled,
-        travel_min=_travel_min,
-        travel_max=_travel_max,
+        soft_min_deg=_soft_min_deg,
+        soft_max_deg=_soft_max_deg,
     )
 
     services = [

@@ -216,8 +216,8 @@ def cmd_servo_status(_args) -> int:
     servo_enabled    = _flag("servo",        "enabled")
     face_tracking    = _flag("head_tracking","face_tracking_enabled")
     random_motion    = _flag("head_tracking","random_motion_enabled")
-    travel_min       = _flag("servo", "travel_min", 135.0)
-    travel_max       = _flag("servo", "travel_max", 215.0)
+    soft_min_deg     = _flag("servo", "soft_min_deg", 135.0)
+    soft_max_deg     = _flag("servo", "soft_max_deg", 215.0)
 
     pos = _request({"cmd": "last", "topic": "motion.position"})
     angle = (pos.get("payload") or {}).get("angle", "?")
@@ -230,7 +230,7 @@ def cmd_servo_status(_args) -> int:
     print(f"    Servo enabled   : {on if servo_enabled  else off}")
     print(f"    Face tracking   : {on if face_tracking  else off}")
     print(f"    Random motion   : {on if random_motion  else off}")
-    print(f"    Travel limits   : {travel_min}° – {travel_max}°")
+    print(f"    Travel limits   : {soft_min_deg}° – {soft_max_deg}°")
     print(f"    Current angle   : {angle}°")
     print()
     return 0
@@ -245,7 +245,7 @@ def cmd_servo_limits(args) -> int:
         return 1
     r = _request({
         "cmd": "publish",
-        "topic": "motion.set_travel_limits",
+        "topic": "motion.set_limits",
         "payload": {"min_deg": min_deg, "max_deg": max_deg},
     })
     if r.get("ok"):

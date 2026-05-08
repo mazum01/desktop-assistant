@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.4.4] - 2026-05-08
+### Fixed
+- **Servo travel limits naming consistency** — aligned `motion_service.py`,
+  `core_main.py`, `web_service.py`, and CLI to use the same
+  `soft_min_deg`/`soft_max_deg` naming and `motion.set_limits` /
+  `motion.limits_changed` bus topics. Previous commit left a mismatch where
+  `MotionService` used new names but callers still used old
+  `travel_min`/`travel_max`/`motion.set_travel_limits` names, which would have
+  caused a `TypeError` at daemon startup. Runtime state persists under
+  `servo.soft_min_deg` / `servo.soft_max_deg` keys going forward.
+
 ## [1.4.3] - 2026-05-08
 ### Added
 - **Servo travel limits** — configurable min/max logical angle (default 135°–215°)
