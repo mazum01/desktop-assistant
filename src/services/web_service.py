@@ -105,6 +105,7 @@ class WebService:
         self._event_log: list[dict] = []             # recent bus events (capped)
         self._unsubs: list = []
         self._running = False
+        self._service_states: dict = {}   # name -> "running" | "stopped"
 
     # ── Service lifecycle ─────────────────────────────────────────────
 
@@ -123,6 +124,14 @@ class WebService:
         self._unsubs.append(
             self.bus.subscribe("vision.frame_ready", self._on_frame)
         )
+        # Subscribe to service lifecycle events for the Services panel
+        self._unsubs.append(
+            self.bus.subscribe("service.started", self._on_service_started)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("service.stopped", self._on_service_stopped)
+        )
+
         # Subscribe to all events for event log
         for topic in (
             "perception.faces", "face.identified", "av.spoke",
@@ -179,6 +188,14 @@ class WebService:
                 self._latest_frame = bytes(buf)
         except Exception:
             pass
+
+    def _on_service_started(self, _topic, payload) -> None:
+        if isinstance(payload, dict) and "name" in payload:
+            self._service_states[payload["name"]] = "running"
+
+    def _on_service_stopped(self, _topic, payload) -> None:
+        if isinstance(payload, dict) and "name" in payload:
+            self._service_states[payload["name"]] = "stopped"
 
     def _on_event(self, topic: str, payload) -> None:
         # Strip the heavy per-face array from perception events so the
@@ -254,6 +271,7 @@ class WebService:
             "version": get_version(),
             "ts": time.time(),
             "last": last,
+            "services": dict(self._service_states),
         }
 
     # ── FastAPI app ───────────────────────────────────────────────────

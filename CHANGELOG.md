@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.1] - 2026-05-08
+### Fixed
+- **Services panel stuck on "loading…"**: `WebService` now subscribes to
+  `service.started` / `service.stopped` bus events and tracks running state
+  in `_service_states`. The state map is included in every WS snapshot under
+  `"services"`. `updateDashboard()` renders green/amber pills for each service;
+  removed dead `loadServices()` stub that fetched `/api/status` but did nothing.
+- Added `pill-warn` CSS class (amber) for stopped/degraded services.
+
 ## [1.3.0] - 2026-05-08
 ### Added
 - **Face tracking toggle**: enable/disable the servo following detected faces at runtime.

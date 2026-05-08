@@ -95,9 +95,17 @@ function updateDashboard(data) {
     drawFaceBoxes(pf.faces || [], frameW, frameH);
   }
 
-  // Services — we derive running state from service.started signals
-  // The WS data doesn't include service status directly, so we fetch from /api/status
-  // on first load and cache it; services section updated via separate poll.
+  // Services pills
+  const services = data.services || {};
+  const svcKeys = Object.keys(services);
+  const svcContainer = el("services-container");
+  if (svcKeys.length > 0) {
+    svcContainer.innerHTML = svcKeys.sort().map(name => {
+      const state = services[name];
+      const cls = state === "running" ? "pill-ok" : "pill-warn";
+      return `<span class="pill ${cls}">${esc(name)}</span>`;
+    }).join("");
+  }
 
   // Event log
   const events = data.events || [];
@@ -171,19 +179,6 @@ function drawFaceBoxes(faces, frameW, frameH) {
       ctx.fillText(label, lx + pad, ly + fontSize + pad - 2);
     }
   }
-}
-
-// ── Services polling ──────────────────────────────────────────────
-
-async function loadServices() {
-  try {
-    const r = await fetch("/api/status");
-    if (!r.ok) return;
-    const data = await r.json();
-    const last = data.last || {};
-    // We don't get services from this endpoint — leave pills as-is
-    // (services come from the daemon's IPC status, not the web service's bus view)
-  } catch (e) { /* ignore */ }
 }
 
 // ── Health badge ──────────────────────────────────────────────────
