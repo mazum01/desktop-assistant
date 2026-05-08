@@ -140,6 +140,19 @@ class ServoController:
     def stop(self) -> None:
         log.info("Servo stop at %.1f°", self._current_logical)
 
+    def set_limits(self, min_deg: float, max_deg: float) -> None:
+        """Update soft travel limits at runtime. Values are clamped to 1–360."""
+        min_deg = max(1.0, min(359.0, float(min_deg)))
+        max_deg = max(min_deg + 1.0, min(360.0, float(max_deg)))
+        self._cfg.soft_min_deg = min_deg
+        self._cfg.soft_max_deg = max_deg
+        log.info("Servo travel limits updated: %.1f°–%.1f°", min_deg, max_deg)
+        # Clamp current position into new limits
+        clamped = self._clamp_logical(self._current_logical)
+        if clamped != self._current_logical:
+            self._write(clamped)
+            self._current_logical = clamped
+
     @property
     def position(self) -> float:
         return self._current_logical

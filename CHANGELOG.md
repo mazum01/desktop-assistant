@@ -6,7 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.4.2] - 2026-05-08
+## [1.4.3] - 2026-05-08
+### Added
+- **Servo travel limits** — configurable min/max logical angle (default 135°–215°)
+  that clamp all pan commands, tracking output, and random motion. Enforced in
+  `ServoController._clamp_logical()` via `ServoConfig.soft_min_deg / soft_max_deg`.
+- **Persistent travel limits** — stored in `config/runtime_state.yaml` under
+  `servo.travel_min` / `servo.travel_max`; survive daemon restarts.
+- **`motion.set_travel_limits` bus topic** — live updates without restart;
+  publishes `motion.travel_limits_changed` on success.
+- **`da servo limits --min <deg> --max <deg>`** CLI subcommand.
+- **`da servo status`** now shows travel limits in the output table.
+- **Web UI** — Travel limits Min/Max number inputs and Set button in the
+  servo control group; pan slider range updates to match limits on load.
+- **`GET/PUT /api/settings/servo/limits`** REST endpoints.
+- `config/assistant.yaml` servo section now includes `travel_min: 135` and
+  `travel_max: 215` defaults.
+
 ### Added
 - **Full-size face photo storage** — `FaceRegistry.save_thumbnail()` now also
   saves a full-resolution crop (up to 320×320, JPEG quality 92) as

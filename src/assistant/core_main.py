@@ -65,6 +65,13 @@ def main() -> int:
         "enabled",
         _cfg.get("servo", {}).get("enabled", True),
     )
+    _servo_cfg = _cfg.get("servo", {})
+    _travel_min = float(_rt.get("servo", {}).get(
+        "travel_min", _servo_cfg.get("travel_min", 135.0)
+    ))
+    _travel_max = float(_rt.get("servo", {}).get(
+        "travel_max", _servo_cfg.get("travel_max", 215.0)
+    ))
 
     from src.motion.head_tracker import HeadTrackerConfig
     from src.services.perception_service import PerceptionConfig
@@ -92,7 +99,11 @@ def main() -> int:
 
     # Persist toggle state changes so they survive daemon restarts.
     _rt_state: dict = {
-        "servo":        {"enabled": _servo_enabled},
+        "servo": {
+            "enabled": _servo_enabled,
+            "travel_min": _travel_min,
+            "travel_max": _travel_max,
+        },
         "head_tracking": {
             "face_tracking_enabled": _face_tracking_enabled,
             "random_motion_enabled": _random_motion_enabled,
@@ -102,6 +113,14 @@ def main() -> int:
     def _on_servo_changed(_t, payload):
         if isinstance(payload, dict) and "enabled" in payload:
             _rt_state["servo"]["enabled"] = bool(payload["enabled"])
+            _save_runtime(_rt_state)
+
+    def _on_travel_limits_changed(_t, payload):
+        if isinstance(payload, dict):
+            if "min_deg" in payload:
+                _rt_state["servo"]["travel_min"] = float(payload["min_deg"])
+            if "max_deg" in payload:
+                _rt_state["servo"]["travel_max"] = float(payload["max_deg"])
             _save_runtime(_rt_state)
 
     def _on_face_tracking_changed(_t, payload):
@@ -115,6 +134,7 @@ def main() -> int:
             _save_runtime(_rt_state)
 
     bus.subscribe("motion.enabled_changed",         _on_servo_changed)
+    bus.subscribe("motion.travel_limits_changed",   _on_travel_limits_changed)
     bus.subscribe("tracking.face_tracking_changed", _on_face_tracking_changed)
     bus.subscribe("tracking.random_motion_changed", _on_random_motion_changed)
 
@@ -129,7 +149,12 @@ def main() -> int:
         "duration_s": av.tts_duration_rpc(msg.get("text", "")),
     })
 
-    motion_svc = MotionService(bus=bus, quiet_hours=_qh, servo_enabled=_servo_enabled)
+    motion_svc = MotionService(
+        bus=bus, quiet_hours=_qh,
+        servo_enabled=_servo_enabled,
+        travel_min=_travel_min,
+        travel_max=_travel_max,
+    )
 
     services = [
         motion_svc,

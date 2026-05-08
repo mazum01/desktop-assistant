@@ -216,6 +216,8 @@ def cmd_servo_status(_args) -> int:
     servo_enabled    = _flag("servo",        "enabled")
     face_tracking    = _flag("head_tracking","face_tracking_enabled")
     random_motion    = _flag("head_tracking","random_motion_enabled")
+    travel_min       = _flag("servo", "travel_min", 135.0)
+    travel_max       = _flag("servo", "travel_max", 215.0)
 
     pos = _request({"cmd": "last", "topic": "motion.position"})
     angle = (pos.get("payload") or {}).get("angle", "?")
@@ -228,9 +230,29 @@ def cmd_servo_status(_args) -> int:
     print(f"    Servo enabled   : {on if servo_enabled  else off}")
     print(f"    Face tracking   : {on if face_tracking  else off}")
     print(f"    Random motion   : {on if random_motion  else off}")
+    print(f"    Travel limits   : {travel_min}° – {travel_max}°")
     print(f"    Current angle   : {angle}°")
     print()
     return 0
+
+
+def cmd_servo_limits(args) -> int:
+    """Set servo travel limits (min/max logical angle)."""
+    min_deg = float(args.min)
+    max_deg = float(args.max)
+    if min_deg < 1 or max_deg > 360 or min_deg >= max_deg:
+        print("Error: min must be ≥ 1, max must be ≤ 360, and min < max.")
+        return 1
+    r = _request({
+        "cmd": "publish",
+        "topic": "motion.set_travel_limits",
+        "payload": {"min_deg": min_deg, "max_deg": max_deg},
+    })
+    if r.get("ok"):
+        print(f"Travel limits set: {min_deg}° – {max_deg}°")
+        return 0
+    print(f"Error: {r}")
+    return 1
 
 
 def cmd_face_tracking_enable(_args) -> int:
@@ -542,11 +564,12 @@ def cmd_help(args) -> int:
         "servo":         "Servo control. Sub-commands:\n"
                          "               servo enable             Enable servo motion.\n"
                          "               servo disable            Disable servo motion.\n"
-                         "               servo status             Show servo state and current angle.\n"
+                         "               servo status             Show servo state, limits, and current angle.\n"
                          "               servo pan --to <deg>     Pan to logical angle 1–360°.\n"
                          "                 [--move-time-ms <ms>]  Optional movement duration.\n"
                          "               servo move <deg> <ms>    Move to position with explicit time.\n"
-                         "                 [-as]  Announce before moving.  [-af]  Announce when done.",
+                         "                 [-as]  Announce before moving.  [-af]  Announce when done.\n"
+                         "               servo limits --min <deg> --max <deg>  Set travel limits.",
         "face-tracking": "Enable/disable servo tracking of detected faces. Sub-commands:\n"
                          "               face-tracking enable    Head follows detected faces.\n"
                          "               face-tracking disable   Head does not follow faces.\n"
@@ -877,7 +900,12 @@ def main() -> int:
 
     servo_sub.add_parser("enable",  help="Enable servo motion").set_defaults(func=cmd_servo_enable)
     servo_sub.add_parser("disable", help="Disable servo motion").set_defaults(func=cmd_servo_disable)
-    servo_sub.add_parser("status",  help="Show servo state and current angle").set_defaults(func=cmd_servo_status)
+    servo_sub.add_parser("status",  help="Show servo state, limits, and current angle").set_defaults(func=cmd_servo_status)
+
+    ssp = servo_sub.add_parser("limits", help="Set servo travel limits")
+    ssp.add_argument("--min", type=float, required=True, help="Minimum logical angle (1–359)")
+    ssp.add_argument("--max", type=float, required=True, help="Maximum logical angle (2–360)")
+    ssp.set_defaults(func=cmd_servo_limits)
 
     ssp = servo_sub.add_parser("pan", help="Pan servo to a logical angle (1–360°)")
     ssp.add_argument("--to", type=float, required=True, help="logical degrees 1–360")

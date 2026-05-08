@@ -130,6 +130,19 @@
               <span>Random motion (idle gaze when no face)</span>
             </label>
           </div>
+          <div class="row-input" style="margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap">
+            <label style="font-size:13px;color:var(--text-dim)">Travel limits:</label>
+            <label style="font-size:13px">
+              Min&nbsp;<input type="number" id="servo-travel-min" min="1" max="359" step="1" value="135"
+                style="width:65px;margin-left:4px" />°
+            </label>
+            <label style="font-size:13px">
+              Max&nbsp;<input type="number" id="servo-travel-max" min="2" max="360" step="1" value="215"
+                style="width:65px;margin-left:4px" />°
+            </label>
+            <button class="btn btn-primary btn-sm" onclick="saveServoLimits()">Set</button>
+            <span id="servo-limits-status" class="qh-status"></span>
+          </div>
         </div>
 
         <div class="control-group">

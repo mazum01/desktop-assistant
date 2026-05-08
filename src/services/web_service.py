@@ -22,6 +22,8 @@ POST /api/pan             Pan servo    body: {"angle": 180.0}
 POST /api/version         Speak version number
 GET  /api/settings/servo  Get servo enabled state
 PUT  /api/settings/servo  Set servo enabled state  body: {"enabled": bool}
+GET  /api/settings/servo/limits  Get servo travel limits
+PUT  /api/settings/servo/limits  Set servo travel limits  body: {"min_deg": float, "max_deg": float}
 GET  /api/settings/face-tracking  Get face tracking enabled state
 PUT  /api/settings/face-tracking  Set face tracking  body: {"enabled": bool}
 GET  /api/settings/random-motion  Get random motion enabled state
@@ -73,6 +75,11 @@ class _MergeFacesBody(BaseModel):
 
 class _ServoBody(BaseModel):
     enabled: bool
+
+
+class _ServoLimitsBody(BaseModel):
+    min_deg: float
+    max_deg: float
 
 
 class _GreetingBody(BaseModel):
@@ -461,6 +468,25 @@ class WebService:
             if self.bus:
                 self.bus.publish("motion.set_enabled", {"enabled": body.enabled})
             return {"ok": True, "enabled": body.enabled}
+
+        @app.get("/api/settings/servo/limits")
+        async def api_get_servo_limits():
+            if self._motion_svc:
+                mn, mx = self._motion_svc.travel_limits
+            else:
+                mn, mx = 135.0, 215.0
+            return {"min_deg": mn, "max_deg": mx}
+
+        @app.put("/api/settings/servo/limits")
+        async def api_put_servo_limits(body: _ServoLimitsBody):
+            if body.min_deg < 1 or body.max_deg > 360 or body.min_deg >= body.max_deg:
+                raise HTTPException(422, "min_deg must be ≥ 1, max_deg ≤ 360, and min < max")
+            if self.bus:
+                self.bus.publish(
+                    "motion.set_travel_limits",
+                    {"min_deg": body.min_deg, "max_deg": body.max_deg},
+                )
+            return {"ok": True, "min_deg": body.min_deg, "max_deg": body.max_deg}
 
         @app.get("/api/settings/face-tracking")
         async def api_get_face_tracking():

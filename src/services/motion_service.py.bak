@@ -8,13 +8,13 @@ Topics subscribed:
     motion.relax          None
     motion.stop           None
     motion.set_enabled    {"enabled": bool}   — enable/disable servo motion
-    motion.set_limits     {"min_deg": float, "max_deg": float}  — update travel limits
+    motion.set_travel_limits {"min_deg": float, "max_deg": float}
 
 Topics published:
-    motion.position        {"angle": float}    — every tick
-    motion.moved           {"from": float, "to": float, "direction": str}
-    motion.enabled_changed {"enabled": bool}   — when enabled state changes
-    motion.limits_changed  {"min_deg": float, "max_deg": float}  — when limits change
+    motion.position       {"angle": float}    — every tick
+    motion.moved          {"from": float, "to": float, "direction": str}
+    motion.enabled_changed {"enabled": bool}  — when enabled state changes
+    motion.travel_limits_changed {"min_deg": float, "max_deg": float}
 """
 
 from __future__ import annotations
@@ -28,8 +28,8 @@ from src.core.service import Service
 
 log = logging.getLogger(__name__)
 
-_LOGICAL_HARD_MIN = 1.0
-_LOGICAL_HARD_MAX = 360.0
+_DEFAULT_TRAVEL_MIN = 135.0
+_DEFAULT_TRAVEL_MAX = 215.0
 
 
 class MotionService(Service):
@@ -39,14 +39,14 @@ class MotionService(Service):
     def __init__(self, bus: Optional[MessageBus] = None, controller=None,
                  quiet_hours: Optional[QuietHours] = None,
                  servo_enabled: bool = True,
-                 soft_min_deg: float = 135.0,
-                 soft_max_deg: float = 215.0) -> None:
+                 travel_min: float = _DEFAULT_TRAVEL_MIN,
+                 travel_max: float = _DEFAULT_TRAVEL_MAX) -> None:
         super().__init__(bus=bus)
         self._controller = controller
         self._quiet_hours = quiet_hours
         self._servo_enabled = servo_enabled
-        self._soft_min = float(soft_min_deg)
-        self._soft_max = float(soft_max_deg)
+        self._travel_min = float(travel_min)
+        self._travel_max = float(travel_max)
         self._unsubs = []
 
     @property
@@ -54,30 +54,31 @@ class MotionService(Service):
         return self._servo_enabled
 
     @property
-    def soft_min_deg(self) -> float:
-        return self._soft_min
-
-    @property
-    def soft_max_deg(self) -> float:
-        return self._soft_max
+    def travel_limits(self) -> tuple[float, float]:
+        return (self._travel_min, self._travel_max)
 
     def on_start(self) -> None:
         if self._controller is None:
             from src.motion.servo_controller import ServoController, ServoConfig
-            self._controller = ServoController(
-                ServoConfig(soft_min_deg=self._soft_min, soft_max_deg=self._soft_max)
+            cfg = ServoConfig(
+                soft_min_deg=self._travel_min,
+                soft_max_deg=self._travel_max,
             )
+            self._controller = ServoController(config=cfg)
         else:
-            self._apply_limits_to_controller()
+            # Apply limits to an externally supplied controller
+            self._controller.set_limits(self._travel_min, self._travel_max)
 
-        self._unsubs.append(self.bus.subscribe("motion.pan_to",      self._on_pan_to))
-        self._unsubs.append(self.bus.subscribe("motion.relax",       self._on_relax))
-        self._unsubs.append(self.bus.subscribe("motion.stop",        self._on_stop_cmd))
+        self._unsubs.append(self.bus.subscribe("motion.pan_to", self._on_pan_to))
+        self._unsubs.append(self.bus.subscribe("motion.relax", self._on_relax))
+        self._unsubs.append(self.bus.subscribe("motion.stop", self._on_stop_cmd))
         self._unsubs.append(self.bus.subscribe("motion.set_enabled", self._on_set_enabled))
-        self._unsubs.append(self.bus.subscribe("motion.set_limits",  self._on_set_limits))
-        log.info("MotionService started; hardware_ready=%s  servo_enabled=%s  limits=[%.0f-%.0f deg]",
-                 getattr(self._controller, "hardware_ready", False),
-                 self._servo_enabled, self._soft_min, self._soft_max)
+        self._unsubs.append(self.bus.subscribe("motion.set_travel_limits", self._on_set_travel_limits))
+        log.info(
+            "MotionService started; hardware_ready=%s  servo_enabled=%s  travel=%.0f°–%.0f°",
+            getattr(self._controller, "hardware_ready", False),
+            self._servo_enabled, self._travel_min, self._travel_max,
+        )
 
     @property
     def hardware_ready(self) -> bool:
@@ -107,7 +108,7 @@ class MotionService(Service):
                 log.exception("controller stop/relax failed")
         log.info("MotionService stopped")
 
-    # ---- Bus handlers -------------------------------------------------
+    # ── Bus handlers ───────────────────────────────────────────────────
 
     def _on_set_enabled(self, _topic: str, payload) -> None:
         if not isinstance(payload, dict) or "enabled" not in payload:
@@ -124,42 +125,30 @@ class MotionService(Service):
                 pass
         self.bus.publish("motion.enabled_changed", {"enabled": new_state})
 
-    def _on_set_limits(self, _topic: str, payload) -> None:
+    def _on_set_travel_limits(self, _topic: str, payload) -> None:
         if not isinstance(payload, dict):
             return
-        changed = False
-        if "min_deg" in payload:
-            new_min = max(_LOGICAL_HARD_MIN, min(float(payload["min_deg"]), _LOGICAL_HARD_MAX))
-            if new_min != self._soft_min:
-                self._soft_min = new_min
-                changed = True
-        if "max_deg" in payload:
-            new_max = max(_LOGICAL_HARD_MIN, min(float(payload["max_deg"]), _LOGICAL_HARD_MAX))
-            if new_max != self._soft_max:
-                self._soft_max = new_max
-                changed = True
-        if not changed:
+        min_deg = payload.get("min_deg")
+        max_deg = payload.get("max_deg")
+        if min_deg is None or max_deg is None:
+            log.warning("motion.set_travel_limits: missing min_deg or max_deg in %r", payload)
             return
-        if self._soft_min > self._soft_max:
-            self._soft_min, self._soft_max = self._soft_max, self._soft_min
-        self._apply_limits_to_controller()
-        log.info("MotionService: limits updated [%.0f-%.0f deg]", self._soft_min, self._soft_max)
-        self.bus.publish("motion.limits_changed", {
-            "min_deg": self._soft_min,
-            "max_deg": self._soft_max,
-        })
-
-    def _apply_limits_to_controller(self) -> None:
-        if self._controller is not None and hasattr(self._controller, "_cfg"):
-            self._controller._cfg.soft_min_deg = self._soft_min
-            self._controller._cfg.soft_max_deg = self._soft_max
+        self._travel_min = float(min_deg)
+        self._travel_max = float(max_deg)
+        if self._controller is not None:
+            self._controller.set_limits(self._travel_min, self._travel_max)
+        self.bus.publish(
+            "motion.travel_limits_changed",
+            {"min_deg": self._travel_min, "max_deg": self._travel_max},
+        )
+        log.info("Travel limits updated: %.1f°–%.1f°", self._travel_min, self._travel_max)
 
     def _on_pan_to(self, _topic: str, payload) -> None:
         if not self._servo_enabled:
-            log.debug("MotionService: pan_to suppressed -- servo disabled")
+            log.debug("MotionService: pan_to suppressed — servo disabled")
             return
         if self._quiet_hours and self._quiet_hours.is_quiet():
-            log.debug("MotionService: pan_to suppressed -- quiet hours active")
+            log.debug("MotionService: pan_to suppressed — quiet hours active")
             return
         if not isinstance(payload, dict) or "angle" not in payload:
             log.warning("motion.pan_to ignored: bad payload %r", payload)

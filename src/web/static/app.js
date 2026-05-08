@@ -445,6 +445,50 @@ async function saveServoEnabled(enabled) {
   } catch (e) { /* ignore */ }
 }
 
+async function loadServoLimits() {
+  try {
+    const d = await fetch("/api/settings/servo/limits").then(r => r.json());
+    el("servo-travel-min").value = d.min_deg ?? 135;
+    el("servo-travel-max").value = d.max_deg ?? 215;
+    // Update pan slider range to match limits
+    const slider = el("pan-slider");
+    if (slider) {
+      slider.min = d.min_deg ?? 135;
+      slider.max = d.max_deg ?? 215;
+      if (parseFloat(slider.value) < d.min_deg) slider.value = d.min_deg;
+      if (parseFloat(slider.value) > d.max_deg) slider.value = d.max_deg;
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function saveServoLimits() {
+  const min_deg = parseFloat(el("servo-travel-min").value);
+  const max_deg = parseFloat(el("servo-travel-max").value);
+  const st = el("servo-limits-status");
+  if (min_deg >= max_deg || min_deg < 1 || max_deg > 360) {
+    st.textContent = "Invalid range";
+    st.style.color = "var(--red)";
+    setTimeout(() => { st.textContent = ""; }, 3000);
+    return;
+  }
+  try {
+    await fetch("/api/settings/servo/limits", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ min_deg, max_deg }),
+    });
+    st.textContent = "Saved ✓";
+    st.style.color = "var(--green)";
+    // Update pan slider range
+    const slider = el("pan-slider");
+    if (slider) { slider.min = min_deg; slider.max = max_deg; }
+  } catch (e) {
+    st.textContent = "Error";
+    st.style.color = "var(--red)";
+  }
+  setTimeout(() => { st.textContent = ""; }, 3000);
+}
+
 async function loadFaceTrackingEnabled() {
   try {
     const r = await fetch("/api/settings/face-tracking");
@@ -580,6 +624,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadFaces();
   loadQuietHours();
   loadServoEnabled();
+  loadServoLimits();
   loadFaceTrackingEnabled();
   loadRandomMotionEnabled();
   loadGreetingSettings();
