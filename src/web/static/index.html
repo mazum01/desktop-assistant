@@ -142,6 +142,41 @@
       </div>
     </section>
 
+    </section>
+
+    <!-- ── Greeting Settings ─────────────────────────────────── -->
+    <section class="card">
+      <h2>💬 Greeting Settings</h2>
+      <div class="qh-form">
+        <div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+          <label style="flex:1;min-width:160px">
+            Cooldown (min)
+            <input type="number" id="greeting-cooldown" min="1" max="240" step="1" value="30"
+              style="width:80px;margin-left:8px" />
+          </label>
+          <label style="flex:1;min-width:160px">
+            Jitter (%)
+            <input type="number" id="greeting-jitter" min="0" max="50" step="5" value="25"
+              style="width:70px;margin-left:8px" />
+          </label>
+        </div>
+        <div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:8px">
+          <label style="flex:1;min-width:160px">
+            Min absence (s)
+            <input type="number" id="greeting-min-absence" min="5" max="300" step="5" value="30"
+              style="width:70px;margin-left:8px" />
+          </label>
+          <label style="flex:1;min-width:160px">
+            Min confidence
+            <input type="number" id="greeting-confidence" min="0.1" max="1.0" step="0.05" value="0.5"
+              style="width:70px;margin-left:8px" />
+          </label>
+        </div>
+        <button class="btn btn-primary" style="margin-top:10px" onclick="saveGreetingSettings()">Save</button>
+        <span id="greeting-status" class="qh-status"></span>
+      </div>
+    </section>
+
     <!-- ── Quiet Hours ────────────────────────────────────────── -->
     <section class="card">
       <h2>🌙 Quiet Hours</h2>

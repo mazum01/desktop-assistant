@@ -7,16 +7,23 @@ by the CLI ``desktop-assistant meet <name>`` command).
 
 Greeting rules
 --------------
-* **New face** (is_new=True): fixed introduction phrase, then ask for name.
-* **Known face** (is_new=False): re-greet only if ``needs_greeting()`` is True
-  (person absent ≥ *greeting_cooldown_s* seconds). Varies phrase each time.
-* **Name assignment** (``face.meet``): names the most-recently-seen ungreeted
-  face, speaks "Nice to meet you, <name>!".
+* **Known face** (is_new=False): re-greet only if ``needs_greeting()`` is True —
+  face was absent ≥ *min_absence_s*, cooldown (±jitter) has elapsed since last greet.
+* **New face** (is_new=True): introduce once per session (in-memory guard).
+* **Name assignment** (``face.meet``): names the most-recently-seen face,
+  speaks a "Nice to meet you, <name>!" confirmation.
+
+Absence detection
+-----------------
+Each incoming ``perception.faces`` payload is diffed against the previous frame.
+Any face that disappears is marked absent in the registry after a 3-frame debounce,
+so brief detection gaps don't reset the greeting cooldown.
 
 Topics subscribed
 -----------------
 perception.faces    ``{faces: [{face_id, name, is_new, …}, …], …}``
-face.meet           ``{name: str}``  — from CLI
+face.meet           ``{name: str}``  — from CLI / web UI
+tracking.set_greeting_cooldown  ``{cooldown_min: float}``
 
 Topics published
 ----------------
@@ -28,6 +35,8 @@ from __future__ import annotations
 
 import logging
 import random
+import time
+from datetime import datetime
 from typing import Optional
 
 from src.core.bus import MessageBus
@@ -36,24 +45,81 @@ from src.core.service import Service
 
 log = logging.getLogger(__name__)
 
-# Varied re-greet phrases.  {name} is substituted at runtime.
-_REGREET_PHRASES = [
-    "Welcome back, {name}!",
-    "Hey {name}, good to see you again.",
-    "Hello again, {name}.",
-    "Nice to see you, {name}.",
-    "{name}! Good to have you back.",
-    "Oh hey, {name}!",
-    "Hi {name}, welcome back.",
-    "Good to see you again, {name}.",
+# ── Time-aware greeting phrases for known faces ───────────────────────────────
+# Keyed by time bucket; {name} substituted at runtime.
+
+_GREET_MORNING = [
+    "Good morning, {name}! Hope you slept well.",
+    "Morning, {name}! Ready to take on the day?",
+    "Hey {name}, good morning!",
+    "Rise and shine, {name}!",
 ]
 
-_NEW_FACE_PHRASE = (
-    "Hi! I'm the Desktop Assistant. Nice to meet you. "
-    "Can I have your name?"
-)
+_GREET_AFTERNOON = [
+    "Good afternoon, {name}! How's your day going?",
+    "Hey {name}, good to see you this afternoon.",
+    "Afternoon, {name}!",
+    "Welcome back, {name}. Having a good afternoon?",
+]
 
-_DEFAULT_COOLDOWN_S = 300.0   # 5 minutes
+_GREET_EVENING = [
+    "Good evening, {name}! Winding down for the night?",
+    "Hey {name}, good evening.",
+    "Evening, {name}! Hope your day was great.",
+    "Nice to see you this evening, {name}!",
+]
+
+_GREET_NIGHT = [
+    "Still up, {name}? Night owl mode!",
+    "Hey {name}, burning the midnight oil?",
+    "Evening, {name} — catching me at a late hour!",
+    "Night, {name}! Don't stay up too late.",
+]
+
+_GREET_GENERIC = [
+    "Welcome back, {name}!",
+    "Hey {name}, good to see you again.",
+    "There you are, {name}!",
+    "Hello again, {name}.",
+    "{name}! Good to have you back.",
+]
+
+# ── Personality-filled intro phrases for new faces ────────────────────────────
+
+_NEW_FACE_PHRASES = [
+    "Oh hey, I don't think we've met! I'm Desktop Assistant. What's your name?",
+    "Whoa, a new face! Hi there — I'm the Desktop Assistant. And you are?",
+    "Hello! Don't think I know you yet. I'm Desktop Assistant. Mind introducing yourself?",
+    "Hey! I'm Desktop Assistant. I'd love to know your name — what should I call you?",
+    "Well, hello there! I'm Desktop Assistant. I haven't had the pleasure — what's your name?",
+]
+
+# Default cooldown: 30 minutes base, ±25% jitter
+_DEFAULT_COOLDOWN_MIN  = 30.0
+_DEFAULT_JITTER_PCT    = 25.0
+_DEFAULT_MIN_ABSENCE_S = 30.0
+_DEFAULT_CONFIDENCE    = 0.5
+
+# Absence debounce: face must be missing this many consecutive frames
+_ABSENCE_DEBOUNCE_FRAMES = 3
+
+
+def _time_bucket() -> str:
+    """Return morning / afternoon / evening / night based on local time."""
+    hour = datetime.now().hour
+    if 5 <= hour < 12:
+        return "morning"
+    if 12 <= hour < 17:
+        return "afternoon"
+    if 17 <= hour < 22:
+        return "evening"
+    return "night"
+
+
+def _jittered_cooldown(cooldown_min: float, jitter_pct: float) -> float:
+    """Return cooldown_min ± jitter_pct%, converted to seconds."""
+    jitter = cooldown_min * jitter_pct / 100.0
+    return (cooldown_min + random.uniform(-jitter, jitter)) * 60.0
 
 
 class FaceService(Service):
@@ -65,29 +131,39 @@ class FaceService(Service):
         self,
         bus: Optional[MessageBus] = None,
         registry=None,
-        greeting_cooldown_s: float = _DEFAULT_COOLDOWN_S,
+        greeting_cooldown_min: float = _DEFAULT_COOLDOWN_MIN,
+        greeting_cooldown_jitter_pct: float = _DEFAULT_JITTER_PCT,
+        min_absence_s: float = _DEFAULT_MIN_ABSENCE_S,
+        confidence_threshold: float = _DEFAULT_CONFIDENCE,
         quiet_hours: Optional[QuietHours] = None,
     ) -> None:
         super().__init__(bus=bus)
         self._registry = registry
-        self._cooldown = greeting_cooldown_s
+        self._cooldown_min = greeting_cooldown_min
+        self._jitter_pct = greeting_cooldown_jitter_pct
+        self._min_absence_s = min_absence_s
+        self._confidence_threshold = confidence_threshold
         self._quiet_hours = quiet_hours
         self._unsubs: list = []
-        self._last_phrase: Optional[str] = None   # avoid immediate repeat
-        self._greeted_new_ids: set[str] = set()  # session-level guard: greet each new face only once
+        self._last_phrase: Optional[str] = None
+        self._greeted_new_ids: set[str] = set()   # session guard: intro each new face once
+        self._prev_face_ids: set[str] = set()     # face_ids in previous frame
+        self._absent_counter: dict[str, int] = {} # face_id → consecutive absent-frame count
 
     def on_start(self) -> None:
         if self._registry is None:
             from src.perception.face_registry import FaceRegistry
             self._registry = FaceRegistry()
 
+        self._unsubs.append(self.bus.subscribe("perception.faces", self._on_faces))
+        self._unsubs.append(self.bus.subscribe("face.meet", self._on_meet))
         self._unsubs.append(
-            self.bus.subscribe("perception.faces", self._on_faces)
+            self.bus.subscribe("tracking.set_greeting_cooldown", self._on_set_cooldown)
         )
-        self._unsubs.append(
-            self.bus.subscribe("face.meet", self._on_meet)
+        log.info(
+            "FaceService started (cooldown=%.0f min ±%.0f%%, min_absence=%.0f s)",
+            self._cooldown_min, self._jitter_pct, self._min_absence_s,
         )
-        log.info("FaceService started (cooldown=%.0fs)", self._cooldown)
 
     def on_stop(self) -> None:
         for unsub in self._unsubs:
@@ -105,20 +181,36 @@ class FaceService(Service):
 
     # ── Bus handlers ─────────────────────────────────────────────────────
 
+    def _on_set_cooldown(self, _topic, payload) -> None:
+        if isinstance(payload, dict) and "cooldown_min" in payload:
+            self._cooldown_min = float(payload["cooldown_min"])
+            log.info("FaceService: greeting cooldown updated to %.1f min", self._cooldown_min)
+
     def _on_faces(self, _topic, payload) -> None:
         if not isinstance(payload, dict):
             return
         faces = payload.get("faces") or []
+
+        current_face_ids: set[str] = set()
+
         for face in faces:
             face_id = face.get("face_id")
             name = face.get("name")
             is_new = face.get("is_new", False)
             score = face.get("match_score", 0.0)
+            confidence = face.get("confidence", 1.0)
 
             if not face_id or not name:
                 continue
 
-            # Publish identity event for telemetry/debug
+            # Skip low-confidence detections for greetings
+            if confidence < self._confidence_threshold:
+                continue
+
+            current_face_ids.add(face_id)
+            # Reset absent counter for faces that are back
+            self._absent_counter.pop(face_id, None)
+
             self.bus.publish("face.identified", {
                 "face_id": face_id,
                 "name": name,
@@ -126,29 +218,47 @@ class FaceService(Service):
                 "score": score,
             })
 
+            cooldown_s = _jittered_cooldown(self._cooldown_min, self._jitter_pct)
             if is_new:
                 self._greet_new(face_id, name)
-            elif self._registry.needs_greeting(face_id, self._cooldown):
+            elif self._registry.needs_greeting(face_id, cooldown_s, self._min_absence_s):
                 self._greet_returning(face_id, name)
 
+        # ── Absence detection ─────────────────────────────────────────────
+        # Track faces that newly disappeared this frame
+        newly_disappeared = self._prev_face_ids - current_face_ids
+        for face_id in newly_disappeared:
+            if face_id not in self._absent_counter:
+                self._absent_counter[face_id] = 0
+
+        # Increment counter for all tracked absent faces; reset if reappeared
+        for face_id in list(self._absent_counter.keys()):
+            if face_id in current_face_ids:
+                del self._absent_counter[face_id]
+            else:
+                self._absent_counter[face_id] += 1
+                if self._absent_counter[face_id] >= _ABSENCE_DEBOUNCE_FRAMES:
+                    self._registry.mark_absent(face_id)
+                    del self._absent_counter[face_id]
+                    log.debug("FaceService: face %s marked absent (debounced)", face_id[:8])
+
+        self._prev_face_ids = current_face_ids
+
     def _on_meet(self, _topic, payload) -> None:
-        """CLI sent 'desktop-assistant meet <name>' — name the last seen face."""
+        """CLI/web sent 'meet <name>' — name the last seen face."""
         if not isinstance(payload, dict):
             return
         given_name = (payload.get("name") or "").strip()
         if not given_name:
             log.warning("face.meet received empty name")
             return
-
         if self._registry is None:
             return
-
         face_id = self._registry.get_current_face_id()
         if face_id is None:
             log.warning("face.meet: no faces in registry yet")
             self.bus.publish("av.say", {"text": "I haven't seen anyone yet to name."})
             return
-
         old_name = (self._registry.get_face(face_id) or {}).get("name", "")
         self._registry.set_name(face_id, given_name)
         self._registry.mark_greeted(face_id)
@@ -160,18 +270,19 @@ class FaceService(Service):
 
     def _greet_new(self, face_id: str, name: str) -> None:
         if face_id in self._greeted_new_ids:
-            return  # already introduced this face this session
+            return
         self._greeted_new_ids.add(face_id)
         if self._quiet_hours and self._quiet_hours.is_quiet():
-            log.debug("FaceService: new-face greeting suppressed — quiet hours active")
+            log.debug("FaceService: new-face greeting suppressed — quiet hours")
             return
         self._registry.mark_greeted(face_id)
+        phrase = random.choice(_NEW_FACE_PHRASES)
         log.info("Greeting new face %s (%s)", face_id[:8], name)
-        self.bus.publish("av.say", {"text": _NEW_FACE_PHRASE})
+        self.bus.publish("av.say", {"text": phrase})
 
     def _greet_returning(self, face_id: str, name: str) -> None:
         if self._quiet_hours and self._quiet_hours.is_quiet():
-            log.debug("FaceService: returning-face greeting suppressed — quiet hours active")
+            log.debug("FaceService: returning-face greeting suppressed — quiet hours")
             return
         self._registry.mark_greeted(face_id)
         phrase = self._pick_phrase(name)
@@ -179,10 +290,18 @@ class FaceService(Service):
         self.bus.publish("av.say", {"text": phrase})
 
     def _pick_phrase(self, name: str) -> str:
-        """Pick a varied greeting phrase, avoiding the immediately-previous one."""
-        candidates = [p for p in _REGREET_PHRASES if p != self._last_phrase]
+        """Pick a time-aware varied greeting, avoiding immediate repeats."""
+        bucket = _time_bucket()
+        pool = {
+            "morning":   _GREET_MORNING,
+            "afternoon": _GREET_AFTERNOON,
+            "evening":   _GREET_EVENING,
+            "night":     _GREET_NIGHT,
+        }.get(bucket, _GREET_GENERIC)
+
+        candidates = [p for p in pool if p != self._last_phrase]
         if not candidates:
-            candidates = _REGREET_PHRASES
+            candidates = pool
         template = random.choice(candidates)
-        self._last_phrase = template  # store template, not formatted string
+        self._last_phrase = template
         return template.format(name=name)

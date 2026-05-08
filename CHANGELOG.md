@@ -6,6 +6,34 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.4.0] - 2026-05-08
+### Added
+- **Face greeting behavior overhaul** — social-timing-aware re-greeting with
+  left-frame requirement. A known person is only greeted after they actually
+  *left the camera frame* (absence debounced over 3 frames) and a configurable
+  cooldown has elapsed (default 30 min ± 25% jitter). Prevents re-greeting
+  someone who is continuously in frame.
+- **Time-of-day greeting phrases** — morning (5-12h), afternoon (12-17h),
+  evening (17-22h), night (22-5h) buckets, 4 varied phrases each, with
+  fallback generic pool. Immediate-repeat prevention across consecutive greetings.
+- **Personality-filled new-face intros** — 5 randomised introduction phrases
+  (down from 1 static line) for unknown faces; each new face is introduced
+  exactly once per session.
+- **Absence tracking in FaceRegistry** — new `last_absent` column and
+  `mark_absent()` method; `needs_greeting()` updated to require absence + cooldown.
+  Existing databases auto-migrated via `ALTER TABLE … ADD COLUMN`.
+- **Configurable greeting settings** — `config/assistant.yaml`:
+  `greeting_cooldown_min`, `greeting_cooldown_jitter_pct`, `min_absence_s`,
+  `confidence_threshold` (replaces flat `greeting_cooldown_s: 300`).
+- **CLI commands**: `da greeting-cooldown <min>`, `da greeting-settings`.
+- **Web UI**: Greeting Settings section — cooldown, jitter, min absence, min
+  confidence; `GET/PUT /api/settings/greeting` REST endpoints.
+- **`tracking.set_greeting_cooldown` bus topic** — live cooldown updates
+  without daemon restart.
+- **12 new tests**: `test_face_service.py` (16 tests total) and
+  `test_face_registry.py` (12 tests total) covering absence debounce, jitter
+  math, time-of-day bucket, session guard, low-confidence filter, and mark_absent.
+
 ## [1.3.4] - 2026-05-08
 ### Fixed
 - **`da servo status`** now shows all three motion flags (servo enabled, face

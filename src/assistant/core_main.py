@@ -56,9 +56,11 @@ def main() -> int:
         _cfg.get("head_tracking", {}).get("random_motion_enabled", True),
     )
     _recognition_enabled = _cfg.get("face_recognition", {}).get("enabled", True)
-    _greeting_cooldown = float(
-        _cfg.get("face_recognition", {}).get("greeting_cooldown_s", 300.0)
-    )
+    _fr_cfg = _cfg.get("face_recognition", {})
+    _greeting_cooldown_min = float(_fr_cfg.get("greeting_cooldown_min", 30.0))
+    _greeting_jitter_pct   = float(_fr_cfg.get("greeting_cooldown_jitter_pct", 25.0))
+    _min_absence_s         = float(_fr_cfg.get("min_absence_s", 30.0))
+    _confidence_threshold  = float(_fr_cfg.get("confidence_threshold", 0.5))
     _servo_enabled = _rt.get("servo", {}).get(
         "enabled",
         _cfg.get("servo", {}).get("enabled", True),
@@ -137,7 +139,14 @@ def main() -> int:
         PerceptionService(bus=bus, vision_service=vis, config=_perc_cfg),
         TelemetryService(bus=bus),
         ClockService(bus=bus, enabled=_clock_enabled, quiet_hours=_qh),
-        FaceService(bus=bus, greeting_cooldown_s=_greeting_cooldown, quiet_hours=_qh),
+        FaceService(
+            bus=bus,
+            greeting_cooldown_min=_greeting_cooldown_min,
+            greeting_cooldown_jitter_pct=_greeting_jitter_pct,
+            min_absence_s=_min_absence_s,
+            confidence_threshold=_confidence_threshold,
+            quiet_hours=_qh,
+        ),
     ]
     tracking_svc = TrackingService(
         bus=bus, config=_tracker_cfg, enabled=_tracking_enabled,

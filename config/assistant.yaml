@@ -27,7 +27,10 @@ face_recognition:
   # ArcFace MobileFaceNet identity recognition on the Hailo-8.
   # New faces are auto-assigned "Guest N"; name them with: da meet "Name"
   enabled: true
-  greeting_cooldown_s: 300  # re-greet a known person after this many seconds away
+  greeting_cooldown_min: 30       # base re-greet cooldown in minutes
+  greeting_cooldown_jitter_pct: 25  # ± jitter percentage (e.g. 25 → 30 min ± 7.5 min)
+  min_absence_s: 30               # face must have been absent this long before re-greeting
+  confidence_threshold: 0.5       # minimum detection confidence to trigger a greeting
 
 web_dashboard:
   # Live browser dashboard served on the local network.

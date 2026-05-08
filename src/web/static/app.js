@@ -471,7 +471,39 @@ async function saveRandomMotionEnabled(enabled) {
   } catch (e) { /* ignore */ }
 }
 
-// ── Controls ──────────────────────────────────────────────────────
+// ── Greeting settings ─────────────────────────────────────────────
+
+async function loadGreetingSettings() {
+  try {
+    const d = await fetch("/api/settings/greeting").then(r => r.json());
+    el("greeting-cooldown").value    = d.cooldown_min ?? 30;
+    el("greeting-jitter").value      = d.jitter_pct ?? 25;
+    el("greeting-min-absence").value = d.min_absence_s ?? 30;
+    el("greeting-confidence").value  = d.confidence_threshold ?? 0.5;
+  } catch (e) { /* ignore */ }
+}
+
+async function saveGreetingSettings() {
+  const cooldown_min         = parseFloat(el("greeting-cooldown").value);
+  const jitter_pct           = parseFloat(el("greeting-jitter").value);
+  const min_absence_s        = parseFloat(el("greeting-min-absence").value);
+  const confidence_threshold = parseFloat(el("greeting-confidence").value);
+  const st = el("greeting-status");
+  try {
+    await fetch("/api/settings/greeting", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cooldown_min, jitter_pct, min_absence_s, confidence_threshold }),
+    });
+    st.textContent = "Saved ✓";
+    st.style.color = "var(--green)";
+  } catch (e) {
+    st.textContent = "Error";
+    st.style.color = "var(--red)";
+  }
+  setTimeout(() => { st.textContent = ""; }, 3000);
+}
+
 
 async function doSay() {
   const text = el("say-input").value.trim();
@@ -521,6 +553,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadServoEnabled();
   loadFaceTrackingEnabled();
   loadRandomMotionEnabled();
+  loadGreetingSettings();
   connectWS();
   // Refresh face registry every 30s
   setInterval(loadFaces, 30000);

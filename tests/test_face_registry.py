@@ -85,29 +85,64 @@ def test_set_name_updates_name(reg):
 
 # ── Greeting cooldown ───────────────────────────────────────────────────────
 
-def test_needs_greeting_new_face(reg):
+def test_needs_greeting_new_face_without_absence(reg):
+    """A never-greeted face: last_absent=0, last_greeted=0 → absent not after greeted → False."""
     face_id, _ = reg.register(_rng_emb(1))
-    # Never greeted → needs greeting
-    assert reg.needs_greeting(face_id, cooldown_s=300) is True
+    # last_absent=0 (default), last_greeted=0 → last_absent <= last_greeted → False
+    assert reg.needs_greeting(face_id, cooldown_s=0, min_absence_s=0) is False
+
+
+def test_needs_greeting_after_absence_and_cooldown(reg):
+    """Face greeted, then left, then cooldown elapsed → needs greeting."""
+    import time
+    face_id, _ = reg.register(_rng_emb(1))
+    past_greeted = time.time() - 2000
+    past_absent  = time.time() - 60   # absent 60s ago (> min_absence_s=30)
+    reg._conn.execute(
+        "UPDATE faces SET last_greeted=?, last_absent=? WHERE id=?",
+        (past_greeted, past_absent, face_id)
+    )
+    reg._conn.commit()
+    assert reg.needs_greeting(face_id, cooldown_s=300, min_absence_s=30) is True
 
 
 def test_mark_greeted_suppresses_greeting(reg):
-    face_id, _ = reg.register(_rng_emb(1))
-    reg.mark_greeted(face_id)
-    # Just greeted → no re-greet
-    assert reg.needs_greeting(face_id, cooldown_s=300) is False
-
-
-def test_needs_greeting_after_cooldown(reg):
+    """Just greeted → no re-greet even if absence conditions are met."""
     import time
     face_id, _ = reg.register(_rng_emb(1))
+    past_absent = time.time() - 60
+    reg._conn.execute(
+        "UPDATE faces SET last_absent=? WHERE id=?",
+        (past_absent, face_id)
+    )
+    reg._conn.commit()
     reg.mark_greeted(face_id)
-    # Simulate elapsed time by directly updating last_greeted
-    con = reg._conn
-    past = time.time() - 400  # 400s ago > 300s cooldown
-    con.execute("UPDATE faces SET last_greeted=? WHERE id=?", (past, face_id))
-    con.commit()
-    assert reg.needs_greeting(face_id, cooldown_s=300) is True
+    # last_greeted is now > last_absent → condition (1) fails
+    assert reg.needs_greeting(face_id, cooldown_s=1, min_absence_s=30) is False
+
+
+def test_needs_greeting_not_absent_long_enough(reg):
+    """Face left only 5s ago (< min_absence_s=30) → not yet ready to greet."""
+    import time
+    face_id, _ = reg.register(_rng_emb(1))
+    past_greeted = time.time() - 2000
+    recent_absent = time.time() - 5   # only 5s ago
+    reg._conn.execute(
+        "UPDATE faces SET last_greeted=?, last_absent=? WHERE id=?",
+        (past_greeted, recent_absent, face_id)
+    )
+    reg._conn.commit()
+    assert reg.needs_greeting(face_id, cooldown_s=300, min_absence_s=30) is False
+
+
+def test_mark_absent_updates_timestamp(reg):
+    """mark_absent sets last_absent to roughly now."""
+    import time
+    face_id, _ = reg.register(_rng_emb(1))
+    before = time.time()
+    reg.mark_absent(face_id)
+    row = reg._conn.execute("SELECT last_absent FROM faces WHERE id=?", (face_id,)).fetchone()
+    assert row["last_absent"] >= before
 
 
 # ── Current face (CLI meet helper) ──────────────────────────────────────────

@@ -27,6 +27,7 @@ import os
 import sys
 import time
 import uuid
+from pathlib import Path
 
 try:
     import zmq
@@ -447,6 +448,65 @@ def cmd_merge_faces(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_greeting_cooldown(args) -> int:
+    """Set the base face greeting cooldown (minutes)."""
+    minutes = float(args.minutes)
+    if minutes < 1:
+        print("Error: cooldown must be at least 1 minute")
+        return 1
+    r = _publish("tracking.set_greeting_cooldown", {"cooldown_min": minutes})
+    if r is None:
+        print(f"Greeting cooldown set to {minutes:.1f} minutes (bus publish; daemon may not be running).")
+    else:
+        print(f"Greeting cooldown updated to {minutes:.1f} minutes.")
+    return 0
+
+
+def cmd_greeting_settings(_args) -> int:
+    """Show current greeting configuration from assistant.yaml / runtime_state.yaml."""
+    import yaml
+    cfg_path  = Path(__file__).resolve().parent.parent / "config" / "assistant.yaml"
+    rt_path   = Path(__file__).resolve().parent.parent / "config" / "runtime_state.yaml"
+    cfg: dict = {}
+    rt: dict  = {}
+    try:
+        with open(cfg_path) as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception as exc:
+        print(f"Warning: could not read assistant.yaml: {exc}")
+    try:
+        with open(rt_path) as f:
+            rt = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        print(f"Warning: could not read runtime_state.yaml: {exc}")
+
+    fr = cfg.get("face_recognition", {})
+    # Runtime state can override cooldown
+    rt_cooldown = rt.get("face_recognition", {}).get("greeting_cooldown_min")
+
+    cooldown_min = rt_cooldown if rt_cooldown is not None else fr.get("greeting_cooldown_min", 30.0)
+    jitter_pct   = fr.get("greeting_cooldown_jitter_pct", 25.0)
+    min_abs_s    = fr.get("min_absence_s", 30.0)
+    confidence   = fr.get("confidence_threshold", 0.5)
+    enabled      = fr.get("enabled", True)
+
+    W = 34
+    BOLD = "\033[1m"; RST = "\033[0m"; GRN = "\033[32m"; RED = "\033[31m"
+    status_str = f"{GRN}enabled{RST}" if enabled else f"{RED}disabled{RST}"
+    print()
+    print(f"{BOLD}Greeting Settings{RST}")
+    print("─" * W)
+    print(f"  {'Face recognition':<20} {status_str}")
+    print(f"  {'Cooldown (base)':<20} {cooldown_min:.1f} min")
+    print(f"  {'Jitter':<20} ±{jitter_pct:.0f}%  ({cooldown_min*(1-jitter_pct/100):.1f}–{cooldown_min*(1+jitter_pct/100):.1f} min)")
+    print(f"  {'Min absence':<20} {min_abs_s:.0f} s")
+    print(f"  {'Min confidence':<20} {confidence:.2f}")
+    print()
+    return 0
+
+
 def cmd_restart(_args) -> int:
     """Restart the desktop-assistant-core systemd service."""
     import subprocess
@@ -505,6 +565,9 @@ def cmd_help(args) -> int:
         "merge-faces":   "Merge two face identities into one (keeps embeddings of both).\n"
                          "               Usage: merge-faces <keep_id> <absorb_id>\n"
                          "               Run 'list-faces' first to get the IDs.",
+        "greeting-cooldown": "Set the base face greeting cooldown in minutes.\n"
+                         "               Usage: greeting-cooldown <minutes>",
+        "greeting-settings": "Show all current greeting configuration values.",
         "help":          "Show this command reference, or help for a specific command.\n"
                          "               Usage: help [command]",
     }
@@ -801,6 +864,10 @@ def main() -> int:
     sp.add_argument("keep_id", help="Face ID to keep (use list-faces to get IDs)")
     sp.add_argument("absorb_id", help="Face ID to absorb into keep_id")
     sp.set_defaults(func=cmd_merge_faces)
+    sp = sub.add_parser("greeting-cooldown", help="Set base face greeting cooldown in minutes")
+    sp.add_argument("minutes", type=float, help="Base cooldown in minutes (min 1)")
+    sp.set_defaults(func=cmd_greeting_cooldown)
+    sub.add_parser("greeting-settings", help="Show all greeting configuration values").set_defaults(func=cmd_greeting_settings)
     sub.add_parser("time", help="Announce the current time").set_defaults(func=cmd_time)
 
     # ── Consolidated servo subcommands ───────────────────────────────

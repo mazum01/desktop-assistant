@@ -1,20 +1,30 @@
-"""Tests for FaceService — greeting logic, cooldown, name assignment."""
+"""Tests for FaceService — greeting logic, cooldown, absence detection, phrases."""
 import time
 import pytest
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call
 
 from src.core.bus import MessageBus
-from src.services.face_service import FaceService
+from src.services.face_service import (
+    FaceService,
+    _jittered_cooldown,
+    _time_bucket,
+    _GREET_MORNING,
+    _GREET_AFTERNOON,
+    _GREET_EVENING,
+    _GREET_NIGHT,
+    _NEW_FACE_PHRASES,
+    _ABSENCE_DEBOUNCE_FRAMES,
+)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _make_face(face_id="f1", name="Guest 1", is_new=True, score=0.0):
+def _make_face(face_id="f1", name="Guest 1", is_new=True, score=0.0, confidence=0.9):
     return {
         "bbox": [0, 0, 100, 100],
         "centroid": [50, 50],
-        "confidence": 0.9,
+        "confidence": confidence,
         "landmarks": None,
         "face_id": face_id,
         "name": name,
@@ -35,6 +45,11 @@ def _mock_registry():
     return r
 
 
+def _wait():
+    import threading
+    threading.Event().wait(0.05)
+
+
 @pytest.fixture
 def bus():
     return MessageBus()
@@ -43,24 +58,68 @@ def bus():
 @pytest.fixture
 def svc(bus):
     reg = _mock_registry()
-    service = FaceService(bus=bus, registry=reg, greeting_cooldown_s=300)
+    service = FaceService(
+        bus=bus,
+        registry=reg,
+        greeting_cooldown_min=0.5,   # 30 s for test purposes
+        greeting_cooldown_jitter_pct=25.0,
+        min_absence_s=5.0,
+        confidence_threshold=0.5,
+    )
     service.start()
     yield service
     service.stop()
 
 
+# ── Unit: jitter helper ───────────────────────────────────────────────────────
+
+def test_jittered_cooldown_within_range():
+    base_min = 30.0
+    jitter = 25.0
+    low  = base_min * (1 - jitter / 100) * 60
+    high = base_min * (1 + jitter / 100) * 60
+    for _ in range(100):
+        val = _jittered_cooldown(base_min, jitter)
+        assert low <= val <= high, f"jitter out of range: {val}"
+
+
+def test_jittered_cooldown_zero_jitter():
+    val = _jittered_cooldown(30.0, 0.0)
+    assert val == pytest.approx(1800.0, abs=0.1)
+
+
+# ── Unit: time bucket ─────────────────────────────────────────────────────────
+
+def test_time_bucket_returns_valid_bucket():
+    bucket = _time_bucket()
+    assert bucket in ("morning", "afternoon", "evening", "night")
+
+
 # ── New face greeting ────────────────────────────────────────────────────────
 
 def test_new_face_triggers_av_say(bus, svc):
-    """A brand-new face should cause an av.say event."""
+    """A brand-new face should cause an av.say event (once per session)."""
     spoken = []
     bus.subscribe("av.say", lambda t, p: spoken.append(p.get("text", "")))
 
     bus.publish("perception.faces", _faces_payload(_make_face(is_new=True)))
-    import threading; threading.Event().wait(0.05)
+    _wait()
 
     assert any(spoken), "expected av.say but got nothing"
-    assert "Nice to meet you" in spoken[0] or "Desktop Assistant" in spoken[0]
+    assert any(phrase in spoken[0] for phrase in ["Desktop Assistant", "new face", "hello", "Hello"])
+
+
+def test_new_face_only_greeted_once_per_session(bus, svc):
+    """New face intro fires exactly once per session (session guard)."""
+    spoken = []
+    bus.subscribe("av.say", lambda t, p: spoken.append(p.get("text", "")))
+
+    for _ in range(3):
+        bus.publish("perception.faces", _faces_payload(_make_face(face_id="f1", is_new=True)))
+        _wait()
+
+    # Only one greeting for new face
+    assert len([s for s in spoken if any(p in s for p in ["Desktop Assistant", "new face"])]) == 1
 
 
 # ── Known face re-greet ──────────────────────────────────────────────────────
@@ -73,7 +132,7 @@ def test_known_face_greeted_when_needs_greeting(bus, svc):
     svc._registry.needs_greeting.return_value = True
     face = _make_face(face_id="f2", name="Alice", is_new=False, score=0.7)
     bus.publish("perception.faces", _faces_payload(face))
-    import threading; threading.Event().wait(0.05)
+    _wait()
 
     assert any("Alice" in s for s in spoken), f"expected 'Alice' in greeting, got: {spoken}"
 
@@ -86,9 +145,67 @@ def test_known_face_not_greeted_within_cooldown(bus, svc):
     svc._registry.needs_greeting.return_value = False
     face = _make_face(face_id="f3", name="Bob", is_new=False, score=0.7)
     bus.publish("perception.faces", _faces_payload(face))
-    import threading; threading.Event().wait(0.05)
+    _wait()
 
     assert not any("Bob" in s for s in spoken), "should not re-greet so soon"
+
+
+# ── Absence detection + debounce ─────────────────────────────────────────────
+
+def test_absence_debounce_requires_n_frames(bus, svc):
+    """mark_absent should not be called until ABSENCE_DEBOUNCE_FRAMES consecutive absent frames."""
+    face = _make_face(face_id="f5", name="Dave", is_new=False, score=0.8)
+
+    # First frame: face present
+    bus.publish("perception.faces", _faces_payload(face))
+    _wait()
+
+    reg = svc._registry
+    reg.mark_absent.reset_mock()
+
+    # Send (debounce - 1) empty frames — should NOT call mark_absent yet
+    for _ in range(_ABSENCE_DEBOUNCE_FRAMES - 1):
+        bus.publish("perception.faces", _faces_payload())
+        _wait()
+    assert not reg.mark_absent.called, "should not mark absent before debounce threshold"
+
+    # One more empty frame — now it should mark absent
+    bus.publish("perception.faces", _faces_payload())
+    _wait()
+    reg.mark_absent.assert_called_once()
+
+
+def test_absence_counter_resets_on_reappearance(bus, svc):
+    """If a face reappears before debounce threshold, counter resets."""
+    face = _make_face(face_id="f6", name="Eve", is_new=False, score=0.8)
+
+    bus.publish("perception.faces", _faces_payload(face))
+    _wait()
+    svc._registry.mark_absent.reset_mock()
+
+    # 1 empty frame (below threshold)
+    bus.publish("perception.faces", _faces_payload())
+    _wait()
+    # Face reappears
+    bus.publish("perception.faces", _faces_payload(face))
+    _wait()
+    # Counter should have reset, no absent mark
+    assert not svc._registry.mark_absent.called
+
+
+# ── Low-confidence filter ────────────────────────────────────────────────────
+
+def test_low_confidence_face_not_greeted(bus, svc):
+    """Faces below confidence_threshold should not trigger greetings."""
+    spoken = []
+    bus.subscribe("av.say", lambda t, p: spoken.append(p.get("text", "")))
+
+    svc._registry.needs_greeting.return_value = True
+    face = _make_face(face_id="f7", name="Alice", is_new=False, score=0.7, confidence=0.1)
+    bus.publish("perception.faces", _faces_payload(face))
+    _wait()
+
+    assert not any("Alice" in s for s in spoken), "low-confidence face should not be greeted"
 
 
 # ── Name assignment via face.meet ────────────────────────────────────────────
@@ -100,9 +217,42 @@ def test_meet_command_triggers_confirmation(bus, svc):
 
     svc._registry.get_current_face_id.return_value = "f4"
     bus.publish("face.meet", {"name": "Charlie"})
-    import threading; threading.Event().wait(0.05)
+    _wait()
 
     assert any("Charlie" in s for s in spoken), f"expected name in confirmation, got: {spoken}"
+
+
+# ── Varied phrases ───────────────────────────────────────────────────────────
+
+def test_varied_phrases_no_immediate_repeat(svc):
+    """_pick_phrase should not return the same phrase twice in a row."""
+    phrases = []
+    for _ in range(30):
+        p = svc._pick_phrase("Alice")
+        phrases.append(p)
+    for i in range(len(phrases) - 1):
+        assert phrases[i] != phrases[i + 1], f"repeated phrase at index {i}: {phrases[i]}"
+
+
+def test_pick_phrase_contains_name(svc):
+    """Every phrase returned by _pick_phrase should contain the person's name."""
+    for _ in range(20):
+        phrase = svc._pick_phrase("TestUser")
+        assert "TestUser" in phrase, f"Name not in phrase: {phrase}"
+
+
+def test_new_face_phrases_are_distinct():
+    """All new face intro phrases are unique."""
+    assert len(_NEW_FACE_PHRASES) == len(set(_NEW_FACE_PHRASES))
+
+
+# ── Greeting cooldown update via bus ─────────────────────────────────────────
+
+def test_set_greeting_cooldown_via_bus(bus, svc):
+    """Sending tracking.set_greeting_cooldown updates _cooldown_min."""
+    bus.publish("tracking.set_greeting_cooldown", {"cooldown_min": 60.0})
+    _wait()
+    assert svc._cooldown_min == pytest.approx(60.0)
 
 
 # ── No crash on missing face_id ──────────────────────────────────────────────
@@ -119,19 +269,6 @@ def test_faces_without_face_id_do_not_crash(bus, svc):
         "is_new": False,
         "match_score": 0.0,
     }
-    # Should not raise
     bus.publish("perception.faces", _faces_payload(face))
-    import threading; threading.Event().wait(0.05)
-
-
-# ── Varied phrases ───────────────────────────────────────────────────────────
-
-def test_varied_phrases_no_immediate_repeat(svc):
-    """_pick_phrase should not return the same phrase twice in a row."""
-    phrases = []
-    for _ in range(30):
-        p = svc._pick_phrase("Alice")
-        phrases.append(p)
-    for i in range(len(phrases) - 1):
-        assert phrases[i] != phrases[i + 1], f"repeated phrase at index {i}: {phrases[i]}"
+    _wait()
 

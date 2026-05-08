@@ -9,6 +9,7 @@ faces
     first_seen   REAL       Unix timestamp
     last_seen    REAL       Unix timestamp
     last_greeted REAL       Unix timestamp (0 = never)
+    last_absent  REAL       Unix timestamp when face last left the camera frame (0 = never)
     seen_count   INTEGER
 
 face_embeddings
@@ -77,6 +78,7 @@ class FaceRegistry:
                 first_seen   REAL NOT NULL,
                 last_seen    REAL NOT NULL,
                 last_greeted REAL NOT NULL DEFAULT 0,
+                last_absent  REAL NOT NULL DEFAULT 0,
                 seen_count   INTEGER NOT NULL DEFAULT 1
             );
             CREATE TABLE IF NOT EXISTS face_embeddings (
@@ -87,6 +89,12 @@ class FaceRegistry:
             );
             CREATE INDEX IF NOT EXISTS idx_emb_face ON face_embeddings(face_id);
         """)
+        # Migrate existing DBs that lack last_absent
+        cols = {row[1] for row in self._conn.execute("PRAGMA table_info(faces)")}
+        if "last_absent" not in cols:
+            self._conn.execute(
+                "ALTER TABLE faces ADD COLUMN last_absent REAL NOT NULL DEFAULT 0"
+            )
         self._conn.commit()
 
     # ── Public API ───────────────────────────────────────────────────────
@@ -131,8 +139,8 @@ class FaceRegistry:
         auto_name = self._next_guest_name()
 
         self._conn.execute(
-            "INSERT INTO faces (id, name, first_seen, last_seen, last_greeted, seen_count) "
-            "VALUES (?, ?, ?, ?, 0, 1)",
+            "INSERT INTO faces (id, name, first_seen, last_seen, last_greeted, last_absent, seen_count) "
+            "VALUES (?, ?, ?, ?, 0, 0, 1)",
             (face_id, auto_name, now, now),
         )
         self._conn.execute(
@@ -164,19 +172,49 @@ class FaceRegistry:
         )
         self._conn.commit()
 
-    def needs_greeting(self, face_id: str, cooldown_s: float = 300.0) -> bool:
-        """True if this person hasn't been greeted for at least *cooldown_s* seconds."""
+    def needs_greeting(
+        self,
+        face_id: str,
+        cooldown_s: float = 1800.0,
+        min_absence_s: float = 30.0,
+    ) -> bool:
+        """True if this person should be greeted now.
+
+        Conditions (all must be true):
+        1. Face was absent from frame since last greeting (last_absent > last_greeted).
+        2. Face has been gone for at least *min_absence_s* (debounce brief look-aways).
+        3. Cooldown has elapsed since last greeting.
+        """
         row = self._conn.execute(
-            "SELECT last_greeted FROM faces WHERE id = ?", (face_id,)
+            "SELECT last_greeted, last_absent FROM faces WHERE id = ?", (face_id,)
         ).fetchone()
         if row is None:
             return False
-        return (time.time() - row["last_greeted"]) >= cooldown_s
+        now = time.time()
+        last_greeted = row["last_greeted"]
+        last_absent  = row["last_absent"]
+
+        # Must have left frame after last greeting
+        if last_absent <= last_greeted:
+            return False
+        # Must have been absent long enough (not just a blink)
+        if (now - last_absent) < min_absence_s:
+            return False
+        # Cooldown since last greeting
+        return (now - last_greeted) >= cooldown_s
 
     def mark_greeted(self, face_id: str) -> None:
         """Record that this person was just greeted."""
         self._conn.execute(
             "UPDATE faces SET last_greeted = ? WHERE id = ?",
+            (time.time(), face_id),
+        )
+        self._conn.commit()
+
+    def mark_absent(self, face_id: str) -> None:
+        """Record that this face just disappeared from the camera frame."""
+        self._conn.execute(
+            "UPDATE faces SET last_absent = ? WHERE id = ?",
             (time.time(), face_id),
         )
         self._conn.commit()

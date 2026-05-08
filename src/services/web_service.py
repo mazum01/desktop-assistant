@@ -25,6 +25,8 @@ GET  /api/settings/face-tracking  Get face tracking enabled state
 PUT  /api/settings/face-tracking  Set face tracking  body: {"enabled": bool}
 GET  /api/settings/random-motion  Get random motion enabled state
 PUT  /api/settings/random-motion  Set random motion  body: {"enabled": bool}
+GET  /api/settings/greeting  Get greeting config
+PUT  /api/settings/greeting  Update greeting cooldown  body: {"cooldown_min": float}
 """
 
 import asyncio
@@ -70,6 +72,13 @@ class _MergeFacesBody(BaseModel):
 
 class _ServoBody(BaseModel):
     enabled: bool
+
+
+class _GreetingBody(BaseModel):
+    cooldown_min: float
+    jitter_pct: Optional[float] = None
+    min_absence_s: Optional[float] = None
+    confidence_threshold: Optional[float] = None
 
 
 class WebService:
@@ -463,7 +472,35 @@ class WebService:
                 self.bus.publish("tracking.set_random_motion", {"enabled": body.enabled})
             return {"ok": True, "enabled": body.enabled}
 
-        # ── REST: controls ────────────────────────────────────────────
+        # ── REST: greeting settings ───────────────────────────────────
+
+        @app.get("/api/settings/greeting")
+        async def api_get_greeting():
+            import yaml
+            cfg_path = Path(__file__).resolve().parent.parent.parent / "config" / "assistant.yaml"
+            cfg: dict = {}
+            try:
+                with open(cfg_path) as f:
+                    cfg = yaml.safe_load(f) or {}
+            except Exception:
+                pass
+            fr = cfg.get("face_recognition", {})
+            return {
+                "cooldown_min":         fr.get("greeting_cooldown_min", 30.0),
+                "jitter_pct":           fr.get("greeting_cooldown_jitter_pct", 25.0),
+                "min_absence_s":        fr.get("min_absence_s", 30.0),
+                "confidence_threshold": fr.get("confidence_threshold", 0.5),
+                "enabled":              fr.get("enabled", True),
+            }
+
+        @app.put("/api/settings/greeting")
+        async def api_put_greeting(body: _GreetingBody):
+            if self.bus:
+                self.bus.publish("tracking.set_greeting_cooldown", {
+                    "cooldown_min": body.cooldown_min
+                })
+            return {"ok": True, "cooldown_min": body.cooldown_min}
+
 
         @app.post("/api/say")
         async def api_say(body: _SayBody):
