@@ -250,7 +250,9 @@ function makeFaceRow(face) {
 
   const thumbHtml = face.has_thumb
     ? `<img src="/api/faces/${esc(face.id)}/thumb" class="face-thumb face-thumb-clickable"
-           alt="face" onclick="openLightbox('/api/faces/${esc(face.id)}/thumb', ${JSON.stringify(face.name || 'Unknown')})" />`
+           alt="face"
+           data-lightbox-src="/api/faces/${esc(face.id)}/thumb"
+           data-lightbox-label="${esc(face.name || 'Unknown')}" />`
     : `<div class="face-thumb face-thumb-placeholder">?</div>`;
 
   tr.innerHTML = `
@@ -268,6 +270,15 @@ function makeFaceRow(face) {
       <button class="btn btn-danger btn-sm" onclick="deleteFace('${esc(face.id)}')">Delete</button>
     </td>
   `;
+
+  // Wire click after innerHTML is parsed so the handler gets the real string values
+  const img = tr.querySelector(".face-thumb-clickable");
+  if (img) {
+    img.addEventListener("click", () =>
+      openLightbox(img.dataset.lightboxSrc, img.dataset.lightboxLabel)
+    );
+  }
+
   return tr;
 }
 
