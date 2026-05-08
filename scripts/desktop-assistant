@@ -190,13 +190,45 @@ def cmd_servo_disable(_args) -> int:
 
 
 def cmd_servo_status(_args) -> int:
-    r = _request({"cmd": "last", "topic": "motion.enabled_changed"})
+    from pathlib import Path
+    import yaml as _yaml
+
+    _base = Path(__file__).resolve().parents[1]
+    _cfg_path = _base / "config" / "assistant.yaml"
+    _rt_path  = _base / "config" / "runtime_state.yaml"
+
+    _cfg = {}
+    try:
+        _cfg = _yaml.safe_load(_cfg_path.read_text()) or {} if _cfg_path.exists() else {}
+    except Exception:
+        pass
+
+    _rt = {}
+    try:
+        _rt = _yaml.safe_load(_rt_path.read_text()) or {} if _rt_path.exists() else {}
+    except Exception:
+        pass
+
+    def _flag(section, key, default=True):
+        return _rt.get(section, {}).get(key, _cfg.get(section, {}).get(key, default))
+
+    servo_enabled    = _flag("servo",        "enabled")
+    face_tracking    = _flag("head_tracking","face_tracking_enabled")
+    random_motion    = _flag("head_tracking","random_motion_enabled")
+
     pos = _request({"cmd": "last", "topic": "motion.position"})
-    payload = r.get("payload") or {}
-    pos_payload = pos.get("payload") or {}
-    enabled = payload.get("enabled", True)
-    angle = pos_payload.get("angle", "?")
-    print(f"Servo: {'enabled' if enabled else 'disabled'}  |  angle: {angle}°")
+    angle = (pos.get("payload") or {}).get("angle", "?")
+
+    on  = "\033[32menabled\033[0m"
+    off = "\033[33mdisabled\033[0m"
+
+    print()
+    print("  Servo motion :")
+    print(f"    Servo enabled   : {on if servo_enabled  else off}")
+    print(f"    Face tracking   : {on if face_tracking  else off}")
+    print(f"    Random motion   : {on if random_motion  else off}")
+    print(f"    Current angle   : {angle}°")
+    print()
     return 0
 
 
@@ -215,9 +247,25 @@ def cmd_face_tracking_disable(_args) -> int:
 
 
 def cmd_face_tracking_status(_args) -> int:
-    r = _request({"cmd": "last", "topic": "tracking.face_tracking_changed"})
-    payload = r.get("payload") or {}
-    enabled = payload.get("enabled", True)
+    from pathlib import Path
+    import yaml as _yaml
+    _base = Path(__file__).resolve().parents[1]
+    _rt = {}
+    try:
+        p = _base / "config" / "runtime_state.yaml"
+        _rt = _yaml.safe_load(p.read_text()) or {} if p.exists() else {}
+    except Exception:
+        pass
+    _cfg = {}
+    try:
+        p2 = _base / "config" / "assistant.yaml"
+        _cfg = _yaml.safe_load(p2.read_text()) or {} if p2.exists() else {}
+    except Exception:
+        pass
+    enabled = _rt.get("head_tracking", {}).get(
+        "face_tracking_enabled",
+        _cfg.get("head_tracking", {}).get("face_tracking_enabled", True),
+    )
     print(f"Face tracking: {'enabled' if enabled else 'disabled'}")
     return 0
 
@@ -237,9 +285,25 @@ def cmd_random_motion_disable(_args) -> int:
 
 
 def cmd_random_motion_status(_args) -> int:
-    r = _request({"cmd": "last", "topic": "tracking.random_motion_changed"})
-    payload = r.get("payload") or {}
-    enabled = payload.get("enabled", True)
+    from pathlib import Path
+    import yaml as _yaml
+    _base = Path(__file__).resolve().parents[1]
+    _rt = {}
+    try:
+        p = _base / "config" / "runtime_state.yaml"
+        _rt = _yaml.safe_load(p.read_text()) or {} if p.exists() else {}
+    except Exception:
+        pass
+    _cfg = {}
+    try:
+        p2 = _base / "config" / "assistant.yaml"
+        _cfg = _yaml.safe_load(p2.read_text()) or {} if p2.exists() else {}
+    except Exception:
+        pass
+    enabled = _rt.get("head_tracking", {}).get(
+        "random_motion_enabled",
+        _cfg.get("head_tracking", {}).get("random_motion_enabled", True),
+    )
     print(f"Random motion: {'enabled' if enabled else 'disabled'}")
     return 0
 

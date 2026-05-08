@@ -1,0 +1,5 @@
+head_tracking:
+  face_tracking_enabled: false
+  random_motion_enabled: false
+servo:
+  enabled: true

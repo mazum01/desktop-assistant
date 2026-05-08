@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.4] - 2026-05-08
+### Fixed
+- **`da servo status`** now shows all three motion flags (servo enabled, face
+  tracking, random motion) plus current angle in a single formatted table.
+  Previously it only checked `motion.enabled_changed` (a bus topic that is
+  `None` until state changes), so the flag always defaulted to `true`.
+  All three status commands now read directly from `config/runtime_state.yaml`
+  (with `config/assistant.yaml` as fallback) — accurate on a fresh restart.
+- **`da face-tracking status`** and **`da random-motion status`** also fixed
+  to read from runtime state rather than the bus topic.
+
 ## [1.3.3] - 2026-05-08
 ### Fixed
 - **Servo motion options now persist across daemon restarts.**
