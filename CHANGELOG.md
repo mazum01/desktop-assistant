@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.5] - 2026-05-07
+### Added
+- Face bounding-box overlay on web dashboard camera feed: green rectangle + name label drawn on a canvas layer over the MJPEG stream, scaled correctly for `object-fit: contain` letterboxing.
+- WS snapshot now includes `bbox` per detected face and `frame_w`/`frame_h` from `vision.frame_ready.shape` so the browser can map coordinates accurately.
+
 ## [1.2.4] - 2026-05-07
 ### Fixed
 - **WebSocket telemetry (403 Forbidden)**: `from __future__ import annotations` in `web_service.py` caused all type annotations in the file to become lazy `ForwardRef` strings. FastAPI's dependency injection couldn't resolve `ws: WebSocket` to the actual class, so it treated the parameter as a query param and failed before accepting the connection, returning 403. Removed the future import to restore eager annotation evaluation.

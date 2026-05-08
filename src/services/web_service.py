@@ -213,7 +213,8 @@ class WebService:
             except Exception:
                 last[t] = None
 
-        # Strip per-face detail from perception.faces so the WS payload stays small.
+        # Strip per-face detail from perception.faces so the WS payload stays small,
+        # but keep bbox for the browser overlay.
         pf = last.get("perception.faces")
         if isinstance(pf, dict) and "faces" in pf:
             last["perception.faces"] = {
@@ -222,10 +223,17 @@ class WebService:
                 "ts":      pf.get("ts"),
                 "faces": [
                     {"name": f.get("name"), "face_id": f.get("face_id"),
-                     "centroid": f.get("centroid"), "confidence": f.get("confidence")}
+                     "bbox": f.get("bbox"), "centroid": f.get("centroid"),
+                     "confidence": f.get("confidence")}
                     for f in (pf.get("faces") or [])
                 ],
             }
+
+        # Include frame dimensions so the browser can scale bbox coords.
+        vfr = last.get("vision.frame_ready")
+        if isinstance(vfr, dict) and vfr.get("shape"):
+            shape = vfr["shape"]  # (H, W, C)
+            last["vision.frame_ready"] = {"frame_w": shape[1], "frame_h": shape[0]}
 
         from src.core.version import get_version
         return {

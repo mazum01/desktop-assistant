@@ -76,7 +76,7 @@ function updateDashboard(data) {
     el("stat-spoken").textContent = `"${snip}"`;
   }
 
-  // Face overlay
+  // Face overlay (badge) + canvas bounding boxes
   const pf = last["perception.faces"];
   if (pf != null) {
     const count = pf.count ?? 0;
@@ -87,6 +87,12 @@ function updateDashboard(data) {
     el("face-overlay").textContent = count === 0
       ? "0 faces"
       : `${count} face${count !== 1 ? "s" : ""}${names ? ": " + names : ""}`;
+
+    // Draw bounding boxes on the canvas overlay
+    const vfr = last["vision.frame_ready"];
+    const frameW = vfr?.frame_w || 1280;
+    const frameH = vfr?.frame_h || 720;
+    drawFaceBoxes(pf.faces || [], frameW, frameH);
   }
 
   // Services — we derive running state from service.started signals
@@ -96,6 +102,75 @@ function updateDashboard(data) {
   // Event log
   const events = data.events || [];
   renderEventLog(events);
+}
+
+// ── Face bounding box overlay ─────────────────────────────────────
+
+function drawFaceBoxes(faces, frameW, frameH) {
+  const canvas = el("face-canvas");
+  if (!canvas) return;
+  const img = el("camera-stream");
+  const rect = img.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+
+  // Match canvas logical resolution to its CSS-displayed size for crisp drawing.
+  canvas.width  = rect.width;
+  canvas.height = rect.height;
+
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (faces.length === 0) return;
+
+  // Compute the rendered image area inside the <img> (accounts for object-fit: contain).
+  const imgAspect    = frameW / frameH;
+  const boxAspect    = rect.width / rect.height;
+  let renderW, renderH, offsetX, offsetY;
+  if (imgAspect > boxAspect) {
+    renderW = rect.width;
+    renderH = rect.width / imgAspect;
+    offsetX = 0;
+    offsetY = (rect.height - renderH) / 2;
+  } else {
+    renderH = rect.height;
+    renderW = rect.height * imgAspect;
+    offsetX = (rect.width - renderW) / 2;
+    offsetY = 0;
+  }
+
+  const scaleX = renderW / frameW;
+  const scaleY = renderH / frameH;
+
+  for (const face of faces) {
+    const bbox = face.bbox;
+    if (!bbox || bbox.length < 4) continue;
+    const [x1, y1, x2, y2] = bbox;
+    const cx = offsetX + x1 * scaleX;
+    const cy = offsetY + y1 * scaleY;
+    const bw = (x2 - x1) * scaleX;
+    const bh = (y2 - y1) * scaleY;
+
+    // Box
+    ctx.strokeStyle = "#00ff88";
+    ctx.lineWidth   = 2;
+    ctx.strokeRect(cx, cy, bw, bh);
+
+    // Label background + text
+    const label = face.name || (face.face_id ? "unknown" : null);
+    if (label) {
+      const pad   = 4;
+      const fontSize = Math.max(11, Math.round(bw / 8));
+      ctx.font = `bold ${fontSize}px monospace`;
+      const tw = ctx.measureText(label).width;
+      const lh = fontSize + pad * 2;
+      const lx = cx;
+      const ly = cy > lh ? cy - lh : cy + bh;
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      ctx.fillRect(lx, ly, tw + pad * 2, lh);
+      ctx.fillStyle = "#00ff88";
+      ctx.fillText(label, lx + pad, ly + fontSize + pad - 2);
+    }
+  }
 }
 
 // ── Services polling ──────────────────────────────────────────────
