@@ -251,7 +251,7 @@ function makeFaceRow(face) {
   const thumbHtml = face.has_thumb
     ? `<img src="/api/faces/${esc(face.id)}/thumb" class="face-thumb face-thumb-clickable"
            alt="face"
-           data-lightbox-src="/api/faces/${esc(face.id)}/thumb"
+           data-lightbox-src="/api/faces/${esc(face.id)}/photo"
            data-lightbox-label="${esc(face.name || 'Unknown')}" />`
     : `<div class="face-thumb face-thumb-placeholder">?</div>`;
 

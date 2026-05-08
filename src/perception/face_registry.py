@@ -357,12 +357,17 @@ class FaceRegistry:
             "UPDATE faces SET seen_count = seen_count + ? WHERE id = ?",
             (absorb["seen_count"], keep_id),
         )
-        # Copy thumbnail if keep_id has none
+        # Copy thumbnail (and photo) if keep_id has none
         keep_thumb = self.thumbnail_path(keep_id)
         absorb_thumb = self.thumbnail_path(absorb_id)
         if keep_thumb is None and absorb_thumb is not None:
             import shutil
             shutil.copy2(str(absorb_thumb), str(self._thumbs_dir / f"{keep_id}.jpg"))
+        keep_photo = self.photo_path(keep_id)
+        absorb_photo = self.photo_path(absorb_id)
+        if keep_photo is None and absorb_photo is not None:
+            import shutil
+            shutil.copy2(str(absorb_photo), str(self._thumbs_dir / f"{keep_id}_photo.jpg"))
         self._conn.execute("DELETE FROM faces WHERE id = ?", (absorb_id,))
         self.delete_thumbnail(absorb_id)
         self._conn.commit()
@@ -445,16 +450,49 @@ class FaceRegistry:
         return True
 
     def save_thumbnail(self, face_id: str, crop: np.ndarray) -> bool:
-        """Save a face crop as a JPEG thumbnail.  Returns True on success."""
+        """Save a face crop as a JPEG thumbnail (64×64) and a full-size photo.
+
+        The thumbnail (``{face_id}.jpg``) is used for fast list display.
+        The photo (``{face_id}_photo.jpg``) is the best-quality crop saved at
+        up to 320×320, used for the lightbox full-size view.  Returns True on
+        success for the thumbnail write (photo failure is non-fatal).
+        """
         try:
             import cv2
             thumb_path = self._thumbs_dir / f"{face_id}.jpg"
             small = cv2.resize(crop, (64, 64), interpolation=cv2.INTER_AREA)
             cv2.imwrite(str(thumb_path), small, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            return True
         except Exception as exc:
             log.warning("save_thumbnail(%s): %s", face_id[:8], exc)
             return False
+
+        # Save full-size photo (up to 320×320, preserving aspect ratio)
+        try:
+            import cv2
+            photo_path = self._thumbs_dir / f"{face_id}_photo.jpg"
+            h, w = crop.shape[:2]
+            max_dim = 320
+            if h > max_dim or w > max_dim:
+                scale = max_dim / max(h, w)
+                photo = cv2.resize(
+                    crop,
+                    (int(w * scale), int(h * scale)),
+                    interpolation=cv2.INTER_AREA,
+                )
+            else:
+                photo = crop.copy()
+            # Only overwrite if this crop is larger than what we have
+            if not photo_path.exists() or max(h, w) >= max_dim:
+                cv2.imwrite(str(photo_path), photo, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        except Exception as exc:
+            log.debug("save_photo(%s): %s", face_id[:8], exc)
+
+        return True
+
+    def photo_path(self, face_id: str) -> Optional[Path]:
+        """Return the Path to the full-size photo JPEG, or None if it doesn't exist."""
+        p = self._thumbs_dir / f"{face_id}_photo.jpg"
+        return p if p.exists() else None
 
     def thumbnail_path(self, face_id: str) -> Optional[Path]:
         """Return the Path to the thumbnail JPEG, or None if it doesn't exist."""
@@ -462,12 +500,13 @@ class FaceRegistry:
         return p if p.exists() else None
 
     def delete_thumbnail(self, face_id: str) -> None:
-        """Remove the thumbnail for *face_id* if present."""
-        p = self._thumbs_dir / f"{face_id}.jpg"
-        try:
-            p.unlink(missing_ok=True)
-        except Exception:
-            pass
+        """Remove the thumbnail and full-size photo for *face_id* if present."""
+        for suffix in ("", "_photo"):
+            p = self._thumbs_dir / f"{face_id}{suffix}.jpg"
+            try:
+                p.unlink(missing_ok=True)
+            except Exception:
+                pass
 
     def close(self) -> None:
         try:

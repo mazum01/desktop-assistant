@@ -10,7 +10,8 @@ GET  /stream              MJPEG camera stream (from bus vision.frame_ready frame
 WS   /ws                  Live JSON status + event tail (pushes every ~1 s)
 GET  /api/status          One-shot status snapshot
 GET  /api/faces           List all known faces
-GET  /api/faces/{id}/thumb  Face thumbnail JPEG
+GET  /api/faces/{id}/thumb  Face thumbnail JPEG (64×64)
+GET  /api/faces/{id}/photo  Full-size face photo JPEG (falls back to thumb)
 PUT  /api/faces/{id}      Rename a face  body: {"name": "Alice"}
 DEL  /api/faces           Delete ALL faces
 DEL  /api/faces/guests    Delete only Guest-named faces
@@ -365,6 +366,17 @@ class WebService:
             path = self._registry.thumbnail_path(face_id)
             if path is None:
                 raise HTTPException(404, "thumbnail not found")
+            from fastapi.responses import FileResponse
+            return FileResponse(str(path), media_type="image/jpeg")
+
+        @app.get("/api/faces/{face_id}/photo")
+        async def api_face_photo(face_id: str):
+            """Full-size face photo. Falls back to thumbnail if no photo stored."""
+            if not self._registry:
+                raise HTTPException(503, "registry unavailable")
+            path = self._registry.photo_path(face_id) or self._registry.thumbnail_path(face_id)
+            if path is None:
+                raise HTTPException(404, "photo not found")
             from fastapi.responses import FileResponse
             return FileResponse(str(path), media_type="image/jpeg")
 

@@ -6,7 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.4.1] - 2026-05-08
+## [1.4.2] - 2026-05-08
+### Added
+- **Full-size face photo storage** — `FaceRegistry.save_thumbnail()` now also
+  saves a full-resolution crop (up to 320×320, JPEG quality 92) as
+  `{face_id}_photo.jpg` alongside the 64×64 thumbnail. Only written when the
+  incoming crop is large enough (≥ 320px on its longest side) or when no photo
+  exists yet, so the best crop is kept.
+- **`GET /api/faces/{id}/photo`** endpoint — serves the full-size photo.
+  Falls back to the 64×64 thumbnail if no photo has been captured yet.
+- Lightbox now loads `/photo` instead of `/thumb`, so the full-size view shows
+  a clear, high-quality image instead of an upscaled 64×64.
+- `delete_thumbnail()` now also removes the `_photo.jpg` file.
+- `merge_faces()` copies the full-size photo from the absorbed face when the
+  kept face has none.
+
 ### Added
 - **Face thumbnail lightbox** — clicking a face image in the Face Registry table
   opens a full-size overlay with the person's name label. Click the backdrop or
