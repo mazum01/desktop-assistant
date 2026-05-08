@@ -188,6 +188,41 @@ class FaceRegistry:
         ).fetchone()
         return dict(row) if row else None
 
+    def list_faces(self) -> list[dict]:
+        """Return all known faces sorted by last_seen descending."""
+        rows = self._conn.execute(
+            "SELECT id, name, first_seen, last_seen, last_greeted, seen_count "
+            "FROM faces ORDER BY last_seen DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_named_faces(self) -> list[dict]:
+        """Return only faces with a real name (not 'Guest N'), sorted by last_seen desc."""
+        rows = self._conn.execute(
+            "SELECT id, name, first_seen, last_seen, last_greeted, seen_count "
+            "FROM faces WHERE name NOT LIKE 'Guest %' ORDER BY last_seen DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_guest_faces(self) -> int:
+        """Delete all faces whose name starts with 'Guest '.
+
+        Removes their embeddings and thumbnails too.
+        Returns the number of faces deleted.
+        """
+        rows = self._conn.execute(
+            "SELECT id FROM faces WHERE name LIKE 'Guest %'"
+        ).fetchall()
+        count = len(rows)
+        for row in rows:
+            fid = row["id"]
+            self._conn.execute("DELETE FROM face_embeddings WHERE face_id = ?", (fid,))
+            self._conn.execute("DELETE FROM faces WHERE id = ?", (fid,))
+            self.delete_thumbnail(fid)
+        self._conn.commit()
+        log.info("Deleted %d guest face(s) from registry", count)
+        return count
+
     def find_match_by_crop(
         self, crop: np.ndarray, threshold: float = 0.60
     ) -> Optional[Tuple[str, str, float]]:
@@ -301,33 +336,6 @@ class FaceRegistry:
             "FROM faces ORDER BY last_seen DESC"
         ).fetchall()
         return [dict(r) for r in rows]
-
-    def list_named_faces(self) -> list[dict]:
-        """Return only faces with a real name (not 'Guest N'), sorted by last_seen desc."""
-        rows = self._conn.execute(
-            "SELECT id, name, first_seen, last_seen, last_greeted, seen_count "
-            "FROM faces WHERE name NOT LIKE 'Guest %' ORDER BY last_seen DESC"
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-    def delete_guest_faces(self) -> int:
-        """Delete all faces whose name starts with 'Guest '.
-
-        Removes their embeddings and thumbnails too.
-        Returns the number of faces deleted.
-        """
-        rows = self._conn.execute(
-            "SELECT id FROM faces WHERE name LIKE 'Guest %'"
-        ).fetchall()
-        count = len(rows)
-        for row in rows:
-            fid = row["id"]
-            self._conn.execute("DELETE FROM face_embeddings WHERE face_id = ?", (fid,))
-            self._conn.execute("DELETE FROM faces WHERE id = ?", (fid,))
-            self.delete_thumbnail(fid)
-        self._conn.commit()
-        log.info("Deleted %d guest face(s) from registry", count)
-        return count
 
     def delete_all_faces(self) -> int:
         """Remove every face and all embeddings. Returns count of faces deleted."""

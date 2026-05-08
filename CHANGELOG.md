@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.9] - 2026-05-08
+### Fixed
+- `FaceRegistry.list_faces()`, `list_named_faces()`, and `delete_guest_faces()` were accidentally omitted from the class when `find_match_by_crop()` was inserted in v1.2.8, causing `AttributeError: 'FaceRegistry' object has no attribute 'list_faces'` on the `/api/faces` endpoint. Also removed duplicate method definitions that were left behind.
+
 ## [1.2.8] - 2026-05-08
 ### Added
 - **Thumbnail-based face matching** (`FaceRegistry.find_match_by_crop()`): HSV histogram correlation against stored face thumbnails. Used in sim mode (when ArcFace is unavailable) before registering a new Guest, giving real visual matching with zero extra dependencies.
