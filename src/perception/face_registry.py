@@ -188,7 +188,113 @@ class FaceRegistry:
         ).fetchone()
         return dict(row) if row else None
 
-    def list_faces(self) -> list[dict]:
+    def find_match_by_crop(
+        self, crop: np.ndarray, threshold: float = 0.60
+    ) -> Optional[Tuple[str, str, float]]:
+        """Find the best-matching face by comparing *crop* against stored thumbnails.
+
+        Uses HSV histogram correlation — fast, zero extra deps, works in sim mode
+        when embedding vectors are all-zero.
+
+        Returns ``(face_id, name, score)`` or ``None`` if no match above *threshold*.
+        Correlation ranges −1 … 1; values ≥ 0.60 are reliably the same person
+        under normal indoor lighting.
+        """
+        try:
+            import cv2 as _cv2
+            if crop is None or crop.size == 0:
+                return None
+            crop_small = _cv2.resize(crop, (64, 64))
+            crop_hsv = _cv2.cvtColor(crop_small, _cv2.COLOR_BGR2HSV)
+            crop_hist = _cv2.calcHist(
+                [crop_hsv], [0, 1], None, [50, 60], [0, 180, 0, 256]
+            )
+            _cv2.normalize(crop_hist, crop_hist, 0, 1, _cv2.NORM_MINMAX)
+        except Exception as exc:
+            log.debug("find_match_by_crop: prep failed: %s", exc)
+            return None
+
+        rows = self._conn.execute(
+            "SELECT id, name FROM faces ORDER BY last_seen DESC"
+        ).fetchall()
+
+        best_score = -1.0
+        best_id: Optional[str] = None
+        best_name: Optional[str] = None
+
+        for row in rows:
+            thumb_path = self.thumbnail_path(row["id"])
+            if thumb_path is None:
+                continue
+            try:
+                import cv2 as _cv2
+                stored = _cv2.imread(str(thumb_path))
+                if stored is None:
+                    continue
+                stored_hsv = _cv2.cvtColor(stored, _cv2.COLOR_BGR2HSV)
+                stored_hist = _cv2.calcHist(
+                    [stored_hsv], [0, 1], None, [50, 60], [0, 180, 0, 256]
+                )
+                _cv2.normalize(stored_hist, stored_hist, 0, 1, _cv2.NORM_MINMAX)
+                score = float(_cv2.compareHist(
+                    crop_hist, stored_hist, _cv2.HISTCMP_CORREL
+                ))
+                if score > best_score:
+                    best_score = score
+                    best_id = row["id"]
+                    best_name = row["name"]
+            except Exception:
+                continue
+
+        if best_score >= threshold and best_id is not None:
+            log.debug(
+                "find_match_by_crop: matched %s (%r) score=%.3f",
+                best_id[:8], best_name, best_score,
+            )
+            return best_id, best_name, best_score
+        return None
+
+    def merge_faces(self, keep_id: str, absorb_id: str) -> bool:
+        """Merge *absorb_id* into *keep_id*.
+
+        - Reassigns all embeddings from *absorb_id* to *keep_id*.
+        - Accumulates *seen_count*.
+        - Back-dates *first_seen* if *absorb_id* was seen earlier.
+        - Copies *absorb_id*'s thumbnail to *keep_id* if *keep_id* has none.
+        - Deletes *absorb_id* entirely.
+
+        Returns True on success, False if either id is not found.
+        """
+        keep = self.get_face(keep_id)
+        absorb = self.get_face(absorb_id)
+        if not keep or not absorb:
+            log.warning("merge_faces: id not found (keep=%s absorb=%s)", keep_id, absorb_id)
+            return False
+
+        self._conn.execute(
+            "UPDATE face_embeddings SET face_id = ? WHERE face_id = ?",
+            (keep_id, absorb_id),
+        )
+        if absorb["first_seen"] < keep["first_seen"]:
+            self._conn.execute(
+                "UPDATE faces SET first_seen = ? WHERE id = ?",
+                (absorb["first_seen"], keep_id),
+            )
+        self._conn.execute(
+            "UPDATE faces SET seen_count = seen_count + ? WHERE id = ?",
+            (absorb["seen_count"], keep_id),
+        )
+        # Copy thumbnail if keep_id has none
+        keep_thumb = self.thumbnail_path(keep_id)
+        absorb_thumb = self.thumbnail_path(absorb_id)
+        if keep_thumb is None and absorb_thumb is not None:
+            import shutil
+            shutil.copy2(str(absorb_thumb), str(self._thumbs_dir / f"{keep_id}.jpg"))
+        self._conn.execute("DELETE FROM faces WHERE id = ?", (absorb_id,))
+        self.delete_thumbnail(absorb_id)
+        self._conn.commit()
+        log.info("Merged face %s into %s (%r)", absorb_id[:8], keep_id[:8], keep["name"])
+        return True
         """Return all known faces sorted by last_seen descending."""
         rows = self._conn.execute(
             "SELECT id, name, first_seen, last_seen, last_greeted, seen_count "

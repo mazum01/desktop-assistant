@@ -14,6 +14,7 @@ GET  /api/faces/{id}/thumb  Face thumbnail JPEG
 PUT  /api/faces/{id}      Rename a face  body: {"name": "Alice"}
 DEL  /api/faces           Delete ALL faces
 DEL  /api/faces/guests    Delete only Guest-named faces
+POST /api/faces/merge     Merge two faces  body: {"keep_id": "...", "absorb_id": "..."}
 DEL  /api/faces/{id}      Delete a face and all its embeddings
 POST /api/say             Speak text   body: {"text": "hello"}
 POST /api/pan             Pan servo    body: {"angle": 180.0}
@@ -56,6 +57,11 @@ class _SayBody(BaseModel):
 
 class _PanBody(BaseModel):
     angle: float
+
+
+class _MergeFacesBody(BaseModel):
+    keep_id: str
+    absorb_id: str
 
 
 class _ServoBody(BaseModel):
@@ -346,6 +352,17 @@ class WebService:
             if self.bus:
                 self.bus.publish("face.guests_cleared", {"count": count})
             return {"ok": True, "deleted": count}
+
+        @app.post("/api/faces/merge")
+        async def api_merge_faces(body: _MergeFacesBody):
+            if not self._registry:
+                raise HTTPException(503, "registry unavailable")
+            ok = self._registry.merge_faces(body.keep_id, body.absorb_id)
+            if not ok:
+                raise HTTPException(404, "one or both face IDs not found")
+            if self.bus:
+                self.bus.publish("face.merged", {"keep_id": body.keep_id, "absorb_id": body.absorb_id})
+            return {"ok": True}
 
         # ── Quiet-hours settings ───────────────────────────────────────
 

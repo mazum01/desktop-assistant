@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.8] - 2026-05-08
+### Added
+- **Thumbnail-based face matching** (`FaceRegistry.find_match_by_crop()`): HSV histogram correlation against stored face thumbnails. Used in sim mode (when ArcFace is unavailable) before registering a new Guest, giving real visual matching with zero extra dependencies.
+- `FaceRegistry.merge_faces(keep_id, absorb_id)`: merges all embeddings, seen_count, and thumbnail from one identity into another.
+- `PerceptionService._identify_or_register()`: shared helper that tries (1) crop similarity, (2) single-named-person fallback, (3) new Guest — keeping both code paths DRY.
+- `da list-faces`: lists all registry entries with IDs, names, seen count, and last-seen age.
+- `da merge-faces <keep_id> <absorb_id>`: CLI command to merge duplicate identities.
+- `POST /api/faces/merge` web API endpoint.
+- Web UI: checkbox column on each face row + "⛓ Merge Selected" button (enabled when exactly 2 faces are checked).
+
+### Fixed
+- Position cache miss no longer immediately spawns a Guest when thumbnails of known faces exist.
+
 ## [1.2.7] - 2026-05-08
 ### Fixed
 - `da help` now lists all current commands accurately: removed stale `pan` and `move-servo` top-level entries, added `servo` with full sub-command descriptions.

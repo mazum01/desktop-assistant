@@ -292,6 +292,53 @@ def cmd_forget_guests(_args) -> int:
     return 0
 
 
+def cmd_list_faces(_args) -> int:
+    from src.perception.face_registry import FaceRegistry
+    reg = FaceRegistry()
+    faces = reg.list_faces()
+    reg.close()
+    if not faces:
+        print("No faces in registry.")
+        return 0
+    col = max(len(f["name"]) for f in faces) + 2
+    print(f"\n{'Name':<{col}}  {'ID (first 8)'}  {'Seen':>5}  {'Last Seen'}")
+    print("─" * (col + 40))
+    import time
+    for f in faces:
+        age = int(time.time() - f["last_seen"])
+        if age < 60:
+            age_str = f"{age}s ago"
+        elif age < 3600:
+            age_str = f"{age//60}m ago"
+        else:
+            age_str = f"{age//3600}h ago"
+        print(f"  {f['name']:<{col}}  {f['id'][:8]}…  {f['seen_count']:>5}  {age_str}")
+    print()
+    return 0
+
+
+def cmd_merge_faces(args) -> int:
+    from src.perception.face_registry import FaceRegistry
+    reg = FaceRegistry()
+    keep = reg.get_face(args.keep_id)
+    absorb = reg.get_face(args.absorb_id)
+    if not keep:
+        print(f"Error: keep_id {args.keep_id!r} not found.")
+        reg.close()
+        return 1
+    if not absorb:
+        print(f"Error: absorb_id {args.absorb_id!r} not found.")
+        reg.close()
+        return 1
+    ok = reg.merge_faces(args.keep_id, args.absorb_id)
+    reg.close()
+    if ok:
+        print(f"Merged {absorb['name']!r} ({args.absorb_id[:8]}…) into {keep['name']!r} ({args.keep_id[:8]}…).")
+    else:
+        print("Merge failed.")
+    return 0 if ok else 1
+
+
 def cmd_help(args) -> int:
     """Print a formatted command reference, or detailed help for one command."""
     commands = {
@@ -322,6 +369,10 @@ def cmd_help(args) -> int:
                          "               Usage: publish <topic> [--payload '{...}']",
         "forget-faces":  "Delete ALL known faces from the registry permanently.",
         "forget-guests": "Delete only Guest-named faces, keeping named identities.",
+        "list-faces":    "List all faces in the registry with IDs, names, and last-seen times.",
+        "merge-faces":   "Merge two face identities into one (keeps embeddings of both).\n"
+                         "               Usage: merge-faces <keep_id> <absorb_id>\n"
+                         "               Run 'list-faces' first to get the IDs.",
         "help":          "Show this command reference, or help for a specific command.\n"
                          "               Usage: help [command]",
     }
@@ -612,6 +663,11 @@ def main() -> int:
     sub.add_parser("joke", help="Tell a random dad joke").set_defaults(func=cmd_joke)
     sub.add_parser("forget-faces", help="Delete ALL faces from the registry").set_defaults(func=cmd_forget_faces)
     sub.add_parser("forget-guests", help="Delete only Guest-named faces, keeping named identities").set_defaults(func=cmd_forget_guests)
+    sub.add_parser("list-faces", help="List all faces with IDs and last-seen times").set_defaults(func=cmd_list_faces)
+    sp = sub.add_parser("merge-faces", help="Merge two face identities into one")
+    sp.add_argument("keep_id", help="Face ID to keep (use list-faces to get IDs)")
+    sp.add_argument("absorb_id", help="Face ID to absorb into keep_id")
+    sp.set_defaults(func=cmd_merge_faces)
     sub.add_parser("time", help="Announce the current time").set_defaults(func=cmd_time)
 
     # ── Consolidated servo subcommands ───────────────────────────────

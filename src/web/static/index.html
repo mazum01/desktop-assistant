@@ -72,6 +72,7 @@
         <table id="face-table">
           <thead>
             <tr>
+              <th></th>
               <th>Name</th>
               <th>First Seen</th>
               <th>Last Seen</th>
@@ -80,10 +81,14 @@
             </tr>
           </thead>
           <tbody id="face-tbody">
-            <tr><td colspan="5" class="empty-row">Loading…</td></tr>
+            <tr><td colspan="6" class="empty-row">Loading…</td></tr>
           </tbody>
         </table>
-        <button class="btn btn-secondary" onclick="loadFaces()">↺ Refresh</button>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+          <button class="btn btn-secondary" onclick="loadFaces()">↺ Refresh</button>
+          <button class="btn btn-primary btn-sm" id="merge-btn" onclick="mergeFaces()" disabled title="Select exactly two faces to merge">⛓ Merge Selected</button>
+          <span id="merge-hint" style="font-size:12px;color:var(--muted)">Select 2 faces to merge</span>
+        </div>
       </div>
     </section>
 

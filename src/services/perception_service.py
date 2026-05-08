@@ -43,6 +43,9 @@ from src.core.service import Service
 
 log = logging.getLogger(__name__)
 
+import numpy as _np
+_ZERO_EMB = _np.zeros(512, dtype=_np.float32)  # placeholder when embedder is unavailable
+
 
 @dataclass
 class PerceptionConfig:
@@ -233,39 +236,15 @@ class PerceptionService(Service):
                                     entry["is_new"] = False
                                     entry["match_score"] = 0.0
                                 else:
-                                    # No embedding match and no position cache hit.
-                                    # If there is exactly one named (non-guest) person in the
-                                    # registry, assume this is them rather than creating a
-                                    # duplicate Guest entry.
-                                    named = self._registry.list_named_faces()
-                                    if len(named) == 1:
-                                        face_id = named[0]["id"]
-                                        name = named[0]["name"]
-                                        self._registry.update_seen(face_id)
-                                        self._registry.add_embedding_if_needed(face_id, emb)
-                                        entry["face_id"] = face_id
-                                        entry["name"] = name
-                                        entry["is_new"] = False
-                                        entry["match_score"] = 0.0
-                                        self._update_pos_cache(face_id, name, f.centroid[0], f.centroid[1])
-                                    else:
-                                        face_id, auto_name = self._registry.register(emb)
-                                        try:
-                                            x1, y1, x2, y2 = (int(v) for v in f.bbox)
-                                            crop = frame[max(0, y1):y2, max(0, x1):x2]
-                                            if crop.size > 0:
-                                                self._registry.save_thumbnail(face_id, crop)
-                                        except Exception:
-                                            pass
-                                        entry["face_id"] = face_id
-                                        entry["name"] = auto_name
-                                        entry["is_new"] = True
-                                        entry["match_score"] = 0.0
-                                        self._update_pos_cache(face_id, auto_name, f.centroid[0], f.centroid[1])
+                                    face_id, name = self._identify_or_register(
+                                        frame, f, emb
+                                    )
+                                    entry["face_id"] = face_id
+                                    entry["name"] = name
+                                    entry["is_new"] = (name.startswith("Guest "))
+                                    entry["match_score"] = 0.0
                         else:
-                            # ── Sim mode (ArcFace unavailable) — position-cache ID ──
-                            # Re-identify by position; register on first encounter so the
-                            # face appears in the registry and can be named by the user.
+                            # ── Sim mode (ArcFace unavailable) — position-cache + crop match ──
                             cached = self._find_cached_face(f.centroid[0], f.centroid[1])
                             if cached:
                                 face_id, name = cached
@@ -275,33 +254,13 @@ class PerceptionService(Service):
                                 entry["is_new"] = False
                                 entry["match_score"] = 0.0
                             else:
-                                # No position cache hit. If there is exactly one named
-                                # (non-guest) person in the registry, assume this is them
-                                # rather than spawning yet another Guest entry.
-                                named = self._registry.list_named_faces()
-                                if len(named) == 1:
-                                    face_id = named[0]["id"]
-                                    name = named[0]["name"]
-                                    self._registry.update_seen(face_id)
-                                    entry["face_id"] = face_id
-                                    entry["name"] = name
-                                    entry["is_new"] = False
-                                    entry["match_score"] = 0.0
-                                    self._update_pos_cache(face_id, name, f.centroid[0], f.centroid[1])
-                                else:
-                                    face_id, auto_name = self._registry.register(emb)
-                                    try:
-                                        x1, y1, x2, y2 = (int(v) for v in f.bbox)
-                                        crop = frame[max(0, y1):y2, max(0, x1):x2]
-                                        if crop.size > 0:
-                                            self._registry.save_thumbnail(face_id, crop)
-                                    except Exception:
-                                        pass
-                                    entry["face_id"] = face_id
-                                    entry["name"] = auto_name
-                                    entry["is_new"] = True
-                                    entry["match_score"] = 0.0
-                                    self._update_pos_cache(face_id, auto_name, f.centroid[0], f.centroid[1])
+                                face_id, name = self._identify_or_register(
+                                    frame, f, emb
+                                )
+                                entry["face_id"] = face_id
+                                entry["name"] = name
+                                entry["is_new"] = (name.startswith("Guest "))
+                                entry["match_score"] = 0.0
                     except Exception:
                         log.exception("face recognition failed for one face")
 
@@ -348,3 +307,59 @@ class PerceptionService(Service):
             except Exception:
                 log.warning("Could not get frame from VisionService")
         return None
+
+    def _extract_crop(self, frame, bbox) -> Optional["np.ndarray"]:
+        """Extract and return the face crop from *frame* given *bbox*."""
+        try:
+            x1, y1, x2, y2 = (int(v) for v in bbox)
+            crop = frame[max(0, y1):max(0, y2), max(0, x1):max(0, x2)]
+            return crop if crop.size > 0 else None
+        except Exception:
+            return None
+
+    def _identify_or_register(self, frame, detection, emb) -> tuple:
+        """Identify a face when position cache and embedding matching both missed.
+
+        Priority:
+        1. Crop-based histogram similarity against stored thumbnails.
+        2. If exactly one named (non-guest) person is registered, assume it's them.
+        3. Register as a new Guest.
+
+        Returns (face_id, name).
+        """
+        crop = self._extract_crop(frame, detection.bbox)
+
+        # 1. Crop similarity
+        if crop is not None:
+            crop_match = self._registry.find_match_by_crop(crop)
+            if crop_match:
+                face_id, name, score = crop_match
+                self._registry.update_seen(face_id)
+                if emb is not None and emb.any():
+                    self._registry.add_embedding_if_needed(face_id, emb)
+                # Refresh thumbnail with a cleaner crop if needed
+                if self._registry.thumbnail_path(face_id) is None:
+                    self._registry.save_thumbnail(face_id, crop)
+                self._update_pos_cache(face_id, name, detection.centroid[0], detection.centroid[1])
+                log.debug("Crop-matched %s as %r (score=%.3f)", face_id[:8], name, score)
+                return face_id, name
+
+        # 2. Single named person fallback
+        named = self._registry.list_named_faces()
+        if len(named) == 1:
+            face_id = named[0]["id"]
+            name = named[0]["name"]
+            self._registry.update_seen(face_id)
+            if emb is not None and emb.any():
+                self._registry.add_embedding_if_needed(face_id, emb)
+            if crop is not None and self._registry.thumbnail_path(face_id) is None:
+                self._registry.save_thumbnail(face_id, crop)
+            self._update_pos_cache(face_id, name, detection.centroid[0], detection.centroid[1])
+            return face_id, name
+
+        # 3. Register as new Guest
+        face_id, auto_name = self._registry.register(emb if emb is not None else _ZERO_EMB)
+        if crop is not None:
+            self._registry.save_thumbnail(face_id, crop)
+        self._update_pos_cache(face_id, auto_name, detection.centroid[0], detection.centroid[1])
+        return face_id, auto_name

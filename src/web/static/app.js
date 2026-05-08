@@ -248,6 +248,7 @@ async function loadFaces() {
 
 function makeFaceRow(face) {
   const tr = document.createElement("tr");
+  tr.dataset.faceId = face.id;
   const firstSeen = face.first_seen ? fmtTime(face.first_seen) : "—";
   const lastSeen  = face.last_seen  ? fmtAge(face.last_seen)   : "—";
   const count     = face.seen_count ?? "—";
@@ -257,6 +258,7 @@ function makeFaceRow(face) {
     : `<div class="face-thumb face-thumb-placeholder">?</div>`;
 
   tr.innerHTML = `
+    <td><input type="checkbox" class="face-merge-cb" onchange="updateMergeBtn()" title="Select to merge" /></td>
     <td class="name-cell">
       ${thumbHtml}
       <input class="name-input" type="text" value="${esc(face.name || "")}"
@@ -271,6 +273,49 @@ function makeFaceRow(face) {
     </td>
   `;
   return tr;
+}
+
+function updateMergeBtn() {
+  const checked = [...document.querySelectorAll(".face-merge-cb:checked")];
+  const btn = el("merge-btn");
+  const hint = el("merge-hint");
+  if (!btn) return;
+  btn.disabled = (checked.length !== 2);
+  hint.textContent = checked.length === 0 ? "Select 2 faces to merge"
+    : checked.length === 1 ? "Select 1 more face"
+    : checked.length === 2 ? "Ready to merge"
+    : `${checked.length} selected (need exactly 2)`;
+}
+
+async function mergeFaces() {
+  const rows = [...document.querySelectorAll("#face-tbody tr[data-face-id]")];
+  const checked = rows.filter(r => r.querySelector(".face-merge-cb")?.checked);
+  if (checked.length !== 2) return;
+  const ids = checked.map(r => r.dataset.faceId);
+  const names = ids.map(id => {
+    const inp = document.getElementById(`name-${id}`);
+    return inp ? inp.value : id.slice(0, 8);
+  });
+  const choice = confirm(
+    `Merge two faces into one.\n\n` +
+    `Keep: "${names[0]}" (${ids[0].slice(0,8)}…)\n` +
+    `Absorb: "${names[1]}" (${ids[1].slice(0,8)}…)\n\n` +
+    `The second entry will be deleted. OK?`
+  );
+  if (!choice) return;
+  try {
+    const r = await fetch("/api/faces/merge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keep_id: ids[0], absorb_id: ids[1] }),
+    });
+    if (r.ok) {
+      loadFaces();
+    } else {
+      const d = await r.json().catch(() => ({}));
+      alert("Merge failed: " + (d.detail || r.status));
+    }
+  } catch (e) { alert("Merge error: " + e); }
 }
 
 async function saveName(faceId) {
