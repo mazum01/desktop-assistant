@@ -283,6 +283,15 @@ def cmd_forget_faces(_args) -> int:
     return 0
 
 
+def cmd_forget_guests(_args) -> int:
+    from src.perception.face_registry import FaceRegistry
+    reg = FaceRegistry()
+    count = reg.delete_guest_faces()
+    reg.close()
+    print(f"Deleted {count} guest face(s) from the registry.")
+    return 0
+
+
 def cmd_help(args) -> int:
     """Print a formatted command reference, or detailed help for one command."""
     commands = {
@@ -311,6 +320,7 @@ def cmd_help(args) -> int:
         "publish":     "Publish a raw JSON event onto the internal bus (advanced).\n"
                        "               Usage: publish <topic> [--payload '{...}']",
         "forget-faces": "Delete ALL known faces from the registry permanently.",
+        "forget-guests": "Delete only Guest-named faces, keeping named identities.",
         "help":        "Show this command reference, or help for a specific command.\n"
                        "               Usage: help [command]",
     }
@@ -609,6 +619,7 @@ def main() -> int:
 
     sub.add_parser("joke", help="Tell a random dad joke").set_defaults(func=cmd_joke)
     sub.add_parser("forget-faces", help="Delete ALL faces from the registry").set_defaults(func=cmd_forget_faces)
+    sub.add_parser("forget-guests", help="Delete only Guest-named faces, keeping named identities").set_defaults(func=cmd_forget_guests)
     sub.add_parser("time", help="Announce the current time").set_defaults(func=cmd_time)
 
     # ── Consolidated servo subcommands ───────────────────────────────

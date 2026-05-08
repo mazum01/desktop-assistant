@@ -12,6 +12,8 @@ GET  /api/status          One-shot status snapshot
 GET  /api/faces           List all known faces
 GET  /api/faces/{id}/thumb  Face thumbnail JPEG
 PUT  /api/faces/{id}      Rename a face  body: {"name": "Alice"}
+DEL  /api/faces           Delete ALL faces
+DEL  /api/faces/guests    Delete only Guest-named faces
 DEL  /api/faces/{id}      Delete a face and all its embeddings
 POST /api/say             Speak text   body: {"text": "hello"}
 POST /api/pan             Pan servo    body: {"angle": 180.0}
@@ -334,6 +336,15 @@ class WebService:
             count = self._registry.delete_all_faces()
             if self.bus:
                 self.bus.publish("face.registry_cleared", {"count": count})
+            return {"ok": True, "deleted": count}
+
+        @app.delete("/api/faces/guests")
+        async def api_delete_guest_faces():
+            if not self._registry:
+                raise HTTPException(503, "registry unavailable")
+            count = self._registry.delete_guest_faces()
+            if self.bus:
+                self.bus.publish("face.guests_cleared", {"count": count})
             return {"ok": True, "deleted": count}
 
         # ── Quiet-hours settings ───────────────────────────────────────

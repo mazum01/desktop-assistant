@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.6] - 2026-05-08
+### Fixed
+- Face registry duplicates: in sim mode (ArcFace unavailable), if exactly one named person exists and the position cache misses, the detection is now matched back to that named person instead of creating a new "Guest N" entry. Applies to both the hardware-embed fallback path and the full sim path.
+- Position cache TTL extended from 8 s to 300 s so brief absences no longer cause re-registration.
+
+### Added
+- `FaceRegistry.list_named_faces()` — returns only non-Guest identities.
+- `FaceRegistry.delete_guest_faces()` — removes all "Guest N" entries and their embeddings/thumbnails.
+- `DELETE /api/faces/guests` web API endpoint.
+- `da forget-guests` CLI command to clean up Guest entries while keeping named identities.
+- "👤 Remove Guests" button in the Face Registry section of the web UI.
+
 ## [1.2.5] - 2026-05-07
 ### Added
 - Face bounding-box overlay on web dashboard camera feed: green rectangle + name label drawn on a canvas layer over the MJPEG stream, scaled correctly for `object-fit: contain` letterboxing.

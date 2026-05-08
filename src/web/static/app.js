@@ -356,6 +356,22 @@ async function deleteAllFaces() {
   } catch (e) { /* ignore */ }
 }
 
+async function deleteGuestFaces() {
+  if (!confirm("Remove all unnamed Guest entries? Named identities will be kept.")) return;
+  try {
+    const r = await fetch("/api/faces/guests", { method: "DELETE" });
+    if (r.ok) {
+      const data = await r.json();
+      loadFaces();
+      const log = el("event-log");
+      const row = document.createElement("div");
+      row.className = "event-row";
+      row.innerHTML = `<span class="event-ts">${new Date().toLocaleTimeString()}</span><span class="event-topic" style="color:var(--yellow,#f5c542)">face.guests_cleared</span><span class="event-body">Removed ${data.deleted} guest(s)</span>`;
+      log.prepend(row);
+    }
+  } catch (e) { /* ignore */ }
+}
+
 // ── Servo enable/disable ──────────────────────────────────────────
 
 async function loadServoEnabled() {
