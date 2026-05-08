@@ -6,7 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.4.0] - 2026-05-08
+## [1.4.1] - 2026-05-08
+### Added
+- **Face thumbnail lightbox** — clicking a face image in the Face Registry table
+  opens a full-size overlay with the person's name label. Click the backdrop or
+  press Escape to dismiss. Thumbnail gains a zoom-cursor and accent-ring hover
+  effect to indicate it is clickable.
+
 ### Added
 - **Face greeting behavior overhaul** — social-timing-aware re-greeting with
   left-frame requirement. A known person is only greeted after they actually

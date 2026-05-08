@@ -209,5 +209,14 @@
   </main>
 
   <script src="/static/app.js"></script>
+
+  <!-- ── Lightbox overlay ──────────────────────────────────────── -->
+  <div id="lightbox" class="lightbox" onclick="closeLightbox()">
+    <div class="lightbox-inner" onclick="event.stopPropagation()">
+      <button class="lightbox-close" onclick="closeLightbox()" aria-label="Close">✕</button>
+      <img id="lightbox-img" src="" alt="face full size" class="lightbox-img" />
+      <p id="lightbox-label" class="lightbox-label"></p>
+    </div>
+  </div>
 </body>
 </html>

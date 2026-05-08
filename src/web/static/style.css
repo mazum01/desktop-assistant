@@ -186,6 +186,14 @@ main {
   border: 1px solid var(--border);
   flex-shrink: 0;
 }
+.face-thumb-clickable {
+  cursor: zoom-in;
+  transition: opacity 0.15s, box-shadow 0.15s;
+}
+.face-thumb-clickable:hover {
+  opacity: 0.85;
+  box-shadow: 0 0 0 2px var(--accent);
+}
 .face-thumb-placeholder {
   display: flex;
   align-items: center;
@@ -195,6 +203,56 @@ main {
   font-size: 16px;
   flex-shrink: 0;
 }
+
+/* ── Lightbox ────────────────────────────────────────────────────── */
+.lightbox {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+}
+.lightbox.active {
+  display: flex;
+}
+.lightbox-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+.lightbox-img {
+  max-width: 80vw;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.7);
+}
+.lightbox-label {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+.lightbox-close {
+  position: absolute;
+  top: -36px;
+  right: -8px;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+  opacity: 0.75;
+}
+.lightbox-close:hover { opacity: 1; }
 .name-input {
   background: var(--bg3);
   border: 1px solid var(--border);

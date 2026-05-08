@@ -249,7 +249,8 @@ function makeFaceRow(face) {
   const count     = face.seen_count ?? "—";
 
   const thumbHtml = face.has_thumb
-    ? `<img src="/api/faces/${esc(face.id)}/thumb" class="face-thumb" alt="face" />`
+    ? `<img src="/api/faces/${esc(face.id)}/thumb" class="face-thumb face-thumb-clickable"
+           alt="face" onclick="openLightbox('/api/faces/${esc(face.id)}/thumb', ${JSON.stringify(face.name || 'Unknown')})" />`
     : `<div class="face-thumb face-thumb-placeholder">?</div>`;
 
   tr.innerHTML = `
@@ -542,11 +543,28 @@ async function restartDaemon() {
   }, 8000);
 }
 
+// ── Lightbox ─────────────────────────────────────────────────────
+
+function openLightbox(src, label) {
+  const lb = el("lightbox");
+  el("lightbox-img").src = src;
+  el("lightbox-label").textContent = label;
+  lb.classList.add("active");
+}
+
+function closeLightbox() {
+  el("lightbox").classList.remove("active");
+  el("lightbox-img").src = "";
+}
+
 // ── Say on enter key ──────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
   el("say-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") doSay();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeLightbox();
   });
   loadFaces();
   loadQuietHours();
