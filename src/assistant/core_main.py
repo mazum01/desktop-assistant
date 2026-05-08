@@ -28,6 +28,7 @@ from src.services.tracking_service import TrackingService
 from src.services.vision_service import VisionService
 from src.core.quiet_hours import QuietHours
 from src.services.web_service import WebService
+from src.core.runtime_state import load as _load_runtime, save as _save_runtime
 
 # The thermal service runs in a separate process. Its IPCBridge PUBs on
 # this endpoint; we SUBscribe to it from the core IPCBridge and re-emit
@@ -40,15 +41,28 @@ def main() -> int:
     from pathlib import Path
     _cfg_path = Path(__file__).parents[2] / "config" / "assistant.yaml"
     _cfg = yaml.safe_load(_cfg_path.read_text()) if _cfg_path.exists() else {}
+
+    # Runtime state overlays the base config for toggle settings.
+    _rt = _load_runtime()
+
     _clock_enabled = _cfg.get("clock_announcements", {}).get("enabled", True)
     _tracking_enabled = _cfg.get("head_tracking", {}).get("enabled", True)
-    _face_tracking_enabled = _cfg.get("head_tracking", {}).get("face_tracking_enabled", True)
-    _random_motion_enabled = _cfg.get("head_tracking", {}).get("random_motion_enabled", True)
+    _face_tracking_enabled = _rt.get("head_tracking", {}).get(
+        "face_tracking_enabled",
+        _cfg.get("head_tracking", {}).get("face_tracking_enabled", True),
+    )
+    _random_motion_enabled = _rt.get("head_tracking", {}).get(
+        "random_motion_enabled",
+        _cfg.get("head_tracking", {}).get("random_motion_enabled", True),
+    )
     _recognition_enabled = _cfg.get("face_recognition", {}).get("enabled", True)
     _greeting_cooldown = float(
         _cfg.get("face_recognition", {}).get("greeting_cooldown_s", 300.0)
     )
-    _servo_enabled = _cfg.get("servo", {}).get("enabled", True)
+    _servo_enabled = _rt.get("servo", {}).get(
+        "enabled",
+        _cfg.get("servo", {}).get("enabled", True),
+    )
 
     from src.motion.head_tracker import HeadTrackerConfig
     from src.services.perception_service import PerceptionConfig
@@ -73,6 +87,35 @@ def main() -> int:
     )
 
     bus = MessageBus()
+
+    # Persist toggle state changes so they survive daemon restarts.
+    _rt_state: dict = {
+        "servo":        {"enabled": _servo_enabled},
+        "head_tracking": {
+            "face_tracking_enabled": _face_tracking_enabled,
+            "random_motion_enabled": _random_motion_enabled,
+        },
+    }
+
+    def _on_servo_changed(_t, payload):
+        if isinstance(payload, dict) and "enabled" in payload:
+            _rt_state["servo"]["enabled"] = bool(payload["enabled"])
+            _save_runtime(_rt_state)
+
+    def _on_face_tracking_changed(_t, payload):
+        if isinstance(payload, dict) and "enabled" in payload:
+            _rt_state["head_tracking"]["face_tracking_enabled"] = bool(payload["enabled"])
+            _save_runtime(_rt_state)
+
+    def _on_random_motion_changed(_t, payload):
+        if isinstance(payload, dict) and "enabled" in payload:
+            _rt_state["head_tracking"]["random_motion_enabled"] = bool(payload["enabled"])
+            _save_runtime(_rt_state)
+
+    bus.subscribe("motion.enabled_changed",         _on_servo_changed)
+    bus.subscribe("tracking.face_tracking_changed", _on_face_tracking_changed)
+    bus.subscribe("tracking.random_motion_changed", _on_random_motion_changed)
+
     av = AVService(bus=bus)
     vis = VisionService(bus=bus)
     ipc = IPCBridge(

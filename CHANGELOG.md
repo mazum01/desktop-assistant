@@ -6,6 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.3] - 2026-05-08
+### Fixed
+- **Servo motion options now persist across daemon restarts.**
+  - New `src/core/runtime_state.py` loads/saves `config/runtime_state.yaml`
+    using atomic tmp-file replacement.
+  - Three toggle states are persisted: `servo.enabled`,
+    `head_tracking.face_tracking_enabled`, `head_tracking.random_motion_enabled`.
+  - `core_main.py` subscribes to `motion.enabled_changed`,
+    `tracking.face_tracking_changed`, and `tracking.random_motion_changed`
+    and writes the runtime file on every change.
+  - On startup, runtime state overlays `assistant.yaml` (runtime wins for these
+    three keys; all other config comes from `assistant.yaml` as before).
+### Added
+- `tests/test_runtime_state.py` — 6 tests covering load/save roundtrip, atomic
+  writes, corrupt YAML handling, and overlay semantics.
+
 ## [1.3.2] - 2026-05-08
 ### Added
 - **`da restart`**: CLI command to restart `desktop-assistant-core.service` via
