@@ -598,6 +598,24 @@ async function restartDaemon() {
   }, 8000);
 }
 
+async function systemReboot() {
+  if (!confirm("Reboot the Raspberry Pi?")) return;
+  const btn = el("btn-reboot");
+  if (btn) { btn.disabled = true; btn.textContent = "↺ Rebooting…"; }
+  try {
+    await fetch("/api/system/reboot", { method: "POST" });
+  } catch (e) { /* expected — connection drops */ }
+}
+
+async function systemShutdown() {
+  if (!confirm("Shut down the Raspberry Pi? It will need to be powered on manually.")) return;
+  const btn = el("btn-shutdown");
+  if (btn) { btn.disabled = true; btn.textContent = "⏻ Shutting down…"; }
+  try {
+    await fetch("/api/system/shutdown", { method: "POST" });
+  } catch (e) { /* expected — connection drops */ }
+}
+
 // ── Lightbox ─────────────────────────────────────────────────────
 
 function openLightbox(src, label) {

@@ -577,4 +577,28 @@ class WebService:
             asyncio.ensure_future(_do_restart())
             return {"ok": True, "message": "Restarting daemon…"}
 
+        @app.post("/api/system/reboot")
+        async def api_reboot():
+            import asyncio
+            import subprocess
+
+            async def _do_reboot():
+                await asyncio.sleep(1.0)
+                subprocess.Popen(["sudo", "reboot"], close_fds=True)
+
+            asyncio.ensure_future(_do_reboot())
+            return {"ok": True, "message": "Rebooting system…"}
+
+        @app.post("/api/system/shutdown")
+        async def api_shutdown():
+            import asyncio
+            import subprocess
+
+            async def _do_shutdown():
+                await asyncio.sleep(1.0)
+                subprocess.Popen(["sudo", "shutdown", "-h", "now"], close_fds=True)
+
+            asyncio.ensure_future(_do_shutdown())
+            return {"ok": True, "message": "Shutting down…"}
+
         return app

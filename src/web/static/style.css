@@ -278,8 +278,10 @@ main {
 .btn-primary   { background: var(--blue);  color: #000; }
 .btn-secondary { background: var(--bg3);   color: var(--text); border: 1px solid var(--border); }
 .btn-danger    { background: rgba(248,81,73,.15); color: var(--red); border: 1px solid var(--red); }
+.btn-warning   { background: rgba(210,153,34,.15); color: var(--yellow, #d2991e); border: 1px solid var(--yellow, #d2991e); }
 .btn-save      { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid var(--green); }
 .btn-sm        { padding: 3px 9px; font-size: 12px; }
+.btn-row       { display: flex; gap: 12px; flex-wrap: wrap; }
 
 /* ── Controls ────────────────────────────────────────────────── */
 .controls-grid { display: flex; flex-direction: column; gap: 14px; }

@@ -219,6 +219,15 @@
       <h2>Event Log <span class="subtext">(last 20)</span></h2>
       <div id="event-log" class="event-log"></div>
     </section>
+
+    <!-- ── System Power ────────────────────────────────────────── -->
+    <section class="card">
+      <h2>System Power</h2>
+      <div class="btn-row">
+        <button class="btn btn-warning" onclick="systemReboot()" id="btn-reboot">↺ Reboot</button>
+        <button class="btn btn-danger"  onclick="systemShutdown()" id="btn-shutdown">⏻ Shutdown</button>
+      </div>
+    </section>
   </main>
 
   <script src="/static/app.js"></script>

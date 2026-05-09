@@ -6,7 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.4.4] - 2026-05-08
+## [1.4.5] - 2026-05-09
+### Added
+- **CLI `reboot` command** — `da reboot` prompts for confirmation then runs
+  `sudo reboot`; aborts cleanly on 'N'.
+- **CLI `shutdown` command** — `da shutdown` prompts for confirmation then runs
+  `sudo shutdown -h now`; aborts cleanly on 'N'.
+- **Web UI "System Power" card** — Reboot and Shutdown buttons at the bottom of
+  the dashboard, each with a browser confirm dialog before executing.
+- **`POST /api/system/reboot`** and **`POST /api/system/shutdown`** FastAPI
+  endpoints; action fires after a 1 s delay to allow the HTTP response to return.
+- **`btn-warning` and `btn-row` CSS classes** in `style.css`.
+
+
 ### Fixed
 - **Servo travel limits naming consistency** — aligned `motion_service.py`,
   `core_main.py`, `web_service.py`, and CLI to use the same

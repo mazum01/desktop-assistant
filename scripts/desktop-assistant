@@ -544,11 +544,42 @@ def cmd_restart(_args) -> int:
     return 0
 
 
+def cmd_reboot(_args) -> int:
+    """Reboot the Raspberry Pi."""
+    import subprocess
+    ans = input("Reboot the Raspberry Pi? [y/N] ").strip().lower()
+    if ans != "y":
+        print("Aborted.")
+        return 0
+    print("Rebooting …")
+    result = subprocess.run(["sudo", "reboot"], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"Error: {result.stderr.strip() or 'unknown error'}")
+        return 1
+    return 0
+
+
+def cmd_shutdown(_args) -> int:
+    """Shut down the Raspberry Pi."""
+    import subprocess
+    ans = input("Shut down the Raspberry Pi? It will need to be powered on manually. [y/N] ").strip().lower()
+    if ans != "y":
+        print("Aborted.")
+        return 0
+    print("Shutting down …")
+    result = subprocess.run(["sudo", "shutdown", "-h", "now"], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"Error: {result.stderr.strip() or 'unknown error'}")
+        return 1
+    return 0
+
 def cmd_help(args) -> int:
     """Print a formatted command reference, or detailed help for one command."""
     commands = {
         "ping":          "Round-trip latency check — confirms the daemon is reachable.",
         "restart":       "Restart the desktop-assistant-core systemd service.",
+        "reboot":        "Reboot the Raspberry Pi (prompts for confirmation).",
+        "shutdown":      "Shut down the Raspberry Pi (prompts for confirmation).",
         "status":        "Health and telemetry dashboard (temp, fan, servo, vision, audio).\n"
                          "               --json  Emit raw JSON instead of the human-readable table.",
         "topics":        "List every bus topic that has at least one active subscriber.",
@@ -859,6 +890,8 @@ def main() -> int:
 
     sub.add_parser("ping", help="Round-trip check").set_defaults(func=cmd_ping)
     sub.add_parser("restart", help="Restart desktop-assistant-core systemd service").set_defaults(func=cmd_restart)
+    sub.add_parser("reboot", help="Reboot the Raspberry Pi").set_defaults(func=cmd_reboot)
+    sub.add_parser("shutdown", help="Shut down the Raspberry Pi").set_defaults(func=cmd_shutdown)
     sub.add_parser("topics", help="List subscribed topics").set_defaults(func=cmd_topics)
     sub.add_parser("version", help="Speak the version (FR-VR2)").set_defaults(func=cmd_version)
 

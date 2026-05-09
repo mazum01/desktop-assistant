@@ -1,5 +1,7 @@
 head_tracking:
-  face_tracking_enabled: false
-  random_motion_enabled: false
+  face_tracking_enabled: true
+  random_motion_enabled: true
 servo:
   enabled: true
+  soft_max_deg: 215.0
+  soft_min_deg: 135.0
