@@ -76,8 +76,8 @@ class TestCameraConfig:
     def test_defaults(self):
         cfg = CameraConfig()
         assert cfg.index == 0
-        assert cfg.width == 1280
-        assert cfg.height == 720
+        assert cfg.width == 640
+        assert cfg.height == 480
         assert cfg.framerate == 30
         assert cfg.stream_format == "RGB888"
 

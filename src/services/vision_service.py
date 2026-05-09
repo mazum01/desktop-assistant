@@ -41,9 +41,11 @@ class VisionService(Service):
         self,
         bus: Optional[MessageBus] = None,
         camera=None,
+        camera_config=None,
     ) -> None:
         super().__init__(bus=bus)
         self._camera = camera
+        self._camera_config = camera_config
         self._latest: Optional[np.ndarray] = None
         self._index = 0
         self._lock = threading.Lock()
@@ -52,7 +54,8 @@ class VisionService(Service):
     def on_start(self) -> None:
         if self._camera is None:
             from src.vision.camera import Camera, CameraConfig
-            self._camera = Camera(CameraConfig())
+            cfg = self._camera_config or CameraConfig()
+            self._camera = Camera(cfg)
         try:
             self._camera.start()
         except Exception:

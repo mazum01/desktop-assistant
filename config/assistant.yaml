@@ -22,10 +22,16 @@ servo:
   # When disabled the servo holds its current position; the web
   # dashboard and CLI can change this at runtime.
   enabled: true
-  travel_min: 135   # minimum logical angle the servo may travel to (1–360)
-  travel_max: 215   # maximum logical angle the servo may travel to (1–360)
   soft_min_deg: 135   # minimum logical angle the servo may travel to (1–360)
   soft_max_deg: 215   # maximum logical angle the servo may travel to (1–360)
+
+camera:
+  # Capture resolution and frame rate for the primary (face-tracking) camera.
+  # Lower resolution = higher frame rate. 640×480 @ 30 fps is a good balance
+  # for face detection on the Raspberry Pi 5.
+  width: 640
+  height: 480
+  framerate: 30
 
 face_recognition:
   # ArcFace MobileFaceNet identity recognition on the Hailo-8.

@@ -6,7 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.4.5] - 2026-05-09
+## [1.4.6] - 2026-05-09
+### Changed
+- **Camera capture resolution reduced from 1280×720 to 640×480** for better
+  frame rate on Raspberry Pi 5. Face detection quality is unaffected at this
+  resolution; the IMX708 delivers significantly higher sustained frame rates.
+- **Camera config is now driven by `config/assistant.yaml`** (`camera.width`,
+  `camera.height`, `camera.framerate`) — no code change needed to tune.
+- `VisionService` accepts an optional `camera_config` parameter; `core_main`
+  reads the YAML section and passes it through.
+- `CameraConfig` dataclass defaults updated to match (640×480 @ 30 fps).
+- Duplicate `servo.travel_min` / `servo.travel_max` keys removed from
+  `assistant.yaml` (superseded by `soft_min_deg` / `soft_max_deg` in v1.4.4).
+
+
 ### Added
 - **CLI `reboot` command** — `da reboot` prompts for confirmation then runs
   `sudo reboot`; aborts cleanly on 'N'.

@@ -31,8 +31,8 @@ except ImportError:
 @dataclass
 class CameraConfig:
     index: int = 0                  # CSI slot (0 = slot 0, 1 = slot 1)
-    width: int = 1280
-    height: int = 720
+    width: int = 640
+    height: int = 480
     framerate: int = 30
     # Format used for stream captures; "RGB888" gives H×W×3 numpy arrays
     stream_format: str = "RGB888"

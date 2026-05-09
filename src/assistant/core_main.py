@@ -85,6 +85,14 @@ def main() -> int:
     )
     _perc_cfg = PerceptionConfig(recognition_enabled=_recognition_enabled)
 
+    _cam_cfg_raw = _cfg.get("camera", {})
+    from src.vision.camera import CameraConfig as _CameraConfig
+    _camera_cfg = _CameraConfig(
+        width=int(_cam_cfg_raw.get("width", 640)),
+        height=int(_cam_cfg_raw.get("height", 480)),
+        framerate=int(_cam_cfg_raw.get("framerate", 30)),
+    )
+
     _web_cfg = _cfg.get("web_dashboard", {})
     _web_enabled = _web_cfg.get("enabled", True)
     _web_port = int(_web_cfg.get("port", 8080))
@@ -139,7 +147,7 @@ def main() -> int:
     bus.subscribe("tracking.random_motion_changed", _on_random_motion_changed)
 
     av = AVService(bus=bus)
-    vis = VisionService(bus=bus)
+    vis = VisionService(bus=bus, camera_config=_camera_cfg)
     ipc = IPCBridge(
         bus=bus,
         upstream_endpoints=[_THERMAL_PUB],
