@@ -142,15 +142,20 @@ class ObjectDetector:
 
     def _decode(
         self,
-        raw: np.ndarray,
+        raw,
         src_w: int,
         src_h: int,
     ) -> List[Detection]:
-        """Decode NMS output tensor into :class:`Detection` objects."""
-        if raw.ndim != 3 or raw.shape[0] != 80 or raw.shape[1] < 5:
-            log.warning("ObjectDetector: unexpected output shape %s — skipping", raw.shape)
-            return []
+        """Decode NMS output into :class:`Detection` objects.
 
+        Hailo's NMS postprocess output at runtime is a **list** of 80 per-class
+        arrays, each shaped ``(N, 5)`` where N is the number of detections for
+        that class and the 5 columns are ``[y1, x1, y2, x2, score]`` in
+        normalised 0–1 coordinates (Hailo convention, y before x).
+
+        The HEF metadata reports ``(80, 5, 100)`` as the max-capacity shape, but
+        the actual runtime value is the variable-length list format.
+        """
         # Letterbox params (must mirror _letterbox exactly)
         scale    = min(_TARGET_SIZE / src_h, _TARGET_SIZE / src_w)
         new_w    = int(src_w * scale)
@@ -159,35 +164,64 @@ class ObjectDetector:
         pad_left = (_TARGET_SIZE - new_w) // 2
 
         detections: List[Detection] = []
-        num_classes, _, max_det = raw.shape
 
-        for cls_id in range(min(num_classes, len(COCO_CLASSES))):
-            for det_id in range(max_det):
-                score = float(raw[cls_id, 4, det_id])
-                if score < self._conf_threshold:
+        # ── List format (runtime NMS output) ──────────────────────────
+        if isinstance(raw, (list, tuple)):
+            for cls_id, cls_dets in enumerate(raw):
+                if cls_id >= len(COCO_CLASSES):
+                    break
+                if cls_dets is None or len(cls_dets) == 0:
                     continue
+                arr = np.asarray(cls_dets, dtype=np.float32)
+                if arr.ndim == 1:
+                    arr = arr[np.newaxis]  # single detection → (1, 5)
+                for det in arr:
+                    if len(det) < 5:
+                        continue
+                    score = float(det[4])
+                    if score < self._conf_threshold:
+                        continue
+                    y1n, x1n, y2n, x2n = float(det[0]), float(det[1]), float(det[2]), float(det[3])
+                    x1 = max(0.0, (x1n * _TARGET_SIZE - pad_left) / scale)
+                    y1 = max(0.0, (y1n * _TARGET_SIZE - pad_top)  / scale)
+                    x2 = min(float(src_w), (x2n * _TARGET_SIZE - pad_left) / scale)
+                    y2 = min(float(src_h), (y2n * _TARGET_SIZE - pad_top)  / scale)
+                    if x2 <= x1 or y2 <= y1:
+                        continue
+                    detections.append(Detection(
+                        label=COCO_CLASSES[cls_id],
+                        class_id=cls_id,
+                        confidence=round(score, 3),
+                        bbox=[round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
+                    ))
 
-                # Hailo NMS convention: [y1, x1, y2, x2] normalised 0–1
-                y1n = float(raw[cls_id, 0, det_id])
-                x1n = float(raw[cls_id, 1, det_id])
-                y2n = float(raw[cls_id, 2, det_id])
-                x2n = float(raw[cls_id, 3, det_id])
+        # ── Fixed tensor format (80, 5, 100) — fallback ───────────────
+        elif isinstance(raw, np.ndarray) and raw.ndim == 3:
+            num_classes, _, max_det = raw.shape
+            for cls_id in range(min(num_classes, len(COCO_CLASSES))):
+                for det_id in range(max_det):
+                    score = float(raw[cls_id, 4, det_id])
+                    if score < self._conf_threshold:
+                        continue
+                    y1n = float(raw[cls_id, 0, det_id])
+                    x1n = float(raw[cls_id, 1, det_id])
+                    y2n = float(raw[cls_id, 2, det_id])
+                    x2n = float(raw[cls_id, 3, det_id])
+                    x1 = max(0.0, (x1n * _TARGET_SIZE - pad_left) / scale)
+                    y1 = max(0.0, (y1n * _TARGET_SIZE - pad_top)  / scale)
+                    x2 = min(float(src_w), (x2n * _TARGET_SIZE - pad_left) / scale)
+                    y2 = min(float(src_h), (y2n * _TARGET_SIZE - pad_top)  / scale)
+                    if x2 <= x1 or y2 <= y1:
+                        continue
+                    detections.append(Detection(
+                        label=COCO_CLASSES[cls_id],
+                        class_id=cls_id,
+                        confidence=round(score, 3),
+                        bbox=[round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
+                    ))
 
-                # Un-letterbox → pixel coordinates in the original frame
-                x1 = max(0.0, (x1n * _TARGET_SIZE - pad_left) / scale)
-                y1 = max(0.0, (y1n * _TARGET_SIZE - pad_top)  / scale)
-                x2 = min(float(src_w), (x2n * _TARGET_SIZE - pad_left) / scale)
-                y2 = min(float(src_h), (y2n * _TARGET_SIZE - pad_top)  / scale)
-
-                if x2 <= x1 or y2 <= y1:
-                    continue
-
-                detections.append(Detection(
-                    label=COCO_CLASSES[cls_id],
-                    class_id=cls_id,
-                    confidence=round(score, 3),
-                    bbox=[round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
-                ))
+        else:
+            log.warning("ObjectDetector: unrecognised output type %s — skipping", type(raw))
 
         detections.sort(key=lambda d: d.confidence, reverse=True)
         return detections

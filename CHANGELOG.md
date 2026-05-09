@@ -6,6 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.1] - 2026-05-09
+### Fixed
+- **Object detection crash** — Hailo ROUND_ROBIN scheduler returns NMS
+  postprocess output as a list of per-class arrays (not a fixed `(80,5,100)`
+  tensor). `_decode()` in `object_detector.py` now handles both the list
+  format (runtime) and the fixed tensor format (fallback). `hailo_inference.py`
+  batch-dim stripping now passes list-type outputs through unchanged instead
+  of throwing `AttributeError: 'list' object has no attribute 'ndim'`.
+- **Hailo multi-model activation** — `hailo_inference.py` now creates the
+  shared VDevice with `HailoSchedulingAlgorithm.ROUND_ROBIN` so face detection
+  (SCRFD) and object detection (YOLOv8s) can both run on the same Hailo-8
+  without one blocking the other. Manual `network_group.activate()` removed.
+
+---
+
 ## [1.5.0] - 2026-05-09
 ### Added
 - **Simultaneous object + face detection** — new `ObjectService` runs YOLOv8s

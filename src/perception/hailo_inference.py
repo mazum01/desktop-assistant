@@ -35,13 +35,17 @@ except (ImportError, OSError) as _exc:
 # One VDevice is shared across all HailoInference instances in this process.
 # Hailo-8 allows multiple configured network groups on a single VDevice; creating
 # two VDevices fails with HAILO_OUT_OF_PHYSICAL_DEVICES.
+# ROUND_ROBIN scheduling lets the Hailo runtime multiplex multiple models without
+# requiring manual network group activation (which only allows one model active).
 _shared_vdevice = None
 
 
 def _get_shared_vdevice():
     global _shared_vdevice
     if _shared_vdevice is None:
-        _shared_vdevice = hp.VDevice()
+        params = hp.VDevice.create_params()
+        params.scheduling_algorithm = hp.HailoSchedulingAlgorithm.ROUND_ROBIN
+        _shared_vdevice = hp.VDevice(params)
     return _shared_vdevice
 
 
@@ -60,7 +64,6 @@ class HailoInference:
         self._vdevice = None
         self._network_group = None
         self._infer_pipeline = None
-        self._activate_ctx = None
         self._input_info: list = []
         self._output_info: list = []
         self._sim = not _HAILO_AVAILABLE
@@ -94,11 +97,9 @@ class HailoInference:
             self._infer_pipeline = hp.InferVStreams(
                 self._network_group, inp_params, out_params
             )
-            # Enter both context managers once and hold open for the lifetime
-            # of this object; __exit__ is called in _cleanup().
+            # With ROUND_ROBIN scheduling the runtime handles activation;
+            # we only need to enter the InferVStreams context.
             self._infer_pipeline.__enter__()
-            self._activate_ctx = self._network_group.activate()
-            self._activate_ctx.__enter__()
             log.info(
                 "HailoInference loaded: %s  inputs=%s  outputs=%s",
                 self._hef_path.name,
@@ -180,8 +181,14 @@ class HailoInference:
             log.error("infer() failed: %s", exc)
             return {}
 
-        # Strip batch dim from outputs
-        return {k: v[0] if v.ndim > 0 and v.shape[0] == 1 else v for k, v in outputs.items()}
+        # Strip batch dim from outputs; NMS outputs may be lists — pass those through.
+        result = {}
+        for k, v in outputs.items():
+            if isinstance(v, np.ndarray):
+                result[k] = v[0] if v.ndim > 0 and v.shape[0] == 1 else v
+            else:
+                result[k] = v  # list-type NMS outputs — pass through unchanged
+        return result
 
     # ── Lifecycle ──────────────────────────────────────────────────────
 
@@ -190,15 +197,14 @@ class HailoInference:
 
     def _cleanup(self) -> None:
         # Do NOT close the shared VDevice — other HailoInference instances may still
-        # be using it. Only clean up our own pipeline and activation context.
-        for attr in ("_activate_ctx", "_infer_pipeline"):
-            obj = getattr(self, attr, None)
-            if obj is not None:
-                try:
-                    obj.__exit__(None, None, None)
-                except Exception:
-                    pass
-                setattr(self, attr, None)
+        # be using it. Only clean up our own infer pipeline.
+        obj = getattr(self, "_infer_pipeline", None)
+        if obj is not None:
+            try:
+                obj.__exit__(None, None, None)
+            except Exception:
+                pass
+            self._infer_pipeline = None
         self._vdevice = None
 
     def __enter__(self) -> "HailoInference":
