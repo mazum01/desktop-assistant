@@ -153,26 +153,35 @@ function drawFaceBoxes(faces, frameW, frameH) {
     const bbox = face.bbox;
     if (!bbox || bbox.length < 4) continue;
     const [x1, y1, x2, y2] = bbox;
-    const cx = offsetX + x1 * scaleX;
-    const cy = offsetY + y1 * scaleY;
-    const bw = (x2 - x1) * scaleX;
-    const bh = (y2 - y1) * scaleY;
 
-    // Box
+    // Expand bbox by 15% horizontally and 20% vertically so the oval
+    // fully encircles the face including forehead and chin.
+    const rawW = (x2 - x1) * scaleX;
+    const rawH = (y2 - y1) * scaleY;
+    const padX = rawW * 0.15;
+    const padY = rawH * 0.20;
+    const ex = offsetX + x1 * scaleX - padX;
+    const ey = offsetY + y1 * scaleY - padY;
+    const ew = rawW + padX * 2;
+    const eh = rawH + padY * 2;
+
+    // Oval
+    ctx.beginPath();
+    ctx.ellipse(ex + ew / 2, ey + eh / 2, ew / 2, eh / 2, 0, 0, Math.PI * 2);
     ctx.strokeStyle = "#00ff88";
     ctx.lineWidth   = 2;
-    ctx.strokeRect(cx, cy, bw, bh);
+    ctx.stroke();
 
     // Label background + text
     const label = face.name || (face.face_id ? "unknown" : null);
     if (label) {
       const pad   = 4;
-      const fontSize = Math.max(11, Math.round(bw / 8));
+      const fontSize = Math.max(11, Math.round(rawW / 8));
       ctx.font = `bold ${fontSize}px monospace`;
       const tw = ctx.measureText(label).width;
       const lh = fontSize + pad * 2;
-      const lx = cx;
-      const ly = cy > lh ? cy - lh : cy + bh;
+      const lx = ex + ew / 2 - tw / 2 - pad;
+      const ly = ey > lh ? ey - lh : ey + eh;
       ctx.fillStyle = "rgba(0,0,0,0.65)";
       ctx.fillRect(lx, ly, tw + pad * 2, lh);
       ctx.fillStyle = "#00ff88";

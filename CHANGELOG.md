@@ -6,7 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.4.6] - 2026-05-09
+## [1.4.7] - 2026-05-09
+### Changed
+- **Face overlay shape changed from rectangle to oval** in the web GUI.
+  Uses `ctx.ellipse()` on the canvas; the oval is also expanded by +15%
+  horizontally and +20% vertically relative to the raw detection bbox so
+  the ellipse fully encircles the face including forehead and chin.
+- Label is now centred below (or above) the oval instead of anchored to
+  the top-left corner.
+
+
 ### Changed
 - **Camera capture resolution reduced from 1280×720 to 640×480** for better
   frame rate on Raspberry Pi 5. Face detection quality is unaffected at this
