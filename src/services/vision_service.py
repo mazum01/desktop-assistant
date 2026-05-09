@@ -13,8 +13,9 @@ Topics published:
 Topics subscribed:
     vision.capture_still  {"path": str}     — write a JPEG still to *path*
 
-Public accessor (in-process callers):
-    svc.latest_frame() → np.ndarray | None
+Public accessors (in-process callers):
+    svc.latest_frame() → np.ndarray | None   (RGB, for detection)
+    svc.latest_jpeg()  → bytes | None        (pre-encoded JPEG, for streaming)
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ import threading
 import time
 from typing import Optional
 
+import cv2
 import numpy as np
 
 from src.core.bus import MessageBus
@@ -46,6 +48,7 @@ class VisionService(Service):
         self._camera = camera
         self._camera_config = camera_config
         self._latest: Optional[np.ndarray] = None
+        self._latest_jpeg: Optional[bytes] = None
         self._index = 0
         self._lock = threading.Lock()
         self._unsubs = []
@@ -83,8 +86,16 @@ class VisionService(Service):
             log.exception("capture_frame failed")
             self.bus.publish("vision.error", {"reason": "capture_failed"})
             return
+
+        # Pre-encode JPEG here (off the bus-callback thread) so WebService
+        # can consume it without any additional copy or encode work.
+        bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        ok, buf = cv2.imencode(".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, 60])
+        jpeg = bytes(buf) if ok else None
+
         with self._lock:
             self._latest = frame
+            self._latest_jpeg = jpeg
             self._index += 1
             idx = self._index
         self.bus.publish(
@@ -109,9 +120,14 @@ class VisionService(Service):
     # ── Public accessors ───────────────────────────────────────────────
 
     def latest_frame(self) -> Optional[np.ndarray]:
-        """Return the most recent frame (or None if nothing captured yet)."""
+        """Return the most recent frame in RGB (or None). Used by detection services."""
         with self._lock:
             return None if self._latest is None else self._latest.copy()
+
+    def latest_jpeg(self) -> Optional[bytes]:
+        """Return the most recent pre-encoded JPEG bytes (or None). Used by WebService."""
+        with self._lock:
+            return self._latest_jpeg
 
     def frame_index(self) -> int:
         with self._lock:

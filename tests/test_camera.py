@@ -35,7 +35,7 @@ class _FakePicamera2:
     def global_camera_info():
         return [{"Num": 0, "Model": "imx708_wide"}]
 
-    def create_video_configuration(self, main=None, controls=None):
+    def create_video_configuration(self, main=None, controls=None, buffer_count=None):
         return {"type": "video", "main": main, "controls": controls}
 
     def create_still_configuration(self):

@@ -191,22 +191,13 @@ class WebService:
     _STREAM_HEIGHT = 480
 
     def _on_frame(self, _topic, payload) -> None:
-        """Grab the latest frame from VisionService, resize for stream, cache as JPEG."""
+        """Read the pre-encoded JPEG from VisionService and wake the MJPEG generator."""
         if self._vision_svc is None:
             return
-        try:
-            frame = self._vision_svc.latest_frame()
-            if frame is None:
-                return
-            import cv2
-            small = cv2.resize(frame, (self._STREAM_WIDTH, self._STREAM_HEIGHT),
-                               interpolation=cv2.INTER_LINEAR)
-            ok, buf = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 65])
-            if ok:
-                self._latest_frame = bytes(buf)
-                self._frame_event.set()   # wake the MJPEG generator
-        except Exception:
-            pass
+        jpeg = self._vision_svc.latest_jpeg()
+        if jpeg is not None:
+            self._latest_frame = jpeg
+            self._frame_event.set()
 
     def _on_service_started(self, _topic, payload) -> None:
         if isinstance(payload, dict) and "name" in payload:

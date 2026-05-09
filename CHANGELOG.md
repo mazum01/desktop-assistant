@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.4] - 2026-05-09
+### Changed
+- **Video pipeline optimization** — JPEG encoding (with correct RGB→BGR
+  conversion) now happens once in `VisionService.run_tick()` instead of in
+  the `WebService` bus-callback thread. `WebService._on_frame` reads the
+  pre-encoded bytes directly, eliminating a full 640×480 frame copy and a
+  redundant `cv2.imencode` call on every published frame. JPEG quality
+  lowered from 65 → 60 (imperceptible, ~8% smaller payload).
+- **Camera buffer count** — picamera2 video config now requests 4 DMA
+  buffers (`buffer_count=4`) to reduce dropped frames under load.
+- **Color accuracy** — added `cv2.cvtColor(RGB→BGR)` before JPEG encode so
+  the MJPEG stream now shows correct colours (previously R/B channels were
+  swapped).
+
 ## [1.5.3] - 2026-05-09
 ### Fixed
 - **Object/face box vertical misalignment** — MJPEG stream was encoded at

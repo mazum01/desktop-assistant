@@ -115,6 +115,7 @@ class Camera:
                 "size": (self._cfg.width, self._cfg.height),
                 "format": self._cfg.stream_format,
             },
+            buffer_count=4,
             controls={"FrameRate": float(self._cfg.framerate)},
         )
         self._cam.configure(video_cfg)
