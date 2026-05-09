@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.8] - 2026-05-09
+### Added
+- **Per-face colors** — each detected face now gets a distinct colored oval and
+  label. Color is derived from the `face_id` hash so the same person always
+  gets the same color across frames and restarts. Eight visually-separated
+  colors (green, blue, orange, magenta, yellow, lime, sky-blue, purple) are
+  cycled across up to 8 simultaneous faces.
+
 ## [1.5.7] - 2026-05-09
 ### Fixed
 - **Greeting TTS pause** — Piper's prosodic model inserts a natural pause at

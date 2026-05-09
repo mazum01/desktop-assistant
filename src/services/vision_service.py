@@ -39,17 +39,40 @@ from src.core.service import Service
 
 log = logging.getLogger(__name__)
 
-# Overlay colours (BGR)
-_GREEN  = (136, 255,   0)   # #00ff88
-_CYAN   = (255, 212,   0)   # #00d4ff
+# Object box colour (BGR)
+_CYAN = (255, 212, 0)   # #00d4ff
+
+# Distinct face colours (BGR) — visually separated, readable on camera backgrounds
+_FACE_COLORS = [
+    (  0, 255, 136),   # green
+    (255, 100,   0),   # blue
+    (  0, 100, 255),   # red-orange
+    (255,   0, 200),   # magenta
+    (  0, 220, 255),   # yellow
+    (200, 255,   0),   # lime
+    (255, 160,  50),   # sky blue
+    (128,   0, 255),   # purple
+]
+
+
+def _face_color(face_id: str | None, index: int) -> tuple:
+    """Return a consistent BGR colour for a face.
+
+    Uses face_id hash for stability (same person → same colour across frames);
+    falls back to round-robin index when no id is available.
+    """
+    if face_id:
+        return _FACE_COLORS[hash(face_id) % len(_FACE_COLORS)]
+    return _FACE_COLORS[index % len(_FACE_COLORS)]
 
 
 def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
     """Draw face ovals and object rectangles in-place on a BGR frame."""
-    for face in faces:
+    for idx, face in enumerate(faces):
         bbox = face.get("bbox")
         if not bbox or len(bbox) < 4:
             continue
+        color = _face_color(face.get("face_id"), idx)
         x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
         # Padded oval to fully surround the face
         pw = max(4, int((x2 - x1) * 0.15))
@@ -57,13 +80,13 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
         rx = max(1, (x2 - x1) // 2 + pw)
         ry = max(1, (y2 - y1) // 2 + ph)
-        cv2.ellipse(frame_bgr, (cx, cy), (rx, ry), 0, 0, 360, _GREEN, 2, cv2.LINE_AA)
+        cv2.ellipse(frame_bgr, (cx, cy), (rx, ry), 0, 0, 360, color, 2, cv2.LINE_AA)
         label = face.get("name") or (face.get("face_id") and "unknown")
         if label:
             lx = max(0, cx - 20)
             ly = max(10, cy - ry - 4)
             cv2.putText(frame_bgr, label, (lx, ly),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, _GREEN, 1, cv2.LINE_AA)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
 
     for obj in objects:
         bbox = obj.get("bbox")
