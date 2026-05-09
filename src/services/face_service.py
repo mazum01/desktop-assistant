@@ -155,6 +155,10 @@ class FaceService(Service):
             from src.perception.face_registry import FaceRegistry
             self._registry = FaceRegistry()
 
+        # Treat a (re)start as an absence event for every known face so that
+        # anyone already in frame when we come up gets a proper greeting.
+        self._registry.mark_all_absent()
+
         self._unsubs.append(self.bus.subscribe("perception.faces", self._on_faces))
         self._unsubs.append(self.bus.subscribe("face.meet", self._on_meet))
         self._unsubs.append(

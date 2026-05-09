@@ -219,6 +219,18 @@ class FaceRegistry:
         )
         self._conn.commit()
 
+    def mark_all_absent(self) -> None:
+        """Stamp every known face as absent right now.
+
+        Called at service startup so that any face already in frame when
+        the daemon (re)starts is treated as a returning visitor and greeted,
+        rather than being silently skipped because last_absent never advanced
+        past last_greeted from the previous session.
+        """
+        self._conn.execute("UPDATE faces SET last_absent = ?", (time.time(),))
+        self._conn.commit()
+        log.debug("FaceRegistry: marked all faces absent (service restart)")
+
     def get_face(self, face_id: str) -> Optional[dict]:
         """Return a dict with all face metadata, or None."""
         row = self._conn.execute(

@@ -6,7 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.4.9] - 2026-05-09
+## [1.4.10] - 2026-05-09
+### Fixed
+- **No greeting after daemon restart** — `needs_greeting()` requires
+  `last_absent > last_greeted`, but a restart while someone is sitting in
+  frame never triggers `mark_absent()`, so the condition always failed.
+  `FaceService.on_start()` now calls `registry.mark_all_absent()` so every
+  known face is treated as having just returned, and the cooldown logic
+  applies normally on the first detection after each restart.
+
+
 ### Changed
 - **Startup readout pacing** — status items now joined with commas so Piper
   takes a short breath between each item instead of running them together.
