@@ -274,7 +274,7 @@ class FaceRegistry:
         return count
 
     def find_match_by_crop(
-        self, crop: np.ndarray, threshold: float = 0.60
+        self, crop: np.ndarray, threshold: float = 0.75
     ) -> Optional[Tuple[str, str, float]]:
         """Find the best-matching face by comparing *crop* against stored thumbnails.
 
@@ -282,8 +282,8 @@ class FaceRegistry:
         when embedding vectors are all-zero.
 
         Returns ``(face_id, name, score)`` or ``None`` if no match above *threshold*.
-        Correlation ranges −1 … 1; values ≥ 0.60 are reliably the same person
-        under normal indoor lighting.
+        Correlation ranges −1 … 1; threshold raised to 0.75 (from 0.60) to reduce
+        false positives between different people with similar skin tones.
         """
         try:
             import cv2 as _cv2

@@ -77,7 +77,7 @@ class PerceptionService(Service):
         self._last_detect_ts: float = 0.0
         self._unsubs: list = []
         self._pos_cache: list = []
-        self._cache_ttl: float = 300.0   # 5 min — keeps identity across brief absences
+        self._cache_ttl: float = 10.0    # 10s — bridges brief detection gaps only, not person changes
         self._cache_dist: float = 160.0 # pixel radius to consider "same face" (wider tolerance)
         # Detection runs in its own thread so it never blocks the VisionService tick.
         self._frame_queue: queue.Queue = queue.Queue(maxsize=1)
@@ -322,8 +322,8 @@ class PerceptionService(Service):
 
         Priority:
         1. Crop-based histogram similarity against stored thumbnails.
-        2. If exactly one named (non-guest) person is registered, assume it's them.
-        3. Register as a new Guest.
+        2. Register as a new Guest — never assume an unrecognized face is a
+           known person; a different person can walk in at any time.
 
         Returns (face_id, name).
         """
@@ -344,20 +344,7 @@ class PerceptionService(Service):
                 log.debug("Crop-matched %s as %r (score=%.3f)", face_id[:8], name, score)
                 return face_id, name
 
-        # 2. Single named person fallback
-        named = self._registry.list_named_faces()
-        if len(named) == 1:
-            face_id = named[0]["id"]
-            name = named[0]["name"]
-            self._registry.update_seen(face_id)
-            if emb is not None and emb.any():
-                self._registry.add_embedding_if_needed(face_id, emb)
-            if crop is not None and self._registry.thumbnail_path(face_id) is None:
-                self._registry.save_thumbnail(face_id, crop)
-            self._update_pos_cache(face_id, name, detection.centroid[0], detection.centroid[1])
-            return face_id, name
-
-        # 3. Register as new Guest
+        # 2. Register as new Guest — never guess based on registry size alone
         face_id, auto_name = self._registry.register(emb if emb is not None else _ZERO_EMB)
         if crop is not None:
             self._registry.save_thumbnail(face_id, crop)

@@ -6,6 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.6] - 2026-05-09
+### Fixed
+- **False identity match** — `_identify_or_register()` had a "single named
+  person fallback": if only one named person was registered (e.g. Mark), any
+  unrecognized face would be assigned that person's identity. Removed this
+  fallback entirely — an unrecognized face is now always registered as a new
+  Guest, regardless of how many named people exist.
+- **Position cache too long** — the face position cache TTL was 300 s (5 min),
+  meaning if Mark stood somewhere and left, anyone walking to the same spot
+  within 5 minutes would inherit his label. Reduced to 10 s so it only bridges
+  brief detection gaps (head turns, blinks) not person changes.
+- **Crop histogram threshold too low** — `find_match_by_crop` matched at
+  cosine correlation ≥ 0.60, which is not discriminative enough across
+  different people with similar skin tones. Raised to 0.75.
+
 ## [1.5.5] - 2026-05-09
 ### Fixed
 - **Color correction** — removed erroneous `cvtColor(RGB→BGR)`: picamera2's
