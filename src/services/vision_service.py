@@ -34,8 +34,7 @@ log = logging.getLogger(__name__)
 
 class VisionService(Service):
     name = "vision"
-    tick_seconds = 0.1   # 10 fps frame-publish cadence; the camera
-                         # itself runs at its configured framerate
+    tick_seconds = 0.033   # ~30 fps frame-publish cadence; matches camera framerate
 
     def __init__(
         self,

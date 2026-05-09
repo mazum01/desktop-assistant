@@ -153,6 +153,13 @@ class ObjectService(Service):
                 log.exception("object detection failed")
                 continue
 
+            # If any faces are currently detected, suppress "person" labels to
+            # avoid double-labelling the same subject.
+            if detections and self.bus is not None:
+                faces_payload = self.bus.last("perception.faces")
+                if faces_payload and faces_payload.get("faces"):
+                    detections = [d for d in detections if d.label != "person"]
+
             src_h, src_w = frame.shape[:2]
             self.bus.publish(
                 "perception.objects",

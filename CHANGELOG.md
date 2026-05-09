@@ -6,6 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.2] - 2026-05-09
+### Fixed
+- **Video lag** — three compounding causes eliminated:
+  1. `VisionService.tick_seconds` reduced from 0.1 (10 fps) to 0.033 (~30 fps)
+     so frame events are published at the camera's native rate.
+  2. MJPEG generator is now event-driven: `_on_frame` sets `threading.Event`
+     after encoding each JPEG; the generator waits on that event instead of
+     sleeping 50 ms unconditionally. Frames are sent immediately when ready,
+     not on a polling interval.
+  3. Generator skips re-sending identical frames (byte-identity check).
+- **Person double-label** — `ObjectService` now filters out `"person"`
+  detections when `perception.faces` has at least one face, preventing the
+  same subject from getting both a face oval and a cyan "person" box.
+
+---
+
 ## [1.5.1] - 2026-05-09
 ### Fixed
 - **Object detection crash** — Hailo ROUND_ROBIN scheduler returns NMS

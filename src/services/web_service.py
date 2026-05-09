@@ -204,6 +204,7 @@ class WebService:
             ok, buf = cv2.imencode(".jpg", small, [cv2.IMWRITE_JPEG_QUALITY, 65])
             if ok:
                 self._latest_frame = bytes(buf)
+                self._frame_event.set()   # wake the MJPEG generator
         except Exception:
             pass
 
@@ -317,15 +318,23 @@ class WebService:
 
         @app.get("/stream")
         async def mjpeg_stream():
+            loop = asyncio.get_event_loop()
+
             async def generate():
+                last_sent: Optional[bytes] = None
                 while True:
+                    # Wait for the bus callback to signal a new frame
+                    await loop.run_in_executor(
+                        None, lambda: self._frame_event.wait(timeout=0.5)
+                    )
+                    self._frame_event.clear()
                     frame = self._latest_frame
-                    if frame:
+                    if frame and frame is not last_sent:
+                        last_sent = frame
                         yield (
                             b"--frame\r\n"
                             b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
                         )
-                    await asyncio.sleep(0.05)  # ~20 fps cap
 
             return StreamingResponse(
                 generate(),
