@@ -78,21 +78,26 @@ function updateDashboard(data) {
 
   // Face overlay (badge) + canvas bounding boxes
   const pf = last["perception.faces"];
-  if (pf != null) {
-    const count = pf.count ?? 0;
-    const names = (pf.faces || [])
+  const po = last["perception.objects"];
+
+  if (pf != null || po != null) {
+    const count = pf?.count ?? 0;
+    const names = (pf?.faces || [])
       .filter(f => f.name)
       .map(f => f.name)
       .join(", ");
-    el("face-overlay").textContent = count === 0
+    const objCount = po?.count ?? 0;
+    let overlayText = count === 0
       ? "0 faces"
       : `${count} face${count !== 1 ? "s" : ""}${names ? ": " + names : ""}`;
+    if (objCount > 0) overlayText += ` · ${objCount} object${objCount !== 1 ? "s" : ""}`;
+    el("face-overlay").textContent = overlayText;
 
-    // Draw bounding boxes on the canvas overlay
+    // Draw overlays on the canvas
     const vfr = last["vision.frame_ready"];
-    const frameW = vfr?.frame_w || 1280;
-    const frameH = vfr?.frame_h || 720;
-    drawFaceBoxes(pf.faces || [], frameW, frameH);
+    const frameW = (po?.frame_w) || vfr?.frame_w || 640;
+    const frameH = (po?.frame_h) || vfr?.frame_h || 480;
+    drawOverlays(pf?.faces || [], po?.objects || [], frameW, frameH);
   }
 
   // Services pills
@@ -112,27 +117,26 @@ function updateDashboard(data) {
   renderEventLog(events);
 }
 
-// ── Face bounding box overlay ─────────────────────────────────────
+// ── Combined overlay: faces (green oval) + objects (cyan rect) ────────────
 
-function drawFaceBoxes(faces, frameW, frameH) {
+function drawOverlays(faces, objects, frameW, frameH) {
   const canvas = el("face-canvas");
   if (!canvas) return;
   const img = el("camera-stream");
   const rect = img.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return;
 
-  // Match canvas logical resolution to its CSS-displayed size for crisp drawing.
   canvas.width  = rect.width;
   canvas.height = rect.height;
 
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  if (faces.length === 0) return;
+  if (faces.length === 0 && objects.length === 0) return;
 
-  // Compute the rendered image area inside the <img> (accounts for object-fit: contain).
-  const imgAspect    = frameW / frameH;
-  const boxAspect    = rect.width / rect.height;
+  // Compute the rendered image area inside <img> (object-fit: contain).
+  const imgAspect = frameW / frameH;
+  const boxAspect = rect.width / rect.height;
   let renderW, renderH, offsetX, offsetY;
   if (imgAspect > boxAspect) {
     renderW = rect.width;
@@ -145,17 +149,15 @@ function drawFaceBoxes(faces, frameW, frameH) {
     offsetX = (rect.width - renderW) / 2;
     offsetY = 0;
   }
-
   const scaleX = renderW / frameW;
   const scaleY = renderH / frameH;
 
+  // ── Face ovals (green) ────────────────────────────────────────────
   for (const face of faces) {
     const bbox = face.bbox;
     if (!bbox || bbox.length < 4) continue;
     const [x1, y1, x2, y2] = bbox;
 
-    // Expand bbox by 15% horizontally and 20% vertically so the oval
-    // fully encircles the face including forehead and chin.
     const rawW = (x2 - x1) * scaleX;
     const rawH = (y2 - y1) * scaleY;
     const padX = rawW * 0.15;
@@ -165,29 +167,50 @@ function drawFaceBoxes(faces, frameW, frameH) {
     const ew = rawW + padX * 2;
     const eh = rawH + padY * 2;
 
-    // Oval
     ctx.beginPath();
     ctx.ellipse(ex + ew / 2, ey + eh / 2, ew / 2, eh / 2, 0, 0, Math.PI * 2);
     ctx.strokeStyle = "#00ff88";
     ctx.lineWidth   = 2;
     ctx.stroke();
 
-    // Label background + text
     const label = face.name || (face.face_id ? "unknown" : null);
     if (label) {
-      const pad   = 4;
-      const fontSize = Math.max(11, Math.round(rawW / 8));
-      ctx.font = `bold ${fontSize}px monospace`;
-      const tw = ctx.measureText(label).width;
-      const lh = fontSize + pad * 2;
-      const lx = ex + ew / 2 - tw / 2 - pad;
-      const ly = ey > lh ? ey - lh : ey + eh;
-      ctx.fillStyle = "rgba(0,0,0,0.65)";
-      ctx.fillRect(lx, ly, tw + pad * 2, lh);
-      ctx.fillStyle = "#00ff88";
-      ctx.fillText(label, lx + pad, ly + fontSize + pad - 2);
+      _drawLabel(ctx, label, "#00ff88", ex + ew / 2, ey, ew, eh, rawW);
     }
   }
+
+  // ── Object rectangles (cyan) ──────────────────────────────────────
+  for (const obj of objects) {
+    const bbox = obj.bbox;
+    if (!bbox || bbox.length < 4) continue;
+    const [x1, y1, x2, y2] = bbox;
+
+    const px = offsetX + x1 * scaleX;
+    const py = offsetY + y1 * scaleY;
+    const pw = (x2 - x1) * scaleX;
+    const ph = (y2 - y1) * scaleY;
+
+    ctx.strokeStyle = "#00d4ff";
+    ctx.lineWidth   = 1.5;
+    ctx.strokeRect(px, py, pw, ph);
+
+    const label = `${obj.label} ${Math.round((obj.confidence ?? 0) * 100)}%`;
+    _drawLabel(ctx, label, "#00d4ff", px + pw / 2, py, pw, ph, pw);
+  }
+}
+
+function _drawLabel(ctx, label, color, cx, top, boxW, boxH, rawW) {
+  const pad      = 4;
+  const fontSize = Math.max(10, Math.round(rawW / 8));
+  ctx.font = `bold ${fontSize}px monospace`;
+  const tw = ctx.measureText(label).width;
+  const lh = fontSize + pad * 2;
+  const lx = cx - tw / 2 - pad;
+  const ly = top > lh ? top - lh : top + boxH;
+  ctx.fillStyle = "rgba(0,0,0,0.65)";
+  ctx.fillRect(lx, ly, tw + pad * 2, lh);
+  ctx.fillStyle = color;
+  ctx.fillText(label, lx + pad, ly + fontSize + pad - 2);
 }
 
 // ── Health badge ──────────────────────────────────────────────────
@@ -592,6 +615,26 @@ async function doPan() {
 
 async function doVersion() {
   await fetch("/api/version", { method: "POST" });
+}
+
+async function doDescribe() {
+  const btn = document.querySelector('[onclick="doDescribe()"]');
+  if (btn) { btn.disabled = true; btn.textContent = "Describing…"; }
+  try {
+    await fetch("/api/vision/describe", { method: "POST" });
+  } catch (e) { /* ignore */ }
+  setTimeout(() => {
+    if (btn) { btn.disabled = false; btn.textContent = "Describe What I See"; }
+  }, 3000);
+}
+
+function toggleHelp() {
+  const panel = el("help-panel");
+  const btn   = el("help-toggle-btn");
+  if (!panel || !btn) return;
+  const visible = panel.style.display !== "none";
+  panel.style.display = visible ? "none" : "block";
+  btn.textContent = visible ? "Show" : "Hide";
 }
 
 async function restartDaemon() {

@@ -6,6 +6,30 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.0] - 2026-05-09
+### Added
+- **Simultaneous object + face detection** — new `ObjectService` runs YOLOv8s
+  on the Hailo-8 at ~3 fps alongside the existing face detection pipeline.
+  Both pipelines share the same Hailo VDevice.
+- **Labeled overlays on web GUI** — face ovals (green) and object bounding
+  rectangles (cyan) drawn on the live video canvas with name/class labels.
+- **"Describe What I See" command** — `da vision describe` (CLI) and a web GUI
+  button both trigger a spoken natural-language scene description. Objects are
+  de-duplicated with counts (e.g. "2 chairs, a laptop, and a cup").
+- **CLI command groups** — `system` (ping/restart/reboot/shutdown/version),
+  `face` (meet/list/forget-all/forget-guests/merge/greeting-cooldown/greeting-settings),
+  and `vision` (describe) subcommand groups replace the old flat structure.
+- **Web GUI Help panel** — collapsible Help card with a 24-command CLI quick
+  reference, dashboard section descriptions, and object detection notes.
+- **Test stubs** — `tests/test_object_detector.py` (8 tests) and
+  `tests/test_object_service.py` (8 tests). Total tests: 282.
+
+### Changed
+- `scripts/desktop-assistant` — `cmd_help()` updated to reflect grouped
+  command structure; old flat top-level `meet` parser removed.
+
+---
+
 ## [1.4.10] - 2026-05-09
 ### Fixed
 - **No greeting after daemon restart** — `needs_greeting()` requires

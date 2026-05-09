@@ -352,3 +352,39 @@ main {
 .qh-sep { font-size: 1.2rem; color: var(--fg-muted); margin-top: 1rem; }
 .qh-status { font-size: .85rem; color: var(--green); margin-left: .5rem; }
 .qh-status.error { color: var(--red); }
+
+/* ── Help panel ───────────────────────────────────────────────── */
+.help-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: .75rem;
+}
+@media (max-width: 900px) {
+  .help-grid { grid-template-columns: 1fr; }
+}
+.help-grid h3 { font-size: .95rem; color: var(--blue); margin: 0 0 .5rem 0; }
+.help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .82rem;
+}
+.help-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  vertical-align: top;
+}
+.help-table td:first-child { white-space: nowrap; padding-right: 1rem; }
+.help-table code {
+  background: rgba(255,255,255,.08);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: .8rem;
+}
+.help-list {
+  font-size: .85rem;
+  padding-left: 1.2rem;
+  margin: 0;
+  line-height: 1.7;
+}
+.help-list li { margin-bottom: .25rem; }

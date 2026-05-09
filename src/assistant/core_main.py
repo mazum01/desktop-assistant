@@ -22,6 +22,7 @@ from src.services.clock_service import ClockService
 from src.services.face_service import FaceService
 from src.services.ipc_bridge import IPCBridge
 from src.services.motion_service import MotionService
+from src.services.object_service import ObjectService
 from src.services.perception_service import PerceptionService
 from src.services.telemetry_service import TelemetryService
 from src.services.tracking_service import TrackingService
@@ -170,6 +171,7 @@ def main() -> int:
         AudioCaptureService(bus=bus),
         av,
         PerceptionService(bus=bus, vision_service=vis, config=_perc_cfg),
+        ObjectService(bus=bus, vision_service=vis),
         TelemetryService(bus=bus),
         ClockService(bus=bus, enabled=_clock_enabled, quiet_hours=_qh),
         FaceService(

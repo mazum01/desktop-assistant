@@ -149,6 +149,7 @@
           <label>System</label>
           <div class="row-input">
             <button class="btn btn-secondary" onclick="doVersion()">Speak Version</button>
+            <button class="btn btn-secondary" onclick="doDescribe()">Describe What I See</button>
           </div>
         </div>
 
@@ -226,6 +227,61 @@
       <div class="btn-row">
         <button class="btn btn-warning" onclick="systemReboot()" id="btn-reboot">↺ Reboot</button>
         <button class="btn btn-danger"  onclick="systemShutdown()" id="btn-shutdown">⏻ Shutdown</button>
+      </div>
+    </section>
+    <!-- ── Help ────────────────────────────────────────────────────── -->
+    <section class="card">
+      <h2>❓ Help <button class="btn btn-secondary btn-sm" onclick="toggleHelp()" id="help-toggle-btn">Show</button></h2>
+      <div id="help-panel" style="display:none">
+        <div class="help-grid">
+          <div>
+            <h3>CLI Quick Reference</h3>
+            <table class="help-table">
+              <tr><td><code>da status</code></td><td>Health and telemetry dashboard</td></tr>
+              <tr><td><code>da say "hello"</code></td><td>Speak text through speakers</td></tr>
+              <tr><td><code>da joke</code></td><td>Tell a random joke</td></tr>
+              <tr><td><code>da time</code></td><td>Announce current time</td></tr>
+              <tr><td><code>da servo pan --to 180</code></td><td>Pan servo to angle</td></tr>
+              <tr><td><code>da servo enable/disable</code></td><td>Enable or disable servo</td></tr>
+              <tr><td><code>da servo limits --min 135 --max 215</code></td><td>Set travel limits</td></tr>
+              <tr><td><code>da face-tracking enable</code></td><td>Head follows detected faces</td></tr>
+              <tr><td><code>da random-motion enable</code></td><td>Idle gaze drifts</td></tr>
+              <tr><td><code>da system ping</code></td><td>Confirm daemon is running</td></tr>
+              <tr><td><code>da system restart</code></td><td>Restart the daemon</td></tr>
+              <tr><td><code>da system version</code></td><td>Speak version number</td></tr>
+              <tr><td><code>da system reboot</code></td><td>Reboot the Pi</td></tr>
+              <tr><td><code>da system shutdown</code></td><td>Shut down the Pi</td></tr>
+              <tr><td><code>da face meet "Alice"</code></td><td>Name the most recently seen face</td></tr>
+              <tr><td><code>da face list</code></td><td>List all known faces</td></tr>
+              <tr><td><code>da face forget-all</code></td><td>Delete all faces from registry</td></tr>
+              <tr><td><code>da face forget-guests</code></td><td>Remove unnamed Guest faces</td></tr>
+              <tr><td><code>da face greeting-cooldown 30</code></td><td>Set greeting cooldown (minutes)</td></tr>
+              <tr><td><code>da vision describe</code></td><td>Speak everything currently seen</td></tr>
+              <tr><td><code>da watch</code></td><td>Stream all bus events (Ctrl-C to stop)</td></tr>
+              <tr><td><code>da help</code></td><td>Full command reference</td></tr>
+            </table>
+          </div>
+          <div>
+            <h3>Dashboard Sections</h3>
+            <ul class="help-list">
+              <li><strong>Camera Feed</strong> — Live MJPEG stream with face ovals (green) and object boxes (cyan).</li>
+              <li><strong>Telemetry</strong> — Temperature, fan duty, servo angle, microphone level, and last spoken text.</li>
+              <li><strong>Services</strong> — Live status of each internal service. Use ⟳ to restart the daemon.</li>
+              <li><strong>Face Registry</strong> — Known faces with thumbnails, seen counts, and merge/delete actions. Click a thumbnail to enlarge.</li>
+              <li><strong>Controls</strong> — Say text, pan servo, toggle tracking, adjust travel limits, speak version, describe scene.</li>
+              <li><strong>Greeting Settings</strong> — Configure face greeting cooldown, jitter, minimum absence, and confidence threshold.</li>
+              <li><strong>Quiet Hours</strong> — Suppress TTS announcements during a configured time window.</li>
+              <li><strong>Event Log</strong> — Last 20 bus events (newest first).</li>
+              <li><strong>System Power</strong> — Reboot or shut down the Pi from the browser.</li>
+            </ul>
+            <h3>Object Detection</h3>
+            <p style="font-size:13px;color:var(--text-dim);margin:4px 0">
+              Detects 80 COCO classes (person, laptop, cup, etc.) at ~3 fps using YOLOv8s on Hailo-8.
+              Cyan rectangles show detected objects; green ovals show recognized faces.
+              Click <em>Describe What I See</em> to have DA speak a summary.
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   </main>

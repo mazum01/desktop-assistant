@@ -30,6 +30,7 @@ GET  /api/settings/random-motion  Get random motion enabled state
 PUT  /api/settings/random-motion  Set random motion  body: {"enabled": bool}
 GET  /api/settings/greeting  Get greeting config
 PUT  /api/settings/greeting  Update greeting cooldown  body: {"cooldown_min": float}
+POST /api/vision/describe    Speak natural-language description of current scene
 """
 
 import asyncio
@@ -252,6 +253,7 @@ class WebService:
             "vision.frame_ready", "vision.error",
             "audio.level",
             "perception.faces", "face.identified",
+            "perception.objects",
             "av.spoke",
         )
         last = {}
@@ -600,5 +602,12 @@ class WebService:
 
             asyncio.ensure_future(_do_shutdown())
             return {"ok": True, "message": "Shutting down…"}
+
+        @app.post("/api/vision/describe")
+        async def api_vision_describe():
+            if not self.bus:
+                raise HTTPException(503, "bus unavailable")
+            self.bus.publish("vision.describe", {})
+            return {"ok": True}
 
         return app

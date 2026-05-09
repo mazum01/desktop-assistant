@@ -576,10 +576,6 @@ def cmd_shutdown(_args) -> int:
 def cmd_help(args) -> int:
     """Print a formatted command reference, or detailed help for one command."""
     commands = {
-        "ping":          "Round-trip latency check — confirms the daemon is reachable.",
-        "restart":       "Restart the desktop-assistant-core systemd service.",
-        "reboot":        "Reboot the Raspberry Pi (prompts for confirmation).",
-        "shutdown":      "Shut down the Raspberry Pi (prompts for confirmation).",
         "status":        "Health and telemetry dashboard (temp, fan, servo, vision, audio).\n"
                          "               --json  Emit raw JSON instead of the human-readable table.",
         "topics":        "List every bus topic that has at least one active subscriber.",
@@ -591,7 +587,8 @@ def cmd_help(args) -> int:
                          "               Usage: say \"<text>\"",
         "joke":          "Have the assistant tell a random dad joke.",
         "time":          "Have the assistant announce the current time.",
-        "version":       "Have the assistant speak its current version number.",
+        "publish":       "Publish a raw JSON event onto the internal bus (advanced).\n"
+                         "               Usage: publish <topic> [--payload '{...}']",
         "servo":         "Servo control. Sub-commands:\n"
                          "               servo enable             Enable servo motion.\n"
                          "               servo disable            Disable servo motion.\n"
@@ -609,19 +606,22 @@ def cmd_help(args) -> int:
                          "               random-motion enable    Idle gaze drifts when no face visible.\n"
                          "               random-motion disable   Head stays still when no face visible.\n"
                          "               random-motion status    Show current state.",
-        "meet":          "Assign a name to the most recently seen face.\n"
-                         "               Usage: meet \"<Name>\"",
-        "publish":       "Publish a raw JSON event onto the internal bus (advanced).\n"
-                         "               Usage: publish <topic> [--payload '{...}']",
-        "forget-faces":  "Delete ALL known faces from the registry permanently.",
-        "forget-guests": "Delete only Guest-named faces, keeping named identities.",
-        "list-faces":    "List all faces in the registry with IDs, names, and last-seen times.",
-        "merge-faces":   "Merge two face identities into one (keeps embeddings of both).\n"
-                         "               Usage: merge-faces <keep_id> <absorb_id>\n"
-                         "               Run 'list-faces' first to get the IDs.",
-        "greeting-cooldown": "Set the base face greeting cooldown in minutes.\n"
-                         "               Usage: greeting-cooldown <minutes>",
-        "greeting-settings": "Show all current greeting configuration values.",
+        "system":        "System management. Sub-commands:\n"
+                         "               system ping             Round-trip latency check.\n"
+                         "               system restart          Restart desktop-assistant-core service.\n"
+                         "               system reboot           Reboot the Raspberry Pi.\n"
+                         "               system shutdown         Shut down the Raspberry Pi.\n"
+                         "               system version          Speak the current version number.",
+        "face":          "Face registry and greeting management. Sub-commands:\n"
+                         "               face meet \"<Name>\"      Name the most recently seen face.\n"
+                         "               face list               List faces with IDs and last-seen times.\n"
+                         "               face forget-all         Delete ALL faces permanently.\n"
+                         "               face forget-guests      Remove unnamed Guest entries.\n"
+                         "               face merge <keep> <absorb>  Merge two face identities.\n"
+                         "               face greeting-cooldown <min>  Set re-greeting cooldown.\n"
+                         "               face greeting-settings  Show all greeting config values.",
+        "vision":        "Vision and object detection. Sub-commands:\n"
+                         "               vision describe         Speak a description of everything seen.",
         "help":          "Show this command reference, or help for a specific command.\n"
                          "               Usage: help [command]",
     }
@@ -877,6 +877,16 @@ def cmd_watch(args) -> int:
         sock.close(linger=0)
 
 
+def cmd_vision_describe(_args) -> int:
+    """Publish vision.describe — ObjectService builds and speaks a scene description."""
+    r = _request({"cmd": "publish", "topic": "vision.describe", "payload": {}})
+    if r.get("ok"):
+        print("Describing what I see…")
+    else:
+        print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
 def main() -> int:
     p = argparse.ArgumentParser(
         prog="desktop-assistant",
@@ -888,12 +898,47 @@ def main() -> int:
     sp.add_argument("command", nargs="?", default=None, help="Command name to get help for")
     sp.set_defaults(func=cmd_help)
 
-    sub.add_parser("ping", help="Round-trip check").set_defaults(func=cmd_ping)
-    sub.add_parser("restart", help="Restart desktop-assistant-core systemd service").set_defaults(func=cmd_restart)
-    sub.add_parser("reboot", help="Reboot the Raspberry Pi").set_defaults(func=cmd_reboot)
-    sub.add_parser("shutdown", help="Shut down the Raspberry Pi").set_defaults(func=cmd_shutdown)
+    # ── system subcommand group ──────────────────────────────────────
+    sys_sp = sub.add_parser("system", help="System management (ping/restart/reboot/shutdown/version)")
+    sys_sub = sys_sp.add_subparsers(dest="sys_cmd", metavar="<subcommand>")
+    sys_sub.required = True
+    sys_sub.add_parser("ping",     help="Round-trip check — confirms daemon is reachable").set_defaults(func=cmd_ping)
+    sys_sub.add_parser("restart",  help="Restart desktop-assistant-core systemd service").set_defaults(func=cmd_restart)
+    sys_sub.add_parser("reboot",   help="Reboot the Raspberry Pi (prompts for confirmation)").set_defaults(func=cmd_reboot)
+    sys_sub.add_parser("shutdown", help="Shut down the Raspberry Pi (prompts for confirmation)").set_defaults(func=cmd_shutdown)
+    sys_sub.add_parser("version",  help="Speak the current version number via TTS").set_defaults(func=cmd_version)
+
+    # ── face subcommand group ────────────────────────────────────────
+    face_sp = sub.add_parser("face", help="Face registry and greeting management")
+    face_sub = face_sp.add_subparsers(dest="face_cmd", metavar="<subcommand>")
+    face_sub.required = True
+
+    ssp = face_sub.add_parser("meet", help="Assign a name to the most recently seen face")
+    ssp.add_argument("name", help="Name to assign (e.g. 'Alice')")
+    ssp.set_defaults(func=cmd_meet)
+
+    face_sub.add_parser("list", help="List all faces with IDs, names, and last-seen times").set_defaults(func=cmd_list_faces)
+    face_sub.add_parser("forget-all", help="Delete ALL known faces from the registry permanently").set_defaults(func=cmd_forget_faces)
+    face_sub.add_parser("forget-guests", help="Delete only Guest-named faces, keeping named identities").set_defaults(func=cmd_forget_guests)
+
+    ssp = face_sub.add_parser("merge", help="Merge two face identities into one")
+    ssp.add_argument("keep_id",   help="Face ID to keep (use 'face list' to get IDs)")
+    ssp.add_argument("absorb_id", help="Face ID to absorb into keep_id")
+    ssp.set_defaults(func=cmd_merge_faces)
+
+    ssp = face_sub.add_parser("greeting-cooldown", help="Set the base face greeting cooldown in minutes")
+    ssp.add_argument("minutes", type=float, help="Base cooldown in minutes (min 1)")
+    ssp.set_defaults(func=cmd_greeting_cooldown)
+
+    face_sub.add_parser("greeting-settings", help="Show all current greeting configuration values").set_defaults(func=cmd_greeting_settings)
+
+    # ── vision subcommand group ──────────────────────────────────────
+    vis_sp = sub.add_parser("vision", help="Vision and object detection commands")
+    vis_sub = vis_sp.add_subparsers(dest="vis_cmd", metavar="<subcommand>")
+    vis_sub.required = True
+    vis_sub.add_parser("describe", help="Speak a natural-language description of everything currently seen").set_defaults(func=cmd_vision_describe)
+
     sub.add_parser("topics", help="List subscribed topics").set_defaults(func=cmd_topics)
-    sub.add_parser("version", help="Speak the version (FR-VR2)").set_defaults(func=cmd_version)
 
     sp = sub.add_parser("status", help="Show health/telemetry dashboard")
     sp.add_argument("--json", action="store_true", help="Emit raw JSON")
@@ -913,17 +958,6 @@ def main() -> int:
     sp.set_defaults(func=cmd_say)
 
     sub.add_parser("joke", help="Tell a random dad joke").set_defaults(func=cmd_joke)
-    sub.add_parser("forget-faces", help="Delete ALL faces from the registry").set_defaults(func=cmd_forget_faces)
-    sub.add_parser("forget-guests", help="Delete only Guest-named faces, keeping named identities").set_defaults(func=cmd_forget_guests)
-    sub.add_parser("list-faces", help="List all faces with IDs and last-seen times").set_defaults(func=cmd_list_faces)
-    sp = sub.add_parser("merge-faces", help="Merge two face identities into one")
-    sp.add_argument("keep_id", help="Face ID to keep (use list-faces to get IDs)")
-    sp.add_argument("absorb_id", help="Face ID to absorb into keep_id")
-    sp.set_defaults(func=cmd_merge_faces)
-    sp = sub.add_parser("greeting-cooldown", help="Set base face greeting cooldown in minutes")
-    sp.add_argument("minutes", type=float, help="Base cooldown in minutes (min 1)")
-    sp.set_defaults(func=cmd_greeting_cooldown)
-    sub.add_parser("greeting-settings", help="Show all greeting configuration values").set_defaults(func=cmd_greeting_settings)
     sub.add_parser("time", help="Announce the current time").set_defaults(func=cmd_time)
 
     # ── Consolidated servo subcommands ───────────────────────────────
@@ -970,10 +1004,6 @@ def main() -> int:
     rm_sub.add_parser("enable",  help="Idle gaze drifts when no face visible").set_defaults(func=cmd_random_motion_enable)
     rm_sub.add_parser("disable", help="Head stays still when no face visible").set_defaults(func=cmd_random_motion_disable)
     rm_sub.add_parser("status",  help="Show current random motion state").set_defaults(func=cmd_random_motion_status)
-
-    sp = sub.add_parser("meet", help="Name the most recently seen face")
-    sp.add_argument("name", help="Name to assign (e.g. 'Alice')")
-    sp.set_defaults(func=cmd_meet)
 
     sp = sub.add_parser("watch", help="Stream all bus events")
     sp.add_argument("--topic", default="", help="Topic prefix filter (default: all)")
