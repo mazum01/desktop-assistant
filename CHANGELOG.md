@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.7] - 2026-05-09
+### Fixed
+- **Greeting TTS pause** — Piper's prosodic model inserts a natural pause at
+  commas. All greeting phrases used patterns like `"Good morning, {name}!"`
+  where the comma immediately precedes the name, creating an awkward beat.
+  Rewrote all phrases in `_GREET_MORNING/AFTERNOON/EVENING/NIGHT/GENERIC` to
+  move `{name}` before the comma or to the start of the clause (e.g.
+  `"Good morning {name}!"`, `"{name}! Good morning!"`) so the name flows
+  directly into the greeting without a prosodic break.
+
 ## [1.5.6] - 2026-05-09
 ### Fixed
 - **False identity match** — `_identify_or_register()` had a "single named

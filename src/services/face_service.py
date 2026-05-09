@@ -47,40 +47,43 @@ log = logging.getLogger(__name__)
 
 # ── Time-aware greeting phrases for known faces ───────────────────────────────
 # Keyed by time bucket; {name} substituted at runtime.
+# IMPORTANT: avoid "word, {name}" patterns — a comma immediately before a name
+# creates an awkward prosodic pause in Piper TTS. Put the name at the start of
+# a clause, mid-sentence after "you", or before the comma instead.
 
 _GREET_MORNING = [
-    "Good morning, {name}! Hope you slept well.",
-    "Morning, {name}! Ready to take on the day?",
-    "Hey {name}, good morning!",
-    "Rise and shine, {name}!",
+    "Good morning {name}! Hope you slept well.",
+    "Hey {name}! Ready to take on the day?",
+    "{name}! Good morning!",
+    "Rise and shine {name}!",
 ]
 
 _GREET_AFTERNOON = [
-    "Good afternoon, {name}! How's your day going?",
-    "Hey {name}, good to see you this afternoon.",
-    "Afternoon, {name}!",
-    "Welcome back, {name}. Having a good afternoon?",
+    "Good afternoon {name}! How's your day going?",
+    "Hey {name}! Good to see you this afternoon.",
+    "{name}! Good afternoon!",
+    "Welcome back {name}. Having a good afternoon?",
 ]
 
 _GREET_EVENING = [
-    "Good evening, {name}! Winding down for the night?",
-    "Hey {name}, good evening.",
-    "Evening, {name}! Hope your day was great.",
-    "Nice to see you this evening, {name}!",
+    "Good evening {name}! Winding down for the night?",
+    "Hey {name}! Good evening.",
+    "{name}! Hope your day was great.",
+    "Nice to see you this evening {name}!",
 ]
 
 _GREET_NIGHT = [
-    "Still up, {name}? Night owl mode!",
-    "Hey {name}, burning the midnight oil?",
-    "Evening, {name}, catching me at a late hour!",
-    "Night, {name}! Don't stay up too late.",
+    "Still up {name}? Night owl mode!",
+    "Hey {name}! Burning the midnight oil?",
+    "{name}! Catching me at a late hour.",
+    "Night {name}! Don't stay up too late.",
 ]
 
 _GREET_GENERIC = [
-    "Welcome back, {name}!",
-    "Hey {name}, good to see you again.",
-    "There you are, {name}!",
-    "Hello again, {name}.",
+    "Welcome back {name}!",
+    "Hey {name}! Good to see you again.",
+    "There you are {name}!",
+    "Hello again {name}!",
     "{name}! Good to have you back.",
 ]
 

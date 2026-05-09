@@ -3,5 +3,5 @@ head_tracking:
   random_motion_enabled: false
 servo:
   enabled: true
-  soft_max_deg: 215.0
-  soft_min_deg: 135.0
+  soft_max_deg: 230.0
+  soft_min_deg: 120.0
