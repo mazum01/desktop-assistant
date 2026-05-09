@@ -6,15 +6,21 @@ latest frame to in-process subscribers, and publishes lightweight
 frame metadata on the bus so other services can react without us
 spamming megabyte-sized payloads through the pub/sub layer.
 
+Subscribes to perception events and draws detection overlays (face ovals,
+object boxes) directly onto each JPEG frame before streaming so the
+overlays are always pixel-accurate and in sync with the video.
+
 Topics published:
     vision.frame_ready  {"index": int, "shape": (H, W, C), "ts": float}
     vision.error        {"reason": str}
 
 Topics subscribed:
     vision.capture_still  {"path": str}     — write a JPEG still to *path*
+    perception.faces      — caches face bboxes for overlay drawing
+    perception.objects    — caches object bboxes for overlay drawing
 
 Public accessors (in-process callers):
-    svc.latest_frame() → np.ndarray | None   (RGB, for detection)
+    svc.latest_frame() → np.ndarray | None   (BGR, for detection)
     svc.latest_jpeg()  → bytes | None        (pre-encoded JPEG, for streaming)
 """
 
@@ -23,7 +29,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Optional
+from typing import List, Optional
 
 import cv2
 import numpy as np
@@ -32,6 +38,44 @@ from src.core.bus import MessageBus
 from src.core.service import Service
 
 log = logging.getLogger(__name__)
+
+# Overlay colours (BGR)
+_GREEN  = (136, 255,   0)   # #00ff88
+_CYAN   = (255, 212,   0)   # #00d4ff
+
+
+def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
+    """Draw face ovals and object rectangles in-place on a BGR frame."""
+    for face in faces:
+        bbox = face.get("bbox")
+        if not bbox or len(bbox) < 4:
+            continue
+        x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+        # Padded oval to fully surround the face
+        pw = max(4, int((x2 - x1) * 0.15))
+        ph = max(4, int((y2 - y1) * 0.20))
+        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+        rx = max(1, (x2 - x1) // 2 + pw)
+        ry = max(1, (y2 - y1) // 2 + ph)
+        cv2.ellipse(frame_bgr, (cx, cy), (rx, ry), 0, 0, 360, _GREEN, 2, cv2.LINE_AA)
+        label = face.get("name") or (face.get("face_id") and "unknown")
+        if label:
+            lx = max(0, cx - 20)
+            ly = max(10, cy - ry - 4)
+            cv2.putText(frame_bgr, label, (lx, ly),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, _GREEN, 1, cv2.LINE_AA)
+
+    for obj in objects:
+        bbox = obj.get("bbox")
+        if not bbox or len(bbox) < 4:
+            continue
+        x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+        cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), _CYAN, 1, cv2.LINE_AA)
+        conf  = obj.get("confidence", 0)
+        label = f"{obj.get('label', '?')} {int(conf * 100)}%"
+        ly    = max(10, y1 - 4)
+        cv2.putText(frame_bgr, label, (x1, ly),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, _CYAN, 1, cv2.LINE_AA)
 
 
 class VisionService(Service):
@@ -51,6 +95,10 @@ class VisionService(Service):
         self._latest_jpeg: Optional[bytes] = None
         self._index = 0
         self._lock = threading.Lock()
+        # Detection caches — written by bus callbacks, read in run_tick
+        self._det_lock = threading.Lock()
+        self._latest_faces: List[dict] = []
+        self._latest_objects: List[dict] = []
         self._unsubs = []
 
     def on_start(self) -> None:
@@ -67,6 +115,12 @@ class VisionService(Service):
 
         self._unsubs.append(
             self.bus.subscribe("vision.capture_still", self._on_capture_still)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("perception.faces", self._on_faces)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("perception.objects", self._on_objects)
         )
         log.info(
             "VisionService started; hardware_ready=%s",
@@ -87,10 +141,17 @@ class VisionService(Service):
             self.bus.publish("vision.error", {"reason": "capture_failed"})
             return
 
-        # Pre-encode JPEG here (off the bus-callback thread) so WebService
-        # can consume it without any additional copy or encode work.
-        bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        ok, buf = cv2.imencode(".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, 60])
+        # picamera2 "RGB888" actually delivers BGR in the buffer.
+        # Snapshot detection caches while we have the lock.
+        with self._det_lock:
+            faces   = self._latest_faces
+            objects = self._latest_objects
+
+        # Draw overlays then encode. Work on a copy so latest_frame()
+        # consumers always see a clean (no-overlay) frame.
+        display = frame.copy()
+        _draw_overlays(display, faces, objects)
+        ok, buf = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 60])
         jpeg = bytes(buf) if ok else None
 
         with self._lock:
@@ -120,12 +181,12 @@ class VisionService(Service):
     # ── Public accessors ───────────────────────────────────────────────
 
     def latest_frame(self) -> Optional[np.ndarray]:
-        """Return the most recent frame in RGB (or None). Used by detection services."""
+        """Return the most recent raw frame (BGR, no overlay). Used by detection services."""
         with self._lock:
             return None if self._latest is None else self._latest.copy()
 
     def latest_jpeg(self) -> Optional[bytes]:
-        """Return the most recent pre-encoded JPEG bytes (or None). Used by WebService."""
+        """Return the most recent pre-encoded JPEG (with overlays). Used by WebService."""
         with self._lock:
             return self._latest_jpeg
 
@@ -134,6 +195,18 @@ class VisionService(Service):
             return self._index
 
     # ── Bus handlers ───────────────────────────────────────────────────
+
+    def _on_faces(self, _topic, payload) -> None:
+        if not isinstance(payload, dict):
+            return
+        with self._det_lock:
+            self._latest_faces = list(payload.get("faces", []))
+
+    def _on_objects(self, _topic, payload) -> None:
+        if not isinstance(payload, dict):
+            return
+        with self._det_lock:
+            self._latest_objects = list(payload.get("objects", []))
 
     def _on_capture_still(self, _topic, payload) -> None:
         if not isinstance(payload, dict) or "path" not in payload:

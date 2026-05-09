@@ -6,6 +6,25 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.5] - 2026-05-09
+### Fixed
+- **Color correction** — removed erroneous `cvtColor(RGB→BGR)`: picamera2's
+  `RGB888` format already delivers BGR in the buffer, so the conversion was
+  double-swapping channels. Video colour is now correct.
+- **Detection overlay lag** — face ovals and object boxes are now drawn
+  server-side directly onto each JPEG frame in `VisionService.run_tick()`
+  before encoding. Overlays are pixel-perfect and always in sync with the
+  video; the asynchronous JS canvas overlay (which lagged behind by up to
+  the WebSocket poll interval) has been removed.
+### Changed
+- `VisionService` now subscribes to `perception.faces` and
+  `perception.objects` to cache the latest detections for overlay drawing.
+- `latest_frame()` returns the clean (no-overlay) frame for detection
+  services; `latest_jpeg()` returns the annotated JPEG for streaming.
+- Removed dead `_STREAM_WIDTH`/`_STREAM_HEIGHT` constants from `WebService`.
+- Removed `<canvas id="face-canvas">` from web UI and JS `drawOverlays()`/
+  `_drawLabel()` functions — no longer needed.
+
 ## [1.5.4] - 2026-05-09
 ### Changed
 - **Video pipeline optimization** — JPEG encoding (with correct RGB→BGR

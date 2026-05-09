@@ -186,10 +186,6 @@ class WebService:
         log.info("WebService stopped")
 
     # ── Internal bus handlers ─────────────────────────────────────────
-
-    _STREAM_WIDTH  = 640
-    _STREAM_HEIGHT = 480
-
     def _on_frame(self, _topic, payload) -> None:
         """Read the pre-encoded JPEG from VisionService and wake the MJPEG generator."""
         if self._vision_svc is None:

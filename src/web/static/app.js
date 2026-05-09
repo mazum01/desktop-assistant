@@ -76,7 +76,7 @@ function updateDashboard(data) {
     el("stat-spoken").textContent = `"${snip}"`;
   }
 
-  // Face overlay (badge) + canvas bounding boxes
+  // Face overlay badge (boxes are now drawn server-side into the JPEG stream)
   const pf = last["perception.faces"];
   const po = last["perception.objects"];
 
@@ -92,12 +92,6 @@ function updateDashboard(data) {
       : `${count} face${count !== 1 ? "s" : ""}${names ? ": " + names : ""}`;
     if (objCount > 0) overlayText += ` · ${objCount} object${objCount !== 1 ? "s" : ""}`;
     el("face-overlay").textContent = overlayText;
-
-    // Draw overlays on the canvas
-    const vfr = last["vision.frame_ready"];
-    const frameW = (po?.frame_w) || vfr?.frame_w || 640;
-    const frameH = (po?.frame_h) || vfr?.frame_h || 480;
-    drawOverlays(pf?.faces || [], po?.objects || [], frameW, frameH);
   }
 
   // Services pills
@@ -115,102 +109,6 @@ function updateDashboard(data) {
   // Event log
   const events = data.events || [];
   renderEventLog(events);
-}
-
-// ── Combined overlay: faces (green oval) + objects (cyan rect) ────────────
-
-function drawOverlays(faces, objects, frameW, frameH) {
-  const canvas = el("face-canvas");
-  if (!canvas) return;
-  const img = el("camera-stream");
-  const rect = img.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) return;
-
-  canvas.width  = rect.width;
-  canvas.height = rect.height;
-
-  const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  if (faces.length === 0 && objects.length === 0) return;
-
-  // Compute the rendered image area inside <img> (object-fit: contain).
-  const imgAspect = frameW / frameH;
-  const boxAspect = rect.width / rect.height;
-  let renderW, renderH, offsetX, offsetY;
-  if (imgAspect > boxAspect) {
-    renderW = rect.width;
-    renderH = rect.width / imgAspect;
-    offsetX = 0;
-    offsetY = (rect.height - renderH) / 2;
-  } else {
-    renderH = rect.height;
-    renderW = rect.height * imgAspect;
-    offsetX = (rect.width - renderW) / 2;
-    offsetY = 0;
-  }
-  const scaleX = renderW / frameW;
-  const scaleY = renderH / frameH;
-
-  // ── Face ovals (green) ────────────────────────────────────────────
-  for (const face of faces) {
-    const bbox = face.bbox;
-    if (!bbox || bbox.length < 4) continue;
-    const [x1, y1, x2, y2] = bbox;
-
-    const rawW = (x2 - x1) * scaleX;
-    const rawH = (y2 - y1) * scaleY;
-    const padX = rawW * 0.15;
-    const padY = rawH * 0.20;
-    const ex = offsetX + x1 * scaleX - padX;
-    const ey = offsetY + y1 * scaleY - padY;
-    const ew = rawW + padX * 2;
-    const eh = rawH + padY * 2;
-
-    ctx.beginPath();
-    ctx.ellipse(ex + ew / 2, ey + eh / 2, ew / 2, eh / 2, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = "#00ff88";
-    ctx.lineWidth   = 2;
-    ctx.stroke();
-
-    const label = face.name || (face.face_id ? "unknown" : null);
-    if (label) {
-      _drawLabel(ctx, label, "#00ff88", ex + ew / 2, ey, ew, eh, rawW);
-    }
-  }
-
-  // ── Object rectangles (cyan) ──────────────────────────────────────
-  for (const obj of objects) {
-    const bbox = obj.bbox;
-    if (!bbox || bbox.length < 4) continue;
-    const [x1, y1, x2, y2] = bbox;
-
-    const px = offsetX + x1 * scaleX;
-    const py = offsetY + y1 * scaleY;
-    const pw = (x2 - x1) * scaleX;
-    const ph = (y2 - y1) * scaleY;
-
-    ctx.strokeStyle = "#00d4ff";
-    ctx.lineWidth   = 1.5;
-    ctx.strokeRect(px, py, pw, ph);
-
-    const label = `${obj.label} ${Math.round((obj.confidence ?? 0) * 100)}%`;
-    _drawLabel(ctx, label, "#00d4ff", px + pw / 2, py, pw, ph, pw);
-  }
-}
-
-function _drawLabel(ctx, label, color, cx, top, boxW, boxH, rawW) {
-  const pad      = 4;
-  const fontSize = Math.max(10, Math.round(rawW / 8));
-  ctx.font = `bold ${fontSize}px monospace`;
-  const tw = ctx.measureText(label).width;
-  const lh = fontSize + pad * 2;
-  const lx = cx - tw / 2 - pad;
-  const ly = top > lh ? top - lh : top + boxH;
-  ctx.fillStyle = "rgba(0,0,0,0.65)";
-  ctx.fillRect(lx, ly, tw + pad * 2, lh);
-  ctx.fillStyle = color;
-  ctx.fillText(label, lx + pad, ly + fontSize + pad - 2);
 }
 
 // ── Health badge ──────────────────────────────────────────────────
