@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.3] - 2026-05-09
+### Fixed
+- **Object/face box vertical misalignment** — MJPEG stream was encoded at
+  640×360 (16:9) while frame metadata reported 640×480 (4:3). The canvas
+  overlay JS computed `imgAspect = 640/480 = 1.333` but the actual displayed
+  image was 16:9, causing the rendered-area Y calculation to be wrong — error
+  grew toward the top/bottom edges. Fixed by streaming at 640×480 to match the
+  camera's native 4:3 aspect ratio and the frame metadata.
+
+---
+
 ## [1.5.2] - 2026-05-09
 ### Fixed
 - **Video lag** — three compounding causes eliminated:

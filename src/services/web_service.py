@@ -188,7 +188,7 @@ class WebService:
     # ── Internal bus handlers ─────────────────────────────────────────
 
     _STREAM_WIDTH  = 640
-    _STREAM_HEIGHT = 360
+    _STREAM_HEIGHT = 480
 
     def _on_frame(self, _topic, payload) -> None:
         """Grab the latest frame from VisionService, resize for stream, cache as JPEG."""
