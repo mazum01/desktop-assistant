@@ -181,13 +181,15 @@ class HailoInference:
             log.error("infer() failed: %s", exc)
             return {}
 
-        # Strip batch dim from outputs; NMS outputs may be lists — pass those through.
+        # Strip batch dim from outputs; NMS outputs may be lists — strip batch dim there too.
         result = {}
         for k, v in outputs.items():
             if isinstance(v, np.ndarray):
                 result[k] = v[0] if v.ndim > 0 and v.shape[0] == 1 else v
+            elif isinstance(v, list) and len(v) == 1:
+                result[k] = v[0]  # strip batch dim from list-type NMS outputs
             else:
-                result[k] = v  # list-type NMS outputs — pass through unchanged
+                result[k] = v
         return result
 
     # ── Lifecycle ──────────────────────────────────────────────────────
