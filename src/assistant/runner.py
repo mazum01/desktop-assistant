@@ -192,11 +192,14 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
                 bus.publish("av.say", {"text": "Boot self test failed. " + ". ".join(problems)})
             else:
                 log.info("[%s] boot self-test OK", unit_name)
-                bus.publish("av.say", {"text": "All systems nominal."})
+                bus.publish("av.say", {"text": "All systems nominal. How may I help?"})
             return
 
-        # Core unit — full spoken readout
-        readout = "Running diagnostics. " + ". ".join(status_lines) + ". "
+        # Core unit — full spoken readout.
+        # Comma-separated items give Piper a short breath between each; the
+        # ellipsis before the greeting creates a clear audible break before
+        # switching tone from status report to conversational greeting.
+        readout = "Running diagnostics. " + ", ".join(status_lines) + " ... "
 
         if problems:
             log.warning("[%s] boot self-test found %d issue(s):", unit_name, len(problems))
@@ -207,7 +210,7 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
         else:
             log.info("[%s] boot self-test OK", unit_name)
             greeting = _time_of_day_greeting()
-            readout += f"{greeting}. I'm ready."
+            readout += f"{greeting}. I'm ready. How may I help?"
             bus.publish("av.say", {"text": readout})
 
     threading.Thread(

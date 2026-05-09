@@ -6,7 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.4.8] - 2026-05-09
+## [1.4.9] - 2026-05-09
+### Changed
+- **Startup readout pacing** — status items now joined with commas so Piper
+  takes a short breath between each item instead of running them together.
+  An ellipsis `...` separates the status list from the time-of-day greeting,
+  giving a clear audible break before switching tone.
+- **Startup sign-off** — nominal boot readout now ends with
+  "How may I help?" after "I'm ready." Non-core nominal path also appended.
+
+
 ### Fixed
 - **TTS spoken timing** — colons and semicolons in startup status lines caused
   Piper to split phrases like "Camera: available" into two synthesis segments
