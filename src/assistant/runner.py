@@ -118,11 +118,11 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
             # Check hardware_ready if the service exposes it
             hw = getattr(svc, "hardware_ready", None)
             if not running:
-                status_lines.append(f"{label}: failed to start")
+                status_lines.append(f"{label} failed to start")
             elif hw is False:
-                status_lines.append(f"{label}: not connected")
+                status_lines.append(f"{label} not connected")
             else:
-                status_lines.append(f"{label}: available")
+                status_lines.append(f"{label} ready")
 
         # ── Topic-specific health ────────────────────────────────────────
         thermal_err = bus.last("thermal.error")
@@ -136,7 +136,7 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
         temp_c: float | None = None
         if isinstance(temp_bus, dict) and temp_bus.get("ok") is False:
             problems.append("temperature sensor offline")
-            status_lines.append("Temperature sensor: not responding")
+            status_lines.append("Temperature sensor not responding")
         else:
             # Key published by ThermalService is "celsius"
             temp_c = temp_bus.get("celsius") if isinstance(temp_bus, dict) else None
@@ -153,10 +153,10 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
             if temp_c is not None:
                 temp_f = temp_c * 9.0 / 5.0 + 32.0
                 status_lines.append(
-                    f"Temperature sensor: {temp_f:.0f} degrees Fahrenheit"
+                    f"Temperature at {temp_f:.0f} degrees"
                 )
             else:
-                status_lines.append("Temperature sensor: not connected")
+                status_lines.append("Temperature sensor not connected")
 
         # Fan: probe sysfs/lgpio non-destructively (avoids conflicting with
         # the thermal process which may own the FanController).
@@ -164,16 +164,16 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
             from pathlib import Path as _Path
             _chip = _Path("/sys/class/pwm/pwmchip0")
             if _chip.is_dir():
-                fan_status = "available"
+                fan_line = "Fan control ready"
             else:
                 try:
                     import lgpio as _lgpio  # noqa: F401
-                    fan_status = "available, software mode"
+                    fan_line = "Fan control running in software mode"
                 except ImportError:
-                    fan_status = "not connected"
+                    fan_line = "Fan control not connected"
         except Exception:
-            fan_status = "not connected"
-        status_lines.append(f"Fan speed control: {fan_status}")
+            fan_line = "Fan control not connected"
+        status_lines.append(fan_line)
 
         vis_err = bus.last("vision.error")
         if vis_err:
@@ -189,7 +189,7 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
                 log.warning("[%s] boot self-test found %d issue(s):", unit_name, len(problems))
                 for p in problems:
                     log.warning("  - %s", p)
-                bus.publish("av.say", {"text": "Boot self test failed. " + "; ".join(problems)})
+                bus.publish("av.say", {"text": "Boot self test failed. " + ". ".join(problems)})
             else:
                 log.info("[%s] boot self-test OK", unit_name)
                 bus.publish("av.say", {"text": "All systems nominal."})
@@ -202,7 +202,7 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
             log.warning("[%s] boot self-test found %d issue(s):", unit_name, len(problems))
             for p in problems:
                 log.warning("  - %s", p)
-            readout += "Warning: " + "; ".join(problems) + "."
+            readout += "Warning. " + ". ".join(problems) + "."
             bus.publish("av.say", {"text": readout})
         else:
             log.info("[%s] boot self-test OK", unit_name)

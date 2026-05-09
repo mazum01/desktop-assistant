@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.4.8] - 2026-05-09
+### Fixed
+- **TTS spoken timing** — colons and semicolons in startup status lines caused
+  Piper to split phrases like "Camera: available" into two synthesis segments
+  with an unnatural pause between them. All status lines now use natural
+  language (`"Camera ready"`, `"Temperature at 72 degrees"`, etc.) so each
+  phrase synthesises as a single flowing utterance.
+- **Problem list separators** — startup warning list used semicolons (another
+  Piper pause trigger); changed to period-separated sentences.
+- **Em-dashes in face greeting phrases** replaced with commas so Piper does not
+  insert exaggerated pauses mid-sentence in new-face introductions.
+
 ## [1.4.7] - 2026-05-09
 ### Changed
 - **Face overlay shape changed from rectangle to oval** in the web GUI.

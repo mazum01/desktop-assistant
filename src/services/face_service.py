@@ -72,7 +72,7 @@ _GREET_EVENING = [
 _GREET_NIGHT = [
     "Still up, {name}? Night owl mode!",
     "Hey {name}, burning the midnight oil?",
-    "Evening, {name} — catching me at a late hour!",
+    "Evening, {name}, catching me at a late hour!",
     "Night, {name}! Don't stay up too late.",
 ]
 
@@ -88,10 +88,10 @@ _GREET_GENERIC = [
 
 _NEW_FACE_PHRASES = [
     "Oh hey, I don't think we've met! I'm Desktop Assistant. What's your name?",
-    "Whoa, a new face! Hi there — I'm the Desktop Assistant. And you are?",
+    "Whoa, a new face! Hi there, I'm the Desktop Assistant. And you are?",
     "Hello! Don't think I know you yet. I'm Desktop Assistant. Mind introducing yourself?",
-    "Hey! I'm Desktop Assistant. I'd love to know your name — what should I call you?",
-    "Well, hello there! I'm Desktop Assistant. I haven't had the pleasure — what's your name?",
+    "Hey! I'm Desktop Assistant. I'd love to know your name. What should I call you?",
+    "Well, hello there! I'm Desktop Assistant. I haven't had the pleasure. What's your name?",
 ]
 
 # Default cooldown: 30 minutes base, ±25% jitter
