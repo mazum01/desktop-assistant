@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.0] - 2026-05-11
+### Added
+- **Music progress bar.** pianobar emits `# -MM:SS/MM:SS\r` progress lines; the reader now scans all CR-split parts (not just the last) to extract elapsed/total time. Both `elapsed_sec` and `duration_sec` are returned by `/api/music/status` and displayed as a read-only range slider with `M:SS / M:SS` timestamps in the web GUI. Auto-refreshes every 2 seconds.
+- **Album art and metadata via pianobar event script.** On startup, MusicService writes `~/.config/pianobar/da-event.sh` (a Python script pianobar invokes on `songstart`) and patches the pianobar config to set `eventcommand`. The script captures `pTitle`, `pArtist`, `pAlbum`, `pCoverArt`, and `pSongDuration` from pianobar's environment and writes them to `~/.config/pianobar/da-meta.json`. MusicService reads the JSON 0.8 s after each song change to pick up `album` and `cover_art_url`. The web GUI displays album art with a graceful placeholder when unavailable.
+- **Volume control via `wpctl`.** `MusicService.volume` reads `wpctl get-volume @DEFAULT_AUDIO_SINK@`; `MusicService.set_volume(level)` calls `wpctl set-volume`. New REST endpoints `GET /api/music/volume` and `PUT /api/music/volume` exposed via WebService. Volume included in `/api/music/status`. Web GUI shows a volume slider; `da music volume [LEVEL]` CLI command added.
+- **Software EQ presets via cascaded biquad filters.** Six presets: `flat`, `bass_boost`, `treble_boost`, `vocal`, `loudness`, `warm`. Applied by `AudioOutput._samples_to_s16()` using `scipy.signal.sosfilt` (silently skipped if scipy not installed). EQ preset stored in `AudioOutputConfig.eq_preset`; `AudioOutput.set_eq_preset()` changes it live. AVService subscribes to `av.set_eq_preset` bus topic to relay changes from MusicService. New REST endpoints `GET /api/music/eq` and `PUT /api/music/eq`. Web GUI shows an EQ dropdown; `da music eq [PRESET]` CLI command added.
+- **`da music volume`** — `da music volume` reads current volume; `da music volume <0-100>` sets it. Uses `urllib` to call the REST API (no new dependencies).
+- **`da music eq`** — `da music eq` reads current preset; `da music eq <preset>` sets it.
+
+### Changed
+- `MusicService.current_song` now includes `album`, `cover_art_url`, `elapsed_sec`, and `duration_sec` fields.
+- `/api/music/status` now returns `elapsed_sec`, `duration_sec`, `volume`, and `eq_preset` at the top level.
+- Web GUI music card refreshes every 2 seconds (was manual only).
+- `cmd_help()` `"music"` entry updated with `volume` and `eq` sub-commands.
+
+---
+
 ## [1.6.5] - 2026-05-10
 ### Fixed
 - **TTS no longer blocks PipeWire / pianobar audio.** The previous `sounddevice`/PortAudio backend kept a persistent `sd.OutputStream` open to the raw ALSA PCM device (`/dev/snd/pcmC2D0p`), holding it exclusively and preventing PipeWire from accessing the USB DAC. PipeWire's sink entered a "suspended" state, starving pianobar of audio output. Replaced `sounddevice` with an `aplay -D pulse` subprocess that routes TTS through PipeWire's PulseAudio compatibility layer — `aplay` does not hold the raw ALSA fd, so PipeWire retains exclusive hardware ownership and can mix TTS alongside pianobar seamlessly. Updated `tests/test_audio_output.py` to match the new subprocess-based backend.

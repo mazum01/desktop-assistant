@@ -96,6 +96,14 @@ class _CameraRotationBody(BaseModel):
     rotation_deg: int
 
 
+class _MusicVolumeBody(BaseModel):
+    level: int
+
+
+class _MusicEqBody(BaseModel):
+    preset: str
+
+
 class WebService:
     """Async FastAPI server running in a background thread."""
 
@@ -633,13 +641,46 @@ class WebService:
         @app.get("/api/music/status")
         async def api_music_status():
             if not self._music_svc:
-                return {"state": "stopped", "song": {}, "stations": [], "configured": False}
+                return {
+                    "state": "stopped", "song": {}, "stations": [],
+                    "configured": False, "elapsed_sec": 0, "duration_sec": 0,
+                    "volume": -1, "eq_preset": "flat",
+                }
+            song = self._music_svc.current_song
             return {
-                "state":      self._music_svc.state,
-                "song":       self._music_svc.current_song,
-                "stations":   self._music_svc.stations,
-                "configured": self._music_svc.is_configured,
+                "state":        self._music_svc.state,
+                "song":         song,
+                "stations":     self._music_svc.stations,
+                "configured":   self._music_svc.is_configured,
+                "elapsed_sec":  song.get("elapsed_sec", 0),
+                "duration_sec": song.get("duration_sec", 0),
+                "volume":       self._music_svc.volume,
+                "eq_preset":    self._music_svc.eq_preset,
             }
+
+        @app.get("/api/music/volume")
+        async def api_music_volume_get():
+            if not self._music_svc:
+                return {"level": -1}
+            return {"level": self._music_svc.volume}
+
+        @app.put("/api/music/volume")
+        async def api_music_volume_set(body: _MusicVolumeBody):
+            if self._music_svc:
+                self._music_svc.set_volume(body.level)
+            return {"ok": True, "level": body.level}
+
+        @app.get("/api/music/eq")
+        async def api_music_eq_get():
+            preset = self._music_svc.eq_preset if self._music_svc else "flat"
+            from src.services.music_service import MusicService as _MS
+            return {"preset": preset, "presets": _MS.EQ_PRESETS}
+
+        @app.put("/api/music/eq")
+        async def api_music_eq_set(body: _MusicEqBody):
+            if self._music_svc:
+                self._music_svc.set_eq_preset(body.preset)
+            return {"ok": True, "preset": body.preset}
 
         class _MusicPlayBody(BaseModel):
             station_id: Optional[int] = None

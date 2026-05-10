@@ -32,6 +32,7 @@ music.error             {"reason": str}
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import pty
@@ -49,9 +50,11 @@ from src.core.service import Service
 
 log = logging.getLogger(__name__)
 
-_PIANOBAR_CONFIG_DIR = Path.home() / ".config" / "pianobar"
-_PIANOBAR_CONFIG    = _PIANOBAR_CONFIG_DIR / "config"
-_PIANOBAR_FIFO      = _PIANOBAR_CONFIG_DIR / "ctl"
+_PIANOBAR_CONFIG_DIR  = Path.home() / ".config" / "pianobar"
+_PIANOBAR_CONFIG      = _PIANOBAR_CONFIG_DIR / "config"
+_PIANOBAR_FIFO        = _PIANOBAR_CONFIG_DIR / "ctl"
+_PIANOBAR_EVENT_SCRIPT = _PIANOBAR_CONFIG_DIR / "da-event.sh"
+_PIANOBAR_META_JSON   = _PIANOBAR_CONFIG_DIR / "da-meta.json"
 
 _RE_SONG           = re.compile(r'\|>\s+"(.+?)"\s+by\s+"(.+?)"\s+on\s+"(.+?)"')
 _RE_STATION        = re.compile(r'^\s*(\d+)\)\s+(?:[qQ]\s+)?(.+?)$')
@@ -60,12 +63,16 @@ _RE_LOGIN_FAIL     = re.compile(r'Login\.\.\.\s*(Network error|Wrong username|wr
 _RE_ANSI           = re.compile(r'\x1b\[[0-9;?]*[a-zA-Z]')
 # pianobar auto-resume line: "|>  Station "Name" (stationId)"
 _RE_STATION_RESUME = re.compile(r'\|>\s+Station\s+"(.+?)"')
+# Progress bar: "# -MM:SS/MM:SS" — remaining time / total time
+_RE_PROGRESS       = re.compile(r'^#\s+[-]?(\d+):(\d+)/(\d+):(\d+)')
 
 
 class MusicService(Service):
     """Pandora music playback managed via a pianobar subprocess."""
 
     name = "music"
+
+    EQ_PRESETS = ["flat", "bass_boost", "treble_boost", "vocal", "loudness", "warm"]
 
     def __init__(
         self,
@@ -88,6 +95,14 @@ class MusicService(Service):
         self._stop_event = threading.Event()
         self._reader_thread: Optional[threading.Thread] = None
         self._unsubs: list = []
+        # Progress tracking
+        self._elapsed_sec: int = 0
+        self._duration_sec: int = 0
+        # Album art / metadata
+        self._song_album: str = ""
+        self._song_cover_art: str = ""
+        # EQ preset (flat = no filtering)
+        self._eq_preset: str = "flat"
 
     # ── Properties ────────────────────────────────────────────────────
 
@@ -99,7 +114,13 @@ class MusicService(Service):
     @property
     def current_song(self) -> dict:
         with self._lock:
-            return dict(self._current_song)
+            return {
+                **self._current_song,
+                "album":         self._song_album,
+                "cover_art_url": self._song_cover_art,
+                "elapsed_sec":   self._elapsed_sec,
+                "duration_sec":  self._duration_sec,
+            }
 
     @property
     def stations(self) -> list[dict]:
@@ -109,6 +130,43 @@ class MusicService(Service):
     @property
     def is_configured(self) -> bool:
         return _PIANOBAR_CONFIG.exists()
+
+    @property
+    def volume(self) -> int:
+        """Return current system volume as 0–100, or -1 on error."""
+        try:
+            out = subprocess.check_output(
+                ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], text=True
+            )
+            # Output: "Volume: 0.42" or "Volume: 0.42 [MUTED]"
+            val = float(out.split()[1])
+            return round(val * 100)
+        except Exception:
+            return -1
+
+    def set_volume(self, level: int) -> None:
+        """Set system volume to level (0–100)."""
+        level = max(0, min(100, level))
+        try:
+            subprocess.run(
+                ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{level}%"],
+                check=True,
+            )
+        except Exception:
+            log.exception("set_volume(%d) failed", level)
+
+    @property
+    def eq_preset(self) -> str:
+        return self._eq_preset
+
+    def set_eq_preset(self, preset: str) -> None:
+        """Set EQ preset and notify AVService via the bus."""
+        if preset not in self.EQ_PRESETS:
+            log.warning("Unknown EQ preset: %r", preset)
+            return
+        self._eq_preset = preset
+        self.bus.publish("av.set_eq_preset", {"preset": preset})
+        log.info("EQ preset changed to %r", preset)
 
     # ── Lifecycle ─────────────────────────────────────────────────────
 
@@ -187,6 +245,7 @@ class MusicService(Service):
             return
 
         self._ensure_fifo()
+        self._write_event_script()
         self._patch_pianobar_config()
 
         with self._lock:
@@ -262,15 +321,49 @@ class MusicService(Service):
                 pass
 
     def _patch_pianobar_config(self) -> None:
-        """Add fifo line to pianobar config if not already present."""
+        """Add fifo and eventcommand lines to pianobar config if not already present."""
         try:
             content = _PIANOBAR_CONFIG.read_text()
+            updated = False
             if "fifo" not in content:
                 with _PIANOBAR_CONFIG.open("a") as f:
                     f.write(f"\nfifo = {_PIANOBAR_FIFO}\n")
-                log.info("Added fifo line to pianobar config")
+                updated = True
+            if "eventcommand" not in content:
+                with _PIANOBAR_CONFIG.open("a") as f:
+                    f.write(f"\neventcommand = {_PIANOBAR_EVENT_SCRIPT}\n")
+                updated = True
+            if updated:
+                log.info("Patched pianobar config (fifo/eventcommand)")
         except Exception:
             log.exception("Could not patch pianobar config")
+
+    def _write_event_script(self) -> None:
+        """Write the pianobar event script that captures song metadata."""
+        script = (
+            "#!/usr/bin/env python3\n"
+            "import json, os, sys\n"
+            f"META = os.path.expanduser('{_PIANOBAR_META_JSON}')\n"
+            "ev = os.environ.get('pianobar_eventcmd', sys.argv[1] if len(sys.argv) > 1 else '')\n"
+            "if ev == 'songstart':\n"
+            "    data = {\n"
+            "        'title':    os.environ.get('pianobar_title', ''),\n"
+            "        'artist':   os.environ.get('pianobar_artist', ''),\n"
+            "        'album':    os.environ.get('pianobar_album', ''),\n"
+            "        'cover_art': os.environ.get('pianobar_coverArt', ''),\n"
+            "        'duration': os.environ.get('pianobar_songDuration', '0'),\n"
+            "        'station':  os.environ.get('pianobar_stationName', ''),\n"
+            "    }\n"
+            "    os.makedirs(os.path.dirname(META), exist_ok=True)\n"
+            "    with open(META, 'w') as f:\n"
+            "        json.dump(data, f)\n"
+        )
+        try:
+            _PIANOBAR_EVENT_SCRIPT.write_text(script)
+            _PIANOBAR_EVENT_SCRIPT.chmod(0o755)
+            log.info("Wrote pianobar event script to %s", _PIANOBAR_EVENT_SCRIPT)
+        except Exception:
+            log.exception("Could not write pianobar event script")
 
     def _send(self, cmd: str) -> None:
         """Write a command character to the pianobar FIFO (non-blocking)."""
@@ -376,12 +469,21 @@ class MusicService(Service):
             while b"\n" in buf:
                 raw, buf = buf.split(b"\n", 1)
                 decoded = _RE_ANSI.sub("", raw.decode("utf-8", errors="replace"))
-                # pianobar uses \r\n line endings, so splitting on \n leaves a
-                # trailing \r. Strip it first, then split on any embedded \r
-                # (pianobar overwrites the progress bar with CR before printing
-                # a station line, leaving contamination like "progress\rstation").
+                # pianobar uses \r\n line endings; embedded \r overwrites the
+                # progress bar. Scan ALL CR-split parts for progress data before
+                # discarding them, then keep only the last non-empty part.
                 if "\r" in decoded:
-                    decoded = decoded.rstrip("\r").split("\r")[-1]
+                    parts = decoded.rstrip("\r").split("\r")
+                    for part in parts:
+                        pm = _RE_PROGRESS.match(part.strip())
+                        if pm:
+                            rem_m, rem_s, tot_m, tot_s = (int(x) for x in pm.groups())
+                            total   = tot_m * 60 + tot_s
+                            elapsed = total - (rem_m * 60 + rem_s)
+                            with self._lock:
+                                self._duration_sec = total
+                                self._elapsed_sec  = max(0, elapsed)
+                    decoded = parts[-1]
                 line = decoded.strip()
                 if not line:
                     continue
@@ -393,6 +495,17 @@ class MusicService(Service):
 
             # Detect partial-line prompt (no newline yet).
             tail = _RE_ANSI.sub("", buf.decode("utf-8", errors="replace"))
+            # Also scan tail for progress data (progress lines may not have \n).
+            if "\r" in tail:
+                for part in tail.split("\r"):
+                    pm = _RE_PROGRESS.match(part.strip())
+                    if pm:
+                        rem_m, rem_s, tot_m, tot_s = (int(x) for x in pm.groups())
+                        total   = tot_m * 60 + tot_s
+                        elapsed = total - (rem_m * 60 + rem_s)
+                        with self._lock:
+                            self._duration_sec = total
+                            self._elapsed_sec  = max(0, elapsed)
             if _RE_SELECT.search(tail):
                 log.debug("pianobar prompt (partial): %s", tail.strip())
                 _handle_select_prompt()
@@ -450,9 +563,18 @@ class MusicService(Service):
             }
             with self._lock:
                 self._current_song = song
-                self._state = "playing"
+                self._state        = "playing"
+                self._elapsed_sec  = 0
+                self._duration_sec = 0
+                self._song_album   = ""
+                self._song_cover_art = ""
             self.bus.publish("music.song_changed", song)
             self.bus.publish("music.state_changed", {"state": "playing"})
+            threading.Thread(
+                target=self._load_meta_after_delay,
+                name="pianobar-meta-loader",
+                daemon=True,
+            ).start()
             if self._announce_songs:
                 self.bus.publish("av.say", {
                     "text": f"Now playing {song['title']} by {song['artist']}"
@@ -472,3 +594,21 @@ class MusicService(Service):
                 if self._state == "paused":
                     self._state = "playing"
                     self.bus.publish("music.state_changed", {"state": "playing"})
+
+    def _load_meta_after_delay(self) -> None:
+        """Sleep briefly then read da-meta.json written by the event script."""
+        time.sleep(0.8)
+        try:
+            if not _PIANOBAR_META_JSON.exists():
+                return
+            data = json.loads(_PIANOBAR_META_JSON.read_text())
+            with self._lock:
+                self._song_album     = data.get("album", "")
+                self._song_cover_art = data.get("cover_art", "")
+                dur = data.get("duration", "0")
+                try:
+                    self._duration_sec = int(dur)
+                except (ValueError, TypeError):
+                    pass
+        except Exception:
+            log.exception("Failed to load pianobar metadata from %s", _PIANOBAR_META_JSON)

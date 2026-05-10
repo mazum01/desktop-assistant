@@ -181,14 +181,40 @@
       <div id="music-not-configured" style="display:none;color:var(--yellow);margin-bottom:8px;font-size:0.9em">
         ⚠ pianobar not configured. Create <code>~/.config/pianobar/config</code> with your Pandora credentials.
       </div>
-      <div style="margin-bottom:8px">
-        <span id="music-state-icon" style="font-size:1.4em">■</span>
-        <span id="music-song-title" style="font-weight:600;margin-left:6px">—</span>
+
+      <!-- Album art + metadata row -->
+      <div class="music-player-row">
+        <div class="music-art" id="music-art-wrap">
+          <img id="music-art-img" src="" alt="Album Art" style="display:none"
+               onerror="this.style.display='none';document.getElementById('music-art-placeholder').style.display='flex'">
+          <div id="music-art-placeholder" class="music-art-placeholder">♫</div>
+        </div>
+        <div class="music-info">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <span id="music-state-icon" style="font-size:1.2em">■</span>
+            <span id="music-song-title" style="font-weight:600">—</span>
+          </div>
+          <div style="font-size:0.85em;color:var(--text-muted)">
+            <span id="music-song-artist"></span>
+          </div>
+          <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px">
+            <span id="music-song-album"></span>
+          </div>
+          <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;opacity:0.7">
+            <span id="music-song-station"></span>
+          </div>
+        </div>
       </div>
-      <div style="font-size:0.85em;color:var(--text-muted);margin-bottom:10px">
-        <span id="music-song-artist"></span>
-        <span id="music-song-station" style="margin-left:8px;opacity:0.7"></span>
+
+      <!-- Progress bar -->
+      <div class="music-progress-row">
+        <span id="music-elapsed" style="font-size:0.8em;color:var(--text-muted);min-width:38px">0:00</span>
+        <input type="range" id="music-progress-bar" class="music-progress-bar"
+               min="0" max="100" value="0" disabled>
+        <span id="music-duration" style="font-size:0.8em;color:var(--text-muted);min-width:38px;text-align:right">0:00</span>
       </div>
+
+      <!-- Playback controls -->
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
         <button class="btn btn-primary" onclick="musicPlay()">▶ Play</button>
         <button class="btn btn-sm" onclick="musicPause()">⏸ Pause</button>
@@ -197,12 +223,35 @@
         <button class="btn btn-sm" onclick="musicThumbsUp()" title="Love this song">👍</button>
         <button class="btn btn-sm" onclick="musicThumbsDown()" title="Ban this song">👎</button>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+
+      <!-- Station selector -->
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
         <label style="font-size:0.9em">Station</label>
         <select id="music-station-select" style="flex:1;min-width:180px" onchange="musicSetStation(this.value)">
           <option value="">— select station —</option>
         </select>
         <span id="music-status" style="font-size:0.85em;color:var(--green)"></span>
+      </div>
+
+      <!-- Volume control -->
+      <div class="music-volume-row">
+        <label style="font-size:0.85em;min-width:56px">🔊 Vol</label>
+        <input type="range" id="music-volume-slider" min="0" max="100" value="50"
+               oninput="musicSetVolume(this.value)" style="flex:1">
+        <span id="music-volume-label" style="font-size:0.85em;min-width:36px;text-align:right">50%</span>
+      </div>
+
+      <!-- EQ preset -->
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+        <label style="font-size:0.85em;min-width:56px">🎚 EQ</label>
+        <select id="music-eq-select" style="flex:1" onchange="musicSetEq(this.value)">
+          <option value="flat">Flat</option>
+          <option value="bass_boost">Bass Boost</option>
+          <option value="treble_boost">Treble Boost</option>
+          <option value="vocal">Vocal</option>
+          <option value="loudness">Loudness</option>
+          <option value="warm">Warm</option>
+        </select>
       </div>
     </section>
     <section class="card">

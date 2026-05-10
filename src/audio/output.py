@@ -39,6 +39,9 @@ class AudioOutputConfig:
     # ALSA PCM device open in this process.
     alsa_device: str = "pulse"
 
+    # EQ preset name (see AudioOutput.set_eq_preset / _build_sos).
+    eq_preset: str = "flat"
+
     # Back-compat fields kept so existing callers don't break.
     device_names: tuple[str, ...] = ("pulse", "USB Audio", "C-Media", "Sabrent")
     device_index: Optional[int] = None
@@ -75,6 +78,7 @@ class AudioOutput:
         self._cfg = config or AudioOutputConfig()
         self._sim = not _APLAY_AVAILABLE
         self._proc: Optional[subprocess.Popen] = None
+        self._eq_cache: dict = {}
 
         if self._sim:
             log.warning("[sim] aplay not found — audio output in sim mode")
@@ -93,6 +97,18 @@ class AudioOutput:
     @property
     def device_info(self) -> Optional[dict]:
         return None
+
+    def set_eq_preset(self, preset: str) -> None:
+        """Apply a named EQ preset to subsequent audio chunks."""
+        self._cfg.eq_preset = preset
+        log.info("EQ preset set to %r", preset)
+
+    def _get_sos(self, preset: str, sample_rate: int):
+        """Return cached SOS biquad coefficients for *preset* at *sample_rate*."""
+        key = f"{preset}@{sample_rate}"
+        if key not in self._eq_cache:
+            self._eq_cache[key] = _build_sos(preset, sample_rate)
+        return self._eq_cache[key]
 
     # ── aplay subprocess management ──────────────────────────────────────
 
@@ -122,13 +138,29 @@ class AudioOutput:
         samples: np.ndarray,
         sample_rate: Optional[int],
     ) -> bytes:
-        """Resample, apply loudness boost, convert to stereo S16_LE bytes."""
+        """Resample, apply loudness boost, apply EQ, convert to stereo S16_LE bytes."""
         sr = sample_rate or self._cfg.sample_rate
         if sr != self._cfg.sample_rate:
             samples = _resample_linear(samples, sr, self._cfg.sample_rate)
         drive = self._cfg.loudness_boost
         if drive and drive > 1.0:
             samples = _soft_clip(samples, drive)
+        # Apply EQ biquad filter if scipy is available and preset is not flat.
+        preset = self._cfg.eq_preset
+        if preset and preset != "flat":
+            try:
+                from scipy.signal import sosfilt  # type: ignore
+                sos = self._get_sos(preset, self._cfg.sample_rate)
+                if sos is not None:
+                    if samples.ndim == 2:
+                        samples = np.column_stack(
+                            [sosfilt(sos, samples[:, ch]) for ch in range(samples.shape[1])]
+                        )
+                    else:
+                        samples = sosfilt(sos, samples)
+                    samples = np.clip(samples, -1.0, 1.0)
+            except ImportError:
+                pass
         if self._cfg.channels == 2 and samples.ndim == 1:
             samples = np.column_stack([samples, samples])
         return (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
@@ -304,3 +336,54 @@ def _soft_clip(samples: np.ndarray, drive: float) -> np.ndarray:
     shaped = np.tanh(drive * (samples / peak)).astype(np.float32)
     shaped *= 0.95 / float(np.tanh(drive))
     return shaped
+
+
+def _build_sos(preset: str, sample_rate: int):
+    """Return scipy SOS biquad coefficients for the named preset, or None.
+
+    Returns None if scipy is not installed or preset is unknown.
+    Each preset is a list of second-order sections built with
+    ``scipy.signal.butter`` / ``iirpeak`` / ``iirnotch``.
+    """
+    try:
+        from scipy.signal import butter, iirpeak  # type: ignore
+    except ImportError:
+        return None
+
+    fs = float(sample_rate)
+
+    if preset == "bass_boost":
+        # Shelving boost: +6 dB below 200 Hz
+        sos = butter(2, 200.0 / (fs / 2), btype="low", output="sos")
+        sos[:, :3] *= 2.0  # boost gain
+        return sos
+
+    if preset == "treble_boost":
+        # Shelving boost: +4 dB above 8 kHz
+        sos = butter(2, 8000.0 / (fs / 2), btype="high", output="sos")
+        sos[:, :3] *= 1.6
+        return sos
+
+    if preset == "vocal":
+        # Slight presence peak at 2.5 kHz (Q=1.5, +3 dB)
+        return iirpeak(2500.0, 1.5, fs=fs, output="sos")
+
+    if preset == "loudness":
+        # Low boost + high boost combined via cascaded SOS
+        lo  = butter(2, 150.0 / (fs / 2), btype="low",  output="sos")
+        hi  = butter(2, 6000.0 / (fs / 2), btype="high", output="sos")
+        lo[:, :3] *= 2.0
+        hi[:, :3] *= 1.5
+        import numpy as _np  # already imported at module scope but kept for clarity
+        return _np.vstack([lo, hi])
+
+    if preset == "warm":
+        # Gentle low-mid boost + treble rolloff
+        lo  = butter(2, 400.0 / (fs / 2), btype="low",  output="sos")
+        hi  = butter(2, 5000.0 / (fs / 2), btype="high", output="sos")
+        lo[:, :3] *= 1.4
+        hi[:, :3] *= 0.6
+        import numpy as _np
+        return _np.vstack([lo, hi])
+
+    return None

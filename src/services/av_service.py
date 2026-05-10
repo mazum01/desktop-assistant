@@ -79,6 +79,9 @@ class AVService(Service):
         self._unsubs.append(
             self.bus.subscribe("av.announce_version", self._on_announce_version)
         )
+        self._unsubs.append(
+            self.bus.subscribe("av.set_eq_preset", self._on_set_eq_preset)
+        )
 
         # Start the serializing audio worker before any handler can
         # enqueue work into it.
@@ -190,6 +193,13 @@ class AVService(Service):
 
     def _on_announce_version(self, _topic, _payload) -> None:
         self._enqueue(self._do_announce_request, label="announce_request")
+
+    def _on_set_eq_preset(self, _topic, payload) -> None:
+        preset = payload.get("preset", "flat")
+        try:
+            self._audio.set_eq_preset(preset)
+        except Exception:
+            log.exception("set_eq_preset(%r) failed", preset)
 
     # ── Worker bodies ──────────────────────────────────────────────────
 

@@ -29,7 +29,7 @@ def test_music_service_default_state():
 
 
 def test_music_service_current_song_empty():
-    """current_song returns an empty dict when nothing is playing."""
+    """current_song returns a dict with metadata fields even when nothing is playing."""
     from src.services.music_service import MusicService
 
     bus = MagicMock()
@@ -37,7 +37,10 @@ def test_music_service_current_song_empty():
     svc = MusicService(bus=bus)
     song = svc.current_song
     assert isinstance(song, dict)
-    assert song == {}
+    # No pianobar metadata yet — title/artist absent, progress fields at zero.
+    assert "title" not in song
+    assert song.get("elapsed_sec", 0) == 0
+    assert song.get("duration_sec", 0) == 0
 
 
 def test_music_service_stations_empty():

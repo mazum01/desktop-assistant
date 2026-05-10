@@ -388,3 +388,67 @@ main {
   line-height: 1.7;
 }
 .help-list li { margin-bottom: .25rem; }
+
+/* ── Music player layout ────────────────────────────────── */
+.music-player-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.music-art {
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  position: relative;
+}
+.music-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.music-art-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 2em;
+  color: var(--text-muted);
+}
+.music-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.music-info span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+.music-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.music-progress-bar {
+  flex: 1;
+  height: 4px;
+  cursor: default;
+  accent-color: var(--green);
+}
+/* Hide the range thumb so it looks like a static track */
+.music-progress-bar::-webkit-slider-thumb { display: none; }
+.music-progress-bar::-moz-range-thumb { width: 0; height: 0; border: none; }
+.music-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}

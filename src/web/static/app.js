@@ -655,21 +655,37 @@ document.addEventListener("DOMContentLoaded", () => {
   loadCamRotation();
   loadMusicStatus();
   connectWS();
-  // Refresh face registry every 30s
+  // Refresh face registry every 30s; music status every 2s
   setInterval(loadFaces, 30000);
+  setInterval(loadMusicStatus, 2000);
 });
 
 // ── Music (Pandora/pianobar) ──────────────────────────────────────
 
 const _MUSIC_ICONS = { playing: "▶", paused: "⏸", stopped: "■", loading: "⏳" };
 
+function _fmtSec(s) {
+  const m = Math.floor((s || 0) / 60);
+  const sec = Math.floor((s || 0) % 60);
+  return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
 async function loadMusicStatus() {
   try {
     const d = await fetch("/api/music/status").then(r => r.json());
     _applyMusicState(d.state || "stopped");
-    _applyMusicSong(d.song || {});
+    _applyMusicSong(d.song || {}, d.elapsed_sec || 0, d.duration_sec || 0);
     _applyMusicStations(d.stations || []);
     el("music-not-configured").style.display = d.configured === false ? "" : "none";
+    // Volume
+    if (d.volume >= 0) {
+      el("music-volume-slider").value = d.volume;
+      el("music-volume-label").textContent = `${d.volume}%`;
+    }
+    // EQ
+    if (d.eq_preset) {
+      el("music-eq-select").value = d.eq_preset;
+    }
   } catch (e) { /* ignore */ }
 }
 
@@ -677,10 +693,33 @@ function _applyMusicState(state) {
   el("music-state-icon").textContent = _MUSIC_ICONS[state] || "■";
 }
 
-function _applyMusicSong(song) {
-  el("music-song-title").textContent  = song.title  || "—";
-  el("music-song-artist").textContent = song.artist ? `by ${song.artist}` : "";
+function _applyMusicSong(song, elapsed, duration) {
+  el("music-song-title").textContent   = song.title   || "—";
+  el("music-song-artist").textContent  = song.artist  ? `by ${song.artist}` : "";
+  el("music-song-album").textContent   = song.album   || "";
   el("music-song-station").textContent = song.station ? `· ${song.station}` : "";
+
+  // Album art
+  const img = el("music-art-img");
+  const placeholder = el("music-art-placeholder");
+  const url = song.cover_art_url || "";
+  if (url && img.src !== url) {
+    img.src = url;
+    img.style.display = "";
+    placeholder.style.display = "none";
+  } else if (!url) {
+    img.src = "";
+    img.style.display = "none";
+    placeholder.style.display = "flex";
+  }
+
+  // Progress bar
+  const bar = el("music-progress-bar");
+  const dur = duration || 0;
+  bar.max = dur > 0 ? dur : 100;
+  bar.value = elapsed || 0;
+  el("music-elapsed").textContent  = _fmtSec(elapsed);
+  el("music-duration").textContent = _fmtSec(dur);
 }
 
 function _applyMusicStations(stations) {
@@ -737,6 +776,26 @@ async function musicSetStation(stationId) {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ station_id: parseInt(stationId) }),
   });
+}
+
+async function musicSetVolume(level) {
+  const pct = parseInt(level);
+  el("music-volume-label").textContent = `${pct}%`;
+  try {
+    await fetch("/api/music/volume", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level: pct }),
+    });
+  } catch (e) { /* ignore */ }
+}
+
+async function musicSetEq(preset) {
+  try {
+    await fetch("/api/music/eq", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preset }),
+    });
+  } catch (e) { /* ignore */ }
 }
 
 // ── Utils ─────────────────────────────────────────────────────────

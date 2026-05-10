@@ -35,6 +35,32 @@ except ImportError:
     print("pyzmq is required: sudo apt-get install -y python3-zmq", file=sys.stderr)
     sys.exit(2)
 
+try:
+    import urllib.request as _urllib_request
+    import urllib.error as _urllib_error
+except ImportError:
+    _urllib_request = None  # type: ignore
+
+
+def _http_base() -> str:
+    return os.environ.get("DA_WEB_URL", "http://localhost:8080")
+
+
+def _http_get(path: str) -> dict:
+    url = _http_base() + path
+    with _urllib_request.urlopen(url, timeout=5) as r:
+        return json.loads(r.read())
+
+
+def _http_put(path: str, data: dict) -> dict:
+    url = _http_base() + path
+    body = json.dumps(data).encode()
+    req = _urllib_request.Request(url, data=body,
+                                  headers={"Content-Type": "application/json"},
+                                  method="PUT")
+    with _urllib_request.urlopen(req, timeout=5) as r:
+        return json.loads(r.read())
+
 
 PUB_ENDPOINT = os.environ.get("DA_BUS_PUB_ENDPOINT", "ipc:///tmp/desktop-assistant.pub")
 REP_ENDPOINT = os.environ.get("DA_BUS_REP_ENDPOINT", "ipc:///tmp/desktop-assistant.rep")
@@ -632,7 +658,9 @@ def cmd_help(args) -> int:
                          "               music thumbs-up             Love the current song.\n"
                          "               music thumbs-down           Ban the current song (skips it).\n"
                          "               music stations              List available Pandora stations.\n"
-                         "               music status                Show playback state and current song.",
+                         "               music status                Show playback state and current song.\n"
+                         "               music volume [LEVEL]        Get or set system volume 0–100.\n"
+                         "               music eq [PRESET]           Get or set EQ preset (flat/bass_boost/treble_boost/vocal/loudness/warm).",
         "help":          "Show this command reference, or help for a specific command.\n"
                          "               Usage: help [command]",
     }
@@ -1036,6 +1064,45 @@ def cmd_music_status(_args) -> int:
     return 0
 
 
+def cmd_music_volume(args) -> int:
+    """Get or set system volume (0–100)."""
+    try:
+        if hasattr(args, "level") and args.level is not None:
+            _http_put("/api/music/volume", {"level": int(args.level)})
+            print(f"Volume set to {args.level}%")
+        else:
+            d = _http_get("/api/music/volume")
+            lvl = d.get("level", -1)
+            if lvl < 0:
+                print("Volume: (unavailable)")
+            else:
+                print(f"Volume: {lvl}%")
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_music_eq(args) -> int:
+    """Get or set the software EQ preset."""
+    _EQ_PRESETS = ["flat", "bass_boost", "treble_boost", "vocal", "loudness", "warm"]
+    try:
+        if hasattr(args, "preset") and args.preset is not None:
+            if args.preset not in _EQ_PRESETS:
+                print(f"Unknown preset '{args.preset}'. Valid: {', '.join(_EQ_PRESETS)}")
+                return 1
+            _http_put("/api/music/eq", {"preset": args.preset})
+            print(f"EQ preset set to '{args.preset}'")
+        else:
+            d = _http_get("/api/music/eq")
+            print(f"EQ preset: {d.get('preset', 'flat')}")
+            print(f"Available: {', '.join(d.get('presets', _EQ_PRESETS))}")
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(
         prog="desktop-assistant",
@@ -1107,6 +1174,15 @@ def main() -> int:
     mus_sub.add_parser("thumbs-down", help="Ban the current song (skips it)").set_defaults(func=cmd_music_thumbs_down)
     mus_sub.add_parser("stations",    help="List available Pandora stations").set_defaults(func=cmd_music_stations)
     mus_sub.add_parser("status",      help="Show playback state and current song").set_defaults(func=cmd_music_status)
+
+    ssp = mus_sub.add_parser("volume", help="Get or set system volume (0–100)")
+    ssp.add_argument("level", nargs="?", type=int, default=None, help="Volume level 0–100 (omit to read)")
+    ssp.set_defaults(func=cmd_music_volume)
+
+    ssp = mus_sub.add_parser("eq", help="Get or set software EQ preset")
+    ssp.add_argument("preset", nargs="?", default=None,
+                     help="EQ preset: flat | bass_boost | treble_boost | vocal | loudness | warm")
+    ssp.set_defaults(func=cmd_music_eq)
 
     sub.add_parser("topics", help="List subscribed topics").set_defaults(func=cmd_topics)
 
