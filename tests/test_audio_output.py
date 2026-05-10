@@ -1,10 +1,11 @@
-"""Unit tests for src/audio/output.py — patches the module-level `sd`
-attribute directly so test ordering is irrelevant."""
+"""Unit tests for src/audio/output.py — patches the module-level ``_APLAY_AVAILABLE``
+and ``subprocess.Popen`` so tests run without a real audio device."""
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import MagicMock
+from io import BytesIO
+from unittest.mock import MagicMock, patch, call
+import subprocess
 
 import numpy as np
 import pytest
@@ -13,142 +14,139 @@ from src.audio import output as audio_output
 from src.audio.output import AudioOutput, AudioOutputConfig, find_output_device
 
 
-_FAKE_DEVICES = [
-    {"name": "bcm2835 Headphones", "max_output_channels": 2, "max_input_channels": 0},
-    {"name": "USB PnP Sound Device: Sabrent Audio (hw:2,0)",
-     "max_output_channels": 2, "max_input_channels": 1},
-    {"name": "default", "max_output_channels": 2, "max_input_channels": 2},
-]
-
-
-class FakeOutputStream:
-    """Minimal stand-in for sd.OutputStream used in tests."""
+class FakeProc:
+    """Minimal stand-in for subprocess.Popen used in tests."""
 
     def __init__(self, *args, **kwargs):
-        self.active = True
-        self.latency = 0.2
-        self.written: list[np.ndarray] = []
-        self._started = False
+        self.stdin = BytesIO()
+        self._returncode = 0
+        self._alive = True
+        self.written: list[bytes] = []
+        _orig_write = self.stdin.write
 
-    def start(self):
-        self._started = True
+        def _tracked_write(data: bytes) -> int:
+            self.written.append(data)
+            return _orig_write(data)
 
-    def write(self, data: np.ndarray):
-        self.written.append(data.copy())
+        self.stdin.write = _tracked_write
+        self.stdin.flush = lambda: None
+        self.stdin.close = lambda: setattr(self, "_alive", False)
 
-    def abort(self):
-        self.active = False
+    def poll(self):
+        return None if self._alive else self._returncode
 
-    def stop(self):
-        self.active = False
+    def wait(self, timeout=None):
+        self._alive = False
+        return self._returncode
 
-    def close(self):
-        self.active = False
+    def kill(self):
+        self._alive = False
 
     @property
-    def total_samples(self) -> int:
-        return sum(len(a) for a in self.written)
+    def total_written(self) -> int:
+        return sum(len(b) for b in self.written)
 
 
 @pytest.fixture
-def fake_sd(monkeypatch):
-    """Replace the module-level `sd` and `_SD_AVAILABLE` so every test
-    sees a known fake regardless of suite ordering."""
-    played = []
-    stream_instances: list[FakeOutputStream] = []
+def fake_aplay(monkeypatch):
+    """Replace _APLAY_AVAILABLE=True and Popen so tests see a known fake."""
+    procs: list[FakeProc] = []
 
-    def query_devices(idx=None, kind=None):
-        return _FAKE_DEVICES if idx is None else _FAKE_DEVICES[idx]
+    def make_proc(*args, **kwargs):
+        p = FakeProc(*args, **kwargs)
+        procs.append(p)
+        return p
 
-    def make_output_stream(*args, **kwargs):
-        inst = FakeOutputStream(*args, **kwargs)
-        stream_instances.append(inst)
-        # Mirror written data into played[] for legacy test assertions
-        orig_write = inst.write
-        def _tracked_write(data):
-            played.append({"n_samples": len(data), "device": kwargs.get("device")})
-            orig_write(data)
-        inst.write = _tracked_write
-        return inst
-
-    fake = SimpleNamespace(
-        query_devices=query_devices,
-        OutputStream=make_output_stream,
-        play=lambda *a, **kw: None,  # legacy fallback — not used by new path
-        wait=lambda: None,
-        stop=lambda: None,
-    )
-    monkeypatch.setattr(audio_output, "sd", fake)
-    monkeypatch.setattr(audio_output, "_SD_AVAILABLE", True)
-    fake.played = played
-    fake.streams = stream_instances
-    return fake
+    monkeypatch.setattr(audio_output, "_APLAY_AVAILABLE", True)
+    monkeypatch.setattr(audio_output.subprocess, "Popen", make_proc)
+    return procs
 
 
 class TestFindOutputDevice:
-    def test_finds_sabrent(self, fake_sd):
-        assert find_output_device("Sabrent") == 1
-
-    def test_case_insensitive(self, fake_sd):
-        assert find_output_device("sabrent") == 1
-
-    def test_returns_none_when_not_found(self, fake_sd):
-        assert find_output_device("Nonexistent") is None
+    def test_always_returns_none(self):
+        """find_output_device is a legacy stub — always returns None."""
+        assert find_output_device("Sabrent") is None
+        assert find_output_device() is None
 
 
 class TestAudioOutput:
-    def test_hardware_ready_with_sabrent(self, fake_sd):
+    def test_hardware_ready_when_aplay_available(self, fake_aplay):
         out = AudioOutput()
         assert out.hardware_ready is True
-        assert out.device_index == 1
 
-    def test_sim_mode_when_device_missing(self, fake_sd):
-        out = AudioOutput(AudioOutputConfig(device_name="Nope"))
+    def test_sim_mode_when_aplay_missing(self, monkeypatch):
+        monkeypatch.setattr(audio_output, "_APLAY_AVAILABLE", False)
+        out = AudioOutput()
         assert out.hardware_ready is False
 
-    def test_explicit_device_index(self, fake_sd):
-        out = AudioOutput(AudioOutputConfig(device_index=2))
-        assert out.device_index == 2
-
-    def test_play_sends_to_correct_device(self, fake_sd):
+    def test_device_index_always_none(self, fake_aplay):
         out = AudioOutput()
-        samples = np.zeros(1000, dtype=np.float32)
-        out.play(samples, sample_rate=48000)
-        # Persistent stream should have received the audio data
-        assert len(fake_sd.streams) >= 1
-        assert fake_sd.streams[0].total_samples > 0
+        assert out.device_index is None
 
-    def test_beep_generates_correct_length(self, fake_sd):
+    def test_play_sends_s16_data(self, fake_aplay):
+        out = AudioOutput(AudioOutputConfig(loudness_boost=1.0, channels=1))
+        samples = np.zeros(1000, dtype=np.float32)
+        out.play(samples, sample_rate=44100)
+        assert len(fake_aplay) == 1
+        assert fake_aplay[0].total_written > 0
+
+    def test_play_spawns_aplay_with_pulse_device(self, monkeypatch):
+        monkeypatch.setattr(audio_output, "_APLAY_AVAILABLE", True)
+        spawned_cmds: list[list] = []
+
+        class _Proc(FakeProc):
+            pass
+
+        def mock_popen(cmd, **kw):
+            spawned_cmds.append(cmd)
+            return FakeProc()
+
+        monkeypatch.setattr(audio_output.subprocess, "Popen", mock_popen)
+        out = AudioOutput()
+        out.play(np.zeros(100, dtype=np.float32))
+        assert any("aplay" in c[0] for c in spawned_cmds)
+        assert any("-D" in c and "pulse" in c for c in spawned_cmds)
+
+    def test_beep_generates_audio(self, fake_aplay):
         out = AudioOutput(AudioOutputConfig(channels=1))
         out.beep(frequency=440, duration=0.1)
-        # beep() calls play(); verify audio data was written to stream
-        assert len(fake_sd.streams) >= 1
-        # 0.1s @ 48kHz = 4800 samples; flush() writes silence pad after,
-        # so total written includes both the beep and the silence drain
-        assert fake_sd.streams[0].total_samples >= 4800
+        assert len(fake_aplay) == 1
+        # 0.1s @ 44100 Hz, 1 ch, 2 bytes/sample → 8820 bytes
+        assert fake_aplay[0].total_written >= 8820
 
-    def test_sim_play_does_not_crash(self, fake_sd):
-        out = AudioOutput(AudioOutputConfig(device_name="Nope"))
+    def test_sim_play_does_not_crash(self, monkeypatch):
+        monkeypatch.setattr(audio_output, "_APLAY_AVAILABLE", False)
+        out = AudioOutput()
         out.play(np.zeros(100, dtype=np.float32))
-        assert fake_sd.played == []
+        assert len([]) == 0  # no procs spawned
 
-    def test_write_chunk_streams_to_persistent_stream(self, fake_sd):
+    def test_write_chunk_reuses_proc(self, fake_aplay):
         out = AudioOutput()
         chunk = np.ones(2400, dtype=np.float32) * 0.5
-        out.write_chunk(chunk, sample_rate=48000)
-        assert len(fake_sd.streams) == 1
-        assert fake_sd.streams[0]._started
+        out.write_chunk(chunk, sample_rate=44100)
+        out.write_chunk(chunk, sample_rate=44100)
+        assert len(fake_aplay) == 1  # same proc reused
 
-    def test_close_clears_stream(self, fake_sd):
+    def test_flush_closes_proc(self, fake_aplay):
+        out = AudioOutput()
+        out.write_chunk(np.zeros(100, dtype=np.float32))
+        assert out._proc is not None
+        out.flush()
+        assert out._proc is None
+
+    def test_close_terminates_proc(self, fake_aplay):
         out = AudioOutput()
         out.write_chunk(np.zeros(100, dtype=np.float32))
         out.close()
-        assert out._stream is None
+        assert out._proc is None
 
-    def test_flush_writes_silence(self, fake_sd):
-        out = AudioOutput()
-        out.write_chunk(np.zeros(100, dtype=np.float32))
-        before = fake_sd.streams[0].total_samples
-        out.flush()
-        after = fake_sd.streams[0].total_samples
-        assert after > before  # silence pad was written
+    def test_stereo_upmix_from_mono(self, fake_aplay):
+        cfg = AudioOutputConfig(channels=2, loudness_boost=1.0)
+        out = AudioOutput(cfg)
+        # mono 1-D array
+        samples = np.ones(1000, dtype=np.float32) * 0.5
+        out.write_chunk(samples, sample_rate=44100)
+        proc = fake_aplay[0]
+        # S16_LE stereo: 1000 frames × 2 ch × 2 bytes = 4000 bytes
+        assert proc.total_written == 4000
+

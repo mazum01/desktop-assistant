@@ -1,16 +1,19 @@
 """
 Audio output — playback through the Sabrent USB audio adapter.
 
-Uses sounddevice (PortAudio backend) for raw waveform playback. The
-adapter is auto-located by name match against ALSA's device list;
-override via AudioOutputConfig.device_name or device_index.
+Routes all audio through ``aplay -D pulse`` which hands off to PipeWire's
+PulseAudio compatibility sink.  This keeps the raw ALSA hardware device free
+for PipeWire's exclusive use, allowing pianobar and other PipeWire clients to
+mix alongside TTS without competing for exclusive device access.
 
-Falls back to simulation mode if no audio device is available.
+Falls back to simulation mode if ``aplay`` is not installed.
 """
 
 from __future__ import annotations
 
 import logging
+import shutil
+import subprocess
 from dataclasses import dataclass
 from typing import Optional
 
@@ -18,24 +21,12 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-try:
-    import sounddevice as sd
-    _SD_AVAILABLE = True
-except (ImportError, OSError) as exc:
-    sd = None  # type: ignore
-    _SD_AVAILABLE = False
-    log.warning("sounddevice not available — audio output in sim mode (%s)", exc)
+_APLAY_AVAILABLE: bool = shutil.which("aplay") is not None
 
 
 @dataclass
 class AudioOutputConfig:
-    # Substrings matched against device names; any match wins. Covers
-    # Sabrent (Realtek), C-Media (Unitek Y-247A and other generic CM108
-    # adapters), and the kernel's generic "USB Audio Device" descriptor.
-    device_names: tuple[str, ...] = ("USB Audio", "C-Media", "Sabrent")
-    # Explicit override; if set, device_names is ignored.
-    device_index: Optional[int] = None
-    sample_rate: int = 48000  # 48 kHz is supported by every common USB DAC
+    sample_rate: int = 44100
     channels: int = 2
 
     # Soft-clipping waveshaper drive — pumps perceived loudness on the
@@ -43,48 +34,36 @@ class AudioOutputConfig:
     # higher = louder + more harmonic distortion. 0 disables.
     loudness_boost: float = 2.0
 
-    # Back-compat: callers may still pass device_name="Foo".
+    # ALSA device name passed to ``aplay -D``.  "pulse" routes through
+    # PipeWire's PulseAudio compatibility layer without holding the raw
+    # ALSA PCM device open in this process.
+    alsa_device: str = "pulse"
+
+    # Back-compat fields kept so existing callers don't break.
+    device_names: tuple[str, ...] = ("pulse", "USB Audio", "C-Media", "Sabrent")
+    device_index: Optional[int] = None
     device_name: Optional[str] = None
 
     def __post_init__(self) -> None:
-        # If a legacy single-string device_name was supplied, it REPLACES
-        # the multi-name default (preserving old "match exactly this and
-        # nothing else" semantics).
-        if self.device_name:
-            self.device_names = (self.device_name,)
+        pass  # back-compat fields accepted but not used
 
 
 def find_output_device(
-    name_substring: str | tuple[str, ...] | list[str] = (
-        "USB Audio", "C-Media", "Sabrent",
-    ),
+    name_substring=("pulse", "USB Audio", "C-Media", "Sabrent"),
 ) -> Optional[int]:
-    """Return the index of the first output device whose name contains
-    any of *name_substring* (case-insensitive). None if nothing matches.
-    Accepts a single string for back-compat."""
-    if not _SD_AVAILABLE:
-        return None
-    try:
-        devices = sd.query_devices()
-    except Exception as exc:
-        log.warning("query_devices failed: %s", exc)
-        return None
-    if isinstance(name_substring, str):
-        needles = (name_substring.lower(),)
-    else:
-        needles = tuple(s.lower() for s in name_substring)
-    for idx, dev in enumerate(devices):
-        if dev.get("max_output_channels", 0) <= 0:
-            continue
-        name = dev.get("name", "").lower()
-        if any(n in name for n in needles):
-            return idx
+    """Legacy helper — kept for back-compat.  Always returns None because
+    the aplay backend does not use sounddevice device indices."""
     return None
 
 
 class AudioOutput:
     """
-    Thin wrapper over sounddevice for playing PCM audio.
+    PCM audio output routed through ``aplay -D pulse`` (PipeWire).
+
+    A single ``aplay`` subprocess is kept alive across streaming chunks so
+    that consecutive TTS sentences play without gaps or restarts.  It is
+    closed (and the process reaped) after each complete utterance via
+    ``flush()``.
 
     Usage:
         out = AudioOutput()
@@ -94,24 +73,11 @@ class AudioOutput:
 
     def __init__(self, config: Optional[AudioOutputConfig] = None) -> None:
         self._cfg = config or AudioOutputConfig()
-        self._sim = not _SD_AVAILABLE
-        self._device_index: Optional[int] = None
-        self._stream: Optional["sd.OutputStream"] = None  # persistent stream
+        self._sim = not _APLAY_AVAILABLE
+        self._proc: Optional[subprocess.Popen] = None
 
         if self._sim:
-            return
-
-        if self._cfg.device_index is not None:
-            self._device_index = self._cfg.device_index
-        else:
-            self._device_index = find_output_device(self._cfg.device_names)
-
-        if self._device_index is None:
-            log.warning(
-                "[sim] No output device matched any of %s — sim mode",
-                self._cfg.device_names,
-            )
-            self._sim = True
+            log.warning("[sim] aplay not found — audio output in sim mode")
 
     # ── Properties ──────────────────────────────────────────────────────
 
@@ -121,63 +87,42 @@ class AudioOutput:
 
     @property
     def device_index(self) -> Optional[int]:
-        return self._device_index
+        """Always None — aplay backend does not use device indices."""
+        return None
 
     @property
     def device_info(self) -> Optional[dict]:
-        if self._sim or self._device_index is None:
-            return None
-        try:
-            return sd.query_devices(self._device_index)
-        except Exception:
-            return None
+        return None
 
-    # ── Persistent stream ────────────────────────────────────────────────
+    # ── aplay subprocess management ──────────────────────────────────────
 
-    def _ensure_stream(self) -> "sd.OutputStream":
-        """Open (or reopen) the persistent output stream with high latency.
-
-        Keeping the stream open between utterances prevents the USB DAC from
-        auto-suspending (which causes audible clicks/pops on resume) and
-        eliminates PortAudio stream-open overhead at the start of each phrase.
-        """
-        if self._stream is not None and self._stream.active:
-            return self._stream
-        if self._stream is not None:
-            try:
-                self._stream.close()
-            except Exception:
-                pass
-            self._stream = None
-        log.debug(
-            "Opening persistent audio stream device=%s %dHz %dch",
-            self._device_index, self._cfg.sample_rate, self._cfg.channels,
+    def _ensure_proc(self) -> subprocess.Popen:
+        """Return the running aplay process, starting one if needed."""
+        if self._proc is not None and self._proc.poll() is None:
+            return self._proc
+        cmd = [
+            "aplay",
+            "-D", self._cfg.alsa_device,
+            "-f", "S16_LE",
+            "-r", str(self._cfg.sample_rate),
+            "-c", str(self._cfg.channels),
+            "-",
+        ]
+        log.debug("Opening aplay process: %s", " ".join(cmd))
+        self._proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
-        self._stream = sd.OutputStream(
-            samplerate=self._cfg.sample_rate,
-            channels=self._cfg.channels,
-            device=self._device_index,
-            dtype="float32",
-            latency="high",             # large OS buffer — prevents underruns
-            blocksize=int(self._cfg.sample_rate * 0.05),  # 50 ms callback blocks
-        )
-        self._stream.start()
-        return self._stream
+        return self._proc
 
-    def write_chunk(
+    def _samples_to_s16(
         self,
         samples: np.ndarray,
-        sample_rate: Optional[int] = None,
-    ) -> None:
-        """Write a chunk of audio to the persistent stream.
-
-        Blocks until the chunk has been accepted into the ring buffer (NOT
-        until playback completes). Call ``flush()`` after the last chunk to
-        wait for audio to fully play through. This streaming path is used by
-        the TTS layer so synthesis and playback can be pipelined.
-        """
-        if self._sim:
-            return
+        sample_rate: Optional[int],
+    ) -> bytes:
+        """Resample, apply loudness boost, convert to stereo S16_LE bytes."""
         sr = sample_rate or self._cfg.sample_rate
         if sr != self._cfg.sample_rate:
             samples = _resample_linear(samples, sr, self._cfg.sample_rate)
@@ -186,34 +131,54 @@ class AudioOutput:
             samples = _soft_clip(samples, drive)
         if self._cfg.channels == 2 and samples.ndim == 1:
             samples = np.column_stack([samples, samples])
-        self._ensure_stream().write(samples.astype(np.float32))
+        return (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
+
+    # ── Streaming write / flush ──────────────────────────────────────────
+
+    def write_chunk(
+        self,
+        samples: np.ndarray,
+        sample_rate: Optional[int] = None,
+    ) -> None:
+        """Write a chunk of audio to the streaming aplay process.
+
+        Does not block until playback finishes.  Call ``flush()`` after the
+        last chunk to wait for the audio to fully play through.
+        """
+        if self._sim:
+            return
+        raw = self._samples_to_s16(samples, sample_rate)
+        try:
+            proc = self._ensure_proc()
+            proc.stdin.write(raw)
+            proc.stdin.flush()
+        except BrokenPipeError:
+            log.warning("aplay stdin closed unexpectedly; resetting")
+            self._proc = None
 
     def flush(self) -> None:
-        """Wait for all previously written chunks to finish playing.
-
-        Writes a silence pad equal to twice the stream latency. Since
-        ``sd.OutputStream.write()`` blocks when the ring buffer is full,
-        this forces the ring buffer to drain (i.e. all audio plays through)
-        before returning.  The silence itself also keeps the USB DAC active
-        so the next utterance starts cleanly.
-        """
-        if self._sim or self._stream is None:
+        """Close aplay's stdin and wait for it to finish playing all audio."""
+        if self._sim or self._proc is None:
             return
-        latency_s = max(0.2, self._stream.latency)
-        pad_frames = int(self._cfg.sample_rate * latency_s * 2)
-        shape = (pad_frames, self._cfg.channels) if self._cfg.channels > 1 else pad_frames
-        silence = np.zeros(shape, dtype=np.float32)
-        self._stream.write(silence)
+        try:
+            self._proc.stdin.close()
+        except Exception:
+            pass
+        self._proc.wait()
+        self._proc = None
 
     def close(self) -> None:
-        """Release the persistent stream (call when the service shuts down)."""
-        if self._stream is not None:
+        """Terminate the aplay process (call when the service shuts down)."""
+        if self._proc is not None:
             try:
-                self._stream.stop()
-                self._stream.close()
+                self._proc.stdin.close()
+                self._proc.wait(timeout=2)
             except Exception:
-                pass
-            self._stream = None
+                try:
+                    self._proc.kill()
+                except Exception:
+                    pass
+            self._proc = None
 
     # ── Playback ────────────────────────────────────────────────────────
 
@@ -223,7 +188,7 @@ class AudioOutput:
         sample_rate: Optional[int] = None,
         blocking: bool = True,
     ) -> None:
-        """Play a numpy waveform through the persistent output stream.
+        """Play a numpy waveform.
 
         samples: 1-D mono or 2-D (n_samples, channels).
         Resamples if sample_rate differs from the device rate.
@@ -240,16 +205,12 @@ class AudioOutput:
         """Abort any ongoing playback immediately."""
         if self._sim:
             return
-        if self._stream is not None:
+        if self._proc is not None:
             try:
-                self._stream.abort()
+                self._proc.kill()
             except Exception:
                 pass
-            self._stream = None  # will reopen on next use
-        try:
-            sd.stop()
-        except Exception:
-            pass
+            self._proc = None
 
     def beep(
         self,

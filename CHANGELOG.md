@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.6.5] - 2026-05-10
+### Fixed
+- **TTS no longer blocks PipeWire / pianobar audio.** The previous `sounddevice`/PortAudio backend kept a persistent `sd.OutputStream` open to the raw ALSA PCM device (`/dev/snd/pcmC2D0p`), holding it exclusively and preventing PipeWire from accessing the USB DAC. PipeWire's sink entered a "suspended" state, starving pianobar of audio output. Replaced `sounddevice` with an `aplay -D pulse` subprocess that routes TTS through PipeWire's PulseAudio compatibility layer — `aplay` does not hold the raw ALSA fd, so PipeWire retains exclusive hardware ownership and can mix TTS alongside pianobar seamlessly. Updated `tests/test_audio_output.py` to match the new subprocess-based backend.
+
+---
+
 ## [1.6.4] - 2026-05-10
 ### Fixed
 - **Music skill: station list now loads correctly.** pianobar uses `\r\n` line endings. After splitting on `\n`, the remaining raw bytes still contained a trailing `\r`. The previous CR-split logic (`decoded.split("\r")[-1]`) then returned the empty string after that `\r`, silently dropping every status and station line pianobar emitted. Fixed by stripping trailing `\r` before splitting (`decoded.rstrip("\r").split("\r")[-1]`). The reader now correctly captures Login/Get-stations acknowledgements, song metadata, and the full 97-station list.
