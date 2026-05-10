@@ -13,9 +13,10 @@ head_tracking:
   face_tracking_enabled: true    # servo follows detected faces
   random_motion_enabled: true    # idle random gaze when no face visible
   fov_degrees: 100.0        # IMX708 wide horizontal field of view estimate
-  spring_k: 6.0             # tracking stiffness (higher = snappier)
-  damping: 2.5              # motion damping (underdamped for natural overshoot)
-  max_speed_deg_s: 80.0     # max tracking speed cap
+  spring_k: 3.5             # tracking stiffness (higher = snappier)
+  damping: 3.8              # near-critical damping (2*sqrt(3.5)≈3.74) — minimal overshoot
+  max_speed_deg_s: 60.0     # max tracking speed cap
+  tracking_gain: 0.6        # scale face-offset correction (0.0–1.0); lower = less aggressive
   invert_pan: false          # flip pan direction (set true if servo mount reverses left/right)
 
 servo:

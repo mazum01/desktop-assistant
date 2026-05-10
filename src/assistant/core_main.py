@@ -106,9 +106,10 @@ def main() -> int:
     _tracker_cfg = HeadTrackerConfig(
         frame_width=_tracking_frame_width(_cam_width, _cam_height, _camera_rotation_deg),
         fov_degrees=float(_ht_cfg_raw.get("fov_degrees", 100.0)),
-        spring_k=float(_ht_cfg_raw.get("spring_k", 6.0)),
-        damping=float(_ht_cfg_raw.get("damping", 2.5)),
-        max_speed_deg_s=float(_ht_cfg_raw.get("max_speed_deg_s", 80.0)),
+        spring_k=float(_ht_cfg_raw.get("spring_k", 3.5)),
+        damping=float(_ht_cfg_raw.get("damping", 3.8)),
+        max_speed_deg_s=float(_ht_cfg_raw.get("max_speed_deg_s", 60.0)),
+        tracking_gain=float(_ht_cfg_raw.get("tracking_gain", 0.6)),
         invert_pan=bool(_ht_cfg_raw.get("invert_pan", False)),
     )
     _perc_cfg = PerceptionConfig(recognition_enabled=_recognition_enabled)

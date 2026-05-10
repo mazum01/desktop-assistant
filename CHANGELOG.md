@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.2] - 2026-05-10
+### Fixed
+- Face tracking over-correction: reduced `spring_k` (6.0→3.5), raised `damping` (2.5→3.8,
+  near-critical), lowered `max_speed_deg_s` (80→60), and widened dead zone (0.04→0.05 frac)
+- Added `tracking_gain` config parameter (default 0.6) to scale per-frame face-offset
+  correction; exposes tuning without touching spring constants
+
+---
+
 ## [1.7.1] - 2026-05-11
 ### Fixed
 - **Web GUI music refresh — progress bar no longer resets every second.** `_applyMusicSong()` in `app.js` now only updates the progress bar, elapsed, and duration elements when `elapsed` and `duration` are explicitly provided. The WebSocket `updateDashboard` handler passes only song metadata (no timing), so it no longer overwrites the values the 2-second REST poll sets.

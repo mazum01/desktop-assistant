@@ -42,12 +42,15 @@ class HeadTrackerConfig:
     fov_degrees: float = 100.0   # camera horizontal field of view
 
     # Spring-damper tracking
-    spring_k: float = 6.0        # stiffness — higher = faster tracking
-    damping: float = 2.5         # underdamped: 2*sqrt(6)≈4.9 is critical
-    max_speed_deg_s: float = 80.0
+    spring_k: float = 3.5        # stiffness — higher = faster tracking
+    damping: float = 3.8         # closer to critical (2*sqrt(3.5)≈3.74) for minimal overshoot
+    max_speed_deg_s: float = 60.0
+
+    # Gain applied to the face-offset target (0.0–1.0). Lower = less aggressive correction.
+    tracking_gain: float = 0.6
 
     # Dead zone — fraction of frame width before the head starts following
-    dead_zone_frac: float = 0.04
+    dead_zone_frac: float = 0.05
 
     # Flip pan direction if the servo linkage or mount reverses left/right
     invert_pan: bool = False
@@ -157,9 +160,10 @@ class HeadTracker:
             offset_deg = 0.0
 
         # Target: move servo so face is centred.
+        # tracking_gain scales how aggressively each frame's offset is applied.
         # Sign: if the servo mount inverts left/right, flip via invert_pan.
         direction = -1.0 if cfg.invert_pan else 1.0
-        target = self._position + direction * offset_deg
+        target = self._position + direction * offset_deg * cfg.tracking_gain
 
         # Micro-saccades
         now = time.monotonic()
