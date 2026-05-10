@@ -16,7 +16,7 @@ head_tracking:
   spring_k: 6.0             # tracking stiffness (higher = snappier)
   damping: 2.5              # motion damping (underdamped for natural overshoot)
   max_speed_deg_s: 80.0     # max tracking speed cap
-  invert_pan: true          # flip pan direction (set true if servo mount reverses left/right)
+  invert_pan: false          # flip pan direction (set true if servo mount reverses left/right)
 
 servo:
   # Enable/disable all servo motion (head pan).
@@ -62,3 +62,12 @@ quiet_hours:
   enabled: true
   start: "21:00"
   end: "06:00"
+
+music:
+  # Pandora playback via pianobar (https://github.com/PromyLOPh/pianobar).
+  # Pre-requisite: sudo apt install pianobar
+  # Then create ~/.config/pianobar/config:
+  #   user = your@pandora.com
+  #   password = yourpassword
+  enabled: true
+  announce_song_changes: false  # if true, speaks "Now playing…" on each new track

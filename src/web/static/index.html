@@ -175,7 +175,36 @@
 
     </section>
 
-    <!-- ── Greeting Settings ─────────────────────────────────── -->
+    <!-- ── Music (Pandora) ───────────────────────────────────── -->
+    <section class="card">
+      <h2>🎵 Music (Pandora)</h2>
+      <div id="music-not-configured" style="display:none;color:var(--yellow);margin-bottom:8px;font-size:0.9em">
+        ⚠ pianobar not configured. Create <code>~/.config/pianobar/config</code> with your Pandora credentials.
+      </div>
+      <div style="margin-bottom:8px">
+        <span id="music-state-icon" style="font-size:1.4em">■</span>
+        <span id="music-song-title" style="font-weight:600;margin-left:6px">—</span>
+      </div>
+      <div style="font-size:0.85em;color:var(--text-muted);margin-bottom:10px">
+        <span id="music-song-artist"></span>
+        <span id="music-song-station" style="margin-left:8px;opacity:0.7"></span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn btn-primary" onclick="musicPlay()">▶ Play</button>
+        <button class="btn btn-sm" onclick="musicPause()">⏸ Pause</button>
+        <button class="btn btn-sm" onclick="musicNext()">⏭ Next</button>
+        <button class="btn btn-sm" onclick="musicStop()">■ Stop</button>
+        <button class="btn btn-sm" onclick="musicThumbsUp()" title="Love this song">👍</button>
+        <button class="btn btn-sm" onclick="musicThumbsDown()" title="Ban this song">👎</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:0.9em">Station</label>
+        <select id="music-station-select" style="flex:1;min-width:180px" onchange="musicSetStation(this.value)">
+          <option value="">— select station —</option>
+        </select>
+        <span id="music-status" style="font-size:0.85em;color:var(--green)"></span>
+      </div>
+    </section>
     <section class="card">
       <h2>💬 Greeting Settings</h2>
       <div class="qh-form">
@@ -276,6 +305,11 @@
               <tr><td><code>da vision describe</code></td><td>Speak everything currently seen</td></tr>
               <tr><td><code>da vision rotation &lt;deg&gt;</code></td><td>Set camera rotation 0–359°</td></tr>
               <tr><td><code>da vision rotation-status</code></td><td>Show current camera rotation</td></tr>
+              <tr><td><code>da music play [station]</code></td><td>Start Pandora (optional station name)</td></tr>
+              <tr><td><code>da music stop / next / pause</code></td><td>Control playback</td></tr>
+              <tr><td><code>da music thumbs-up / thumbs-down</code></td><td>Love or ban current song</td></tr>
+              <tr><td><code>da music stations</code></td><td>List available stations</td></tr>
+              <tr><td><code>da music status</code></td><td>Show current playback state</td></tr>
               <tr><td><code>da watch</code></td><td>Stream all bus events (Ctrl-C to stop)</td></tr>
               <tr><td><code>da help</code></td><td>Full command reference</td></tr>
             </table>
@@ -289,6 +323,7 @@
               <li><strong>Face Registry</strong> — Known faces with thumbnails, seen counts, and merge/delete actions. Click a thumbnail to enlarge.</li>
               <li><strong>Controls</strong> — Say text, pan servo, toggle tracking, adjust travel limits, speak version, describe scene.</li>
               <li><strong>Greeting Settings</strong> — Configure face greeting cooldown, jitter, minimum absence, and confidence threshold.</li>
+              <li><strong>Music (Pandora)</strong> — Play, pause, skip, love/ban songs, and select stations via pianobar.</li>
               <li><strong>Quiet Hours</strong> — Suppress TTS announcements during a configured time window.</li>
               <li><strong>Event Log</strong> — Last 20 bus events (newest first).</li>
               <li><strong>System Power</strong> — Reboot or shut down the Pi from the browser.</li>

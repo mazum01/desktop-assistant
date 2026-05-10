@@ -22,6 +22,7 @@ from src.services.clock_service import ClockService
 from src.services.face_service import FaceService
 from src.services.ipc_bridge import IPCBridge
 from src.services.motion_service import MotionService
+from src.services.music_service import MusicService
 from src.services.object_service import ObjectService
 from src.services.perception_service import PerceptionService
 from src.services.telemetry_service import TelemetryService
@@ -200,6 +201,13 @@ def main() -> int:
         soft_max_deg=_soft_max_deg,
     )
 
+    _music_cfg = _cfg.get("music", {})
+    music_svc = MusicService(
+        bus=bus,
+        enabled=bool(_music_cfg.get("enabled", True)),
+        announce_song_changes=bool(_music_cfg.get("announce_song_changes", False)),
+    )
+
     services = [
         motion_svc,
         vis,
@@ -217,6 +225,7 @@ def main() -> int:
             confidence_threshold=_confidence_threshold,
             quiet_hours=_qh,
         ),
+        music_svc,
     ]
     tracking_svc = TrackingService(
         bus=bus, config=_tracker_cfg, enabled=_tracking_enabled,
@@ -229,7 +238,7 @@ def main() -> int:
         services.append(
             WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
                        quiet_hours=_qh, motion_service=motion_svc,
-                       tracking_service=tracking_svc)
+                       tracking_service=tracking_svc, music_service=music_svc)
         )
 
     return run_services(services=services, unit_name="core")

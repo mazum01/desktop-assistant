@@ -624,6 +624,15 @@ def cmd_help(args) -> int:
                          "               vision describe             Speak a description of everything seen.\n"
                          "               vision rotation <deg>       Set camera rotation (0–359°).\n"
                          "               vision rotation-status      Show current camera rotation angle.",
+        "music":         "Pandora music playback. Sub-commands:\n"
+                         "               music play [STATION]        Start or resume playback (optional station name).\n"
+                         "               music stop                  Stop playback.\n"
+                         "               music next                  Skip to the next song.\n"
+                         "               music pause                 Toggle pause/resume.\n"
+                         "               music thumbs-up             Love the current song.\n"
+                         "               music thumbs-down           Ban the current song (skips it).\n"
+                         "               music stations              List available Pandora stations.\n"
+                         "               music status                Show playback state and current song.",
         "help":          "Show this command reference, or help for a specific command.\n"
                          "               Usage: help [command]",
     }
@@ -929,6 +938,104 @@ def cmd_vision_rotation_status(_args) -> int:
     return 0
 
 
+def cmd_music_play(args) -> int:
+    """Start or resume Pandora playback, optionally selecting a station by name."""
+    payload: dict = {}
+    if hasattr(args, "station") and args.station:
+        # Try to resolve station name to ID from the last known stations payload.
+        import yaml as _yaml
+        from pathlib import Path
+        station_name = " ".join(args.station).lower()
+        r = _request({"cmd": "last", "topic": "music.stations_updated"})
+        stations = r.get("payload", {}).get("stations", []) if isinstance(r.get("payload"), dict) else []
+        matched = next(
+            (s for s in stations if station_name in s.get("name", "").lower()),
+            None,
+        )
+        if matched:
+            payload["station_id"] = matched["id"]
+            print(f"Playing station: {matched['name']}")
+        elif stations:
+            print(f"Station {args.station!r} not found. Starting default station.")
+        # No stations cached yet — pianobar will show list and pick first
+    r = _request({"cmd": "publish", "topic": "music.play", "payload": payload})
+    if r.get("ok"):
+        print("▶  Music starting…")
+    else:
+        print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
+def cmd_music_stop(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "music.stop", "payload": {}})
+    if r.get("ok"):
+        print("■  Music stopped.")
+    return 0 if r.get("ok") else 1
+
+
+def cmd_music_next(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "music.next", "payload": {}})
+    if r.get("ok"):
+        print("⏭  Skipping to next song…")
+    return 0 if r.get("ok") else 1
+
+
+def cmd_music_pause(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "music.pause", "payload": {}})
+    if r.get("ok"):
+        print("⏯  Pause toggled.")
+    return 0 if r.get("ok") else 1
+
+
+def cmd_music_thumbs_up(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "music.thumbs_up", "payload": {}})
+    if r.get("ok"):
+        print("👍  Loved the song.")
+    return 0 if r.get("ok") else 1
+
+
+def cmd_music_thumbs_down(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "music.thumbs_down", "payload": {}})
+    if r.get("ok"):
+        print("👎  Banned the song — skipping.")
+    return 0 if r.get("ok") else 1
+
+
+def cmd_music_stations(_args) -> int:
+    r = _request({"cmd": "last", "topic": "music.stations_updated"})
+    stations = []
+    if isinstance(r.get("payload"), dict):
+        stations = r["payload"].get("stations", [])
+    if not stations:
+        print("No station list available yet. Start music first: da music play")
+        return 1
+    print(f"\n  {'ID':<4} Station")
+    print("  " + "─" * 36)
+    for s in stations:
+        print(f"  {s['id']:<4} {s['name']}")
+    print()
+    return 0
+
+
+def cmd_music_status(_args) -> int:
+    state_r = _request({"cmd": "last", "topic": "music.state_changed"})
+    song_r  = _request({"cmd": "last", "topic": "music.song_changed"})
+    state = "stopped"
+    if isinstance(state_r.get("payload"), dict):
+        state = state_r["payload"].get("state", "stopped")
+    song = {}
+    if isinstance(song_r.get("payload"), dict):
+        song = song_r["payload"]
+    icons = {"playing": "▶", "paused": "⏸", "stopped": "■"}
+    print(f"\n  State    : {icons.get(state, '?')} {state}")
+    if song:
+        print(f"  Title    : {song.get('title', '—')}")
+        print(f"  Artist   : {song.get('artist', '—')}")
+        print(f"  Station  : {song.get('station', '—')}")
+    print()
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(
         prog="desktop-assistant",
@@ -983,6 +1090,23 @@ def main() -> int:
     ssp = vis_sub.add_parser("rotation", help="Set camera rotation angle (0–359°)")
     ssp.add_argument("degrees", type=int, help="Rotation in degrees (0–359)")
     ssp.set_defaults(func=cmd_vision_rotation)
+
+    # ── music subcommand group ───────────────────────────────────────
+    mus_sp = sub.add_parser("music", help="Pandora music playback via pianobar")
+    mus_sub = mus_sp.add_subparsers(dest="mus_cmd", metavar="<subcommand>")
+    mus_sub.required = True
+
+    ssp = mus_sub.add_parser("play", help="Start or resume playback (optional station name)")
+    ssp.add_argument("station", nargs="*", help="Station name to select (fuzzy match)")
+    ssp.set_defaults(func=cmd_music_play)
+
+    mus_sub.add_parser("stop",        help="Stop playback").set_defaults(func=cmd_music_stop)
+    mus_sub.add_parser("next",        help="Skip to the next song").set_defaults(func=cmd_music_next)
+    mus_sub.add_parser("pause",       help="Toggle pause/resume").set_defaults(func=cmd_music_pause)
+    mus_sub.add_parser("thumbs-up",   help="Love the current song").set_defaults(func=cmd_music_thumbs_up)
+    mus_sub.add_parser("thumbs-down", help="Ban the current song (skips it)").set_defaults(func=cmd_music_thumbs_down)
+    mus_sub.add_parser("stations",    help="List available Pandora stations").set_defaults(func=cmd_music_stations)
+    mus_sub.add_parser("status",      help="Show playback state and current song").set_defaults(func=cmd_music_status)
 
     sub.add_parser("topics", help="List subscribed topics").set_defaults(func=cmd_topics)
 

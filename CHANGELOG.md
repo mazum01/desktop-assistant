@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.6.0] - 2026-05-09
+### Added
+- **Music skill (Pandora via pianobar)**: New `MusicService` manages a pianobar subprocess, exposes play/stop/next/pause/thumbs-up/thumbs-down/station-select via the internal bus.
+- Web GUI music card: now-playing title/artist/station display, playback buttons (Play, Pause, Next, Stop, 👍, 👎), and station dropdown auto-populated from pianobar.
+- REST API music routes: `GET /api/music/status`, `POST /api/music/play|stop|next|pause|thumbs-up|thumbs-down`, `POST /api/music/station`.
+- CLI `music` subcommand group: `da music play [station] | stop | next | pause | thumbs-up | thumbs-down | stations | status`.
+- Test stub `tests/test_music_service.py` covering import, instantiation, default state, and empty song/stations.
+
 ## [1.5.12] - 2026-05-09
 ### Fixed
 - Face tracking pan direction was reversed — servo moved left when face was right and vice versa. Fixed by correcting the sign of the `offset_deg` application in `HeadTracker._update_tracking()`.

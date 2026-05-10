@@ -111,6 +111,7 @@ class WebService:
         quiet_hours: Optional[QuietHours] = None,
         motion_service=None,
         tracking_service=None,
+        music_service=None,
     ) -> None:
         self.bus = bus
         self._host = host
@@ -120,6 +121,7 @@ class WebService:
         self._quiet_hours = quiet_hours
         self._motion_svc = motion_service
         self._tracking_svc = tracking_service
+        self._music_svc = music_service
         self._server = None
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -625,5 +627,69 @@ class WebService:
             if self.bus:
                 self.bus.publish("camera.set_rotation", {"rotation_deg": deg})
             return {"ok": True, "rotation_deg": deg}
+
+        # ── Music (Pandora/pianobar) ────────────────────────────────────
+
+        @app.get("/api/music/status")
+        async def api_music_status():
+            if not self._music_svc:
+                return {"state": "stopped", "song": {}, "stations": [], "configured": False}
+            return {
+                "state":      self._music_svc.state,
+                "song":       self._music_svc.current_song,
+                "stations":   self._music_svc.stations,
+                "configured": self._music_svc.is_configured,
+            }
+
+        class _MusicPlayBody(BaseModel):
+            station_id: Optional[int] = None
+
+        class _MusicStationBody(BaseModel):
+            station_id: int
+
+        @app.post("/api/music/play")
+        async def api_music_play(body: _MusicPlayBody = _MusicPlayBody()):
+            payload = {}
+            if body.station_id is not None:
+                payload["station_id"] = body.station_id
+            if self.bus:
+                self.bus.publish("music.play", payload)
+            return {"ok": True}
+
+        @app.post("/api/music/stop")
+        async def api_music_stop():
+            if self.bus:
+                self.bus.publish("music.stop", {})
+            return {"ok": True}
+
+        @app.post("/api/music/next")
+        async def api_music_next():
+            if self.bus:
+                self.bus.publish("music.next", {})
+            return {"ok": True}
+
+        @app.post("/api/music/pause")
+        async def api_music_pause():
+            if self.bus:
+                self.bus.publish("music.pause", {})
+            return {"ok": True}
+
+        @app.post("/api/music/thumbs-up")
+        async def api_music_thumbs_up():
+            if self.bus:
+                self.bus.publish("music.thumbs_up", {})
+            return {"ok": True}
+
+        @app.post("/api/music/thumbs-down")
+        async def api_music_thumbs_down():
+            if self.bus:
+                self.bus.publish("music.thumbs_down", {})
+            return {"ok": True}
+
+        @app.post("/api/music/station")
+        async def api_music_station(body: _MusicStationBody):
+            if self.bus:
+                self.bus.publish("music.set_station", {"station_id": body.station_id})
+            return {"ok": True}
 
         return app

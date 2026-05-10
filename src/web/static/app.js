@@ -109,6 +109,14 @@ function updateDashboard(data) {
   // Event log
   const events = data.events || [];
   renderEventLog(events);
+
+  // Music state/song updates from bus events
+  const musicState = last["music.state_changed"];
+  if (musicState) _applyMusicState(musicState.state || "stopped");
+  const musicSong = last["music.song_changed"];
+  if (musicSong) _applyMusicSong(musicSong);
+  const musicStations = last["music.stations_updated"];
+  if (musicStations) _applyMusicStations(musicStations.stations || []);
 }
 
 // ── Health badge ──────────────────────────────────────────────────
@@ -645,10 +653,91 @@ document.addEventListener("DOMContentLoaded", () => {
   loadRandomMotionEnabled();
   loadGreetingSettings();
   loadCamRotation();
+  loadMusicStatus();
   connectWS();
   // Refresh face registry every 30s
   setInterval(loadFaces, 30000);
 });
+
+// ── Music (Pandora/pianobar) ──────────────────────────────────────
+
+const _MUSIC_ICONS = { playing: "▶", paused: "⏸", stopped: "■", loading: "⏳" };
+
+async function loadMusicStatus() {
+  try {
+    const d = await fetch("/api/music/status").then(r => r.json());
+    _applyMusicState(d.state || "stopped");
+    _applyMusicSong(d.song || {});
+    _applyMusicStations(d.stations || []);
+    el("music-not-configured").style.display = d.configured === false ? "" : "none";
+  } catch (e) { /* ignore */ }
+}
+
+function _applyMusicState(state) {
+  el("music-state-icon").textContent = _MUSIC_ICONS[state] || "■";
+}
+
+function _applyMusicSong(song) {
+  el("music-song-title").textContent  = song.title  || "—";
+  el("music-song-artist").textContent = song.artist ? `by ${song.artist}` : "";
+  el("music-song-station").textContent = song.station ? `· ${song.station}` : "";
+}
+
+function _applyMusicStations(stations) {
+  const sel = el("music-station-select");
+  const prev = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  for (const s of stations) {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = s.name;
+    sel.appendChild(opt);
+  }
+  if (prev) sel.value = prev;
+}
+
+async function musicPlay() {
+  const sel = el("music-station-select");
+  const body = sel.value ? { station_id: parseInt(sel.value) } : {};
+  await fetch("/api/music/play", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+async function musicStop() {
+  await fetch("/api/music/stop", { method: "POST" });
+}
+
+async function musicNext() {
+  await fetch("/api/music/next", { method: "POST" });
+}
+
+async function musicPause() {
+  await fetch("/api/music/pause", { method: "POST" });
+}
+
+async function musicThumbsUp() {
+  const st = el("music-status");
+  await fetch("/api/music/thumbs-up", { method: "POST" });
+  st.textContent = "👍 Loved!";
+  setTimeout(() => { st.textContent = ""; }, 3000);
+}
+
+async function musicThumbsDown() {
+  const st = el("music-status");
+  await fetch("/api/music/thumbs-down", { method: "POST" });
+  st.textContent = "👎 Banned — skipping…";
+  setTimeout(() => { st.textContent = ""; }, 3000);
+}
+
+async function musicSetStation(stationId) {
+  if (!stationId) return;
+  await fetch("/api/music/station", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ station_id: parseInt(stationId) }),
+  });
+}
 
 // ── Utils ─────────────────────────────────────────────────────────
 
