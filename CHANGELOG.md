@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.3] - 2026-05-10
+### Added
+- Video feed overlay: pan angle text and compass arc drawn on each live frame
+- `VisionService` subscribes to `motion.position` and `motion.limits_changed` to
+  track the current servo angle and soft limits for the overlay
+- `_draw_servo_overlay()` helper draws a bottom-left text label (`Pan: NNN°`) and
+  a bottom-right arc compass using the `_CYAN` colour to match existing annotations
+- `/api/status` (and WebSocket snapshot) now includes a `servo_angle` field
+
+---
+
 ## [1.7.2] - 2026-05-10
 ### Fixed
 - Face tracking over-correction: reduced `spring_k` (6.0→3.5), raised `damping` (2.5→3.8,

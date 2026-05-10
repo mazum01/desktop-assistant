@@ -185,7 +185,8 @@ def main() -> int:
     tracking_svc: "TrackingService | None" = None  # forward-ref for rotation callback
 
     av = AVService(bus=bus)
-    vis = VisionService(bus=bus, camera_config=_camera_cfg)
+    vis = VisionService(bus=bus, camera_config=_camera_cfg,
+                        servo_min_deg=_soft_min_deg, servo_max_deg=_soft_max_deg)
     ipc = IPCBridge(
         bus=bus,
         upstream_endpoints=[_THERMAL_PUB],

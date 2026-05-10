@@ -27,6 +27,7 @@ Public accessors (in-process callers):
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from typing import List, Optional
@@ -122,6 +123,56 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.4, _CYAN, 1, cv2.LINE_AA)
 
 
+def _draw_servo_overlay(
+    frame: np.ndarray,
+    angle: float,
+    servo_min: float,
+    servo_max: float,
+) -> None:
+    """Draw a servo pan-angle indicator in-place on a BGR frame."""
+    h, w = frame.shape[:2]
+    servo_ctr = (servo_min + servo_max) / 2.0
+
+    # ── Text label (bottom-left) ────────────────────────────────────────
+    text = f"Pan: {angle:.0f}\u00b0"
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.55
+    thickness = 1
+    (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
+
+    pad = 4
+    x0, y0 = 8, h - 8 - th - pad * 2
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (x0 - pad, y0 - pad), (x0 + tw + pad, y0 + th + pad), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
+    cv2.putText(frame, text, (x0, y0 + th), font, font_scale, _CYAN, thickness, cv2.LINE_AA)
+
+    # ── Arc compass (bottom-right) ────────────────────────────────────────
+    cx, cy = w - 60, h - 55
+    radius = 40
+    half_range = max(1.0, (servo_max - servo_min) / 2.0)
+    arc_half_deg = 60  # visual arc spans ±60° regardless of servo range
+
+    # Background arc (gray) — drawn as a U opening upward
+    cv2.ellipse(frame, (cx, cy), (radius, radius), 0, 210, 330, (80, 80, 80), 2, cv2.LINE_AA)
+
+    # Normalize position within servo range → -1.0 .. +1.0
+    norm = (angle - servo_ctr) / half_range
+    norm = max(-1.0, min(1.0, norm))
+
+    # cv2 angle 270° = straight up; sweep left/right by arc_half_deg
+    pointer_deg = 270.0 + norm * arc_half_deg
+    pointer_rad = math.radians(pointer_deg)
+    px = int(cx + radius * math.cos(pointer_rad))
+    py = int(cy + radius * math.sin(pointer_rad))
+
+    cv2.line(frame, (cx, cy), (px, py), _CYAN, 2, cv2.LINE_AA)
+    cv2.circle(frame, (cx, cy), 3, _CYAN, -1, cv2.LINE_AA)
+    # Centre tick (straight up = servo centre position)
+    cv2.line(frame, (cx, cy - radius + 6), (cx, cy - radius - 2), (120, 120, 120), 1, cv2.LINE_AA)
+
+
+
 class VisionService(Service):
     name = "vision"
     tick_seconds = 0.033   # ~30 fps frame-publish cadence; matches camera framerate
@@ -131,6 +182,8 @@ class VisionService(Service):
         bus: Optional[MessageBus] = None,
         camera=None,
         camera_config=None,
+        servo_min_deg: float = 135.0,
+        servo_max_deg: float = 215.0,
     ) -> None:
         super().__init__(bus=bus)
         self._camera = camera
@@ -150,6 +203,11 @@ class VisionService(Service):
         if camera_config is not None:
             _init_rot = int(getattr(camera_config, "rotation_deg", 0))
         self._rotation_deg: int = _init_rot % 360
+        # Servo overlay state — updated by bus callbacks
+        self._servo_lock = threading.Lock()
+        self._servo_angle: Optional[float] = None
+        self._servo_min_deg: float = float(servo_min_deg)
+        self._servo_max_deg: float = float(servo_max_deg)
 
     def on_start(self) -> None:
         if self._camera is None:
@@ -174,6 +232,12 @@ class VisionService(Service):
         )
         self._unsubs.append(
             self.bus.subscribe("camera.set_rotation", self._on_set_rotation)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("motion.position", self._on_servo_angle)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("motion.limits_changed", self._on_servo_limits)
         )
         log.info(
             "VisionService started; hardware_ready=%s",
@@ -215,6 +279,15 @@ class VisionService(Service):
         # consumers always see a clean (no-overlay) frame.
         display = frame.copy()
         _draw_overlays(display, faces, objects)
+
+        # Servo position overlay — drawn on top of all other annotations.
+        with self._servo_lock:
+            servo_angle = self._servo_angle
+            servo_min = self._servo_min_deg
+            servo_max = self._servo_max_deg
+        if servo_angle is not None:
+            _draw_servo_overlay(display, servo_angle, servo_min, servo_max)
+
         ok, buf = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 60])
         jpeg = bytes(buf) if ok else None
 
@@ -291,3 +364,17 @@ class VisionService(Service):
             self._rotation_deg = deg
         log.info("Camera rotation set to %d°", deg)
         self.bus.publish("camera.rotation_changed", {"rotation_deg": deg})
+
+    def _on_servo_angle(self, _topic, payload) -> None:
+        if isinstance(payload, dict) and "angle" in payload:
+            with self._servo_lock:
+                self._servo_angle = float(payload["angle"])
+
+    def _on_servo_limits(self, _topic, payload) -> None:
+        if not isinstance(payload, dict):
+            return
+        with self._servo_lock:
+            if "min_deg" in payload:
+                self._servo_min_deg = float(payload["min_deg"])
+            if "max_deg" in payload:
+                self._servo_max_deg = float(payload["max_deg"])

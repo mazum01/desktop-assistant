@@ -290,11 +290,14 @@ class WebService:
             last["vision.frame_ready"] = {"frame_w": shape[1], "frame_h": shape[0]}
 
         from src.core.version import get_version
+        motion_pos = last.get("motion.position")
+        servo_angle = float(motion_pos["angle"]) if isinstance(motion_pos, dict) and "angle" in motion_pos else None
         return {
             "version": get_version(),
             "ts": time.time(),
             "last": last,
             "services": dict(self._service_states),
+            "servo_angle": servo_angle,
         }
 
     # ── FastAPI app ───────────────────────────────────────────────────
