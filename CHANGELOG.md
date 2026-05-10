@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.6.4] - 2026-05-10
+### Fixed
+- **Music skill: station list now loads correctly.** pianobar uses `\r\n` line endings. After splitting on `\n`, the remaining raw bytes still contained a trailing `\r`. The previous CR-split logic (`decoded.split("\r")[-1]`) then returned the empty string after that `\r`, silently dropping every status and station line pianobar emitted. Fixed by stripping trailing `\r` before splitting (`decoded.rstrip("\r").split("\r")[-1]`). The reader now correctly captures Login/Get-stations acknowledgements, song metadata, and the full 97-station list.
+- **Music skill: station list auto-fetched after auto-resume.** When pianobar resumes the last station from its state file it skips the initial station-selection prompt, so the parser never saw the station list. The reader now detects the auto-resume line (`|> Station "Name"`) and sends `s` via the command FIFO to request the list explicitly.
+
+---
+
 ## [1.6.3] - 2026-05-09
 ### Fixed
 - **Music skill: audio now actually audible.** The `desktop-assistant-core.service` systemd unit was missing `XDG_RUNTIME_DIR`, so pianobar (a child of the daemon) couldn't reach the PipeWire/PulseAudio socket and silently produced no sound. Added `XDG_RUNTIME_DIR=/run/user/1000` and `PULSE_SERVER=unix:/run/user/1000/pulse/native` to the unit. `wpctl status` now shows libao streams routed to the USB Audio Device.

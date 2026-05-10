@@ -53,11 +53,13 @@ _PIANOBAR_CONFIG_DIR = Path.home() / ".config" / "pianobar"
 _PIANOBAR_CONFIG    = _PIANOBAR_CONFIG_DIR / "config"
 _PIANOBAR_FIFO      = _PIANOBAR_CONFIG_DIR / "ctl"
 
-_RE_SONG    = re.compile(r'\|>\s+"(.+?)"\s+by\s+"(.+?)"\s+on\s+"(.+?)"')
-_RE_STATION = re.compile(r'^\s*(\d+)\)\s+(.+)$')
-_RE_SELECT  = re.compile(r'[Ss]elect station|[Cc]hoose station')
-_RE_LOGIN_FAIL = re.compile(r'Login\.\.\.\s*(Network error|Wrong username|wrong password|Error)', re.IGNORECASE)
-_RE_ANSI    = re.compile(r'\x1b\[[0-9;?]*[a-zA-Z]')
+_RE_SONG           = re.compile(r'\|>\s+"(.+?)"\s+by\s+"(.+?)"\s+on\s+"(.+?)"')
+_RE_STATION        = re.compile(r'^\s*(\d+)\)\s+(?:[qQ]\s+)?(.+?)$')
+_RE_SELECT         = re.compile(r'[Ss]elect station|[Cc]hoose station')
+_RE_LOGIN_FAIL     = re.compile(r'Login\.\.\.\s*(Network error|Wrong username|wrong password|Error)', re.IGNORECASE)
+_RE_ANSI           = re.compile(r'\x1b\[[0-9;?]*[a-zA-Z]')
+# pianobar auto-resume line: "|>  Station "Name" (stationId)"
+_RE_STATION_RESUME = re.compile(r'\|>\s+Station\s+"(.+?)"')
 
 
 class MusicService(Service):
@@ -80,6 +82,8 @@ class MusicService(Service):
         self._current_song: dict = {}
         self._stations: list[dict] = []
         self._pending_station: Optional[int] = None
+        self._got_stations: bool = False
+        self._resuming_station_name: str = ""
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._reader_thread: Optional[threading.Thread] = None
@@ -188,6 +192,8 @@ class MusicService(Service):
         with self._lock:
             self._pending_station = station_id
             self._stations = []
+            self._got_stations = False
+            self._resuming_station_name = ""
 
         self._stop_event.clear()
 
@@ -286,24 +292,70 @@ class MusicService(Service):
         """Select a station while pianobar is running."""
         self._send(f"s{station_id}")
 
+    def _request_station_list(self) -> None:
+        """Send 's' via FIFO to force pianobar to display the station list.
+
+        Used when pianobar auto-resumes without showing the selection prompt
+        (pianobar stores the last station in its state file).  Waits briefly
+        for pianobar to settle before sending so the FIFO is ready.
+        """
+        time.sleep(1.2)
+        if self._got_stations or self._stop_event.is_set():
+            return
+        log.info("pianobar auto-resumed without station list; requesting via FIFO")
+        self._send("s")
+
     # ── Output parser ─────────────────────────────────────────────────
 
     def _read_output(self) -> None:
         """Parse pianobar output (via PTY); update state and publish bus events.
 
-        pianobar writes CRLF line endings and embeds ANSI escape sequences for
-        cursor control. The 'Select station:' prompt has no trailing newline,
-        so we read in chunks, strip ANSI, and detect the prompt against a
-        rolling buffer.
+        pianobar writes CRLF line endings, embeds ANSI escape sequences for
+        cursor control, and uses CR to overwrite its progress bar in-place.
+        The 'Select station:' prompt may or may not have a trailing newline
+        depending on whether it was triggered by startup or a FIFO 's' command.
+        We therefore detect the SELECT prompt both in complete lines and in the
+        rolling partial-line buffer.
         """
+        log.info("pianobar reader thread started (master_fd=%s)", self._pty_master)
         stations_buf: list[dict] = []
         buf = b""
         master = self._pty_master
 
+        def _handle_select_prompt() -> None:
+            """Commit the accumulated station list and auto-select a station."""
+            nonlocal stations_buf
+            if not stations_buf:
+                return
+            with self._lock:
+                self._stations = list(stations_buf)
+                self._got_stations = True
+                pending = self._pending_station
+                self._pending_station = None
+                resuming = self._resuming_station_name
+            self.bus.publish("music.stations_updated",
+                             {"stations": list(stations_buf)})
+            log.info("Captured %d stations", len(stations_buf))
+            # Re-select the previously playing station if no explicit target.
+            if pending is None and resuming:
+                for s in stations_buf:
+                    if s["name"] == resuming:
+                        pending = s["id"]
+                        break
+            stations_buf.clear()
+            target = pending if pending is not None else 0
+            log.info("Auto-selecting station %d (writing to PTY)", target)
+            time.sleep(0.2)
+            try:
+                os.write(master, f"{target}\n".encode())
+            except OSError as exc:
+                log.warning("PTY write failed: %s", exc)
+
         while master is not None and not self._stop_event.is_set():
             try:
                 r, _, _ = select.select([master], [], [], 0.5)
-            except (OSError, ValueError):
+            except (OSError, ValueError) as exc:
+                log.warning("pianobar reader select failed: %s", exc)
                 break
             if not r:
                 # Detect process exit while idle
@@ -312,41 +364,38 @@ class MusicService(Service):
                 continue
             try:
                 chunk = os.read(master, 4096)
-            except OSError:
+            except OSError as exc:
+                log.warning("pianobar reader read failed: %s", exc)
                 break
             if not chunk:
+                log.warning("pianobar reader: empty read (EOF on PTY)")
                 break
             buf += chunk
 
-            # Process all complete lines (handle both \n and \r\n)
+            # Process all complete lines.
             while b"\n" in buf:
                 raw, buf = buf.split(b"\n", 1)
-                line = _RE_ANSI.sub("", raw.decode("utf-8", errors="replace")).rstrip("\r").rstrip()
-                if line:
-                    self._process_line(line, stations_buf)
+                decoded = _RE_ANSI.sub("", raw.decode("utf-8", errors="replace"))
+                # pianobar uses \r\n line endings, so splitting on \n leaves a
+                # trailing \r. Strip it first, then split on any embedded \r
+                # (pianobar overwrites the progress bar with CR before printing
+                # a station line, leaving contamination like "progress\rstation").
+                if "\r" in decoded:
+                    decoded = decoded.rstrip("\r").split("\r")[-1]
+                line = decoded.strip()
+                if not line:
+                    continue
+                if _RE_SELECT.search(line):
+                    log.debug("pianobar prompt (full line): %s", line)
+                    _handle_select_prompt()
+                    continue
+                self._process_line(line, stations_buf)
 
-            # Detect partial-line prompt (no newline yet)
+            # Detect partial-line prompt (no newline yet).
             tail = _RE_ANSI.sub("", buf.decode("utf-8", errors="replace"))
             if _RE_SELECT.search(tail):
-                log.debug("pianobar prompt: %s", tail.strip())
-                if stations_buf:
-                    with self._lock:
-                        self._stations = list(stations_buf)
-                        pending = self._pending_station
-                        self._pending_station = None
-                    self.bus.publish("music.stations_updated",
-                                     {"stations": list(stations_buf)})
-                    log.info("Captured %d stations", len(stations_buf))
-                    stations_buf.clear()
-                target = pending if pending is not None else 0
-                log.info("Auto-selecting station %d (writing to PTY)", target)
-                time.sleep(0.2)
-                # The initial select-station prompt reads from stdin (the PTY),
-                # NOT the FIFO. Write the station number directly to the PTY.
-                try:
-                    os.write(master, f"{target}\n".encode())
-                except OSError as exc:
-                    log.warning("PTY write failed: %s", exc)
+                log.debug("pianobar prompt (partial): %s", tail.strip())
+                _handle_select_prompt()
                 buf = b""
 
         # Process ended
@@ -367,6 +416,22 @@ class MusicService(Service):
             self.bus.publish("music.error",
                              {"reason": f"pianobar login failed: {m.group(1)}"})
             log.error("pianobar login failed: %s", line)
+            return
+
+        # Detect auto-resume: pianobar skips the selection prompt when its
+        # state file contains a saved station.  Capture the station name and
+        # request the full list via FIFO so the GUI dropdown populates.
+        m = _RE_STATION_RESUME.match(line)
+        if m:
+            with self._lock:
+                already = self._got_stations
+                self._resuming_station_name = m.group(1)
+            if not already:
+                threading.Thread(
+                    target=self._request_station_list,
+                    name="pianobar-station-fetch",
+                    daemon=True,
+                ).start()
             return
 
         # Station list entry
