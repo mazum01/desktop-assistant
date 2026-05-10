@@ -34,7 +34,10 @@ from __future__ import annotations
 
 import logging
 import os
+import pty
 import re
+import select
+import signal
 import subprocess
 import threading
 import time
@@ -53,6 +56,8 @@ _PIANOBAR_FIFO      = _PIANOBAR_CONFIG_DIR / "ctl"
 _RE_SONG    = re.compile(r'\|>\s+"(.+?)"\s+by\s+"(.+?)"\s+on\s+"(.+?)"')
 _RE_STATION = re.compile(r'^\s*(\d+)\)\s+(.+)$')
 _RE_SELECT  = re.compile(r'[Ss]elect station|[Cc]hoose station')
+_RE_LOGIN_FAIL = re.compile(r'Login\.\.\.\s*(Network error|Wrong username|wrong password|Error)', re.IGNORECASE)
+_RE_ANSI    = re.compile(r'\x1b\[[0-9;?]*[a-zA-Z]')
 
 
 class MusicService(Service):
@@ -70,6 +75,7 @@ class MusicService(Service):
         self._enabled = enabled
         self._announce_songs = announce_song_changes
         self._proc: Optional[subprocess.Popen] = None
+        self._pty_master: Optional[int] = None
         self._state: str = "stopped"          # stopped | playing | paused
         self._current_song: dict = {}
         self._stations: list[dict] = []
@@ -184,14 +190,20 @@ class MusicService(Service):
             self._stations = []
 
         self._stop_event.clear()
+
+        # pianobar refuses to produce output unless stdout is a TTY.
+        # Allocate a pseudo-terminal so we can capture its output.
         try:
+            self._pty_master, slave_fd = pty.openpty()
             self._proc = subprocess.Popen(
                 ["pianobar"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL,
-                bufsize=0,           # unbuffered binary so we see partial lines
+                stdout=slave_fd,
+                stderr=slave_fd,
+                stdin=slave_fd,
+                close_fds=True,
+                preexec_fn=os.setsid,
             )
+            os.close(slave_fd)
         except FileNotFoundError:
             self.bus.publish("music.error", {"reason": "pianobar not installed"})
             log.error("pianobar executable not found")
@@ -212,8 +224,24 @@ class MusicService(Service):
             try:
                 proc.wait(timeout=3.0)
             except subprocess.TimeoutExpired:
-                proc.terminate()
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                try:
+                    proc.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
         self._proc = None
+        if self._pty_master is not None:
+            try:
+                os.close(self._pty_master)
+            except OSError:
+                pass
+            self._pty_master = None
         with self._lock:
             self._state = "stopped"
             self._current_song = {}
@@ -261,52 +289,65 @@ class MusicService(Service):
     # ── Output parser ─────────────────────────────────────────────────
 
     def _read_output(self) -> None:
-        """Parse pianobar stdout; update state and publish bus events.
+        """Parse pianobar output (via PTY); update state and publish bus events.
 
-        pianobar's 'Select station:' prompt has no trailing newline, so we read
-        byte-by-byte and process both complete lines (ending in \\n) and partial
-        lines (detected by matching a known prompt suffix).
+        pianobar writes CRLF line endings and embeds ANSI escape sequences for
+        cursor control. The 'Select station:' prompt has no trailing newline,
+        so we read in chunks, strip ANSI, and detect the prompt against a
+        rolling buffer.
         """
         stations_buf: list[dict] = []
         buf = b""
+        master = self._pty_master
 
-        while True:
-            if self._stop_event.is_set():
+        while master is not None and not self._stop_event.is_set():
+            try:
+                r, _, _ = select.select([master], [], [], 0.5)
+            except (OSError, ValueError):
                 break
-            chunk = self._proc.stdout.read(1)
+            if not r:
+                # Detect process exit while idle
+                if self._proc and self._proc.poll() is not None:
+                    break
+                continue
+            try:
+                chunk = os.read(master, 4096)
+            except OSError:
+                break
             if not chunk:
                 break
             buf += chunk
 
-            # Process complete lines
-            if b"\n" in buf:
+            # Process all complete lines (handle both \n and \r\n)
+            while b"\n" in buf:
                 raw, buf = buf.split(b"\n", 1)
-                line = raw.decode("utf-8", errors="replace").rstrip()
-                self._process_line(line, stations_buf)
-                continue
+                line = _RE_ANSI.sub("", raw.decode("utf-8", errors="replace")).rstrip("\r").rstrip()
+                if line:
+                    self._process_line(line, stations_buf)
 
-            # Detect the station-select prompt (no trailing newline)
-            decoded = buf.decode("utf-8", errors="replace")
-            if _RE_SELECT.search(decoded):
-                log.debug("pianobar: %s", decoded.strip())
+            # Detect partial-line prompt (no newline yet)
+            tail = _RE_ANSI.sub("", buf.decode("utf-8", errors="replace"))
+            if _RE_SELECT.search(tail):
+                log.debug("pianobar prompt: %s", tail.strip())
                 if stations_buf:
                     with self._lock:
                         self._stations = list(stations_buf)
                         pending = self._pending_station
                         self._pending_station = None
-                    self.bus.publish("music.stations_updated", {"stations": list(stations_buf)})
+                    self.bus.publish("music.stations_updated",
+                                     {"stations": list(stations_buf)})
+                    log.info("Captured %d stations", len(stations_buf))
                     stations_buf.clear()
-                    target = pending if pending is not None else 0
-                    log.info("Selecting station %d", target)
-                    time.sleep(0.3)
-                    self._send(str(target))
+                target = pending if pending is not None else 0
+                log.info("Auto-selecting station %d (writing to PTY)", target)
+                time.sleep(0.2)
+                # The initial select-station prompt reads from stdin (the PTY),
+                # NOT the FIFO. Write the station number directly to the PTY.
+                try:
+                    os.write(master, f"{target}\n".encode())
+                except OSError as exc:
+                    log.warning("PTY write failed: %s", exc)
                 buf = b""
-
-        # Process any remaining buffer content
-        if buf:
-            line = buf.decode("utf-8", errors="replace").rstrip()
-            if line:
-                self._process_line(line, stations_buf)
 
         # Process ended
         with self._lock:
@@ -317,6 +358,16 @@ class MusicService(Service):
     def _process_line(self, line: str, stations_buf: list) -> None:
         """Handle a single decoded line from pianobar stdout."""
         log.debug("pianobar: %s", line)
+
+        # Login / network failure
+        if "Login..." in line or "Get stations..." in line or "Network error" in line:
+            log.info("pianobar: %s", line)
+        m = _RE_LOGIN_FAIL.search(line)
+        if m:
+            self.bus.publish("music.error",
+                             {"reason": f"pianobar login failed: {m.group(1)}"})
+            log.error("pianobar login failed: %s", line)
+            return
 
         # Station list entry
         m = _RE_STATION.match(line)

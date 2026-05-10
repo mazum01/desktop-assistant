@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.6.2] - 2026-05-09
+### Fixed
+- **Music skill: pianobar requires a TTY.** When stdout is a plain pipe, pianobar produces zero output (it was hanging silently — login wasn't even attempted). Switched to a pseudo-terminal (`pty.openpty()`) so pianobar behaves as if attached to a console.
+- Strip ANSI escape sequences from pianobar output before regex matching (pianobar emits `\x1b[2K` between lines).
+- Handle CRLF line endings from PTY.
+- The initial "Select station:" prompt reads from stdin (not the FIFO), so the auto-select now writes the station number directly to the PTY.
+- Added detection of pianobar login failures (network error, wrong username/password) — published as `music.error` and logged.
+- Process group cleanup on stop (`os.setsid` + `killpg`) to ensure no zombie pianobar processes.
+
 ## [1.6.1] - 2026-05-09
 ### Fixed
 - Music skill: pianobar's `[?] Select station:` prompt has no trailing newline, so the previous line-by-line stdout reader never saw it and never sent the auto-select command. Rewrote `_read_output` to read byte-by-byte, building lines manually and detecting the partial-line prompt via regex. Station 0 is now auto-selected on `da music play` without any manual FIFO writes needed.
