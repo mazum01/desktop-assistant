@@ -73,6 +73,18 @@ class TrackingService(Service):
     def random_motion_enabled(self) -> bool:
         return self._random_motion_enabled
 
+    def update_frame_width(self, frame_width: int) -> None:
+        """Update the horizontal pixel width used for tracking math.
+
+        Called when camera rotation changes so the tracker re-centres
+        correctly without requiring a daemon restart.
+        """
+        with self._lock:
+            self._tracker_cfg.frame_width = frame_width
+            if self._tracker is not None:
+                self._tracker._cfg.frame_width = frame_width
+        log.info("TrackingService: frame_width updated to %d", frame_width)
+
     def on_start(self) -> None:
         if not self._enabled:
             log.info("TrackingService disabled via config")

@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.11] - 2026-05-09
+### Fixed
+- Face tracking servo now uses the correct `frame_width` matching the actual camera resolution (640 px) instead of the hard-coded default of 1280. For 90°/270° camera rotations the axes are swapped, so `frame_width` is set to the camera height (480 px) — matching what detection sees after `cv2.rotate()` swaps width ↔ height.
+- Camera rotation changes at runtime (via CLI / web GUI) now live-update the tracker's `frame_width` via `TrackingService.update_frame_width()`, so tracking stays accurate without a daemon restart.
+
 ## [1.5.10] - 2026-05-09
 ### Fixed
 - Web GUI camera rotation preset dropdown now auto-applies the rotation immediately when selected, without requiring a separate "Set" click.

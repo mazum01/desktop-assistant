@@ -77,26 +77,39 @@ def main() -> int:
     from src.motion.head_tracker import HeadTrackerConfig
     from src.services.perception_service import PerceptionConfig
 
+    # Camera config must be built first so we can derive the effective
+    # frame width (which changes when rotation is 90° or 270°).
+    _cam_cfg_raw = _cfg.get("camera", {})
+    from src.vision.camera import CameraConfig as _CameraConfig
+    _camera_rotation_deg = int(_rt.get("camera", {}).get(
+        "rotation_deg", _cam_cfg_raw.get("rotation_deg", 0)
+    )) % 360
+    _cam_width  = int(_cam_cfg_raw.get("width", 640))
+    _cam_height = int(_cam_cfg_raw.get("height", 480))
+    _camera_cfg = _CameraConfig(
+        width=_cam_width,
+        height=_cam_height,
+        framerate=int(_cam_cfg_raw.get("framerate", 30)),
+        rotation_deg=_camera_rotation_deg,
+    )
+
+    def _tracking_frame_width(cam_w: int, cam_h: int, rot_deg: int) -> int:
+        """Return the horizontal pixel count of the frame as seen by detection.
+
+        For 90° / 270° rotations cv2 swaps width ↔ height, so the axis the
+        servo tracks (left-right) maps to the original camera height.
+        """
+        return cam_h if rot_deg in (90, 270) else cam_w
+
     _ht_cfg_raw = _cfg.get("head_tracking", {})
     _tracker_cfg = HeadTrackerConfig(
+        frame_width=_tracking_frame_width(_cam_width, _cam_height, _camera_rotation_deg),
         fov_degrees=float(_ht_cfg_raw.get("fov_degrees", 100.0)),
         spring_k=float(_ht_cfg_raw.get("spring_k", 6.0)),
         damping=float(_ht_cfg_raw.get("damping", 2.5)),
         max_speed_deg_s=float(_ht_cfg_raw.get("max_speed_deg_s", 80.0)),
     )
     _perc_cfg = PerceptionConfig(recognition_enabled=_recognition_enabled)
-
-    _cam_cfg_raw = _cfg.get("camera", {})
-    from src.vision.camera import CameraConfig as _CameraConfig
-    _camera_rotation_deg = int(_rt.get("camera", {}).get(
-        "rotation_deg", _cam_cfg_raw.get("rotation_deg", 0)
-    )) % 360
-    _camera_cfg = _CameraConfig(
-        width=int(_cam_cfg_raw.get("width", 640)),
-        height=int(_cam_cfg_raw.get("height", 480)),
-        framerate=int(_cam_cfg_raw.get("framerate", 30)),
-        rotation_deg=_camera_rotation_deg,
-    )
 
     _web_cfg = _cfg.get("web_dashboard", {})
     _web_enabled = _web_cfg.get("enabled", True)
@@ -151,14 +164,22 @@ def main() -> int:
 
     def _on_camera_rotation_changed(_t, payload):
         if isinstance(payload, dict) and "rotation_deg" in payload:
-            _rt_state["camera"]["rotation_deg"] = int(payload["rotation_deg"]) % 360
+            new_rot = int(payload["rotation_deg"]) % 360
+            _rt_state["camera"]["rotation_deg"] = new_rot
             _save_runtime(_rt_state)
+            # Keep tracker frame_width in sync so tracking stays accurate
+            # when the user changes camera rotation at runtime.
+            new_fw = _tracking_frame_width(_cam_width, _cam_height, new_rot)
+            if tracking_svc is not None:
+                tracking_svc.update_frame_width(new_fw)
 
     bus.subscribe("motion.enabled_changed",         _on_servo_changed)
     bus.subscribe("motion.limits_changed",          _on_limits_changed)
     bus.subscribe("tracking.face_tracking_changed", _on_face_tracking_changed)
     bus.subscribe("tracking.random_motion_changed", _on_random_motion_changed)
     bus.subscribe("camera.rotation_changed",        _on_camera_rotation_changed)
+
+    tracking_svc: "TrackingService | None" = None  # forward-ref for rotation callback
 
     av = AVService(bus=bus)
     vis = VisionService(bus=bus, camera_config=_camera_cfg)
