@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.6.3] - 2026-05-09
+### Fixed
+- **Music skill: audio now actually audible.** The `desktop-assistant-core.service` systemd unit was missing `XDG_RUNTIME_DIR`, so pianobar (a child of the daemon) couldn't reach the PipeWire/PulseAudio socket and silently produced no sound. Added `XDG_RUNTIME_DIR=/run/user/1000` and `PULSE_SERVER=unix:/run/user/1000/pulse/native` to the unit. `wpctl status` now shows libao streams routed to the USB Audio Device.
+
+---
+
 ## [1.6.2] - 2026-05-09
 ### Fixed
 - **Music skill: pianobar requires a TTY.** When stdout is a plain pipe, pianobar produces zero output (it was hanging silently — login wasn't even attempted). Switched to a pseudo-terminal (`pty.openpty()`) so pianobar behaves as if attached to a console.

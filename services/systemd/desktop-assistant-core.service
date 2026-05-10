@@ -16,6 +16,8 @@ SupplementaryGroups=i2c gpio audio video
 WorkingDirectory=/home/starter/Code/Desktop Assistant
 Environment=PYTHONUNBUFFERED=1
 Environment="PYTHONPATH=/home/starter/Code/Desktop Assistant"
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
 ExecStart=/usr/bin/python3 -m src.assistant.core_main
 
 Restart=on-failure
