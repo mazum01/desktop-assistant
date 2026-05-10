@@ -537,6 +537,8 @@ function setCamRotationPreset(val) {
   // Reset select so user can pick the same value again
   const sel = el("cam-rotation-preset");
   if (sel) sel.value = "";
+  // Auto-apply when a preset is chosen
+  saveCamRotation();
 }
 
 async function saveCamRotation() {
@@ -545,12 +547,16 @@ async function saveCamRotation() {
   if (!slider) return;
   const rotation_deg = parseInt(slider.value, 10);
   try {
-    await fetch("/api/settings/camera/rotation", {
+    const r = await fetch("/api/settings/camera/rotation", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rotation_deg }),
     });
-    if (st) { st.textContent = "Saved ✓"; st.style.color = "var(--green)"; }
+    if (r.ok) {
+      if (st) { st.textContent = "Saved ✓"; st.style.color = "var(--green)"; }
+    } else {
+      if (st) { st.textContent = "Error " + r.status; st.style.color = "var(--red)"; }
+    }
   } catch (e) {
     if (st) { st.textContent = "Error"; st.style.color = "var(--red)"; }
   }

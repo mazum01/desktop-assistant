@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.10] - 2026-05-09
+### Fixed
+- Web GUI camera rotation preset dropdown now auto-applies the rotation immediately when selected, without requiring a separate "Set" click.
+- `saveCamRotation()` now checks `response.ok` and displays the HTTP error code if the server returns a non-2xx status.
+
 ## [1.5.9] - 2026-05-09
 ### Added
 - **Camera rotation** — new `rotation_deg` config field (0–359°) applied in
