@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.1] - 2026-05-11
+### Fixed
+- **Web GUI music refresh — progress bar no longer resets every second.** `_applyMusicSong()` in `app.js` now only updates the progress bar, elapsed, and duration elements when `elapsed` and `duration` are explicitly provided. The WebSocket `updateDashboard` handler passes only song metadata (no timing), so it no longer overwrites the values the 2-second REST poll sets.
+- **Volume slider debounce.** `musicSetVolume()` in `app.js` now waits 300 ms after the last `oninput` event before firing the PUT request. This prevents rapid-fire `wpctl set-volume` calls while dragging and eliminates the race condition between concurrent requests.
+- **EQ biquad filter correctness.** Replaced the incorrect Butterworth-coefficient-scaling approach in `_build_sos()` with proper Audio EQ Cookbook low-shelf and high-shelf biquad formulas (`_lowshelf_sos`, `_highshelf_sos`). The vocal preset now uses `scipy.signal.iirpeak` + `tf2sos` for the correct API (the `output=` kwarg was removed in scipy ≥ 1.14). Installed `scipy` system-wide.
+- **EQ scope clarification.** The web GUI EQ dropdown is now labelled "EQ (voice)" and the `_build_sos` docstring documents that EQ filtering applies to TTS/voice audio only — pianobar streams directly through PipeWire and bypasses Python's audio pipeline.
+
 ## [1.7.0] - 2026-05-11
 ### Added
 - **Music progress bar.** pianobar emits `# -MM:SS/MM:SS\r` progress lines; the reader now scans all CR-split parts (not just the last) to extract elapsed/total time. Both `elapsed_sec` and `duration_sec` are returned by `/api/music/status` and displayed as a read-only range slider with `M:SS / M:SS` timestamps in the web GUI. Auto-refreshes every 2 seconds.

@@ -338,52 +338,92 @@ def _soft_clip(samples: np.ndarray, drive: float) -> np.ndarray:
     return shaped
 
 
+def _lowshelf_sos(fc: float, gain_db: float, fs: float, S: float = 1.0):
+    """Single-section low-shelf biquad (Audio EQ Cookbook).
+
+    Returns a 1×6 numpy array [b0, b1, b2, 1.0, a1, a2] suitable for
+    ``scipy.signal.sosfilt``.
+    """
+    import math
+    A  = 10 ** (gain_db / 40.0)
+    w0 = 2 * math.pi * fc / fs
+    cs = math.cos(w0)
+    sn = math.sin(w0)
+    alpha = sn / 2 * math.sqrt((A + 1 / A) * (1 / S - 1) + 2)
+
+    b0 =     A * ((A + 1) - (A - 1) * cs + 2 * math.sqrt(A) * alpha)
+    b1 =  2 * A * ((A - 1) - (A + 1) * cs)
+    b2 =     A * ((A + 1) - (A - 1) * cs - 2 * math.sqrt(A) * alpha)
+    a0 =          (A + 1) + (A - 1) * cs + 2 * math.sqrt(A) * alpha
+    a1 =    -2 * ((A - 1) + (A + 1) * cs)
+    a2 =          (A + 1) + (A - 1) * cs - 2 * math.sqrt(A) * alpha
+
+    import numpy as _np
+    return _np.array([[b0 / a0, b1 / a0, b2 / a0, 1.0, a1 / a0, a2 / a0]])
+
+
+def _highshelf_sos(fc: float, gain_db: float, fs: float, S: float = 1.0):
+    """Single-section high-shelf biquad (Audio EQ Cookbook).
+
+    Returns a 1×6 numpy array [b0, b1, b2, 1.0, a1, a2].
+    """
+    import math
+    A  = 10 ** (gain_db / 40.0)
+    w0 = 2 * math.pi * fc / fs
+    cs = math.cos(w0)
+    sn = math.sin(w0)
+    alpha = sn / 2 * math.sqrt((A + 1 / A) * (1 / S - 1) + 2)
+
+    b0 =     A * ((A + 1) + (A - 1) * cs + 2 * math.sqrt(A) * alpha)
+    b1 = -2 * A * ((A - 1) + (A + 1) * cs)
+    b2 =     A * ((A + 1) + (A - 1) * cs - 2 * math.sqrt(A) * alpha)
+    a0 =          (A + 1) - (A - 1) * cs + 2 * math.sqrt(A) * alpha
+    a1 =     2 * ((A - 1) - (A + 1) * cs)
+    a2 =          (A + 1) - (A - 1) * cs - 2 * math.sqrt(A) * alpha
+
+    import numpy as _np
+    return _np.array([[b0 / a0, b1 / a0, b2 / a0, 1.0, a1 / a0, a2 / a0]])
+
+
 def _build_sos(preset: str, sample_rate: int):
     """Return scipy SOS biquad coefficients for the named preset, or None.
 
     Returns None if scipy is not installed or preset is unknown.
-    Each preset is a list of second-order sections built with
-    ``scipy.signal.butter`` / ``iirpeak`` / ``iirnotch``.
+    Each preset is a list of second-order sections compatible with
+    ``scipy.signal.sosfilt``.
+
+    Note: EQ filtering is applied to TTS/voice audio only.  pianobar
+    streams audio directly through its own PipeWire client and bypasses
+    Python's audio pipeline entirely, so these presets do not affect music
+    playback — only spoken text.
     """
     try:
-        from scipy.signal import butter, iirpeak  # type: ignore
+        import numpy as _np
+        from scipy.signal import iirpeak  # type: ignore
     except ImportError:
         return None
 
     fs = float(sample_rate)
 
     if preset == "bass_boost":
-        # Shelving boost: +6 dB below 200 Hz
-        sos = butter(2, 200.0 / (fs / 2), btype="low", output="sos")
-        sos[:, :3] *= 2.0  # boost gain
-        return sos
+        return _lowshelf_sos(200.0, 6.0, fs)
 
     if preset == "treble_boost":
-        # Shelving boost: +4 dB above 8 kHz
-        sos = butter(2, 8000.0 / (fs / 2), btype="high", output="sos")
-        sos[:, :3] *= 1.6
-        return sos
+        return _highshelf_sos(8000.0, 4.0, fs)
 
     if preset == "vocal":
-        # Slight presence peak at 2.5 kHz (Q=1.5, +3 dB)
-        return iirpeak(2500.0, 1.5, fs=fs, output="sos")
+        from scipy.signal import tf2sos  # type: ignore
+        b, a = iirpeak(2500.0, 1.5, fs=fs)
+        return tf2sos(b, a)
 
     if preset == "loudness":
-        # Low boost + high boost combined via cascaded SOS
-        lo  = butter(2, 150.0 / (fs / 2), btype="low",  output="sos")
-        hi  = butter(2, 6000.0 / (fs / 2), btype="high", output="sos")
-        lo[:, :3] *= 2.0
-        hi[:, :3] *= 1.5
-        import numpy as _np  # already imported at module scope but kept for clarity
+        lo = _lowshelf_sos(150.0, 6.0, fs)
+        hi = _highshelf_sos(6000.0, 4.0, fs)
         return _np.vstack([lo, hi])
 
     if preset == "warm":
-        # Gentle low-mid boost + treble rolloff
-        lo  = butter(2, 400.0 / (fs / 2), btype="low",  output="sos")
-        hi  = butter(2, 5000.0 / (fs / 2), btype="high", output="sos")
-        lo[:, :3] *= 1.4
-        hi[:, :3] *= 0.6
-        import numpy as _np
+        lo = _lowshelf_sos(400.0, 3.0, fs)
+        hi = _highshelf_sos(5000.0, -4.0, fs)
         return _np.vstack([lo, hi])
 
     return None

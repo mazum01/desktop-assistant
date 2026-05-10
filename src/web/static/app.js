@@ -713,13 +713,16 @@ function _applyMusicSong(song, elapsed, duration) {
     placeholder.style.display = "flex";
   }
 
-  // Progress bar
-  const bar = el("music-progress-bar");
-  const dur = duration || 0;
-  bar.max = dur > 0 ? dur : 100;
-  bar.value = elapsed || 0;
-  el("music-elapsed").textContent  = _fmtSec(elapsed);
-  el("music-duration").textContent = _fmtSec(dur);
+  // Progress bar — only update when elapsed/duration are explicitly provided
+  // (the WebSocket song_changed event does not carry timing data).
+  if (elapsed !== undefined && duration !== undefined) {
+    const bar = el("music-progress-bar");
+    const dur = duration || 0;
+    bar.max = dur > 0 ? dur : 100;
+    bar.value = elapsed || 0;
+    el("music-elapsed").textContent  = _fmtSec(elapsed);
+    el("music-duration").textContent = _fmtSec(dur);
+  }
 }
 
 function _applyMusicStations(stations) {
@@ -778,15 +781,19 @@ async function musicSetStation(stationId) {
   });
 }
 
+let _volTimer = null;
 async function musicSetVolume(level) {
   const pct = parseInt(level);
   el("music-volume-label").textContent = `${pct}%`;
-  try {
-    await fetch("/api/music/volume", {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ level: pct }),
-    });
-  } catch (e) { /* ignore */ }
+  clearTimeout(_volTimer);
+  _volTimer = setTimeout(async () => {
+    try {
+      await fetch("/api/music/volume", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ level: pct }),
+      });
+    } catch (e) { /* ignore */ }
+  }, 300);
 }
 
 async function musicSetEq(preset) {
