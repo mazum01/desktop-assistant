@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+from pathlib import Path
 from typing import Optional
 
 from src.core.bus import MessageBus
@@ -31,6 +32,8 @@ from src.core.service import Service
 
 log = logging.getLogger(__name__)
 
+_STATE_DIR = Path.home() / ".config" / "desktop-assistant"
+_EQ_STATE_FILE = _STATE_DIR / "eq_preset.txt"
 
 # Sentinel used to wake the worker for shutdown.
 _SHUTDOWN = object()
@@ -97,6 +100,16 @@ class AVService(Service):
             getattr(self._audio, "hardware_ready", False),
             getattr(self._tts, "hardware_ready", False),
         )
+
+        # Restore persisted EQ preset from last session
+        if _EQ_STATE_FILE.exists():
+            try:
+                preset = _EQ_STATE_FILE.read_text().strip()
+                if preset:
+                    self._audio.set_eq_preset(preset)
+                    log.info("Restored EQ preset: %s", preset)
+            except Exception:
+                log.warning("Could not restore EQ preset", exc_info=True)
 
         if self._announce_on_start:
             self._enqueue(self._do_announce_startup, label="announce_startup")
@@ -198,6 +211,8 @@ class AVService(Service):
         preset = payload.get("preset", "flat")
         try:
             self._audio.set_eq_preset(preset)
+            _STATE_DIR.mkdir(parents=True, exist_ok=True)
+            _EQ_STATE_FILE.write_text(preset)
         except Exception:
             log.exception("set_eq_preset(%r) failed", preset)
 

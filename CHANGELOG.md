@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.6] - 2026-05-10
+### Added
+- EQ preset now persists across restarts; saved to
+  `~/.config/desktop-assistant/eq_preset.txt` whenever changed and
+  automatically restored by `AVService` on startup
+
+---
+
 ## [1.7.5] - 2026-05-10
 ### Fixed
 - Pianobar event command key was wrong (`eventcommand` → `event_command`); cover art
