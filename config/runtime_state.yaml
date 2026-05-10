@@ -1,7 +1,7 @@
 camera:
   rotation_deg: 270
 head_tracking:
-  face_tracking_enabled: true
+  face_tracking_enabled: false
   random_motion_enabled: false
 servo:
   enabled: true

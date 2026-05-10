@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.6.1] - 2026-05-09
+### Fixed
+- Music skill: pianobar's `[?] Select station:` prompt has no trailing newline, so the previous line-by-line stdout reader never saw it and never sent the auto-select command. Rewrote `_read_output` to read byte-by-byte, building lines manually and detecting the partial-line prompt via regex. Station 0 is now auto-selected on `da music play` without any manual FIFO writes needed.
+- Changed pianobar `Popen` to `bufsize=0` (unbuffered binary) to ensure bytes arrive immediately.
+
 ## [1.6.0] - 2026-05-09
 ### Added
 - **Music skill (Pandora via pianobar)**: New `MusicService` manages a pianobar subprocess, exposes play/stop/next/pause/thumbs-up/thumbs-down/station-select via the internal bus.

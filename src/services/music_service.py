@@ -190,8 +190,7 @@ class MusicService(Service):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
-                text=True,
-                bufsize=1,
+                bufsize=0,           # unbuffered binary so we see partial lines
             )
         except FileNotFoundError:
             self.bus.publish("music.error", {"reason": "pianobar not installed"})
@@ -262,77 +261,98 @@ class MusicService(Service):
     # ── Output parser ─────────────────────────────────────────────────
 
     def _read_output(self) -> None:
-        """Parse pianobar stdout; update state and publish bus events."""
-        collecting_stations = False
-        stations_buf: list[dict] = []
+        """Parse pianobar stdout; update state and publish bus events.
 
-        for line in self._proc.stdout:
+        pianobar's 'Select station:' prompt has no trailing newline, so we read
+        byte-by-byte and process both complete lines (ending in \\n) and partial
+        lines (detected by matching a known prompt suffix).
+        """
+        stations_buf: list[dict] = []
+        buf = b""
+
+        while True:
             if self._stop_event.is_set():
                 break
+            chunk = self._proc.stdout.read(1)
+            if not chunk:
+                break
+            buf += chunk
 
-            line = line.rstrip()
-            log.debug("pianobar: %s", line)
-
-            # ── Station list collection ──────────────────────────────
-            m = _RE_STATION.match(line)
-            if m and not line.startswith("|"):
-                stations_buf.append({"id": int(m.group(1)), "name": m.group(2).strip()})
-                collecting_stations = True
+            # Process complete lines
+            if b"\n" in buf:
+                raw, buf = buf.split(b"\n", 1)
+                line = raw.decode("utf-8", errors="replace").rstrip()
+                self._process_line(line, stations_buf)
                 continue
 
-            # ── Station select prompt — flush collected stations ────
-            if _RE_SELECT.search(line):
+            # Detect the station-select prompt (no trailing newline)
+            decoded = buf.decode("utf-8", errors="replace")
+            if _RE_SELECT.search(decoded):
+                log.debug("pianobar: %s", decoded.strip())
                 if stations_buf:
                     with self._lock:
                         self._stations = list(stations_buf)
                         pending = self._pending_station
                         self._pending_station = None
                     self.bus.publish("music.stations_updated", {"stations": list(stations_buf)})
-                    stations_buf = []
-                    collecting_stations = False
-                    # Auto-select station
+                    stations_buf.clear()
                     target = pending if pending is not None else 0
                     log.info("Selecting station %d", target)
-                    # Small delay to ensure pianobar is reading
                     time.sleep(0.3)
                     self._send(str(target))
-                continue
+                buf = b""
 
-            # ── Now playing ──────────────────────────────────────────
-            m = _RE_SONG.search(line)
-            if m:
-                song = {
-                    "title":   m.group(1),
-                    "artist":  m.group(2),
-                    "station": m.group(3),
-                }
-                with self._lock:
-                    self._current_song = song
-                    self._state = "playing"
-                self.bus.publish("music.song_changed", song)
-                self.bus.publish("music.state_changed", {"state": "playing"})
-                if self._announce_songs:
-                    self.bus.publish("av.say", {
-                        "text": f"Now playing {song['title']} by {song['artist']}"
-                    })
-                continue
-
-            # ── Paused ───────────────────────────────────────────────
-            if "|| paused" in line or line.strip() == "|| paused":
-                with self._lock:
-                    self._state = "paused"
-                self.bus.publish("music.state_changed", {"state": "paused"})
-                continue
-
-            # ── Resumed ──────────────────────────────────────────────
-            if "|>" in line and "paused" not in line:
-                with self._lock:
-                    if self._state == "paused":
-                        self._state = "playing"
-                        self.bus.publish("music.state_changed", {"state": "playing"})
+        # Process any remaining buffer content
+        if buf:
+            line = buf.decode("utf-8", errors="replace").rstrip()
+            if line:
+                self._process_line(line, stations_buf)
 
         # Process ended
         with self._lock:
             self._state = "stopped"
         self.bus.publish("music.state_changed", {"state": "stopped"})
         log.info("pianobar process ended")
+
+    def _process_line(self, line: str, stations_buf: list) -> None:
+        """Handle a single decoded line from pianobar stdout."""
+        log.debug("pianobar: %s", line)
+
+        # Station list entry
+        m = _RE_STATION.match(line)
+        if m and not line.startswith("|"):
+            stations_buf.append({"id": int(m.group(1)), "name": m.group(2).strip()})
+            return
+
+        # Now playing
+        m = _RE_SONG.search(line)
+        if m:
+            song = {
+                "title":   m.group(1),
+                "artist":  m.group(2),
+                "station": m.group(3),
+            }
+            with self._lock:
+                self._current_song = song
+                self._state = "playing"
+            self.bus.publish("music.song_changed", song)
+            self.bus.publish("music.state_changed", {"state": "playing"})
+            if self._announce_songs:
+                self.bus.publish("av.say", {
+                    "text": f"Now playing {song['title']} by {song['artist']}"
+                })
+            return
+
+        # Paused
+        if "|| paused" in line or line.strip() == "|| paused":
+            with self._lock:
+                self._state = "paused"
+            self.bus.publish("music.state_changed", {"state": "paused"})
+            return
+
+        # Resumed from pause
+        if "|>" in line and "paused" not in line:
+            with self._lock:
+                if self._state == "paused":
+                    self._state = "playing"
+                    self.bus.publish("music.state_changed", {"state": "playing"})
