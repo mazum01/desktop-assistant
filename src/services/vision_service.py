@@ -55,6 +55,27 @@ _FACE_COLORS = [
 ]
 
 
+def _rotate_frame(frame: np.ndarray, degrees: int) -> np.ndarray:
+    """Rotate *frame* by *degrees* clockwise.
+
+    Multiples of 90° use cv2.rotate (lossless, may change dimensions).
+    Other angles use cv2.warpAffine centred on the frame, keeping the same
+    output canvas (corners are clipped by the rotation).
+    """
+    deg = degrees % 360
+    if deg == 0:
+        return frame
+    if deg == 90:
+        return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+    if deg == 180:
+        return cv2.rotate(frame, cv2.ROTATE_180)
+    if deg == 270:
+        return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    h, w = frame.shape[:2]
+    M = cv2.getRotationMatrix2D((w / 2.0, h / 2.0), -float(deg), 1.0)
+    return cv2.warpAffine(frame, M, (w, h))
+
+
 def _face_color(face_id: str | None, index: int) -> tuple:
     """Return a consistent BGR colour for a face.
 
@@ -123,6 +144,12 @@ class VisionService(Service):
         self._latest_faces: List[dict] = []
         self._latest_objects: List[dict] = []
         self._unsubs = []
+        # Rotation — initialised from camera config, updated live via bus
+        self._rotation_lock = threading.Lock()
+        _init_rot = 0
+        if camera_config is not None:
+            _init_rot = int(getattr(camera_config, "rotation_deg", 0))
+        self._rotation_deg: int = _init_rot % 360
 
     def on_start(self) -> None:
         if self._camera is None:
@@ -145,6 +172,9 @@ class VisionService(Service):
         self._unsubs.append(
             self.bus.subscribe("perception.objects", self._on_objects)
         )
+        self._unsubs.append(
+            self.bus.subscribe("camera.set_rotation", self._on_set_rotation)
+        )
         log.info(
             "VisionService started; hardware_ready=%s",
             getattr(self._camera, "hardware_ready", False),
@@ -153,6 +183,11 @@ class VisionService(Service):
     @property
     def hardware_ready(self) -> bool:
         return bool(getattr(self._camera, "hardware_ready", False))
+
+    @property
+    def rotation_deg(self) -> int:
+        with self._rotation_lock:
+            return self._rotation_deg
 
     def run_tick(self) -> None:
         if self._camera is None:
@@ -163,6 +198,12 @@ class VisionService(Service):
             log.exception("capture_frame failed")
             self.bus.publish("vision.error", {"reason": "capture_failed"})
             return
+
+        # Apply software rotation before any processing or display.
+        with self._rotation_lock:
+            rot = self._rotation_deg
+        if rot:
+            frame = _rotate_frame(frame, rot)
 
         # picamera2 "RGB888" actually delivers BGR in the buffer.
         # Snapshot detection caches while we have the lock.
@@ -241,3 +282,12 @@ class VisionService(Service):
         except Exception:
             log.exception("capture_still(%s) failed", path)
             self.bus.publish("vision.error", {"reason": "still_failed"})
+
+    def _on_set_rotation(self, _topic, payload) -> None:
+        if not isinstance(payload, dict) or "rotation_deg" not in payload:
+            return
+        deg = int(payload["rotation_deg"]) % 360
+        with self._rotation_lock:
+            self._rotation_deg = deg
+        log.info("Camera rotation set to %d°", deg)
+        self.bus.publish("camera.rotation_changed", {"rotation_deg": deg})

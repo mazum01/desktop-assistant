@@ -515,6 +515,48 @@ async function doVersion() {
   await fetch("/api/version", { method: "POST" });
 }
 
+async function loadCamRotation() {
+  try {
+    const r = await fetch("/api/settings/camera/rotation");
+    if (!r.ok) return;
+    const d = await r.json();
+    const deg = d.rotation_deg ?? 0;
+    const slider = el("cam-rotation-slider");
+    const display = el("cam-rotation-display");
+    if (slider) slider.value = deg;
+    if (display) display.textContent = deg + "°";
+  } catch (e) { /* ignore */ }
+}
+
+function setCamRotationPreset(val) {
+  if (val === "") return;
+  const slider = el("cam-rotation-slider");
+  const display = el("cam-rotation-display");
+  if (slider) { slider.value = val; }
+  if (display) { display.textContent = val + "°"; }
+  // Reset select so user can pick the same value again
+  const sel = el("cam-rotation-preset");
+  if (sel) sel.value = "";
+}
+
+async function saveCamRotation() {
+  const slider = el("cam-rotation-slider");
+  const st = el("cam-rotation-status");
+  if (!slider) return;
+  const rotation_deg = parseInt(slider.value, 10);
+  try {
+    await fetch("/api/settings/camera/rotation", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rotation_deg }),
+    });
+    if (st) { st.textContent = "Saved ✓"; st.style.color = "var(--green)"; }
+  } catch (e) {
+    if (st) { st.textContent = "Error"; st.style.color = "var(--red)"; }
+  }
+  setTimeout(() => { if (st) st.textContent = ""; }, 3000);
+}
+
 async function doDescribe() {
   const btn = document.querySelector('[onclick="doDescribe()"]');
   if (btn) { btn.disabled = true; btn.textContent = "Describing…"; }
@@ -596,6 +638,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadFaceTrackingEnabled();
   loadRandomMotionEnabled();
   loadGreetingSettings();
+  loadCamRotation();
   connectWS();
   // Refresh face registry every 30s
   setInterval(loadFaces, 30000);

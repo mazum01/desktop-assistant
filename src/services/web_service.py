@@ -31,6 +31,8 @@ PUT  /api/settings/random-motion  Set random motion  body: {"enabled": bool}
 GET  /api/settings/greeting  Get greeting config
 PUT  /api/settings/greeting  Update greeting cooldown  body: {"cooldown_min": float}
 POST /api/vision/describe    Speak natural-language description of current scene
+GET  /api/settings/camera/rotation  Get camera rotation angle
+PUT  /api/settings/camera/rotation  Set camera rotation  body: {"rotation_deg": int 0-359}
 """
 
 import asyncio
@@ -88,6 +90,10 @@ class _GreetingBody(BaseModel):
     jitter_pct: Optional[float] = None
     min_absence_s: Optional[float] = None
     confidence_threshold: Optional[float] = None
+
+
+class _CameraRotationBody(BaseModel):
+    rotation_deg: int
 
 
 class WebService:
@@ -605,5 +611,19 @@ class WebService:
                 raise HTTPException(503, "bus unavailable")
             self.bus.publish("vision.describe", {})
             return {"ok": True}
+
+        # ── Camera rotation ────────────────────────────────────────────
+
+        @app.get("/api/settings/camera/rotation")
+        async def api_get_camera_rotation():
+            deg = self._vision_svc.rotation_deg if self._vision_svc else 0
+            return {"rotation_deg": deg}
+
+        @app.put("/api/settings/camera/rotation")
+        async def api_put_camera_rotation(body: _CameraRotationBody):
+            deg = int(body.rotation_deg) % 360
+            if self.bus:
+                self.bus.publish("camera.set_rotation", {"rotation_deg": deg})
+            return {"ok": True, "rotation_deg": deg}
 
         return app

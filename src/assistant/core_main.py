@@ -88,10 +88,14 @@ def main() -> int:
 
     _cam_cfg_raw = _cfg.get("camera", {})
     from src.vision.camera import CameraConfig as _CameraConfig
+    _camera_rotation_deg = int(_rt.get("camera", {}).get(
+        "rotation_deg", _cam_cfg_raw.get("rotation_deg", 0)
+    )) % 360
     _camera_cfg = _CameraConfig(
         width=int(_cam_cfg_raw.get("width", 640)),
         height=int(_cam_cfg_raw.get("height", 480)),
         framerate=int(_cam_cfg_raw.get("framerate", 30)),
+        rotation_deg=_camera_rotation_deg,
     )
 
     _web_cfg = _cfg.get("web_dashboard", {})
@@ -116,6 +120,9 @@ def main() -> int:
         "head_tracking": {
             "face_tracking_enabled": _face_tracking_enabled,
             "random_motion_enabled": _random_motion_enabled,
+        },
+        "camera": {
+            "rotation_deg": _camera_rotation_deg,
         },
     }
 
@@ -142,10 +149,16 @@ def main() -> int:
             _rt_state["head_tracking"]["random_motion_enabled"] = bool(payload["enabled"])
             _save_runtime(_rt_state)
 
+    def _on_camera_rotation_changed(_t, payload):
+        if isinstance(payload, dict) and "rotation_deg" in payload:
+            _rt_state["camera"]["rotation_deg"] = int(payload["rotation_deg"]) % 360
+            _save_runtime(_rt_state)
+
     bus.subscribe("motion.enabled_changed",         _on_servo_changed)
     bus.subscribe("motion.limits_changed",          _on_limits_changed)
     bus.subscribe("tracking.face_tracking_changed", _on_face_tracking_changed)
     bus.subscribe("tracking.random_motion_changed", _on_random_motion_changed)
+    bus.subscribe("camera.rotation_changed",        _on_camera_rotation_changed)
 
     av = AVService(bus=bus)
     vis = VisionService(bus=bus, camera_config=_camera_cfg)

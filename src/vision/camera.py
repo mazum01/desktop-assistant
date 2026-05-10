@@ -36,6 +36,10 @@ class CameraConfig:
     framerate: int = 30
     # Format used for stream captures; "RGB888" gives H×W×3 numpy arrays
     stream_format: str = "RGB888"
+    # Software rotation applied after capture. 0–359 degrees.
+    # Multiples of 90 are lossless (cv2.rotate); other angles keep the same
+    # canvas size via cv2.warpAffine (corners are slightly cropped).
+    rotation_deg: int = 0
 
 
 class Camera:

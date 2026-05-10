@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.9] - 2026-05-09
+### Added
+- **Camera rotation** — new `rotation_deg` config field (0–359°) applied in
+  software after every frame capture. Multiples of 90° use lossless OpenCV
+  rotation (which may change frame dimensions); arbitrary angles use
+  `cv2.warpAffine` with the same canvas size. Value persists across daemon
+  restarts via `config/runtime_state.yaml`.
+- **Web GUI** — Camera Rotation slider (0–359) plus quick-pick preset select
+  (0°/90°/180°/270°) with a "Set" button under the Controls panel.
+  Live-loaded from the daemon on page open.
+- **CLI** — `da vision rotation <deg>` sets the angle immediately;
+  `da vision rotation-status` shows the current value from runtime state.
+- **REST API** — `GET /api/settings/camera/rotation` and
+  `PUT /api/settings/camera/rotation` body `{"rotation_deg": int}`.
+- **Bus topics** — `camera.set_rotation` (request) and
+  `camera.rotation_changed` (broadcast after change).
+
 ## [1.5.8] - 2026-05-09
 ### Added
 - **Per-face colors** — each detected face now gets a distinct colored oval and

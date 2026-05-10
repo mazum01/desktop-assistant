@@ -621,7 +621,9 @@ def cmd_help(args) -> int:
                          "               face greeting-cooldown <min>  Set re-greeting cooldown.\n"
                          "               face greeting-settings  Show all greeting config values.",
         "vision":        "Vision and object detection. Sub-commands:\n"
-                         "               vision describe         Speak a description of everything seen.",
+                         "               vision describe             Speak a description of everything seen.\n"
+                         "               vision rotation <deg>       Set camera rotation (0–359°).\n"
+                         "               vision rotation-status      Show current camera rotation angle.",
         "help":          "Show this command reference, or help for a specific command.\n"
                          "               Usage: help [command]",
     }
@@ -887,6 +889,46 @@ def cmd_vision_describe(_args) -> int:
     return 0 if r.get("ok") else 1
 
 
+def cmd_vision_rotation(args) -> int:
+    """Set camera rotation angle (0–359°)."""
+    deg = int(args.degrees) % 360
+    r = _request({"cmd": "publish", "topic": "camera.set_rotation",
+                  "payload": {"rotation_deg": deg}})
+    if r.get("ok"):
+        print(f"Camera rotation set to {deg}°")
+    else:
+        print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
+def cmd_vision_rotation_status(_args) -> int:
+    """Show the current camera rotation angle."""
+    from pathlib import Path
+    import yaml as _yaml
+
+    _base = Path(__file__).resolve().parents[1]
+    _cfg_path = _base / "config" / "assistant.yaml"
+    _rt_path  = _base / "config" / "runtime_state.yaml"
+
+    _cfg = {}
+    try:
+        _cfg = _yaml.safe_load(_cfg_path.read_text()) or {} if _cfg_path.exists() else {}
+    except Exception:
+        pass
+    _rt = {}
+    try:
+        _rt = _yaml.safe_load(_rt_path.read_text()) or {} if _rt_path.exists() else {}
+    except Exception:
+        pass
+
+    deg = _rt.get("camera", {}).get(
+        "rotation_deg",
+        _cfg.get("camera", {}).get("rotation_deg", 0),
+    )
+    print(f"  Camera rotation : {deg}°")
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(
         prog="desktop-assistant",
@@ -937,6 +979,10 @@ def main() -> int:
     vis_sub = vis_sp.add_subparsers(dest="vis_cmd", metavar="<subcommand>")
     vis_sub.required = True
     vis_sub.add_parser("describe", help="Speak a natural-language description of everything currently seen").set_defaults(func=cmd_vision_describe)
+    vis_sub.add_parser("rotation-status", help="Show current camera rotation angle").set_defaults(func=cmd_vision_rotation_status)
+    ssp = vis_sub.add_parser("rotation", help="Set camera rotation angle (0–359°)")
+    ssp.add_argument("degrees", type=int, help="Rotation in degrees (0–359)")
+    ssp.set_defaults(func=cmd_vision_rotation)
 
     sub.add_parser("topics", help="List subscribed topics").set_defaults(func=cmd_topics)
 

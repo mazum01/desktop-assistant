@@ -145,6 +145,24 @@
         </div>
 
         <div class="control-group">
+          <label>Camera Rotation  <span id="cam-rotation-display">0°</span></label>
+          <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
+            <input type="range" id="cam-rotation-slider" min="0" max="359" step="1" value="0"
+                   oninput="document.getElementById('cam-rotation-display').textContent=this.value+'°'" />
+            <select id="cam-rotation-preset" style="width:90px"
+                    onchange="setCamRotationPreset(this.value)">
+              <option value="">Preset…</option>
+              <option value="0">0°</option>
+              <option value="90">90°</option>
+              <option value="180">180°</option>
+              <option value="270">270°</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="saveCamRotation()">Set</button>
+            <span id="cam-rotation-status" class="qh-status"></span>
+          </div>
+        </div>
+
+        <div class="control-group">
           <label>System</label>
           <div class="row-input">
             <button class="btn btn-secondary" onclick="doVersion()">Speak Version</button>
@@ -256,6 +274,8 @@
               <tr><td><code>da face forget-guests</code></td><td>Remove unnamed Guest faces</td></tr>
               <tr><td><code>da face greeting-cooldown 30</code></td><td>Set greeting cooldown (minutes)</td></tr>
               <tr><td><code>da vision describe</code></td><td>Speak everything currently seen</td></tr>
+              <tr><td><code>da vision rotation &lt;deg&gt;</code></td><td>Set camera rotation 0–359°</td></tr>
+              <tr><td><code>da vision rotation-status</code></td><td>Show current camera rotation</td></tr>
               <tr><td><code>da watch</code></td><td>Stream all bus events (Ctrl-C to stop)</td></tr>
               <tr><td><code>da help</code></td><td>Full command reference</td></tr>
             </table>

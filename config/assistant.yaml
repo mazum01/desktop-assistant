@@ -32,6 +32,11 @@ camera:
   width: 640
   height: 480
   framerate: 30
+  # Software rotation applied to every frame before display and detection.
+  # Valid range: 0–359. Common values: 0 (none), 90, 180, 270.
+  # Multiples of 90 are lossless; other angles keep the same canvas size.
+  # Persisted at runtime; change live with: da vision rotation <deg>
+  rotation_deg: 0
 
 face_recognition:
   # ArcFace MobileFaceNet identity recognition on the Hailo-8.
