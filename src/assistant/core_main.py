@@ -108,6 +108,7 @@ def main() -> int:
         spring_k=float(_ht_cfg_raw.get("spring_k", 6.0)),
         damping=float(_ht_cfg_raw.get("damping", 2.5)),
         max_speed_deg_s=float(_ht_cfg_raw.get("max_speed_deg_s", 80.0)),
+        invert_pan=bool(_ht_cfg_raw.get("invert_pan", False)),
     )
     _perc_cfg = PerceptionConfig(recognition_enabled=_recognition_enabled)
 

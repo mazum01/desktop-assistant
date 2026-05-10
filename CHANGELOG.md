@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.5.12] - 2026-05-09
+### Fixed
+- Face tracking pan direction was reversed — servo moved left when face was right and vice versa. Fixed by correcting the sign of the `offset_deg` application in `HeadTracker._update_tracking()`.
+- Added `invert_pan: bool = False` to `HeadTrackerConfig` and `invert_pan: true` to `config/assistant.yaml` so the direction can be flipped via config without code changes.
+
 ## [1.5.11] - 2026-05-09
 ### Fixed
 - Face tracking servo now uses the correct `frame_width` matching the actual camera resolution (640 px) instead of the hard-coded default of 1280. For 90°/270° camera rotations the axes are swapped, so `frame_width` is set to the camera height (480 px) — matching what detection sees after `cv2.rotate()` swaps width ↔ height.

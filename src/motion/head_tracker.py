@@ -49,6 +49,9 @@ class HeadTrackerConfig:
     # Dead zone — fraction of frame width before the head starts following
     dead_zone_frac: float = 0.04
 
+    # Flip pan direction if the servo linkage or mount reverses left/right
+    invert_pan: bool = False
+
     # Micro-saccades when locked on face (simulates natural small eye/head movements)
     saccade_amplitude_deg: float = 1.5
     saccade_interval_s: Tuple[float, float] = (3.0, 7.0)
@@ -153,8 +156,10 @@ class HeadTracker:
         if abs(offset_deg) < dead_deg:
             offset_deg = 0.0
 
-        # Target: move servo so face is centred (invert: servo moves camera)
-        target = self._position - offset_deg
+        # Target: move servo so face is centred.
+        # Sign: if the servo mount inverts left/right, flip via invert_pan.
+        direction = -1.0 if cfg.invert_pan else 1.0
+        target = self._position + direction * offset_deg
 
         # Micro-saccades
         now = time.monotonic()
