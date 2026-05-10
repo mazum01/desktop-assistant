@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.5] - 2026-05-10
+### Fixed
+- Pianobar event command key was wrong (`eventcommand` → `event_command`); cover art
+  and album metadata were never populated because pianobar silently ignored the setting
+- Event script was reading nonexistent environment variables; pianobar passes song data
+  via stdin as `key=value` lines — rewrote script to parse stdin correctly
+- Station dropdown now reflects the currently playing station on each web refresh;
+  added `current_station_id` to the music status API (matched by station name from
+  event metadata) and updated JS `_applyMusicStations()` to select it
+
+---
+
 ## [1.7.4] - 2026-05-10
 ### Fixed
 - Servo calibration: corrected pulse range from 750–2250 µs to **500–2500 µs**

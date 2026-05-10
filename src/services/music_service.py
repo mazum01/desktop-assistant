@@ -91,6 +91,7 @@ class MusicService(Service):
         self._pending_station: Optional[int] = None
         self._got_stations: bool = False
         self._resuming_station_name: str = ""
+        self._current_station_id: Optional[int] = None
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._reader_thread: Optional[threading.Thread] = None
@@ -116,10 +117,11 @@ class MusicService(Service):
         with self._lock:
             return {
                 **self._current_song,
-                "album":         self._song_album,
-                "cover_art_url": self._song_cover_art,
-                "elapsed_sec":   self._elapsed_sec,
-                "duration_sec":  self._duration_sec,
+                "album":              self._song_album,
+                "cover_art_url":      self._song_cover_art,
+                "elapsed_sec":        self._elapsed_sec,
+                "duration_sec":       self._duration_sec,
+                "current_station_id": self._current_station_id,
             }
 
     @property
@@ -321,7 +323,7 @@ class MusicService(Service):
                 pass
 
     def _patch_pianobar_config(self) -> None:
-        """Add fifo and eventcommand lines to pianobar config if not already present."""
+        """Add fifo and event_command lines to pianobar config if not already present."""
         try:
             content = _PIANOBAR_CONFIG.read_text()
             updated = False
@@ -329,30 +331,48 @@ class MusicService(Service):
                 with _PIANOBAR_CONFIG.open("a") as f:
                     f.write(f"\nfifo = {_PIANOBAR_FIFO}\n")
                 updated = True
-            if "eventcommand" not in content:
+            # Remove legacy wrong key if present
+            if "eventcommand" in content and "event_command" not in content:
+                content = content.replace(
+                    f"eventcommand = {_PIANOBAR_EVENT_SCRIPT}",
+                    f"event_command = {_PIANOBAR_EVENT_SCRIPT}",
+                )
+                _PIANOBAR_CONFIG.write_text(content)
+                updated = True
+            elif "event_command" not in content:
                 with _PIANOBAR_CONFIG.open("a") as f:
-                    f.write(f"\neventcommand = {_PIANOBAR_EVENT_SCRIPT}\n")
+                    f.write(f"\nevent_command = {_PIANOBAR_EVENT_SCRIPT}\n")
                 updated = True
             if updated:
-                log.info("Patched pianobar config (fifo/eventcommand)")
+                log.info("Patched pianobar config (fifo/event_command)")
         except Exception:
             log.exception("Could not patch pianobar config")
 
     def _write_event_script(self) -> None:
-        """Write the pianobar event script that captures song metadata."""
+        """Write the pianobar event script that captures song metadata.
+
+        pianobar passes the event name as argv[1] and streams key=value pairs
+        via stdin (one per line).  Environment variables are NOT used.
+        """
         script = (
             "#!/usr/bin/env python3\n"
             "import json, os, sys\n"
-            f"META = os.path.expanduser('{_PIANOBAR_META_JSON}')\n"
-            "ev = os.environ.get('pianobar_eventcmd', sys.argv[1] if len(sys.argv) > 1 else '')\n"
+            f"META = '{_PIANOBAR_META_JSON}'\n"
+            "ev = sys.argv[1] if len(sys.argv) > 1 else ''\n"
             "if ev == 'songstart':\n"
+            "    fields = {}\n"
+            "    for line in sys.stdin:\n"
+            "        line = line.rstrip('\\n')\n"
+            "        if '=' in line:\n"
+            "            k, _, v = line.partition('=')\n"
+            "            fields[k.strip()] = v.strip()\n"
             "    data = {\n"
-            "        'title':    os.environ.get('pianobar_title', ''),\n"
-            "        'artist':   os.environ.get('pianobar_artist', ''),\n"
-            "        'album':    os.environ.get('pianobar_album', ''),\n"
-            "        'cover_art': os.environ.get('pianobar_coverArt', ''),\n"
-            "        'duration': os.environ.get('pianobar_songDuration', '0'),\n"
-            "        'station':  os.environ.get('pianobar_stationName', ''),\n"
+            "        'title':     fields.get('title', ''),\n"
+            "        'artist':    fields.get('artist', ''),\n"
+            "        'album':     fields.get('album', ''),\n"
+            "        'cover_art': fields.get('coverArt', ''),\n"
+            "        'duration':  fields.get('songDuration', '0'),\n"
+            "        'station':   fields.get('stationName', ''),\n"
             "    }\n"
             "    os.makedirs(os.path.dirname(META), exist_ok=True)\n"
             "    with open(META, 'w') as f:\n"
@@ -610,5 +630,15 @@ class MusicService(Service):
                     self._duration_sec = int(dur)
                 except (ValueError, TypeError):
                     pass
+                # Resolve station id from name
+                station_name = data.get("station", "")
+                if station_name:
+                    for s in self._stations:
+                        if s["name"] == station_name:
+                            self._current_station_id = s["id"]
+                            break
+                    # Also update the song's station field if it was blank
+                    if station_name and not self._current_song.get("station"):
+                        self._current_song["station"] = station_name
         except Exception:
             log.exception("Failed to load pianobar metadata from %s", _PIANOBAR_META_JSON)

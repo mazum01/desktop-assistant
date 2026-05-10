@@ -675,7 +675,7 @@ async function loadMusicStatus() {
     const d = await fetch("/api/music/status").then(r => r.json());
     _applyMusicState(d.state || "stopped");
     _applyMusicSong(d.song || {}, d.elapsed_sec || 0, d.duration_sec || 0);
-    _applyMusicStations(d.stations || []);
+    _applyMusicStations(d.stations || [], (d.song || {}).current_station_id);
     el("music-not-configured").style.display = d.configured === false ? "" : "none";
     // Volume
     if (d.volume >= 0) {
@@ -725,9 +725,8 @@ function _applyMusicSong(song, elapsed, duration) {
   }
 }
 
-function _applyMusicStations(stations) {
+function _applyMusicStations(stations, currentId) {
   const sel = el("music-station-select");
-  const prev = sel.value;
   while (sel.options.length > 1) sel.remove(1);
   for (const s of stations) {
     const opt = document.createElement("option");
@@ -735,7 +734,10 @@ function _applyMusicStations(stations) {
     opt.textContent = s.name;
     sel.appendChild(opt);
   }
-  if (prev) sel.value = prev;
+  // Select the currently playing station if known
+  if (currentId !== undefined && currentId !== null) {
+    sel.value = String(currentId);
+  }
 }
 
 async function musicPlay() {

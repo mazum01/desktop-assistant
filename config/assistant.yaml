@@ -29,8 +29,8 @@ servo:
   # DS3218 pulse calibration.  500–2500 µs covers the full 0°–270° physical
   # travel; through the 360/270 gear ratio this gives 0°–360° head rotation.
   # Narrow the range here only if the servo binds at the extremes.
-  pulse_min_us: 500
-  pulse_max_us: 2500
+  pulse_min_us: 10
+  pulse_max_us: 2950
 
 camera:
   # Capture resolution and frame rate for the primary (face-tracking) camera.
