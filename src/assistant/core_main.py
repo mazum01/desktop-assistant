@@ -201,6 +201,8 @@ def main() -> int:
         servo_enabled=_servo_enabled,
         soft_min_deg=_soft_min_deg,
         soft_max_deg=_soft_max_deg,
+        pulse_min_us=int(_servo_cfg.get("pulse_min_us", 500)),
+        pulse_max_us=int(_servo_cfg.get("pulse_max_us", 2500)),
     )
 
     _music_cfg = _cfg.get("music", {})

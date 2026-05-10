@@ -5,10 +5,22 @@ Pan servo controller for the DS3218 servo on a SparkFun Pi Servo pHAT
 Uses Adafruit ServoKit with busio.I2C(board.SCL, board.SDA) — the
 same initialisation pattern confirmed working on this hardware.
 
-Pulse range: 750–2250 µs (calibrated for DS3218 on this pHAT).
-Servo kit angle range: 0–180° (maps to the DS3218 travel range).
+Gear-ratio calibration
+-----------------------
+The DS3218 has a physical range of 0°–270°.  It is geared so that
+270° of servo travel produces 360° of head/camera rotation.
 
-Logical pan range: 1°–360° mapped onto 0°–180° kit angles.
+    gear_ratio = 360 / 270 ≈ 1.333
+
+Pulse-width mapping (DS3218 datasheet):
+    500 µs  →  0°   physical  →  0°   head
+    2500 µs → 270°  physical  → 360°  head
+
+Setting ``pulse_min_us=500`` and ``pulse_max_us=2500`` ensures the
+ServoKit 0–180 angle range spans the full 0°–270° physical travel,
+which in turn produces the full 0°–360° logical head rotation.
+
+Logical pan range: 1°–360° mapped linearly onto kit angles 0°–180°.
 Dead-zone wrap rule enforced: movement from higher→lower logical angle
 always traverses backward; never crosses the 360°/1° boundary.
 """
@@ -22,9 +34,11 @@ from typing import Optional
 
 log = logging.getLogger(__name__)
 
-# DS3218 pulse-width calibration (microseconds) — confirmed working values
-_PULSE_MIN_US  = 750
-_PULSE_MAX_US  = 2250
+# DS3218 pulse-width calibration (microseconds).
+# 500–2500 µs covers the full 0°–270° physical travel of the DS3218.
+# Through the 360/270 gear ratio this maps logical 1°–360° → 0°–360° head.
+_PULSE_MIN_US  = 500
+_PULSE_MAX_US  = 2500
 
 # Kit angle range (ServoKit uses 0–180)
 _KIT_MIN_DEG   = 0.0
@@ -46,6 +60,8 @@ class ServoConfig:
     i2c_address: int = 0x40             # Servo pHAT I²C address
     pulse_min_us: int = _PULSE_MIN_US
     pulse_max_us: int = _PULSE_MAX_US
+    # Gear ratio: head rotation per servo rotation (DS3218 270° → 360° head)
+    gear_ratio: float = 360.0 / 270.0
     speed_deg_per_sec: float = _DEFAULT_SPEED_DEG_PER_SEC
     soft_min_deg: float = _LOGICAL_MIN
     soft_max_deg: float = _LOGICAL_MAX

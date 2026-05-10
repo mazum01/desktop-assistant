@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.4] - 2026-05-10
+### Fixed
+- Servo calibration: corrected pulse range from 750–2250 µs to **500–2500 µs**
+  to cover the DS3218's full 0°–270° physical travel.  Through the 360/270 gear
+  ratio this now correctly maps logical 1°–360° to 0°–360° of head rotation.
+  The previous range caused the extents (~90° and ~270°) to be ~30° short each.
+### Changed
+- `pulse_min_us` and `pulse_max_us` are now exposed in `config/assistant.yaml`
+  under the `servo:` section for field calibration without code changes.
+- Added `gear_ratio` field to `ServoConfig` (360/270 ≈ 1.333) for documentation
+  and future use.
+
+---
+
 ## [1.7.3] - 2026-05-10
 ### Added
 - Video feed overlay: pan angle text and compass arc drawn on each live frame

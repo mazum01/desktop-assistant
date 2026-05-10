@@ -40,13 +40,17 @@ class MotionService(Service):
                  quiet_hours: Optional[QuietHours] = None,
                  servo_enabled: bool = True,
                  soft_min_deg: float = 135.0,
-                 soft_max_deg: float = 215.0) -> None:
+                 soft_max_deg: float = 215.0,
+                 pulse_min_us: int = 500,
+                 pulse_max_us: int = 2500) -> None:
         super().__init__(bus=bus)
         self._controller = controller
         self._quiet_hours = quiet_hours
         self._servo_enabled = servo_enabled
         self._soft_min = float(soft_min_deg)
         self._soft_max = float(soft_max_deg)
+        self._pulse_min_us = int(pulse_min_us)
+        self._pulse_max_us = int(pulse_max_us)
         self._unsubs = []
 
     @property
@@ -65,7 +69,12 @@ class MotionService(Service):
         if self._controller is None:
             from src.motion.servo_controller import ServoController, ServoConfig
             self._controller = ServoController(
-                ServoConfig(soft_min_deg=self._soft_min, soft_max_deg=self._soft_max)
+                ServoConfig(
+                    soft_min_deg=self._soft_min,
+                    soft_max_deg=self._soft_max,
+                    pulse_min_us=self._pulse_min_us,
+                    pulse_max_us=self._pulse_max_us,
+                )
             )
         else:
             self._apply_limits_to_controller()
