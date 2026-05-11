@@ -169,7 +169,7 @@ class WebService:
         self._event_log: list[dict] = []             # recent bus events (capped)
         self._unsubs: list = []
         self._running = False
-        self._service_states: dict = {}   # name -> "running" | "stopped"
+        self._service_states: dict = {}   # name -> "running" | "stopped" | "error"
         # FPS counters — incremented by _on_frame callbacks, sampled in _build_status_snapshot
         self._cam1_frame_count: int = 0
         self._cam2_frame_count: int = 0
@@ -212,6 +212,19 @@ class WebService:
         self._unsubs.append(
             self.bus.subscribe("service.stopped", self._on_service_stopped)
         )
+        # Subscribe to per-service error events so the panel can show red.
+        _err_map = {
+            "audio.error":       "audio_capture",
+            "vision.error":      "vision",
+            "perception.error":  "perception",
+            "music.error":       "music",
+            "thermal.error":     "telemetry",
+        }
+        for _topic, _svc_name in _err_map.items():
+            _n = _svc_name  # capture for closure
+            self._unsubs.append(
+                self.bus.subscribe(_topic, lambda t, p, n=_n: self._on_service_error(n))
+            )
 
         # Subscribe to all events for event log
         for topic in (
@@ -273,11 +286,18 @@ class WebService:
 
     def _on_service_started(self, _topic, payload) -> None:
         if isinstance(payload, dict) and "name" in payload:
+            # Recovery — clear any prior error state.
             self._service_states[payload["name"]] = "running"
 
     def _on_service_stopped(self, _topic, payload) -> None:
         if isinstance(payload, dict) and "name" in payload:
             self._service_states[payload["name"]] = "stopped"
+
+    def _on_service_error(self, service_name: str) -> None:
+        """Mark a service degraded (red) when it publishes an error event."""
+        # Only degrade if currently shown as running — don't override "stopped".
+        if self._service_states.get(service_name) == "running":
+            self._service_states[service_name] = "error"
 
     def _on_event(self, topic: str, payload) -> None:
         # Strip the heavy per-face array from perception events so the

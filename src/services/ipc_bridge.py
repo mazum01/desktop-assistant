@@ -140,6 +140,23 @@ class IPCBridge(Service):
         self._unsub_started = self.bus.subscribe("service.started", _on_started)
         self._unsub_stopped = self.bus.subscribe("service.stopped", _on_stopped)
 
+        # Mark services degraded (error=True) when they publish error events.
+        _err_map = {
+            "audio.error":       "audio_capture",
+            "vision.error":      "vision",
+            "perception.error":  "perception",
+            "music.error":       "music",
+            "thermal.error":     "telemetry",
+        }
+        def _make_err_handler(svc_name):
+            def _on_err(_topic, _payload):
+                entry = self._service_status.get(svc_name)
+                if entry and entry.get("running"):
+                    self._service_status[svc_name] = {**entry, "error": True}
+            return _on_err
+        for _topic, _name in _err_map.items():
+            self.bus.subscribe(_topic, _make_err_handler(_name))
+
         if not _ZMQ_AVAILABLE:
             log.warning(
                 "pyzmq not installed — IPC bridge disabled "

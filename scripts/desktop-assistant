@@ -916,11 +916,20 @@ def cmd_status(args) -> int:
     print("┌─ Services " + "─" * 49)
     if not svcs:
         print("│  (none reported)")
+    GRN = "\033[32m"; RED = "\033[31m"; YLW = "\033[33m"; RST = "\033[0m"
     for name, info in sorted(svcs.items()):
-        mark = "✓" if info.get("running") else "✗"
-        ts   = info.get("ts")
-        age  = f"  (since {_fmt_ts(ts)})" if ts else ""
-        print(f"│  {mark}  {name}{age}")
+        if not info.get("running"):
+            mark = f"{YLW}✗{RST}"
+            extra = f"  {YLW}(stopped){RST}"
+        elif info.get("error"):
+            mark = f"{RED}⚠{RST}"
+            extra = f"  {RED}(error/degraded){RST}"
+        else:
+            mark = f"{GRN}✓{RST}"
+            extra = ""
+        ts  = info.get("ts")
+        age = f"  (since {_fmt_ts(ts)})" if ts else ""
+        print(f"│  {mark}  {name}{age}{extra}")
 
     # ── Hardware / Thermal ─────────────────────────────────────────────
     print("├─ Hardware / Thermal " + "─" * 38)

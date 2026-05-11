@@ -101,8 +101,12 @@ function updateDashboard(data) {
   if (svcKeys.length > 0) {
     svcContainer.innerHTML = svcKeys.sort().map(name => {
       const state = services[name];
-      const cls = state === "running" ? "pill-ok" : "pill-warn";
-      return `<span class="pill ${cls}">${esc(name)}</span>`;
+      const cls = state === "running" ? "pill-ok"
+                : state === "error"   ? "pill-fail"
+                : state === "stopped" ? "pill-warn"
+                : "pill-unknown";
+      const label = state === "error" ? `${esc(name)} ⚠` : esc(name);
+      return `<span class="pill ${cls}" title="${esc(state)}">${label}</span>`;
     }).join("");
   }
 

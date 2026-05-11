@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.8.4] - 2026-05-11
+### Added
+- **Service error (red) state in Services panel** — `WebService` now subscribes to
+  `audio.error`, `vision.error`, `perception.error`, `music.error`, and `thermal.error`.
+  Any service that fires an error event while running transitions to `"error"` state and
+  renders as a red ⚠ pill in the web GUI. Clears back to green when the service restarts.
+- **`da status` colorized service list** — services now display green ✓ (running), yellow ✗
+  (stopped), or red ⚠ (running but degraded). `IPCBridge` tracks the same error events and
+  propagates `error: True` in its `_service_status` dict for the CLI to read.
+
 ## [1.8.3] - 2026-05-11
 ### Fixed
 - **Services panel now shows all services** — `WebService` and `IPCBridge` both start at
