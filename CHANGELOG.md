@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.15] - 2026-05-11
+### Changed
+- MJPEG stream generators now use `asyncio.Event` + `loop.call_soon_threadsafe()`
+  instead of `run_in_executor(threading.Event.wait)` — eliminates thread-pool
+  dispatch overhead (one task per frame) for lower latency and less CPU churn.
+- `VisionService.on_start()` now sets `tick_seconds = 1/framerate` from the
+  camera config instead of the hardcoded 0.033 class constant.
+- `picamera2` `buffer_count` increased from 4 → 6 for more ISP pipeline headroom.
+- Camera 2 default framerate raised from 15 → 30 fps (`config/assistant.yaml`
+  and `RawCameraConfig` default); Pi 5 handles dual 30fps without issue.
+
 ## [1.7.14] - 2026-05-11
 ### Fixed
 - Camera 2 rotation is now persisted across daemon restarts.

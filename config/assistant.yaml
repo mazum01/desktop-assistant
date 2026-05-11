@@ -52,7 +52,7 @@ camera2:
   index: 1          # CSI slot 1
   width: 640
   height: 480
-  framerate: 15     # half of primary to keep CPU overhead low
+  framerate: 30     # match primary cam — Pi 5 handles dual 30fps comfortably
   rotation_deg: 0
 
 face_recognition:

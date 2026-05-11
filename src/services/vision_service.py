@@ -214,6 +214,10 @@ class VisionService(Service):
             from src.vision.camera import Camera, CameraConfig
             cfg = self._camera_config or CameraConfig()
             self._camera = Camera(cfg)
+        # Derive tick rate from the camera's configured framerate so the
+        # service loop stays in sync when framerate changes at runtime.
+        if self._camera_config is not None and self._camera_config.framerate > 0:
+            self.tick_seconds = 1.0 / self._camera_config.framerate
         try:
             self._camera.start()
         except Exception:

@@ -157,9 +157,9 @@ class WebService:
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._latest_frame: Optional[bytes] = None   # JPEG bytes
-        self._frame_event = threading.Event()
+        self._frame_event: Optional[asyncio.Event] = None   # created in _run_server
         self._latest_frame2: Optional[bytes] = None  # second camera JPEG
-        self._frame2_event = threading.Event()
+        self._frame2_event: Optional[asyncio.Event] = None  # created in _run_server
         self._ws_clients: list = []
         self._event_log: list[dict] = []             # recent bus events (capped)
         self._unsubs: list = []
@@ -238,7 +238,8 @@ class WebService:
         jpeg = self._vision_svc.latest_jpeg()
         if jpeg is not None:
             self._latest_frame = jpeg
-            self._frame_event.set()
+            if self._loop is not None and self._frame_event is not None:
+                self._loop.call_soon_threadsafe(self._frame_event.set)
 
     def _on_frame2(self, _topic, payload) -> None:
         """Read JPEG from RawCameraService (second camera) and wake /stream2 generator."""
@@ -247,7 +248,8 @@ class WebService:
         jpeg = self._camera2_svc.latest_jpeg()
         if jpeg is not None:
             self._latest_frame2 = jpeg
-            self._frame2_event.set()
+            if self._loop is not None and self._frame2_event is not None:
+                self._loop.call_soon_threadsafe(self._frame2_event.set)
 
     def _on_service_started(self, _topic, payload) -> None:
         if isinstance(payload, dict) and "name" in payload:
@@ -275,6 +277,9 @@ class WebService:
         import uvicorn
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
+        # asyncio.Events must be created inside the loop they belong to
+        self._frame_event = asyncio.Event()
+        self._frame2_event = asyncio.Event()
         app = self._build_app()
         config = uvicorn.Config(
             app,
@@ -362,16 +367,18 @@ class WebService:
 
         @app.get("/stream")
         async def mjpeg_stream():
-            loop = asyncio.get_event_loop()
-
             async def generate():
                 last_sent: Optional[bytes] = None
                 while True:
-                    # Wait for the bus callback to signal a new frame
-                    await loop.run_in_executor(
-                        None, lambda: self._frame_event.wait(timeout=0.5)
-                    )
-                    self._frame_event.clear()
+                    evt = self._frame_event
+                    if evt is None:
+                        await asyncio.sleep(0.05)
+                        continue
+                    try:
+                        await asyncio.wait_for(evt.wait(), timeout=1.0)
+                    except asyncio.TimeoutError:
+                        continue
+                    evt.clear()
                     frame = self._latest_frame
                     if frame and frame is not last_sent:
                         last_sent = frame
@@ -387,15 +394,18 @@ class WebService:
 
         @app.get("/stream2")
         async def mjpeg_stream2():
-            loop = asyncio.get_event_loop()
-
             async def generate2():
                 last_sent: Optional[bytes] = None
                 while True:
-                    await loop.run_in_executor(
-                        None, lambda: self._frame2_event.wait(timeout=0.5)
-                    )
-                    self._frame2_event.clear()
+                    evt = self._frame2_event
+                    if evt is None:
+                        await asyncio.sleep(0.05)
+                        continue
+                    try:
+                        await asyncio.wait_for(evt.wait(), timeout=1.0)
+                    except asyncio.TimeoutError:
+                        continue
+                    evt.clear()
                     frame = self._latest_frame2
                     if frame and frame is not last_sent:
                         last_sent = frame

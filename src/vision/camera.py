@@ -123,7 +123,7 @@ class Camera:
                 "size": (self._cfg.width, self._cfg.height),
                 "format": self._cfg.stream_format,
             },
-            buffer_count=4,
+            buffer_count=6,  # more ISP pipeline headroom → lower capture latency
             controls={"FrameRate": float(self._cfg.framerate)},
         )
         self._cam.configure(video_cfg)
@@ -223,6 +223,7 @@ class Camera:
                     "size": (self._cfg.width, self._cfg.height),
                     "format": self._cfg.stream_format,
                 },
+                buffer_count=6,
                 controls={"FrameRate": float(self._cfg.framerate)},
             )
             self._cam.configure(video_cfg)

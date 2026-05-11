@@ -39,7 +39,7 @@ class RawCameraConfig:
     index: int = 1
     width: int = 640
     height: int = 480
-    framerate: int = 15        # half of primary cam — sufficient for a raw view
+    framerate: int = 30        # matches primary cam; Pi 5 handles dual 30fps
     rotation_deg: int = 0
     jpeg_quality: int = _DEFAULT_JPEG_QUALITY
 
@@ -48,8 +48,8 @@ class RawCameraService(Service):
     """Capture-only service for the second CSI camera."""
 
     name = "raw_camera2"
-    # tick_seconds is computed from framerate in on_start; default ~15fps
-    tick_seconds = 0.067
+    # tick_seconds is computed from framerate in on_start; default ~30fps
+    tick_seconds = 0.033
 
     def __init__(
         self,
