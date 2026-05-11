@@ -6,7 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.8.11] - 2026-05-11
+## [1.8.12] - 2026-05-11
+### Fixed
+- **Object boxes persist after disabling detection** — `VisionService` now
+  subscribes to `object.enabled_changed`; when detection is disabled it
+  immediately clears `_latest_objects` so stale bounding boxes are removed
+  from the next encoded frame.
+
+
 ### Fixed
 - **Camera color (red still appeared blue after v1.8.10)** — root cause was a
   libcamera v0.7/PiSP naming quirk: the "RGB888" stream format stores bytes as

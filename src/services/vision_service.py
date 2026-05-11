@@ -272,6 +272,9 @@ class VisionService(Service):
             self.bus.subscribe("perception.objects", self._on_objects)
         )
         self._unsubs.append(
+            self.bus.subscribe("object.enabled_changed", self._on_object_enabled_changed)
+        )
+        self._unsubs.append(
             self.bus.subscribe("camera.set_rotation", self._on_set_rotation)
         )
         self._unsubs.append(
@@ -432,6 +435,14 @@ class VisionService(Service):
             return
         with self._det_lock:
             self._latest_objects = list(payload.get("objects", []))
+
+    def _on_object_enabled_changed(self, _topic, payload) -> None:
+        """Clear cached object detections immediately when detection is disabled."""
+        if not isinstance(payload, dict):
+            return
+        if not payload.get("enabled", True):
+            with self._det_lock:
+                self._latest_objects = []
 
     def _on_capture_still(self, _topic, payload) -> None:
         if not isinstance(payload, dict) or "path" not in payload:
