@@ -6,6 +6,26 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.11] - 2026-05-11
+### Added
+- **Camera resolution adjustment** — both cameras share a single resolution setting.
+  Publishing `camera.set_resolution` `{"width": int, "height": int}` on the bus changes
+  both `VisionService` (Camera 1) and `RawCameraService` (Camera 2) simultaneously.
+- `Camera.set_resolution(width, height)` method in `src/vision/camera.py`; stops and
+  restarts the stream only when running on real hardware, no-op in sim mode.
+- `Camera.resolution` property returning `(width, height)` tuple.
+- `VisionService.resolution` property; publishes `camera.resolution_changed` after change.
+- `RawCameraService.resolution` property; updates stored `RawCameraConfig` on change.
+- Resolution persisted in `~/.config/desktop-assistant/runtime_state.json` under
+  `camera.width` / `camera.height`; restored at startup for both cameras.
+- `core_main.py` subscribes `camera.resolution_changed` → persists state + updates
+  tracker `frame_width` for continued accurate head-tracking after resolution change.
+- `GET /api/settings/camera/resolution` — returns current resolution (both cameras).
+- `PUT /api/settings/camera/resolution` — sets resolution via bus publish.
+- Web UI: Resolution dropdown (320×240, 640×480, 1280×720, 1920×1080) in the Controls
+  section, with "Applied ✓" feedback and interruption warning.
+- CLI: `da camera resolution WxH` subcommand to set resolution from the terminal.
+
 ## [1.7.10] - 2026-05-11
 ### Removed
 - `tests/test_servo_controller.py` — servo unit tests were commanding real hardware

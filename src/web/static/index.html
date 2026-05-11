@@ -193,6 +193,20 @@
         </div>
 
         <div class="control-group">
+          <label>Camera Resolution <small style="color:var(--text-muted)">(both feeds)</small></label>
+          <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
+            <select id="cam-resolution-select" onchange="saveCamResolution(this.value)" style="width:200px">
+              <option value="320x240">320×240 (QVGA — fastest)</option>
+              <option value="640x480" selected>640×480 (VGA — default)</option>
+              <option value="1280x720">1280×720 (HD 720p)</option>
+              <option value="1920x1080">1920×1080 (Full HD)</option>
+            </select>
+            <span id="cam-resolution-status" class="qh-status"></span>
+            <small style="color:var(--text-muted);font-size:0.8em">⚠ Brief stream interruption during change</small>
+          </div>
+        </div>
+
+        <div class="control-group">
           <label>System</label>
           <div class="row-input">
             <button class="btn btn-secondary" onclick="doVersion()">Speak Version</button>

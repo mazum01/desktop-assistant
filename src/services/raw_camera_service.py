@@ -90,6 +90,7 @@ class RawCameraService(Service):
 
         if self.bus:
             self.bus.subscribe("camera2.set_rotation", self._on_set_rotation)
+            self.bus.subscribe("camera.set_resolution", self._on_set_resolution)
 
         log.info(
             "RawCameraService started; cam_index=%d hw_ready=%s %dx%d@%dfps",
@@ -147,6 +148,11 @@ class RawCameraService(Service):
             return self._rotation_deg
 
     @property
+    def resolution(self) -> tuple:
+        with self._lock:
+            return (self._cam_cfg.width, self._cam_cfg.height)
+
+    @property
     def hardware_ready(self) -> bool:
         return bool(getattr(self._camera, "hardware_ready", False))
 
@@ -161,6 +167,27 @@ class RawCameraService(Service):
         if self.bus:
             self.bus.publish("camera2.rotation_changed", {"rotation_deg": deg})
         log.info("RawCameraService: rotation set to %d°", deg)
+
+    def _on_set_resolution(self, _topic, payload) -> None:
+        if not isinstance(payload, dict) or "width" not in payload or "height" not in payload:
+            return
+        w = int(payload["width"])
+        h = int(payload["height"])
+        if self._camera is None:
+            return
+        try:
+            self._cam_cfg = RawCameraConfig(
+                index=self._cam_cfg.index,
+                width=w,
+                height=h,
+                framerate=self._cam_cfg.framerate,
+                rotation_deg=self._cam_cfg.rotation_deg,
+                jpeg_quality=self._cam_cfg.jpeg_quality,
+            )
+            self._camera.set_resolution(w, h)
+            log.info("Camera 2 resolution changed to %dx%d", w, h)
+        except Exception:
+            log.exception("Failed to change camera 2 resolution to %dx%d", w, h)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────

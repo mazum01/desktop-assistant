@@ -86,8 +86,8 @@ def main() -> int:
     _camera_rotation_deg = int(_rt.get("camera", {}).get(
         "rotation_deg", _cam_cfg_raw.get("rotation_deg", 0)
     )) % 360
-    _cam_width  = int(_cam_cfg_raw.get("width", 640))
-    _cam_height = int(_cam_cfg_raw.get("height", 480))
+    _cam_width  = int(_rt.get("camera", {}).get("width",  _cam_cfg_raw.get("width", 640)))
+    _cam_height = int(_rt.get("camera", {}).get("height", _cam_cfg_raw.get("height", 480)))
     _camera_cfg = _CameraConfig(
         width=_cam_width,
         height=_cam_height,
@@ -140,6 +140,8 @@ def main() -> int:
         },
         "camera": {
             "rotation_deg": _camera_rotation_deg,
+            "width": _cam_width,
+            "height": _cam_height,
         },
     }
 
@@ -177,11 +179,24 @@ def main() -> int:
             if tracking_svc is not None:
                 tracking_svc.update_frame_width(new_fw)
 
+    def _on_camera_resolution_changed(_t, payload):
+        if isinstance(payload, dict) and "width" in payload and "height" in payload:
+            new_w = int(payload["width"])
+            new_h = int(payload["height"])
+            _rt_state["camera"]["width"] = new_w
+            _rt_state["camera"]["height"] = new_h
+            _save_runtime(_rt_state)
+            current_rot = _rt_state["camera"].get("rotation_deg", 0)
+            new_fw = _tracking_frame_width(new_w, new_h, current_rot)
+            if tracking_svc is not None:
+                tracking_svc.update_frame_width(new_fw)
+
     bus.subscribe("motion.enabled_changed",         _on_servo_changed)
     bus.subscribe("motion.limits_changed",          _on_limits_changed)
     bus.subscribe("tracking.face_tracking_changed", _on_face_tracking_changed)
     bus.subscribe("tracking.random_motion_changed", _on_random_motion_changed)
     bus.subscribe("camera.rotation_changed",        _on_camera_rotation_changed)
+    bus.subscribe("camera.resolution_changed",      _on_camera_resolution_changed)
 
     tracking_svc: "TrackingService | None" = None  # forward-ref for rotation callback
 
@@ -221,8 +236,8 @@ def main() -> int:
             bus=bus,
             camera_config=RawCameraConfig(
                 index=int(_cam2_cfg_raw.get("index", 1)),
-                width=int(_cam2_cfg_raw.get("width", 640)),
-                height=int(_cam2_cfg_raw.get("height", 480)),
+                width=_cam_width,
+                height=_cam_height,
                 framerate=int(_cam2_cfg_raw.get("framerate", 15)),
                 rotation_deg=int(_cam2_cfg_raw.get("rotation_deg", 0)),
             ),

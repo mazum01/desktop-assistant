@@ -234,6 +234,9 @@ class VisionService(Service):
             self.bus.subscribe("camera.set_rotation", self._on_set_rotation)
         )
         self._unsubs.append(
+            self.bus.subscribe("camera.set_resolution", self._on_set_resolution)
+        )
+        self._unsubs.append(
             self.bus.subscribe("motion.position", self._on_servo_angle)
         )
         self._unsubs.append(
@@ -252,6 +255,13 @@ class VisionService(Service):
     def rotation_deg(self) -> int:
         with self._rotation_lock:
             return self._rotation_deg
+
+    @property
+    def resolution(self) -> tuple:
+        if self._camera is not None:
+            return self._camera.resolution
+        cfg = self._camera_config
+        return (cfg.width if cfg else 640, cfg.height if cfg else 480)
 
     def run_tick(self) -> None:
         if self._camera is None:
@@ -364,6 +374,20 @@ class VisionService(Service):
             self._rotation_deg = deg
         log.info("Camera rotation set to %d°", deg)
         self.bus.publish("camera.rotation_changed", {"rotation_deg": deg})
+
+    def _on_set_resolution(self, _topic, payload) -> None:
+        if not isinstance(payload, dict) or "width" not in payload or "height" not in payload:
+            return
+        w = int(payload["width"])
+        h = int(payload["height"])
+        if self._camera is None:
+            return
+        try:
+            self._camera.set_resolution(w, h)
+            log.info("Camera 1 resolution changed to %dx%d", w, h)
+            self.bus.publish("camera.resolution_changed", {"width": w, "height": h})
+        except Exception:
+            log.exception("Failed to change camera 1 resolution to %dx%d", w, h)
 
     def _on_servo_angle(self, _topic, payload) -> None:
         if isinstance(payload, dict) and "angle" in payload:

@@ -434,6 +434,27 @@ def cmd_watch(args) -> int:
         sock.close(linger=0)
 
 
+def cmd_camera(args) -> int:
+    if args.camera_cmd == "resolution":
+        parts = args.resolution.split("x")
+        if len(parts) != 2:
+            print(f"Invalid format: {args.resolution!r}. Use WxH e.g. 640x480", file=sys.stderr)
+            return 1
+        try:
+            w, h = int(parts[0]), int(parts[1])
+        except ValueError:
+            print(f"Invalid resolution: {args.resolution!r}", file=sys.stderr)
+            return 1
+        r = _request({
+            "cmd": "publish",
+            "topic": "camera.set_resolution",
+            "payload": {"width": w, "height": h},
+        })
+        print(json.dumps(r, indent=2))
+        return 0 if r.get("ok") else 1
+    return 1
+
+
 def cmd_camera2(args) -> int:
     if args.camera2_cmd == "rotation":
         r = _request({
@@ -547,6 +568,13 @@ def main() -> int:
     face_sub.add_parser("greeting-settings", help="Show current greeting configuration")
 
     sp.set_defaults(func=cmd_face)
+
+    sp = sub.add_parser("camera", help="Camera controls (both cameras)")
+    cam_sub = sp.add_subparsers(dest="camera_cmd", required=True)
+    cp = cam_sub.add_parser("resolution",
+        help="Set capture resolution for both cameras (e.g. 640x480, 1280x720)")
+    cp.add_argument("resolution", help="WxH e.g. 640x480")
+    sp.set_defaults(func=cmd_camera)
 
     sp = sub.add_parser("camera2", help="Camera 2 controls")
     cam2_sub = sp.add_subparsers(dest="camera2_cmd", required=True)

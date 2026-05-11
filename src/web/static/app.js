@@ -615,6 +615,43 @@ async function saveCam2Rotation() {
   setTimeout(() => { if (st) st.textContent = ""; }, 3000);
 }
 
+async function loadCamResolution() {
+  try {
+    const r = await fetch("/api/settings/camera/resolution");
+    if (!r.ok) return;
+    const d = await r.json();
+    const val = `${d.width}x${d.height}`;
+    const sel = el("cam-resolution-select");
+    if (sel) {
+      const opts = Array.from(sel.options).map(o => o.value);
+      sel.value = opts.includes(val) ? val : "640x480";
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function saveCamResolution(val) {
+  const st = el("cam-resolution-status");
+  const parts = val.split("x");
+  if (parts.length !== 2) return;
+  const width = parseInt(parts[0], 10);
+  const height = parseInt(parts[1], 10);
+  try {
+    const r = await fetch("/api/settings/camera/resolution", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ width, height }),
+    });
+    if (r.ok) {
+      if (st) { st.textContent = "Applied ✓"; st.style.color = "var(--green)"; }
+    } else {
+      if (st) { st.textContent = "Error " + r.status; st.style.color = "var(--red)"; }
+    }
+  } catch (e) {
+    if (st) { st.textContent = "Error"; st.style.color = "var(--red)"; }
+  }
+  setTimeout(() => { if (st) st.textContent = ""; }, 4000);
+}
+
 async function doDescribe() {
   const btn = document.querySelector('[onclick="doDescribe()"]');
   if (btn) { btn.disabled = true; btn.textContent = "Describing…"; }
@@ -698,6 +735,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadGreetingSettings();
   loadCamRotation();
   loadCam2Rotation();
+  loadCamResolution();
   loadMusicStatus();
   connectWS();
   // Refresh face registry every 30s; music status every 2s

@@ -35,6 +35,8 @@ GET  /api/settings/camera/rotation   Get camera 1 rotation angle
 PUT  /api/settings/camera/rotation   Set camera 1 rotation  body: {"rotation_deg": int 0-359}
 GET  /api/settings/camera2/rotation  Get camera 2 rotation angle
 PUT  /api/settings/camera2/rotation  Set camera 2 rotation  body: {"rotation_deg": int 0-359}
+GET  /api/settings/camera/resolution  Get current capture resolution (both cameras)
+PUT  /api/settings/camera/resolution  Set capture resolution  body: {"width": int, "height": int}
 GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
 """
@@ -98,6 +100,11 @@ class _GreetingBody(BaseModel):
 
 class _CameraRotationBody(BaseModel):
     rotation_deg: int
+
+
+class _CameraResolutionBody(BaseModel):
+    width: int
+    height: int
 
 
 class _MusicVolumeBody(BaseModel):
@@ -717,6 +724,22 @@ class WebService:
             if self.bus:
                 self.bus.publish("camera2.set_rotation", {"rotation_deg": deg})
             return {"ok": True, "rotation_deg": deg}
+
+        # ── Camera resolution (both cameras) ──────────────────────────────
+
+        @app.get("/api/settings/camera/resolution")
+        async def api_get_camera_resolution():
+            if self._vision_svc:
+                w, h = self._vision_svc.resolution
+            else:
+                w, h = 640, 480
+            return {"width": w, "height": h}
+
+        @app.put("/api/settings/camera/resolution")
+        async def api_put_camera_resolution(body: _CameraResolutionBody):
+            if self.bus:
+                self.bus.publish("camera.set_resolution", {"width": body.width, "height": body.height})
+            return {"ok": True, "width": body.width, "height": body.height}
 
         # ── Music (Pandora/pianobar) ────────────────────────────────────
 

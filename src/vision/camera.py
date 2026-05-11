@@ -103,6 +103,10 @@ class Camera:
     def config(self) -> CameraConfig:
         return self._cfg
 
+    @property
+    def resolution(self) -> tuple:
+        return (self._cfg.width, self._cfg.height)
+
     # ── Lifecycle ───────────────────────────────────────────────────────
 
     def start(self) -> None:
@@ -140,6 +144,27 @@ class Camera:
             self._cam.stop()
         self._running = False
         log.info("Camera %d stopped", self._cfg.index)
+
+    def set_resolution(self, width: int, height: int) -> None:
+        """Change capture resolution. Stops and restarts the stream if running."""
+        if self._cfg.width == width and self._cfg.height == height:
+            return
+        self._cfg = CameraConfig(
+            index=self._cfg.index,
+            width=width,
+            height=height,
+            framerate=self._cfg.framerate,
+            stream_format=self._cfg.stream_format,
+            rotation_deg=self._cfg.rotation_deg,
+        )
+        if self._sim:
+            log.info("[sim] Resolution changed to %dx%d", width, height)
+            return
+        was_running = self._running
+        if was_running:
+            self.stop()
+            self.start()
+        log.info("Camera %d resolution changed to %dx%d", self._cfg.index, width, height)
 
     def close(self) -> None:
         """Stop and close the camera, releasing the device handle."""
