@@ -6,7 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.7.9] - 2026-05-11
+## [1.7.10] - 2026-05-11
+### Removed
+- `tests/test_servo_controller.py` — servo unit tests were commanding real hardware
+  during regression runs and interfering with live servo positioning.
+
+
 ### Added
 - **Camera 2 live rotation** — `RawCameraService` now supports live rotation via
   `camera2.set_rotation` bus topic; persists under lock. `rotation_deg` property
