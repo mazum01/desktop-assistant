@@ -42,6 +42,9 @@ class RawCameraConfig:
     framerate: int = 30        # matches primary cam; Pi 5 handles dual 30fps
     rotation_deg: int = 0
     jpeg_quality: int = _DEFAULT_JPEG_QUALITY
+    # Autofocus mode: matches CameraConfig values ("continuous" recommended)
+    af_mode: str = "continuous"
+    lens_position: float = 0.0
 
 
 class RawCameraService(Service):
@@ -81,6 +84,8 @@ class RawCameraService(Service):
                 height=self._cam_cfg.height,
                 framerate=self._cam_cfg.framerate,
                 rotation_deg=self._cam_cfg.rotation_deg,
+                af_mode=self._cam_cfg.af_mode,
+                lens_position=self._cam_cfg.lens_position,
             )
             self._camera = Camera(cfg)
         try:

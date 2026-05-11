@@ -6,7 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.8.7] - 2026-05-11
+## [1.8.8] - 2026-05-11
+### Added
+- **Autofocus mode control for both cameras** — `CameraConfig` and `RawCameraConfig`
+  now include `af_mode` (`"continuous"` | `"auto"` | `"manual"` | `"off"`) and
+  `lens_position` (diopters, used in manual mode).
+- Both cameras default to `af_mode: continuous` (libcamera `AfMode=2, AfSpeed=1`)
+  so both CSI feeds continuously track focus and stay in sync.
+- Config exposed in `config/assistant.yaml` under `camera.af_mode` and
+  `camera2.af_mode` — change to `manual` with a `lens_position` to lock both at a
+  fixed desk distance (e.g. `lens_position: 1.0` = 1 metre).
+
+
 ### Added
 - **System-level EQ via PipeWire filter-chain** — new `src/audio/pipewire_eq.py`
   module writes a PipeWire filter-chain config (`~/.config/pipewire/filter-chain.conf.d/da-eq.conf`),

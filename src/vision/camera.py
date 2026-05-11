@@ -29,6 +29,15 @@ except ImportError:
     log.warning("picamera2 not available — camera running in simulation mode")
 
 
+# Autofocus mode → libcamera AfMode integer
+_AF_MODE_MAP = {
+    "continuous": 2,    # Continuous AF — camera tracks focus in real-time
+    "auto":       1,    # Single AF sweep triggered once at startup
+    "manual":     0,    # Manual — use lens_position (diopters); 0 = ∞, 1 = 1 m
+    "off":        0,    # Alias for manual with lens_position = 0 (infinity)
+}
+
+
 @dataclass
 class CameraConfig:
     index: int = 0                  # CSI slot (0 = slot 0, 1 = slot 1)
@@ -40,6 +49,13 @@ class CameraConfig:
     # Multiples of 90 are lossless (cv2.rotate); other angles keep the same
     # canvas size via cv2.warpAffine (corners are slightly cropped).
     rotation_deg: int = 0
+    # Autofocus mode: "continuous" | "auto" | "manual" | "off"
+    # "continuous" keeps both cameras in sync with the scene distance.
+    # "auto"       does a single AF sweep at startup (may drift over time).
+    # "manual"     locks to lens_position diopters (0 = ∞, 1.0 = 1 m, 2.0 = 0.5 m).
+    af_mode: str = "continuous"
+    # Lens position in diopters — only used when af_mode is "manual" or "off".
+    lens_position: float = 0.0
 
 
 class Camera:
@@ -128,16 +144,29 @@ class Camera:
             self._running = True
             return
 
+        af_int = _AF_MODE_MAP.get(self._cfg.af_mode, 2)
+        controls: dict = {
+            "FrameRate": float(self._cfg.framerate),
+            "NoiseReductionMode": 0,  # Off — eliminates ISP NR latency
+            "AfMode": af_int,
+        }
+        if af_int == 2:
+            # Continuous: use fast AF speed to minimise lag between cameras
+            controls["AfSpeed"] = 1
+        elif af_int == 1:
+            # Auto: trigger a single AF sweep immediately after start
+            controls["AfTrigger"] = 0
+        elif af_int == 0:
+            # Manual / off: lock to the specified dioptre value
+            controls["LensPosition"] = float(self._cfg.lens_position)
+
         video_cfg = self._cam.create_video_configuration(
             main={
                 "size": (self._cfg.width, self._cfg.height),
                 "format": self._cfg.stream_format,
             },
             buffer_count=6,  # more ISP pipeline headroom → lower capture latency
-            controls={
-                "FrameRate": float(self._cfg.framerate),
-                "NoiseReductionMode": 0,  # Off — eliminates ISP NR latency
-            },
+            controls=controls,
         )
         self._cam.configure(video_cfg)
         self._cam.start()

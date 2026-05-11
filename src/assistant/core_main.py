@@ -97,6 +97,8 @@ def main() -> int:
         height=_cam_height,
         framerate=int(_cam_cfg_raw.get("framerate", 30)),
         rotation_deg=_camera_rotation_deg,
+        af_mode=str(_cam_cfg_raw.get("af_mode", "continuous")),
+        lens_position=float(_cam_cfg_raw.get("lens_position", 0.0)),
     )
 
     def _tracking_frame_width(cam_w: int, cam_h: int, rot_deg: int) -> int:
@@ -256,6 +258,8 @@ def main() -> int:
                 height=_cam_height,
                 framerate=int(_cam2_cfg_raw.get("framerate", 15)),
                 rotation_deg=_camera2_rotation_deg,  # from runtime state
+                af_mode=str(_cam2_cfg_raw.get("af_mode", "continuous")),
+                lens_position=float(_cam2_cfg_raw.get("lens_position", 0.0)),
             ),
         )
 

@@ -44,6 +44,11 @@ camera:
   # Multiples of 90 are lossless; other angles keep the same canvas size.
   # Persisted at runtime; change live with: da vision rotation <deg>
   rotation_deg: 0
+  # Autofocus mode: continuous | auto | manual | off
+  # continuous — camera tracks focus in real-time (recommended for desk use)
+  # auto       — single AF sweep at startup, then locks
+  # manual     — fixed lens_position in diopters (0=∞, 1.0=1m, 2.0=0.5m)
+  af_mode: continuous
 
 camera2:
   # Secondary CSI camera — raw view only (no detection/overlays).
@@ -54,6 +59,8 @@ camera2:
   height: 480
   framerate: 30     # match primary cam — Pi 5 handles dual 30fps comfortably
   rotation_deg: 0
+  # Must match camera.af_mode so both feeds have consistent focus behaviour.
+  af_mode: continuous
 
 face_recognition:
   # ArcFace MobileFaceNet identity recognition on the Hailo-8.
