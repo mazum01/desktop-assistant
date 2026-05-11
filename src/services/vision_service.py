@@ -16,9 +16,10 @@ This avoids blocking the capture loop with GIL-contended cv2 operations
 closer to the 30fps ISP delivery rate.
 
 Topics published:
-    vision.frame_ready   {"index": int, "shape": (H, W, C), "ts": float}
-    vision.jpeg_ready    {"index": int}
-    vision.error         {"reason": str}
+    vision.frame_ready    {"index": int, "shape": (H, W, C), "ts": float}
+    vision.jpeg_ready     {"index": int}
+    vision.error          {"reason": str}
+    vision.lens_position  {"position": float}  — cam0 lens position (diopters), ~2 Hz
 
 Topics subscribed:
     vision.capture_still  {"path": str}     — write a JPEG still to *path*
@@ -245,6 +246,8 @@ class VisionService(Service):
         self._encode_queue: queue.Queue = queue.Queue(maxsize=1)
         self._encoder_running: bool = False
         self._encoder_thread: Optional[threading.Thread] = None
+        # Counter for throttling vision.lens_position publishes (~2 Hz at 30fps)
+        self._lens_publish_counter: int = 0
 
     def on_start(self) -> None:
         if self._camera is None:
@@ -345,6 +348,15 @@ class VisionService(Service):
             "vision.frame_ready",
             {"index": idx, "shape": tuple(frame.shape), "ts": time.time()},
         )
+
+        # Throttled lens-position relay: publish ~2 Hz so RawCameraService can
+        # mirror cam0's focus onto cam1 without flooding the bus.
+        self._lens_publish_counter += 1
+        if self._lens_publish_counter >= 15:
+            self._lens_publish_counter = 0
+            lp = getattr(self._camera, "current_lens_position", None)
+            if lp is not None:
+                self.bus.publish("vision.lens_position", {"position": lp})
 
         # Snapshot overlay state and hand off to the encoder thread.
         # Drop the frame if the encoder is still busy (queue full).

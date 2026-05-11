@@ -9,7 +9,9 @@ No face detection, object detection, or overlay drawing is performed — this
 service is intentionally minimal to keep CPU overhead low.
 
 Topics subscribed:
-    camera2.set_rotation  {"rotation_deg": int}  — live rotation update
+    camera2.set_rotation   {"rotation_deg": int}  — live rotation update
+    vision.lens_position   {"position": float}    — cam0 lens position; mirrors
+                                                    onto cam1 for focus sync
 
 Topics published:
     vision.frame2_ready   {"index": int, "ts": float}
@@ -96,6 +98,7 @@ class RawCameraService(Service):
         if self.bus:
             self.bus.subscribe("camera2.set_rotation", self._on_set_rotation)
             self.bus.subscribe("camera.set_resolution", self._on_set_resolution)
+            self.bus.subscribe("vision.lens_position", self._on_lens_position)
 
         log.info(
             "RawCameraService started; cam_index=%d hw_ready=%s %dx%d@%dfps",
@@ -193,6 +196,15 @@ class RawCameraService(Service):
             log.info("Camera 2 resolution changed to %dx%d", w, h)
         except Exception:
             log.exception("Failed to change camera 2 resolution to %dx%d", w, h)
+
+    def _on_lens_position(self, _topic, payload) -> None:
+        """Mirror cam0's lens position onto cam1 for focus sync."""
+        if not isinstance(payload, dict) or "position" not in payload:
+            return
+        if self._camera is None:
+            return
+        pos = float(payload["position"])
+        self._camera.set_lens_position(pos)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────

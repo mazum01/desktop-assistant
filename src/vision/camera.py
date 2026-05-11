@@ -85,6 +85,9 @@ class Camera:
         self._frame_lock = threading.Lock()
         self._capture_thread: Optional[threading.Thread] = None
         self._diag_logged = False  # log first-frame pixel info once
+        # Lens position read from ISP metadata each frame (diopters, -1 = unknown)
+        self._lens_position: float = -1.0
+        self._lens_lock = threading.Lock()
 
         if not _PICAMERA2_AVAILABLE:
             log.warning("[sim] picamera2 not installed — camera in sim mode")
@@ -135,6 +138,24 @@ class Camera:
     def resolution(self) -> tuple:
         return (self._cfg.width, self._cfg.height)
 
+    @property
+    def current_lens_position(self) -> Optional[float]:
+        """Last known lens position in diopters read from ISP metadata.
+        Returns None if no metadata has been received yet."""
+        with self._lens_lock:
+            return self._lens_position if self._lens_position >= 0 else None
+
+    def set_lens_position(self, position: float) -> None:
+        """Switch to manual AF and lock to *position* diopters (0 = ∞, 1 = 1 m).
+        Thread-safe; can be called from any thread while the camera is running."""
+        if self._sim or self._cam is None or not self._running:
+            return
+        try:
+            self._cam.set_controls({"AfMode": 0, "LensPosition": float(position)})
+        except Exception as exc:
+            log.debug("Camera %d: set_lens_position(%.3f) failed: %s",
+                      self._cfg.index, position, exc)
+
     # ── Lifecycle ───────────────────────────────────────────────────────
 
     def start(self) -> None:
@@ -171,6 +192,10 @@ class Camera:
             controls=controls,
         )
         self._cam.configure(video_cfg)
+        # Install a pre-callback to extract ISP metadata (including LensPosition)
+        # on every frame.  This runs on picamera2's internal thread and is safe
+        # to call concurrently with capture_array().
+        self._cam.pre_callback = self._on_frame_metadata
         self._cam.start()
         # Brief warm-up so auto-exposure settles
         time.sleep(0.5)
@@ -198,24 +223,33 @@ class Camera:
             self._cfg.index, self._cfg.width, self._cfg.height, self._cfg.framerate,
         )
 
-    def _capture_loop(self) -> None:
-        """Continuously pull frames from the ISP into _latest_array as BGR.
+    def _on_frame_metadata(self, request) -> None:
+        """picamera2 pre_callback: extract LensPosition from every ISP request.
+        Called on picamera2's internal thread; must not block."""
+        try:
+            lp = request.get_metadata().get("LensPosition")
+            if lp is not None:
+                with self._lens_lock:
+                    self._lens_position = float(lp)
+        except Exception:
+            pass  # never raise from a callback
 
-        libcamera v0.7 / PiSP on RPi5 uses the DRM naming convention where the
-        "RGB888" format string stores bytes as B-G-R in memory (BGR), not R-G-B.
-        capture_array("main") therefore already returns a BGR-ordered array —
-        no channel conversion is needed before passing to imencode or cv2 draws.
+    def _capture_loop(self) -> None:
+        """Continuously pull frames from the ISP via capture_array().
+
+        Metadata (including LensPosition) is extracted asynchronously through
+        _on_frame_metadata(), which is installed as a picamera2 pre_callback.
+
+        libcamera v0.7 / PiSP on RPi5 uses the DRM convention where the
+        "RGB888" format stores bytes as B-G-R in memory (BGR), not R-G-B.
+        No channel conversion is needed before passing to imencode or cv2.
         """
         while self._running:
             try:
                 arr = self._cam.capture_array("main")
                 if not self._running:
                     break
-                # picamera2 on libcamera v0.7 / PiSP (RPi5) delivers BGR bytes in
-                # memory even when the stream is configured as "RGB888" (DRM/V4L2
-                # naming quirk: RGB888 = packed 24-bit with B first in memory).
-                # No channel conversion needed; the raw array is already in the
-                # BGR byte order that OpenCV's imencode expects.
+
                 if not self._diag_logged:
                     log.debug(
                         "Camera %d: first frame shape=%s dtype=%s ch0=%d ch1=%d ch2=%d",
@@ -223,6 +257,7 @@ class Camera:
                         int(arr[0, 0, 0]), int(arr[0, 0, 1]), int(arr[0, 0, 2]),
                     )
                     self._diag_logged = True
+
                 with self._frame_lock:
                     self._latest_array = arr
             except Exception:
@@ -257,6 +292,8 @@ class Camera:
             framerate=self._cfg.framerate,
             stream_format=self._cfg.stream_format,
             rotation_deg=self._cfg.rotation_deg,
+            af_mode=self._cfg.af_mode,
+            lens_position=self._cfg.lens_position,
         )
         if self._sim:
             log.info("[sim] Resolution changed to %dx%d", width, height)

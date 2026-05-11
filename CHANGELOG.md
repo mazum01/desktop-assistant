@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.8.14] - 2026-05-11
+### Added
+- **Cross-camera focus sync** — Camera 0 (main VisionService cam) is now the
+  autofocus master. Its ISP-reported `LensPosition` (diopters) is read every
+  frame via `capture_request()` (replacing the old `capture_array()` call) and
+  published on `vision.lens_position` at ~2 Hz. `RawCameraService` subscribes
+  and applies the same lens position to Camera 1 via `set_controls({"AfMode": 0,
+  "LensPosition": ...})`, keeping both cameras locked to the same focus distance
+  without measurable framerate impact.
+### Fixed
+- `Camera.set_resolution()` now preserves `af_mode` and `lens_position` fields
+  in the rebuilt `CameraConfig`.
+
 ## [1.8.13] - 2026-05-11
 ### Fixed
 - **Object boxes still persisted after v1.8.12 fix** — the detection worker
