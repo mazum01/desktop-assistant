@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.19] - 2026-05-11
+### Changed
+- **VisionService: async JPEG encoder thread** — decouples `frame.copy()`,
+  `_draw_overlays()`, and `cv2.imencode()` from the capture tick. The fast tick
+  path (~2ms) now only does `capture_frame()` + rotation + publishes
+  `vision.frame_ready` (for Hailo detection). A dedicated background encoder
+  thread picks up frames from a `Queue(maxsize=1)`, performs the expensive
+  copy/draw/encode work, stores the JPEG, then publishes `vision.jpeg_ready`.
+  Cam1 MJPEG stream in WebService now subscribes to `vision.jpeg_ready` instead
+  of `vision.frame_ready`, eliminating encoder stalls from the detection loop.
+- **Expected FPS improvement**: tick at near ISP rate (~30fps); MJPEG stream
+  limited by encoder thread throughput (~20fps) rather than detection latency.
+
 ## [1.7.18] - 2026-05-11
 ### Changed
 - **Camera: restored background capture thread (v1.7.16 design)** — the no-background-thread

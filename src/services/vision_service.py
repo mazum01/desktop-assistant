@@ -6,13 +6,19 @@ latest frame to in-process subscribers, and publishes lightweight
 frame metadata on the bus so other services can react without us
 spamming megabyte-sized payloads through the pub/sub layer.
 
-Subscribes to perception events and draws detection overlays (face ovals,
-object boxes) directly onto each JPEG frame before streaming so the
-overlays are always pixel-accurate and in sync with the video.
+Architecture: two-thread pipeline to decouple capture rate from encode rate.
+  • run_tick() (service thread) — capture frame (~2ms), store `self._latest`,
+    publish `vision.frame_ready` so Hailo inference can start immediately.
+  • _encoder_loop() (encoder thread) — copy + draw overlays + JPEG encode,
+    then publish `vision.jpeg_ready` so the MJPEG stream delivers the new frame.
+This avoids blocking the capture loop with GIL-contended cv2 operations
+(copy 7-54ms, draw 17-95ms, encode 2-27ms) and pushes cam1 from ~11fps to
+closer to the 30fps ISP delivery rate.
 
 Topics published:
-    vision.frame_ready  {"index": int, "shape": (H, W, C), "ts": float}
-    vision.error        {"reason": str}
+    vision.frame_ready   {"index": int, "shape": (H, W, C), "ts": float}
+    vision.jpeg_ready    {"index": int}
+    vision.error         {"reason": str}
 
 Topics subscribed:
     vision.capture_still  {"path": str}     — write a JPEG still to *path*
@@ -28,6 +34,7 @@ from __future__ import annotations
 
 import logging
 import math
+import queue
 import threading
 import time
 from typing import List, Optional
@@ -211,6 +218,10 @@ class VisionService(Service):
         self._servo_angle: Optional[float] = None
         self._servo_min_deg: float = float(servo_min_deg)
         self._servo_max_deg: float = float(servo_max_deg)
+        # Background JPEG encoder — decouples copy+draw+encode from capture tick
+        self._encode_queue: queue.Queue = queue.Queue(maxsize=1)
+        self._encoder_running: bool = False
+        self._encoder_thread: Optional[threading.Thread] = None
 
     def on_start(self) -> None:
         if self._camera is None:
@@ -249,6 +260,12 @@ class VisionService(Service):
         self._unsubs.append(
             self.bus.subscribe("motion.limits_changed", self._on_servo_limits)
         )
+        # Spawn background encoder thread
+        self._encoder_running = True
+        self._encoder_thread = threading.Thread(
+            target=self._encoder_loop, daemon=True, name="vision-encoder"
+        )
+        self._encoder_thread.start()
         log.info(
             "VisionService started; hardware_ready=%s",
             getattr(self._camera, "hardware_ready", False),
@@ -273,66 +290,79 @@ class VisionService(Service):
     def run_tick(self) -> None:
         if self._camera is None:
             return
-        _t0 = time.monotonic()
         try:
             frame = self._camera.capture_frame()
         except Exception:
             log.exception("capture_frame failed")
             self.bus.publish("vision.error", {"reason": "capture_failed"})
             return
-        _t1 = time.monotonic()
 
-        # Apply software rotation before any processing or display.
+        # Apply software rotation so detection receives the correctly-oriented frame.
         with self._rotation_lock:
             rot = self._rotation_deg
         if rot:
             frame = _rotate_frame(frame, rot)
 
-        # Snapshot detection caches while we have the lock.
-        with self._det_lock:
-            faces   = self._latest_faces
-            objects = self._latest_objects
-
-        # Draw overlays then encode. Work on a copy so latest_frame()
-        # consumers always see a clean (no-overlay) frame.
-        display = frame.copy()
-        _t1b = time.monotonic()
-        _draw_overlays(display, faces, objects)
-
-        # Servo position overlay — drawn on top of all other annotations.
-        with self._servo_lock:
-            servo_angle = self._servo_angle
-            servo_min = self._servo_min_deg
-            servo_max = self._servo_max_deg
-        if servo_angle is not None:
-            _draw_servo_overlay(display, servo_angle, servo_min, servo_max)
-        _t2 = time.monotonic()
-
-        ok, buf = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 60])
-        jpeg = bytes(buf) if ok else None
-        _t3 = time.monotonic()
-
+        # Store clean frame for detection consumers and bump the frame index.
         with self._lock:
             self._latest = frame
-            self._latest_jpeg = jpeg
             self._index += 1
             idx = self._index
 
-        log.info(
-            "tick ms: capture=%.1f copy=%.1f draw=%.1f encode=%.1f total=%.1f",
-            (_t1  - _t0)  * 1000,
-            (_t1b - _t1)  * 1000,
-            (_t2  - _t1b) * 1000,
-            (_t3  - _t2)  * 1000,
-            (_t3  - _t0)  * 1000,
-        ) if idx % 30 == 0 else None
-
+        # Publish immediately — PerceptionService and ObjectService start
+        # Hailo inference on this frame without waiting for JPEG encoding.
         self.bus.publish(
             "vision.frame_ready",
             {"index": idx, "shape": tuple(frame.shape), "ts": time.time()},
         )
 
+        # Snapshot overlay state and hand off to the encoder thread.
+        # Drop the frame if the encoder is still busy (queue full).
+        with self._det_lock:
+            faces = self._latest_faces
+            objects = self._latest_objects
+        with self._servo_lock:
+            servo_angle = self._servo_angle
+            servo_min = self._servo_min_deg
+            servo_max = self._servo_max_deg
+        try:
+            self._encode_queue.put_nowait(
+                (frame, faces, objects, servo_angle, servo_min, servo_max, idx)
+            )
+        except queue.Full:
+            pass  # encoder is behind — drop this frame silently
+
+    def _encoder_loop(self) -> None:
+        """Background thread: copy frame → draw overlays → JPEG encode → publish.
+
+        Runs independently from the service tick so that GIL-contended cv2
+        operations (copy, draw, imencode) don't stall the capture loop.
+        Frames dropped when encoder can't keep up are silently discarded;
+        the MJPEG stream simply delivers the most recent encoded frame.
+        """
+        while self._encoder_running:
+            try:
+                item = self._encode_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            frame, faces, objects, servo_angle, servo_min, servo_max, idx = item
+
+            display = frame.copy()
+            _draw_overlays(display, faces, objects)
+            if servo_angle is not None:
+                _draw_servo_overlay(display, servo_angle, servo_min, servo_max)
+
+            ok, buf = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 60])
+            with self._lock:
+                self._latest_jpeg = bytes(buf) if ok else None
+
+            self.bus.publish("vision.jpeg_ready", {"index": idx})
+
     def on_stop(self) -> None:
+        self._encoder_running = False
+        if self._encoder_thread is not None:
+            self._encoder_thread.join(timeout=2.0)
+            self._encoder_thread = None
         for unsub in self._unsubs:
             try:
                 unsub()

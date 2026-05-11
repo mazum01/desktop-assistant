@@ -6,7 +6,7 @@ Serves a live dark-themed single-page dashboard on ``http://<pi>:8080``.
 Endpoints
 ---------
 GET  /                    Main dashboard HTML
-GET  /stream              MJPEG camera stream (from bus vision.frame_ready frames)
+GET  /stream              MJPEG camera stream (from bus vision.jpeg_ready frames)
 WS   /ws                  Live JSON status + event tail (pushes every ~1 s)
 GET  /api/status          One-shot status snapshot
 GET  /api/faces           List all known faces
@@ -179,9 +179,10 @@ class WebService:
             except Exception as exc:
                 log.warning("FaceRegistry unavailable in WebService: %s", exc)
 
-        # Subscribe to camera frames
+        # Subscribe to camera frames — cam1 uses jpeg_ready (set by encoder thread)
+        # so the MJPEG stream doesn't block waiting for JPEG to be encoded.
         self._unsubs.append(
-            self.bus.subscribe("vision.frame_ready", self._on_frame)
+            self.bus.subscribe("vision.jpeg_ready", self._on_frame)
         )
         if self._camera2_svc is not None:
             self._unsubs.append(
