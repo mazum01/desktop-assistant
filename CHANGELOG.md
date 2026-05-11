@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.8.11] - 2026-05-11
+### Fixed
+- **Camera color (red still appeared blue after v1.8.10)** — root cause was a
+  libcamera v0.7/PiSP naming quirk: the "RGB888" stream format stores bytes as
+  B-G-R in memory (DRM convention), so `capture_array("main")` already returns
+  a BGR-ordered array. Removed the erroneous `cv2.cvtColor(RGB→BGR)` that was
+  double-swapping channels. Also corrected `face_detector._detect_haar()` to
+  use `COLOR_BGR2GRAY` now that the frame byte-order contract is explicit.
+
 ## [1.8.10] - 2026-05-11
 ### Fixed
 - **Camera color (red appeared blue)** — changed `stream_format` from `"BGR888"` to

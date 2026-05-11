@@ -45,7 +45,7 @@ class CameraConfig:
     width: int = 640
     height: int = 480
     framerate: int = 30
-    stream_format: str = "RGB888"   # native camera output; converted to BGR in capture loop
+    stream_format: str = "RGB888"   # libcamera/PiSP delivers BGR bytes with this label; no conversion needed
     # Software rotation applied after capture. 0–359 degrees.
     # Multiples of 90 are lossless (cv2.rotate); other angles keep the same
     # canvas size via cv2.warpAffine (corners are slightly cropped).
@@ -84,6 +84,7 @@ class Camera:
         self._latest_array: Optional[np.ndarray] = None
         self._frame_lock = threading.Lock()
         self._capture_thread: Optional[threading.Thread] = None
+        self._diag_logged = False  # log first-frame pixel info once
 
         if not _PICAMERA2_AVAILABLE:
             log.warning("[sim] picamera2 not installed — camera in sim mode")
@@ -200,20 +201,30 @@ class Camera:
     def _capture_loop(self) -> None:
         """Continuously pull frames from the ISP into _latest_array as BGR.
 
-        picamera2 delivers RGB888 (native camera format). We explicitly convert
-        to BGR so all downstream OpenCV operations (overlays, imencode) work
-        correctly and the final JPEG displays with proper colors in the browser.
+        libcamera v0.7 / PiSP on RPi5 uses the DRM naming convention where the
+        "RGB888" format string stores bytes as B-G-R in memory (BGR), not R-G-B.
+        capture_array("main") therefore already returns a BGR-ordered array —
+        no channel conversion is needed before passing to imencode or cv2 draws.
         """
         while self._running:
             try:
                 arr = self._cam.capture_array("main")
                 if not self._running:
                     break
-                # Convert RGB → BGR explicitly (rather than relying on BGR888
-                # format which behaves inconsistently across libcamera versions).
-                bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+                # picamera2 on libcamera v0.7 / PiSP (RPi5) delivers BGR bytes in
+                # memory even when the stream is configured as "RGB888" (DRM/V4L2
+                # naming quirk: RGB888 = packed 24-bit with B first in memory).
+                # No channel conversion needed; the raw array is already in the
+                # BGR byte order that OpenCV's imencode expects.
+                if not self._diag_logged:
+                    log.debug(
+                        "Camera %d: first frame shape=%s dtype=%s ch0=%d ch1=%d ch2=%d",
+                        self._cfg.index, arr.shape, arr.dtype,
+                        int(arr[0, 0, 0]), int(arr[0, 0, 1]), int(arr[0, 0, 2]),
+                    )
+                    self._diag_logged = True
                 with self._frame_lock:
-                    self._latest_array = bgr
+                    self._latest_array = arr
             except Exception:
                 if not self._running:
                     break

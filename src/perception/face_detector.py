@@ -374,7 +374,7 @@ class FaceDetector:
     # ── CPU Haar path ──────────────────────────────────────────────────
 
     def _detect_haar(self, frame: np.ndarray) -> List[FaceDetection]:
-        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY if frame.shape[2] == 3 else cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         rects = self._haar.detectMultiScale(
             gray,
             scaleFactor=1.1,
