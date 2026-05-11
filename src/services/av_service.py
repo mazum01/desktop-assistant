@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
-from pathlib import Path
+import time
 from typing import Optional
 
 from src.core.bus import MessageBus
@@ -32,8 +32,6 @@ from src.core.service import Service
 
 log = logging.getLogger(__name__)
 
-_STATE_DIR = Path.home() / ".config" / "desktop-assistant"
-_EQ_STATE_FILE = _STATE_DIR / "eq_preset.txt"
 
 # Sentinel used to wake the worker for shutdown.
 _SHUTDOWN = object()
@@ -82,9 +80,6 @@ class AVService(Service):
         self._unsubs.append(
             self.bus.subscribe("av.announce_version", self._on_announce_version)
         )
-        self._unsubs.append(
-            self.bus.subscribe("av.set_eq_preset", self._on_set_eq_preset)
-        )
 
         # Start the serializing audio worker before any handler can
         # enqueue work into it.
@@ -101,22 +96,8 @@ class AVService(Service):
             getattr(self._tts, "hardware_ready", False),
         )
 
-        # Restore persisted EQ preset from last session
-        if _EQ_STATE_FILE.exists():
-            try:
-                preset = _EQ_STATE_FILE.read_text().strip()
-                if preset:
-                    self._audio.set_eq_preset(preset)
-                    log.info("Restored EQ preset: %s", preset)
-            except Exception:
-                log.warning("Could not restore EQ preset", exc_info=True)
-
         if self._announce_on_start:
             self._enqueue(self._do_announce_startup, label="announce_startup")
-
-    @property
-    def hardware_ready(self) -> bool:
-        return bool(getattr(self._audio, "hardware_ready", False))
 
     def on_stop(self) -> None:
         for unsub in self._unsubs:
@@ -136,9 +117,8 @@ class AVService(Service):
         try:
             if self._audio is not None:
                 self._audio.stop()
-                self._audio.close()
         except Exception:
-            log.exception("audio.stop/close failed")
+            log.exception("audio.stop failed")
         log.info("AVService stopped")
 
     # ── Worker queue ───────────────────────────────────────────────────
@@ -161,6 +141,16 @@ class AVService(Service):
             finally:
                 self._audio_q.task_done()
 
+    def tts_duration_rpc(self, text: str) -> float:
+        """Return exact TTS render duration for *text* in seconds.
+        Safe to call from any thread; TTS is initialised lazily if needed."""
+        if self._tts is None:
+            from src.audio.tts import TextToSpeech
+            tts = TextToSpeech()
+        else:
+            tts = self._tts
+        return tts.render_duration(text)
+
     def wait_idle(self, timeout: float = 5.0) -> bool:
         """Block until the audio worker has drained its queue. Test hook;
         also useful for callers that want to know audio has fully played
@@ -179,7 +169,11 @@ class AVService(Service):
         text = (payload or {}).get("text", "") if isinstance(payload, dict) else ""
         if not text:
             return
-        self._enqueue(lambda t=text: self._do_say(t), label=f"say:{text[:32]}")
+        request_id = (payload or {}).get("request_id") if isinstance(payload, dict) else None
+        self._enqueue(
+            lambda t=text, rid=request_id: self._do_say(t, request_id=rid),
+            label=f"say:{text[:32]}",
+        )
 
     def _on_beep(self, _topic, payload) -> None:
         if not isinstance(payload, dict):
@@ -207,21 +201,15 @@ class AVService(Service):
     def _on_announce_version(self, _topic, _payload) -> None:
         self._enqueue(self._do_announce_request, label="announce_request")
 
-    def _on_set_eq_preset(self, _topic, payload) -> None:
-        preset = payload.get("preset", "flat")
-        try:
-            self._audio.set_eq_preset(preset)
-            _STATE_DIR.mkdir(parents=True, exist_ok=True)
-            _EQ_STATE_FILE.write_text(preset)
-        except Exception:
-            log.exception("set_eq_preset(%r) failed", preset)
-
     # ── Worker bodies ──────────────────────────────────────────────────
 
-    def _do_say(self, text: str) -> None:
+    def _do_say(self, text: str, request_id: str | None = None) -> None:
         try:
             self._tts.say(text, output=self._audio)
-            self.bus.publish("av.spoke", {"text": text})
+            payload = {"text": text, "ts": time.time()}
+            if request_id is not None:
+                payload["request_id"] = request_id
+            self.bus.publish("av.spoke", payload)
         except Exception:
             log.exception("say(%r) failed", text)
 

@@ -27,39 +27,12 @@ import os
 import sys
 import time
 import uuid
-from pathlib import Path
 
 try:
     import zmq
 except ImportError:
     print("pyzmq is required: sudo apt-get install -y python3-zmq", file=sys.stderr)
     sys.exit(2)
-
-try:
-    import urllib.request as _urllib_request
-    import urllib.error as _urllib_error
-except ImportError:
-    _urllib_request = None  # type: ignore
-
-
-def _http_base() -> str:
-    return os.environ.get("DA_WEB_URL", "http://localhost:8080")
-
-
-def _http_get(path: str) -> dict:
-    url = _http_base() + path
-    with _urllib_request.urlopen(url, timeout=5) as r:
-        return json.loads(r.read())
-
-
-def _http_put(path: str, data: dict) -> dict:
-    url = _http_base() + path
-    body = json.dumps(data).encode()
-    req = _urllib_request.Request(url, data=body,
-                                  headers={"Content-Type": "application/json"},
-                                  method="PUT")
-    with _urllib_request.urlopen(req, timeout=5) as r:
-        return json.loads(r.read())
 
 
 PUB_ENDPOINT = os.environ.get("DA_BUS_PUB_ENDPOINT", "ipc:///tmp/desktop-assistant.pub")
@@ -196,167 +169,6 @@ def cmd_pan(args) -> int:
     return 0 if r.get("ok") else 1
 
 
-def cmd_servo_enable(_args) -> int:
-    r = _request({
-        "cmd": "publish",
-        "topic": "motion.set_enabled",
-        "payload": {"enabled": True},
-    })
-    print("Servo enabled." if r.get("ok") else json.dumps(r, indent=2))
-    return 0 if r.get("ok") else 1
-
-
-def cmd_servo_disable(_args) -> int:
-    r = _request({
-        "cmd": "publish",
-        "topic": "motion.set_enabled",
-        "payload": {"enabled": False},
-    })
-    print("Servo disabled." if r.get("ok") else json.dumps(r, indent=2))
-    return 0 if r.get("ok") else 1
-
-
-def cmd_servo_status(_args) -> int:
-    from pathlib import Path
-    import yaml as _yaml
-
-    _base = Path(__file__).resolve().parents[1]
-    _cfg_path = _base / "config" / "assistant.yaml"
-    _rt_path  = _base / "config" / "runtime_state.yaml"
-
-    _cfg = {}
-    try:
-        _cfg = _yaml.safe_load(_cfg_path.read_text()) or {} if _cfg_path.exists() else {}
-    except Exception:
-        pass
-
-    _rt = {}
-    try:
-        _rt = _yaml.safe_load(_rt_path.read_text()) or {} if _rt_path.exists() else {}
-    except Exception:
-        pass
-
-    def _flag(section, key, default=True):
-        return _rt.get(section, {}).get(key, _cfg.get(section, {}).get(key, default))
-
-    servo_enabled    = _flag("servo",        "enabled")
-    face_tracking    = _flag("head_tracking","face_tracking_enabled")
-    random_motion    = _flag("head_tracking","random_motion_enabled")
-    soft_min_deg     = _flag("servo", "soft_min_deg", 135.0)
-    soft_max_deg     = _flag("servo", "soft_max_deg", 215.0)
-
-    pos = _request({"cmd": "last", "topic": "motion.position"})
-    angle = (pos.get("payload") or {}).get("angle", "?")
-
-    on  = "\033[32menabled\033[0m"
-    off = "\033[33mdisabled\033[0m"
-
-    print()
-    print("  Servo motion :")
-    print(f"    Servo enabled   : {on if servo_enabled  else off}")
-    print(f"    Face tracking   : {on if face_tracking  else off}")
-    print(f"    Random motion   : {on if random_motion  else off}")
-    print(f"    Travel limits   : {soft_min_deg}° – {soft_max_deg}°")
-    print(f"    Current angle   : {angle}°")
-    print()
-    return 0
-
-
-def cmd_servo_limits(args) -> int:
-    """Set servo travel limits (min/max logical angle)."""
-    min_deg = float(args.min)
-    max_deg = float(args.max)
-    if min_deg < 1 or max_deg > 360 or min_deg >= max_deg:
-        print("Error: min must be ≥ 1, max must be ≤ 360, and min < max.")
-        return 1
-    r = _request({
-        "cmd": "publish",
-        "topic": "motion.set_limits",
-        "payload": {"min_deg": min_deg, "max_deg": max_deg},
-    })
-    if r.get("ok"):
-        print(f"Travel limits set: {min_deg}° – {max_deg}°")
-        return 0
-    print(f"Error: {r}")
-    return 1
-
-
-def cmd_face_tracking_enable(_args) -> int:
-    r = _request({"cmd": "publish", "topic": "tracking.set_face_tracking",
-                  "payload": {"enabled": True}})
-    print("Face tracking enabled." if r.get("ok") else f"Error: {r}")
-    return 0 if r.get("ok") else 1
-
-
-def cmd_face_tracking_disable(_args) -> int:
-    r = _request({"cmd": "publish", "topic": "tracking.set_face_tracking",
-                  "payload": {"enabled": False}})
-    print("Face tracking disabled." if r.get("ok") else f"Error: {r}")
-    return 0 if r.get("ok") else 1
-
-
-def cmd_face_tracking_status(_args) -> int:
-    from pathlib import Path
-    import yaml as _yaml
-    _base = Path(__file__).resolve().parents[1]
-    _rt = {}
-    try:
-        p = _base / "config" / "runtime_state.yaml"
-        _rt = _yaml.safe_load(p.read_text()) or {} if p.exists() else {}
-    except Exception:
-        pass
-    _cfg = {}
-    try:
-        p2 = _base / "config" / "assistant.yaml"
-        _cfg = _yaml.safe_load(p2.read_text()) or {} if p2.exists() else {}
-    except Exception:
-        pass
-    enabled = _rt.get("head_tracking", {}).get(
-        "face_tracking_enabled",
-        _cfg.get("head_tracking", {}).get("face_tracking_enabled", True),
-    )
-    print(f"Face tracking: {'enabled' if enabled else 'disabled'}")
-    return 0
-
-
-def cmd_random_motion_enable(_args) -> int:
-    r = _request({"cmd": "publish", "topic": "tracking.set_random_motion",
-                  "payload": {"enabled": True}})
-    print("Random motion enabled." if r.get("ok") else f"Error: {r}")
-    return 0 if r.get("ok") else 1
-
-
-def cmd_random_motion_disable(_args) -> int:
-    r = _request({"cmd": "publish", "topic": "tracking.set_random_motion",
-                  "payload": {"enabled": False}})
-    print("Random motion disabled." if r.get("ok") else f"Error: {r}")
-    return 0 if r.get("ok") else 1
-
-
-def cmd_random_motion_status(_args) -> int:
-    from pathlib import Path
-    import yaml as _yaml
-    _base = Path(__file__).resolve().parents[1]
-    _rt = {}
-    try:
-        p = _base / "config" / "runtime_state.yaml"
-        _rt = _yaml.safe_load(p.read_text()) or {} if p.exists() else {}
-    except Exception:
-        pass
-    _cfg = {}
-    try:
-        p2 = _base / "config" / "assistant.yaml"
-        _cfg = _yaml.safe_load(p2.read_text()) or {} if p2.exists() else {}
-    except Exception:
-        pass
-    enabled = _rt.get("head_tracking", {}).get(
-        "random_motion_enabled",
-        _cfg.get("head_tracking", {}).get("random_motion_enabled", True),
-    )
-    print(f"Random motion: {'enabled' if enabled else 'disabled'}")
-    return 0
-
-
 def cmd_move_servo(args) -> int:
     timeout_ms = max(2000, int(float(args.move_time_ms)) + 3000)
 
@@ -398,17 +210,6 @@ def cmd_move_servo(args) -> int:
     return 0 if r.get("ok") else 1
 
 
-def cmd_meet(args) -> int:
-    """Name the most recently seen face."""
-    r = _request({
-        "cmd": "publish",
-        "topic": "face.meet",
-        "payload": {"name": args.name},
-    })
-    print(json.dumps(r, indent=2))
-    return 0 if r.get("ok") else 1
-
-
 def cmd_say(args) -> int:
     r = _request({
         "cmd": "publish",
@@ -417,283 +218,6 @@ def cmd_say(args) -> int:
     })
     print(json.dumps(r, indent=2))
     return 0 if r.get("ok") else 1
-
-
-def cmd_joke(_args) -> int:
-    r = _request({"cmd": "publish", "topic": "av.tell_joke", "payload": None})
-    print(json.dumps(r, indent=2))
-    return 0 if r.get("ok") else 1
-
-
-def cmd_time(_args) -> int:
-    r = _request({"cmd": "publish", "topic": "av.announce_time", "payload": None})
-    print(json.dumps(r, indent=2))
-    return 0 if r.get("ok") else 1
-
-
-def cmd_forget_faces(_args) -> int:
-    from src.perception.face_registry import FaceRegistry
-    reg = FaceRegistry()
-    count = reg.delete_all_faces()
-    reg.close()
-    print(f"Deleted {count} face(s) from the registry.")
-    return 0
-
-
-def cmd_forget_guests(_args) -> int:
-    from src.perception.face_registry import FaceRegistry
-    reg = FaceRegistry()
-    count = reg.delete_guest_faces()
-    reg.close()
-    print(f"Deleted {count} guest face(s) from the registry.")
-    return 0
-
-
-def cmd_list_faces(_args) -> int:
-    from src.perception.face_registry import FaceRegistry
-    reg = FaceRegistry()
-    faces = reg.list_faces()
-    reg.close()
-    if not faces:
-        print("No faces in registry.")
-        return 0
-    col = max(len(f["name"]) for f in faces) + 2
-    print(f"\n{'Name':<{col}}  {'ID (first 8)'}  {'Seen':>5}  {'Last Seen'}")
-    print("─" * (col + 40))
-    import time
-    for f in faces:
-        age = int(time.time() - f["last_seen"])
-        if age < 60:
-            age_str = f"{age}s ago"
-        elif age < 3600:
-            age_str = f"{age//60}m ago"
-        else:
-            age_str = f"{age//3600}h ago"
-        print(f"  {f['name']:<{col}}  {f['id'][:8]}…  {f['seen_count']:>5}  {age_str}")
-    print()
-    return 0
-
-
-def cmd_merge_faces(args) -> int:
-    from src.perception.face_registry import FaceRegistry
-    reg = FaceRegistry()
-    keep = reg.get_face(args.keep_id)
-    absorb = reg.get_face(args.absorb_id)
-    if not keep:
-        print(f"Error: keep_id {args.keep_id!r} not found.")
-        reg.close()
-        return 1
-    if not absorb:
-        print(f"Error: absorb_id {args.absorb_id!r} not found.")
-        reg.close()
-        return 1
-    ok = reg.merge_faces(args.keep_id, args.absorb_id)
-    reg.close()
-    if ok:
-        print(f"Merged {absorb['name']!r} ({args.absorb_id[:8]}…) into {keep['name']!r} ({args.keep_id[:8]}…).")
-    else:
-        print("Merge failed.")
-    return 0 if ok else 1
-
-
-def cmd_greeting_cooldown(args) -> int:
-    """Set the base face greeting cooldown (minutes)."""
-    minutes = float(args.minutes)
-    if minutes < 1:
-        print("Error: cooldown must be at least 1 minute")
-        return 1
-    r = _publish("tracking.set_greeting_cooldown", {"cooldown_min": minutes})
-    if r is None:
-        print(f"Greeting cooldown set to {minutes:.1f} minutes (bus publish; daemon may not be running).")
-    else:
-        print(f"Greeting cooldown updated to {minutes:.1f} minutes.")
-    return 0
-
-
-def cmd_greeting_settings(_args) -> int:
-    """Show current greeting configuration from assistant.yaml / runtime_state.yaml."""
-    import yaml
-    cfg_path  = Path(__file__).resolve().parent.parent / "config" / "assistant.yaml"
-    rt_path   = Path(__file__).resolve().parent.parent / "config" / "runtime_state.yaml"
-    cfg: dict = {}
-    rt: dict  = {}
-    try:
-        with open(cfg_path) as f:
-            cfg = yaml.safe_load(f) or {}
-    except Exception as exc:
-        print(f"Warning: could not read assistant.yaml: {exc}")
-    try:
-        with open(rt_path) as f:
-            rt = yaml.safe_load(f) or {}
-    except FileNotFoundError:
-        pass
-    except Exception as exc:
-        print(f"Warning: could not read runtime_state.yaml: {exc}")
-
-    fr = cfg.get("face_recognition", {})
-    # Runtime state can override cooldown
-    rt_cooldown = rt.get("face_recognition", {}).get("greeting_cooldown_min")
-
-    cooldown_min = rt_cooldown if rt_cooldown is not None else fr.get("greeting_cooldown_min", 30.0)
-    jitter_pct   = fr.get("greeting_cooldown_jitter_pct", 25.0)
-    min_abs_s    = fr.get("min_absence_s", 30.0)
-    confidence   = fr.get("confidence_threshold", 0.5)
-    enabled      = fr.get("enabled", True)
-
-    W = 34
-    BOLD = "\033[1m"; RST = "\033[0m"; GRN = "\033[32m"; RED = "\033[31m"
-    status_str = f"{GRN}enabled{RST}" if enabled else f"{RED}disabled{RST}"
-    print()
-    print(f"{BOLD}Greeting Settings{RST}")
-    print("─" * W)
-    print(f"  {'Face recognition':<20} {status_str}")
-    print(f"  {'Cooldown (base)':<20} {cooldown_min:.1f} min")
-    print(f"  {'Jitter':<20} ±{jitter_pct:.0f}%  ({cooldown_min*(1-jitter_pct/100):.1f}–{cooldown_min*(1+jitter_pct/100):.1f} min)")
-    print(f"  {'Min absence':<20} {min_abs_s:.0f} s")
-    print(f"  {'Min confidence':<20} {confidence:.2f}")
-    print()
-    return 0
-
-
-def cmd_restart(_args) -> int:
-    """Restart the desktop-assistant-core systemd service."""
-    import subprocess
-    print("Restarting desktop-assistant-core.service …")
-    result = subprocess.run(
-        ["sudo", "systemctl", "restart", "desktop-assistant-core.service"],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        print(f"Error: {result.stderr.strip() or 'unknown error'}")
-        return 1
-    print("Service restarted. Use 'da ping' to confirm it is back up.")
-    return 0
-
-
-def cmd_reboot(_args) -> int:
-    """Reboot the Raspberry Pi."""
-    import subprocess
-    ans = input("Reboot the Raspberry Pi? [y/N] ").strip().lower()
-    if ans != "y":
-        print("Aborted.")
-        return 0
-    print("Rebooting …")
-    result = subprocess.run(["sudo", "reboot"], capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"Error: {result.stderr.strip() or 'unknown error'}")
-        return 1
-    return 0
-
-
-def cmd_shutdown(_args) -> int:
-    """Shut down the Raspberry Pi."""
-    import subprocess
-    ans = input("Shut down the Raspberry Pi? It will need to be powered on manually. [y/N] ").strip().lower()
-    if ans != "y":
-        print("Aborted.")
-        return 0
-    print("Shutting down …")
-    result = subprocess.run(["sudo", "shutdown", "-h", "now"], capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"Error: {result.stderr.strip() or 'unknown error'}")
-        return 1
-    return 0
-
-def cmd_help(args) -> int:
-    """Print a formatted command reference, or detailed help for one command."""
-    commands = {
-        "status":        "Health and telemetry dashboard (temp, fan, servo, vision, audio).\n"
-                         "               --json  Emit raw JSON instead of the human-readable table.",
-        "topics":        "List every bus topic that has at least one active subscriber.",
-        "last":          "Show the most recent payload published on a given topic.\n"
-                         "               Usage: last <topic>",
-        "watch":         "Stream live bus events to stdout (Ctrl-C to stop).\n"
-                         "               --topic <prefix>  Filter to topics starting with <prefix>.",
-        "say":           "Speak a phrase through the speakers via neural TTS.\n"
-                         "               Usage: say \"<text>\"",
-        "joke":          "Have the assistant tell a random dad joke.",
-        "time":          "Have the assistant announce the current time.",
-        "publish":       "Publish a raw JSON event onto the internal bus (advanced).\n"
-                         "               Usage: publish <topic> [--payload '{...}']",
-        "servo":         "Servo control. Sub-commands:\n"
-                         "               servo enable             Enable servo motion.\n"
-                         "               servo disable            Disable servo motion.\n"
-                         "               servo status             Show servo state, limits, and current angle.\n"
-                         "               servo pan --to <deg>     Pan to logical angle 1–360°.\n"
-                         "                 [--move-time-ms <ms>]  Optional movement duration.\n"
-                         "               servo move <deg> <ms>    Move to position with explicit time.\n"
-                         "                 [-as]  Announce before moving.  [-af]  Announce when done.\n"
-                         "               servo limits --min <deg> --max <deg>  Set travel limits.",
-        "face-tracking": "Enable/disable servo tracking of detected faces. Sub-commands:\n"
-                         "               face-tracking enable    Head follows detected faces.\n"
-                         "               face-tracking disable   Head does not follow faces.\n"
-                         "               face-tracking status    Show current state.",
-        "random-motion": "Enable/disable random idle head movement. Sub-commands:\n"
-                         "               random-motion enable    Idle gaze drifts when no face visible.\n"
-                         "               random-motion disable   Head stays still when no face visible.\n"
-                         "               random-motion status    Show current state.",
-        "system":        "System management. Sub-commands:\n"
-                         "               system ping             Round-trip latency check.\n"
-                         "               system restart          Restart desktop-assistant-core service.\n"
-                         "               system reboot           Reboot the Raspberry Pi.\n"
-                         "               system shutdown         Shut down the Raspberry Pi.\n"
-                         "               system version          Speak the current version number.",
-        "face":          "Face registry and greeting management. Sub-commands:\n"
-                         "               face meet \"<Name>\"      Name the most recently seen face.\n"
-                         "               face list               List faces with IDs and last-seen times.\n"
-                         "               face forget-all         Delete ALL faces permanently.\n"
-                         "               face forget-guests      Remove unnamed Guest entries.\n"
-                         "               face merge <keep> <absorb>  Merge two face identities.\n"
-                         "               face greeting-cooldown <min>  Set re-greeting cooldown.\n"
-                         "               face greeting-settings  Show all greeting config values.",
-        "vision":        "Vision and object detection. Sub-commands:\n"
-                         "               vision describe             Speak a description of everything seen.\n"
-                         "               vision rotation <deg>       Set camera rotation (0–359°).\n"
-                         "               vision rotation-status      Show current camera rotation angle.",
-        "music":         "Pandora music playback. Sub-commands:\n"
-                         "               music play [STATION]        Start or resume playback (optional station name).\n"
-                         "               music stop                  Stop playback.\n"
-                         "               music next                  Skip to the next song.\n"
-                         "               music pause                 Toggle pause/resume.\n"
-                         "               music thumbs-up             Love the current song.\n"
-                         "               music thumbs-down           Ban the current song (skips it).\n"
-                         "               music stations              List available Pandora stations.\n"
-                         "               music status                Show playback state and current song.\n"
-                         "               music volume [LEVEL]        Get or set system volume 0–100.\n"
-                         "               music eq [PRESET]           Get or set EQ preset (flat/bass_boost/treble_boost/vocal/loudness/warm).",
-        "help":          "Show this command reference, or help for a specific command.\n"
-                         "               Usage: help [command]",
-    }
-
-    if hasattr(args, "command") and args.command:
-        name = args.command
-        if name not in commands:
-            print(f"Unknown command: {name!r}\n")
-            print("Available commands: " + ", ".join(commands))
-            return 1
-        print(f"\ndesktop-assistant {name}")
-        print("─" * (len(name) + 21))
-        print(commands[name])
-        print(f"\nFor argument details: desktop-assistant {name} --help\n")
-        return 0
-
-    width = max(len(k) for k in commands) + 2
-    print()
-    print("desktop-assistant — control the running assistant over ZMQ")
-    print("=" * 60)
-    print(f"  Daemon REP : {REP_ENDPOINT}")
-    print(f"  Daemon PUB : {PUB_ENDPOINT}")
-    print("  Override   : $DA_BUS_REP_ENDPOINT / $DA_BUS_PUB_ENDPOINT")
-    print()
-    print("Commands")
-    print("─" * 60)
-    for cmd, desc in commands.items():
-        first_line = desc.split("\n")[0]
-        print(f"  {cmd:<{width}}{first_line}")
-    print()
-    print("Tip: desktop-assistant <command> --help  for full argument details.")
-    print()
-    return 0
 
 
 def cmd_status(args) -> int:
@@ -706,172 +230,61 @@ def cmd_status(args) -> int:
         return 0 if _is_healthy(r["status"]) else 1
 
     s = r["status"]
-    last = s.get("last", {})
-    svcs = s.get("services", {})
-    healthy = _is_healthy(s)
-
-    # ── Header ─────────────────────────────────────────────────────────
-    status_tag = "● OK" if healthy else "✗ DEGRADED"
-    print(f"\ndesktop-assistant  v{s.get('version','?')}   "
-          f"uptime: {_fmt_uptime(s.get('uptime_s', 0))}   {status_tag}")
-    print(f"  pub  {s['endpoints']['pub']}")
-    print(f"  rep  {s['endpoints']['rep']}")
-
-    # ── Services ───────────────────────────────────────────────────────
+    print(f"desktop-assistant v{s.get('version','?')}  "
+          f"(up {_fmt_uptime(s.get('uptime_s', 0))})")
+    print(f"endpoints: pub={s['endpoints']['pub']}  rep={s['endpoints']['rep']}")
     print()
-    print("┌─ Services " + "─" * 49)
-    if not svcs:
-        print("│  (none reported)")
-    for name, info in sorted(svcs.items()):
+    print("services:")
+    if not s["services"]:
+        print("  (none reported)")
+    for name, info in sorted(s["services"].items()):
         mark = "✓" if info.get("running") else "✗"
-        ts   = info.get("ts")
-        age  = f"  (since {_fmt_ts(ts)})" if ts else ""
-        print(f"│  {mark}  {name}{age}")
+        print(f"  {mark} {name}")
 
-    # ── Hardware / Thermal ─────────────────────────────────────────────
-    print("├─ Hardware / Thermal " + "─" * 38)
-    temp = last.get("thermal.temp") or {}
-    if temp:
-        ok_sym = "✓" if temp.get("ok") else "✗"
-        print(f"│  {ok_sym}  temperature   "
-              f"{_safe_float(temp,'celsius'):.1f} °C  "
-              f"({_safe_float(temp,'fahrenheit'):.1f} °F)")
-    else:
-        print("│  —  temperature   no data")
+    print()
+    print("latest telemetry:")
+    last = s.get("last", {})
 
-    fan = last.get("thermal.fan") or {}
-    rpm = last.get("thermal.rpm") or {}
-    if fan:
-        duty    = _safe_float(fan, "duty")
-        backend = fan.get("backend", "?")
-        rpm_val = rpm.get("rpm", "—") if rpm else "—"
-        print(f"│     fan           {duty:.0f}% duty   {rpm_val} RPM   backend={backend}")
-    else:
-        print("│  —  fan           no data")
+    def show(label, topic, fmt=None):
+        v = last.get(topic)
+        if v is None:
+            print(f"  {label:<14} —")
+            return
+        print(f"  {label:<14} {fmt(v) if fmt else json.dumps(v)}")
+
+    show("temp",     "thermal.temp",
+         lambda v: f"{v.get('celsius','?'):.1f} °C  ({v.get('fahrenheit','?'):.1f} °F)  ok={v.get('ok')}")
+    show("fan",      "thermal.fan",
+         lambda v: f"{v.get('duty','?'):.0f}%  backend={v.get('backend','?')}")
+    show("rpm",      "thermal.rpm",
+         lambda v: f"{v.get('rpm','—')}")
+    show("motion",   "motion.position",
+         lambda v: f"angle={v.get('angle','?')}")
+    show("vision",   "vision.frame_ready",
+         lambda v: (
+             f"frame#{v.get('frame_id', v.get('index', '?'))}  "
+             f"{v.get('width', (v.get('shape') or [None, '?'])[1])}x"
+             f"{v.get('height', (v.get('shape') or ['?'])[0])}"
+         ))
+    show("audio",    "audio.level",
+         lambda v: f"{v.get('dbfs','?'):.1f} dBFS  rms={v.get('rms','?'):.4f}")
 
     err_temp = last.get("thermal.error")
     if err_temp:
-        print(f"│  ⚠  thermal error: {err_temp}")
-
-    # ── Vision / Perception ────────────────────────────────────────────
-    print("├─ Vision / Perception " + "─" * 37)
-    frame = last.get("vision.frame_ready") or {}
-    if frame:
-        fid = frame.get("frame_id", frame.get("index", "?"))
-        w   = frame.get("width")  or (frame.get("shape") or [None, "?"])[1]
-        h   = frame.get("height") or (frame.get("shape") or ["?"])[0]
-        print(f"│  ✓  camera        frame #{fid}   {w}×{h}")
-    else:
-        print("│  —  camera        no frames yet")
-
-    pf = last.get("perception.faces") or {}
-    if pf:
-        count   = pf.get("count", 0)
-        backend = pf.get("backend", "?")
-        faces   = pf.get("faces") or []
-        names   = [f.get("name") or "unknown" for f in faces if f.get("face_id")]
-        age_s   = _payload_age(pf)
-        face_str = (", ".join(names) if names else "no identified faces") if count else "none"
-        print(f"│  ✓  faces         {count} detected   [{face_str}]   "
-              f"backend={backend}   {age_s}")
-    else:
-        print("│  —  faces         no detection data")
-
-    err_vis = last.get("vision.error")
-    err_prc = last.get("perception.error")
+        print(f"\n⚠ thermal.error: {err_temp}")
+    err_vis  = last.get("vision.error")
     if err_vis:
-        print(f"│  ⚠  vision error: {err_vis}")
-    if err_prc:
-        print(f"│  ⚠  perception error: {err_prc}")
-
-    # ── Identity / Head Tracking ───────────────────────────────────────
-    print("├─ Identity / Head Tracking " + "─" * 32)
-    fi = last.get("face.identified") or {}
-    if fi:
-        name  = fi.get("name", "?")
-        fid   = fi.get("face_id", "?")
-        score = fi.get("score", 0.0)
-        is_new = fi.get("is_new", False)
-        label = "new" if is_new else f"score={score:.2f}"
-        age_s = _payload_age(fi)
-        print(f"│  ✓  last identity  {name!r}  (id={fid[:8]}…  {label})  {age_s}")
-    else:
-        print("│  —  last identity  no face recognized yet")
-
-    motion = last.get("motion.position") or {}
-    if motion:
-        angle = motion.get("angle", "?")
-        print(f"│     servo angle   {angle}°")
-    else:
-        print("│  —  servo angle   no data")
-
-    # ── Audio / Speech ─────────────────────────────────────────────────
-    print("├─ Audio / Speech " + "─" * 42)
-    audio = last.get("audio.level") or {}
-    if audio:
-        dbfs = _safe_float(audio, "dbfs")
-        rms  = _safe_float(audio, "rms")
-        print(f"│  ✓  microphone    {dbfs:.1f} dBFS   rms={rms:.4f}")
-    else:
-        print("│  —  microphone    no data")
-
-    spoke = last.get("av.spoke") or {}
-    if spoke:
-        text   = spoke.get("text", "")
-        snip   = (text[:50] + "…") if len(text) > 50 else text
-        age_s  = _payload_age(spoke)
-        print(f"│  ✓  last spoken   \"{snip}\"  {age_s}")
-    else:
-        print("│  —  last spoken   (nothing spoken yet)")
-
-    err_aud = last.get("audio.error")
+        print(f"⚠ vision.error: {err_vis}")
+    err_aud  = last.get("audio.error")
     if err_aud:
-        print(f"│  ⚠  audio error: {err_aud}")
+        print(f"⚠ audio.error: {err_aud}")
 
-    print("└" + "─" * 59)
-    print()
-    return 0 if healthy else 1
-
-
-def _safe_float(d: dict, key: str, default: float = 0.0) -> float:
-    v = d.get(key, default)
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return default
-
-
-def _payload_age(payload: dict) -> str:
-    """Return a human-readable age string from a payload's 'ts' field."""
-    ts = payload.get("ts")
-    if ts is None:
-        return ""
-    age = time.time() - float(ts)
-    if age < 2:
-        return "(just now)"
-    if age < 60:
-        return f"({age:.0f}s ago)"
-    if age < 3600:
-        return f"({age/60:.0f}m ago)"
-    return f"({age/3600:.1f}h ago)"
-
-
-def _fmt_ts(ts) -> str:
-    """Format a Unix timestamp as HH:MM:SS."""
-    try:
-        import datetime
-        return datetime.datetime.fromtimestamp(float(ts)).strftime("%H:%M:%S")
-    except Exception:
-        return str(ts)
+    return 0 if _is_healthy(s) else 1
 
 
 def _is_healthy(status: dict) -> bool:
     last = status.get("last", {})
     if last.get("thermal.error"):
-        return False
-    if last.get("vision.error"):
-        return False
-    if last.get("audio.error"):
         return False
     temp = last.get("thermal.temp") or {}
     if temp.get("ok") is False:
@@ -916,275 +329,14 @@ def cmd_watch(args) -> int:
         sock.close(linger=0)
 
 
-def cmd_vision_describe(_args) -> int:
-    """Publish vision.describe — ObjectService builds and speaks a scene description."""
-    r = _request({"cmd": "publish", "topic": "vision.describe", "payload": {}})
-    if r.get("ok"):
-        print("Describing what I see…")
-    else:
-        print(json.dumps(r, indent=2))
-    return 0 if r.get("ok") else 1
-
-
-def cmd_vision_rotation(args) -> int:
-    """Set camera rotation angle (0–359°)."""
-    deg = int(args.degrees) % 360
-    r = _request({"cmd": "publish", "topic": "camera.set_rotation",
-                  "payload": {"rotation_deg": deg}})
-    if r.get("ok"):
-        print(f"Camera rotation set to {deg}°")
-    else:
-        print(json.dumps(r, indent=2))
-    return 0 if r.get("ok") else 1
-
-
-def cmd_vision_rotation_status(_args) -> int:
-    """Show the current camera rotation angle."""
-    from pathlib import Path
-    import yaml as _yaml
-
-    _base = Path(__file__).resolve().parents[1]
-    _cfg_path = _base / "config" / "assistant.yaml"
-    _rt_path  = _base / "config" / "runtime_state.yaml"
-
-    _cfg = {}
-    try:
-        _cfg = _yaml.safe_load(_cfg_path.read_text()) or {} if _cfg_path.exists() else {}
-    except Exception:
-        pass
-    _rt = {}
-    try:
-        _rt = _yaml.safe_load(_rt_path.read_text()) or {} if _rt_path.exists() else {}
-    except Exception:
-        pass
-
-    deg = _rt.get("camera", {}).get(
-        "rotation_deg",
-        _cfg.get("camera", {}).get("rotation_deg", 0),
-    )
-    print(f"  Camera rotation : {deg}°")
-    return 0
-
-
-def cmd_music_play(args) -> int:
-    """Start or resume Pandora playback, optionally selecting a station by name."""
-    payload: dict = {}
-    if hasattr(args, "station") and args.station:
-        # Try to resolve station name to ID from the last known stations payload.
-        import yaml as _yaml
-        from pathlib import Path
-        station_name = " ".join(args.station).lower()
-        r = _request({"cmd": "last", "topic": "music.stations_updated"})
-        stations = r.get("payload", {}).get("stations", []) if isinstance(r.get("payload"), dict) else []
-        matched = next(
-            (s for s in stations if station_name in s.get("name", "").lower()),
-            None,
-        )
-        if matched:
-            payload["station_id"] = matched["id"]
-            print(f"Playing station: {matched['name']}")
-        elif stations:
-            print(f"Station {args.station!r} not found. Starting default station.")
-        # No stations cached yet — pianobar will show list and pick first
-    r = _request({"cmd": "publish", "topic": "music.play", "payload": payload})
-    if r.get("ok"):
-        print("▶  Music starting…")
-    else:
-        print(json.dumps(r, indent=2))
-    return 0 if r.get("ok") else 1
-
-
-def cmd_music_stop(_args) -> int:
-    r = _request({"cmd": "publish", "topic": "music.stop", "payload": {}})
-    if r.get("ok"):
-        print("■  Music stopped.")
-    return 0 if r.get("ok") else 1
-
-
-def cmd_music_next(_args) -> int:
-    r = _request({"cmd": "publish", "topic": "music.next", "payload": {}})
-    if r.get("ok"):
-        print("⏭  Skipping to next song…")
-    return 0 if r.get("ok") else 1
-
-
-def cmd_music_pause(_args) -> int:
-    r = _request({"cmd": "publish", "topic": "music.pause", "payload": {}})
-    if r.get("ok"):
-        print("⏯  Pause toggled.")
-    return 0 if r.get("ok") else 1
-
-
-def cmd_music_thumbs_up(_args) -> int:
-    r = _request({"cmd": "publish", "topic": "music.thumbs_up", "payload": {}})
-    if r.get("ok"):
-        print("👍  Loved the song.")
-    return 0 if r.get("ok") else 1
-
-
-def cmd_music_thumbs_down(_args) -> int:
-    r = _request({"cmd": "publish", "topic": "music.thumbs_down", "payload": {}})
-    if r.get("ok"):
-        print("👎  Banned the song — skipping.")
-    return 0 if r.get("ok") else 1
-
-
-def cmd_music_stations(_args) -> int:
-    r = _request({"cmd": "last", "topic": "music.stations_updated"})
-    stations = []
-    if isinstance(r.get("payload"), dict):
-        stations = r["payload"].get("stations", [])
-    if not stations:
-        print("No station list available yet. Start music first: da music play")
-        return 1
-    print(f"\n  {'ID':<4} Station")
-    print("  " + "─" * 36)
-    for s in stations:
-        print(f"  {s['id']:<4} {s['name']}")
-    print()
-    return 0
-
-
-def cmd_music_status(_args) -> int:
-    state_r = _request({"cmd": "last", "topic": "music.state_changed"})
-    song_r  = _request({"cmd": "last", "topic": "music.song_changed"})
-    state = "stopped"
-    if isinstance(state_r.get("payload"), dict):
-        state = state_r["payload"].get("state", "stopped")
-    song = {}
-    if isinstance(song_r.get("payload"), dict):
-        song = song_r["payload"]
-    icons = {"playing": "▶", "paused": "⏸", "stopped": "■"}
-    print(f"\n  State    : {icons.get(state, '?')} {state}")
-    if song:
-        print(f"  Title    : {song.get('title', '—')}")
-        print(f"  Artist   : {song.get('artist', '—')}")
-        print(f"  Station  : {song.get('station', '—')}")
-    print()
-    return 0
-
-
-def cmd_music_volume(args) -> int:
-    """Get or set system volume (0–100)."""
-    try:
-        if hasattr(args, "level") and args.level is not None:
-            _http_put("/api/music/volume", {"level": int(args.level)})
-            print(f"Volume set to {args.level}%")
-        else:
-            d = _http_get("/api/music/volume")
-            lvl = d.get("level", -1)
-            if lvl < 0:
-                print("Volume: (unavailable)")
-            else:
-                print(f"Volume: {lvl}%")
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
-    return 0
-
-
-def cmd_music_eq(args) -> int:
-    """Get or set the software EQ preset."""
-    _EQ_PRESETS = ["flat", "bass_boost", "treble_boost", "vocal", "loudness", "warm"]
-    try:
-        if hasattr(args, "preset") and args.preset is not None:
-            if args.preset not in _EQ_PRESETS:
-                print(f"Unknown preset '{args.preset}'. Valid: {', '.join(_EQ_PRESETS)}")
-                return 1
-            _http_put("/api/music/eq", {"preset": args.preset})
-            print(f"EQ preset set to '{args.preset}'")
-        else:
-            d = _http_get("/api/music/eq")
-            print(f"EQ preset: {d.get('preset', 'flat')}")
-            print(f"Available: {', '.join(d.get('presets', _EQ_PRESETS))}")
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
-    return 0
-
-
 def main() -> int:
-    p = argparse.ArgumentParser(
-        prog="desktop-assistant",
-        description="Control the running assistant over ZMQ.",
-    )
-    sub = p.add_subparsers(dest="cmd")
+    p = argparse.ArgumentParser(prog="desktop-assistant",
+                                description="Control the running assistant over ZMQ.")
+    sub = p.add_subparsers(dest="cmd", required=True)
 
-    sp = sub.add_parser("help", help="Show command reference or help for a specific command")
-    sp.add_argument("command", nargs="?", default=None, help="Command name to get help for")
-    sp.set_defaults(func=cmd_help)
-
-    # ── system subcommand group ──────────────────────────────────────
-    sys_sp = sub.add_parser("system", help="System management (ping/restart/reboot/shutdown/version)")
-    sys_sub = sys_sp.add_subparsers(dest="sys_cmd", metavar="<subcommand>")
-    sys_sub.required = True
-    sys_sub.add_parser("ping",     help="Round-trip check — confirms daemon is reachable").set_defaults(func=cmd_ping)
-    sys_sub.add_parser("restart",  help="Restart desktop-assistant-core systemd service").set_defaults(func=cmd_restart)
-    sys_sub.add_parser("reboot",   help="Reboot the Raspberry Pi (prompts for confirmation)").set_defaults(func=cmd_reboot)
-    sys_sub.add_parser("shutdown", help="Shut down the Raspberry Pi (prompts for confirmation)").set_defaults(func=cmd_shutdown)
-    sys_sub.add_parser("version",  help="Speak the current version number via TTS").set_defaults(func=cmd_version)
-
-    # ── face subcommand group ────────────────────────────────────────
-    face_sp = sub.add_parser("face", help="Face registry and greeting management")
-    face_sub = face_sp.add_subparsers(dest="face_cmd", metavar="<subcommand>")
-    face_sub.required = True
-
-    ssp = face_sub.add_parser("meet", help="Assign a name to the most recently seen face")
-    ssp.add_argument("name", help="Name to assign (e.g. 'Alice')")
-    ssp.set_defaults(func=cmd_meet)
-
-    face_sub.add_parser("list", help="List all faces with IDs, names, and last-seen times").set_defaults(func=cmd_list_faces)
-    face_sub.add_parser("forget-all", help="Delete ALL known faces from the registry permanently").set_defaults(func=cmd_forget_faces)
-    face_sub.add_parser("forget-guests", help="Delete only Guest-named faces, keeping named identities").set_defaults(func=cmd_forget_guests)
-
-    ssp = face_sub.add_parser("merge", help="Merge two face identities into one")
-    ssp.add_argument("keep_id",   help="Face ID to keep (use 'face list' to get IDs)")
-    ssp.add_argument("absorb_id", help="Face ID to absorb into keep_id")
-    ssp.set_defaults(func=cmd_merge_faces)
-
-    ssp = face_sub.add_parser("greeting-cooldown", help="Set the base face greeting cooldown in minutes")
-    ssp.add_argument("minutes", type=float, help="Base cooldown in minutes (min 1)")
-    ssp.set_defaults(func=cmd_greeting_cooldown)
-
-    face_sub.add_parser("greeting-settings", help="Show all current greeting configuration values").set_defaults(func=cmd_greeting_settings)
-
-    # ── vision subcommand group ──────────────────────────────────────
-    vis_sp = sub.add_parser("vision", help="Vision and object detection commands")
-    vis_sub = vis_sp.add_subparsers(dest="vis_cmd", metavar="<subcommand>")
-    vis_sub.required = True
-    vis_sub.add_parser("describe", help="Speak a natural-language description of everything currently seen").set_defaults(func=cmd_vision_describe)
-    vis_sub.add_parser("rotation-status", help="Show current camera rotation angle").set_defaults(func=cmd_vision_rotation_status)
-    ssp = vis_sub.add_parser("rotation", help="Set camera rotation angle (0–359°)")
-    ssp.add_argument("degrees", type=int, help="Rotation in degrees (0–359)")
-    ssp.set_defaults(func=cmd_vision_rotation)
-
-    # ── music subcommand group ───────────────────────────────────────
-    mus_sp = sub.add_parser("music", help="Pandora music playback via pianobar")
-    mus_sub = mus_sp.add_subparsers(dest="mus_cmd", metavar="<subcommand>")
-    mus_sub.required = True
-
-    ssp = mus_sub.add_parser("play", help="Start or resume playback (optional station name)")
-    ssp.add_argument("station", nargs="*", help="Station name to select (fuzzy match)")
-    ssp.set_defaults(func=cmd_music_play)
-
-    mus_sub.add_parser("stop",        help="Stop playback").set_defaults(func=cmd_music_stop)
-    mus_sub.add_parser("next",        help="Skip to the next song").set_defaults(func=cmd_music_next)
-    mus_sub.add_parser("pause",       help="Toggle pause/resume").set_defaults(func=cmd_music_pause)
-    mus_sub.add_parser("thumbs-up",   help="Love the current song").set_defaults(func=cmd_music_thumbs_up)
-    mus_sub.add_parser("thumbs-down", help="Ban the current song (skips it)").set_defaults(func=cmd_music_thumbs_down)
-    mus_sub.add_parser("stations",    help="List available Pandora stations").set_defaults(func=cmd_music_stations)
-    mus_sub.add_parser("status",      help="Show playback state and current song").set_defaults(func=cmd_music_status)
-
-    ssp = mus_sub.add_parser("volume", help="Get or set system volume (0–100)")
-    ssp.add_argument("level", nargs="?", type=int, default=None, help="Volume level 0–100 (omit to read)")
-    ssp.set_defaults(func=cmd_music_volume)
-
-    ssp = mus_sub.add_parser("eq", help="Get or set software EQ preset")
-    ssp.add_argument("preset", nargs="?", default=None,
-                     help="EQ preset: flat | bass_boost | treble_boost | vocal | loudness | warm")
-    ssp.set_defaults(func=cmd_music_eq)
-
+    sub.add_parser("ping", help="Round-trip check").set_defaults(func=cmd_ping)
     sub.add_parser("topics", help="List subscribed topics").set_defaults(func=cmd_topics)
+    sub.add_parser("version", help="Speak the version (FR-VR2)").set_defaults(func=cmd_version)
 
     sp = sub.add_parser("status", help="Show health/telemetry dashboard")
     sp.add_argument("--json", action="store_true", help="Emit raw JSON")
@@ -1199,67 +351,34 @@ def main() -> int:
     sp.add_argument("--payload", help="JSON payload (default: null)")
     sp.set_defaults(func=cmd_publish)
 
+    sp = sub.add_parser("pan", help="Pan the servo to a logical angle")
+    sp.add_argument("--to", type=float, required=True, help="logical degrees 1–360")
+    sp.add_argument(
+        "--move-time-ms",
+        type=float,
+        default=None,
+        help="Optional target move time in milliseconds",
+    )
+    sp.set_defaults(func=cmd_pan)
+
+    sp = sub.add_parser("move-servo", help="Move servo: position and move time (ms)")
+    sp.add_argument("position", type=float, help="logical degrees 1–360")
+    sp.add_argument("move_time_ms", type=float, help="target move time in milliseconds")
+    sp.add_argument("-as", "--announce-start", action="store_true",
+                    help="Speak when move starts")
+    sp.add_argument("-af", "--announce-finish", action="store_true",
+                    help="Speak when move finishes")
+    sp.set_defaults(func=cmd_move_servo)
+
     sp = sub.add_parser("say", help="Speak a phrase via TTS")
     sp.add_argument("text")
     sp.set_defaults(func=cmd_say)
-
-    sub.add_parser("joke", help="Tell a random dad joke").set_defaults(func=cmd_joke)
-    sub.add_parser("time", help="Announce the current time").set_defaults(func=cmd_time)
-
-    # ── Consolidated servo subcommands ───────────────────────────────
-    servo_sp = sub.add_parser("servo", help="Servo control (enable/disable/status/pan/move)")
-    servo_sub = servo_sp.add_subparsers(dest="servo_cmd", metavar="<servo-command>")
-    servo_sub.required = True
-
-    servo_sub.add_parser("enable",  help="Enable servo motion").set_defaults(func=cmd_servo_enable)
-    servo_sub.add_parser("disable", help="Disable servo motion").set_defaults(func=cmd_servo_disable)
-    servo_sub.add_parser("status",  help="Show servo state, limits, and current angle").set_defaults(func=cmd_servo_status)
-
-    ssp = servo_sub.add_parser("limits", help="Set servo travel limits")
-    ssp.add_argument("--min", type=float, required=True, help="Minimum logical angle (1–359)")
-    ssp.add_argument("--max", type=float, required=True, help="Maximum logical angle (2–360)")
-    ssp.set_defaults(func=cmd_servo_limits)
-
-    ssp = servo_sub.add_parser("pan", help="Pan servo to a logical angle (1–360°)")
-    ssp.add_argument("--to", type=float, required=True, help="logical degrees 1–360")
-    ssp.add_argument("--move-time-ms", type=float, default=None,
-                     help="Optional target move time in ms")
-    ssp.set_defaults(func=cmd_pan)
-
-    ssp = servo_sub.add_parser("move", help="Move servo: position and move time (ms)")
-    ssp.add_argument("position", type=float, help="logical degrees 1–360")
-    ssp.add_argument("move_time_ms", type=float, help="target move time in ms")
-    ssp.add_argument("-as", "--announce-start", action="store_true",
-                     help="Speak when move starts")
-    ssp.add_argument("-af", "--announce-finish", action="store_true",
-                     help="Speak when move finishes")
-    ssp.set_defaults(func=cmd_move_servo)
-
-    # ── Face tracking subcommands ────────────────────────────────────
-    ft_sp = sub.add_parser("face-tracking", help="Enable/disable face-following servo behavior")
-    ft_sub = ft_sp.add_subparsers(dest="ft_cmd", metavar="<subcommand>")
-    ft_sub.required = True
-    ft_sub.add_parser("enable",  help="Head follows detected faces").set_defaults(func=cmd_face_tracking_enable)
-    ft_sub.add_parser("disable", help="Head does not follow faces").set_defaults(func=cmd_face_tracking_disable)
-    ft_sub.add_parser("status",  help="Show current face tracking state").set_defaults(func=cmd_face_tracking_status)
-
-    # ── Random motion subcommands ────────────────────────────────────
-    rm_sp = sub.add_parser("random-motion", help="Enable/disable idle random head movement")
-    rm_sub = rm_sp.add_subparsers(dest="rm_cmd", metavar="<subcommand>")
-    rm_sub.required = True
-    rm_sub.add_parser("enable",  help="Idle gaze drifts when no face visible").set_defaults(func=cmd_random_motion_enable)
-    rm_sub.add_parser("disable", help="Head stays still when no face visible").set_defaults(func=cmd_random_motion_disable)
-    rm_sub.add_parser("status",  help="Show current random motion state").set_defaults(func=cmd_random_motion_status)
 
     sp = sub.add_parser("watch", help="Stream all bus events")
     sp.add_argument("--topic", default="", help="Topic prefix filter (default: all)")
     sp.set_defaults(func=cmd_watch)
 
     args = p.parse_args()
-    if args.cmd is None:
-        # No subcommand → show help
-        args.command = None
-        return cmd_help(args)
     return args.func(args)
 
 

@@ -45,6 +45,16 @@ camera:
   # Persisted at runtime; change live with: da vision rotation <deg>
   rotation_deg: 0
 
+camera2:
+  # Secondary CSI camera — raw view only (no detection/overlays).
+  # Set enabled: false to disable the second stream entirely.
+  enabled: true
+  index: 1          # CSI slot 1
+  width: 640
+  height: 480
+  framerate: 15     # half of primary to keep CPU overhead low
+  rotation_deg: 0
+
 face_recognition:
   # ArcFace MobileFaceNet identity recognition on the Hailo-8.
   # New faces are auto-assigned "Guest N"; name them with: da meet "Name"

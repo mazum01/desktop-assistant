@@ -120,6 +120,7 @@ class WebService:
         motion_service=None,
         tracking_service=None,
         music_service=None,
+        camera2_service=None,
     ) -> None:
         self.bus = bus
         self._host = host
@@ -130,11 +131,14 @@ class WebService:
         self._motion_svc = motion_service
         self._tracking_svc = tracking_service
         self._music_svc = music_service
+        self._camera2_svc = camera2_service
         self._server = None
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._latest_frame: Optional[bytes] = None   # JPEG bytes
         self._frame_event = threading.Event()
+        self._latest_frame2: Optional[bytes] = None  # second camera JPEG
+        self._frame2_event = threading.Event()
         self._ws_clients: list = []
         self._event_log: list[dict] = []             # recent bus events (capped)
         self._unsubs: list = []
@@ -158,6 +162,10 @@ class WebService:
         self._unsubs.append(
             self.bus.subscribe("vision.frame_ready", self._on_frame)
         )
+        if self._camera2_svc is not None:
+            self._unsubs.append(
+                self.bus.subscribe("vision.frame2_ready", self._on_frame2)
+            )
         # Subscribe to service lifecycle events for the Services panel
         self._unsubs.append(
             self.bus.subscribe("service.started", self._on_service_started)
@@ -210,6 +218,15 @@ class WebService:
         if jpeg is not None:
             self._latest_frame = jpeg
             self._frame_event.set()
+
+    def _on_frame2(self, _topic, payload) -> None:
+        """Read JPEG from RawCameraService (second camera) and wake /stream2 generator."""
+        if self._camera2_svc is None:
+            return
+        jpeg = self._camera2_svc.latest_jpeg()
+        if jpeg is not None:
+            self._latest_frame2 = jpeg
+            self._frame2_event.set()
 
     def _on_service_started(self, _topic, payload) -> None:
         if isinstance(payload, dict) and "name" in payload:
@@ -344,6 +361,30 @@ class WebService:
 
             return StreamingResponse(
                 generate(),
+                media_type="multipart/x-mixed-replace; boundary=frame",
+            )
+
+        @app.get("/stream2")
+        async def mjpeg_stream2():
+            loop = asyncio.get_event_loop()
+
+            async def generate2():
+                last_sent: Optional[bytes] = None
+                while True:
+                    await loop.run_in_executor(
+                        None, lambda: self._frame2_event.wait(timeout=0.5)
+                    )
+                    self._frame2_event.clear()
+                    frame = self._latest_frame2
+                    if frame and frame is not last_sent:
+                        last_sent = frame
+                        yield (
+                            b"--frame\r\n"
+                            b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+                        )
+
+            return StreamingResponse(
+                generate2(),
                 media_type="multipart/x-mixed-replace; boundary=frame",
             )
 

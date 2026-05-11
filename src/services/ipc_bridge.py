@@ -213,6 +213,11 @@ class IPCBridge(Service):
         self._enabled = False
         log.info("IPCBridge stopped")
 
+    def register_rpc(self, cmd: str, fn) -> None:
+        """Register a callable for a custom REP command.
+        fn(payload: dict) -> dict; called on the REP thread."""
+        self._rpc_handlers[cmd] = fn
+
     @property
     def enabled(self) -> bool:
         return self._enabled
@@ -298,13 +303,6 @@ class IPCBridge(Service):
             except Exception:
                 log.exception("REP send failed")
 
-    def register_rpc(self, cmd: str, handler) -> None:
-        """Register a custom RPC handler for ``cmd``.
-
-        ``handler`` receives the full request dict and must return a dict.
-        """
-        self._rpc_handlers[cmd] = handler
-
     def _handle_request(self, raw: bytes) -> dict:
         try:
             msg = json.loads(raw.decode("utf-8"))
@@ -333,7 +331,7 @@ class IPCBridge(Service):
             try:
                 return self._rpc_handlers[cmd](msg)
             except Exception as exc:
-                return {"ok": False, "error": f"rpc_error:{exc}"}
+                return {"ok": False, "error": str(exc)}
         return {"ok": False, "error": f"unknown_cmd:{cmd}"}
 
     def _build_status(self) -> dict:
@@ -346,9 +344,6 @@ class IPCBridge(Service):
             "motion.position",
             "vision.frame_ready", "vision.error",
             "audio.level", "audio.error",
-            "perception.faces", "perception.error",
-            "face.identified",
-            "av.spoke",
             "telemetry.flush",
         )
         last = {t: self.bus.last(t) for t in snapshot_topics}

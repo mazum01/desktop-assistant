@@ -1,0 +1,154 @@
+"""
+Raw Camera Service — lightweight second-camera capture and MJPEG publishing.
+
+Captures frames from a secondary CSI camera (index 1 by default), encodes
+them to JPEG, and publishes ``vision.frame2_ready`` on the bus so the
+WebService can serve a ``/stream2`` MJPEG endpoint.
+
+No face detection, object detection, or overlay drawing is performed — this
+service is intentionally minimal to keep CPU overhead low.
+
+Topics published:
+    vision.frame2_ready   {"index": int, "ts": float}
+"""
+
+from __future__ import annotations
+
+import logging
+import threading
+import time
+from dataclasses import dataclass
+from typing import Optional
+
+import cv2
+
+from src.core.service import Service
+from src.core.bus import MessageBus
+
+log = logging.getLogger(__name__)
+
+_DEFAULT_JPEG_QUALITY = 55  # lower than primary cam to save bandwidth
+
+
+@dataclass
+class RawCameraConfig:
+    index: int = 1
+    width: int = 640
+    height: int = 480
+    framerate: int = 15        # half of primary cam — sufficient for a raw view
+    rotation_deg: int = 0
+    jpeg_quality: int = _DEFAULT_JPEG_QUALITY
+
+
+class RawCameraService(Service):
+    """Capture-only service for the second CSI camera."""
+
+    name = "raw_camera2"
+    # tick_seconds is computed from framerate in on_start; default ~15fps
+    tick_seconds = 0.067
+
+    def __init__(
+        self,
+        bus: Optional[MessageBus] = None,
+        camera_config: Optional[RawCameraConfig] = None,
+        camera=None,
+    ) -> None:
+        super().__init__(bus=bus)
+        self._cam_cfg = camera_config or RawCameraConfig()
+        self._camera = camera
+
+        self._lock = threading.Lock()
+        self._latest_jpeg: Optional[bytes] = None
+        self._index = 0
+
+        # Derived tick rate from config
+        if self._cam_cfg.framerate > 0:
+            self.tick_seconds = 1.0 / self._cam_cfg.framerate
+
+    # ── Lifecycle ───────────────────────────────────────────────────────
+
+    def on_start(self) -> None:
+        if self._camera is None:
+            from src.vision.camera import Camera, CameraConfig
+            cfg = CameraConfig(
+                index=self._cam_cfg.index,
+                width=self._cam_cfg.width,
+                height=self._cam_cfg.height,
+                framerate=self._cam_cfg.framerate,
+                rotation_deg=self._cam_cfg.rotation_deg,
+            )
+            self._camera = Camera(cfg)
+        try:
+            self._camera.start()
+        except Exception:
+            log.exception("RawCameraService: camera.start() failed")
+
+        log.info(
+            "RawCameraService started; cam_index=%d hw_ready=%s %dx%d@%dfps",
+            self._cam_cfg.index,
+            getattr(self._camera, "hardware_ready", False),
+            self._cam_cfg.width,
+            self._cam_cfg.height,
+            self._cam_cfg.framerate,
+        )
+
+    def on_stop(self) -> None:
+        if self._camera is not None:
+            try:
+                self._camera.close()
+            except Exception:
+                log.exception("RawCameraService: camera.close() failed")
+
+    # ── Tick ────────────────────────────────────────────────────────────
+
+    def run_tick(self) -> None:
+        if self._camera is None:
+            return
+        try:
+            frame = self._camera.capture_frame()
+        except Exception:
+            log.exception("RawCameraService: capture_frame failed")
+            return
+
+        rot = self._cam_cfg.rotation_deg
+        if rot:
+            frame = _rotate_frame(frame, rot)
+
+        quality = self._cam_cfg.jpeg_quality
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        jpeg = bytes(buf) if ok else None
+
+        with self._lock:
+            self._latest_jpeg = jpeg
+            self._index += 1
+            idx = self._index
+
+        self.bus.publish("vision.frame2_ready", {"index": idx, "ts": time.time()})
+
+    # ── Public accessors ─────────────────────────────────────────────────
+
+    def latest_jpeg(self) -> Optional[bytes]:
+        with self._lock:
+            return self._latest_jpeg
+
+    @property
+    def hardware_ready(self) -> bool:
+        return bool(getattr(self._camera, "hardware_ready", False))
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────
+
+def _rotate_frame(frame, deg: int):
+    """Apply software rotation — same logic as VisionService."""
+    deg = deg % 360
+    if deg == 90:
+        return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+    if deg == 180:
+        return cv2.rotate(frame, cv2.ROTATE_180)
+    if deg == 270:
+        return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    # Arbitrary angle — warpAffine (slight corner crop)
+    import numpy as np
+    h, w = frame.shape[:2]
+    M = cv2.getRotationMatrix2D((w / 2, h / 2), -deg, 1.0)
+    return cv2.warpAffine(frame, M, (w, h))

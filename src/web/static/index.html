@@ -22,10 +22,22 @@
   <main>
     <!-- ── Camera + Faces ──────────────────────────────────────── -->
     <section class="card camera-card">
-      <h2>Camera Feed</h2>
-      <div class="camera-wrap">
-        <img id="camera-stream" src="/stream" alt="camera stream" />
-        <span id="face-overlay" class="face-overlay">0 faces</span>
+      <h2>Camera Feeds</h2>
+      <div class="camera-feeds">
+        <div class="camera-feed-wrap">
+          <div class="camera-label">Cam 1 — Face Tracking</div>
+          <div class="camera-wrap">
+            <img id="camera-stream" src="/stream" alt="camera stream" />
+            <span id="face-overlay" class="face-overlay">0 faces</span>
+          </div>
+        </div>
+        <div class="camera-feed-wrap" id="cam2-wrap">
+          <div class="camera-label">Cam 2 — Raw</div>
+          <div class="camera-wrap">
+            <img id="camera-stream2" src="/stream2" alt="camera 2 stream"
+                 onerror="document.getElementById('cam2-wrap').style.display='none'" />
+          </div>
+        </div>
       </div>
     </section>
 

@@ -121,49 +121,33 @@ class TextToSpeech:
     # ── Public API ───────────────────────────────────────────────────────
 
     def say(self, text: str, output=None) -> None:
-        """Speak *text*.
+        """
+        Speak *text*.
 
         If *output* is None, audio plays directly through ALSA default.
-        If *output* is an AudioOutput with ``write_chunk()`` support, Piper
-        chunks are streamed directly — synthesis and playback overlap so the
-        first sentence starts playing while the rest are still being rendered.
-        Otherwise the full waveform is rendered first and handed to
-        ``output.play()``.
+        If *output* is an AudioOutput, the rendered array is passed through
+        it (so it goes via the Sabrent USB adapter + loudness pipeline).
         """
         if self._backend == "sim":
             log.info("[sim TTS] %s", text)
             return
+        samples, sr = self._render_to_array(text)
         if output is None:
-            samples, sr = self._render_to_array(text)
             sounddevice.play(samples, samplerate=sr)
             sounddevice.wait()
-        elif self._backend == "piper" and hasattr(output, "write_chunk"):
-            self._say_streaming(text, output)
         else:
-            samples, sr = self._render_to_array(text)
             output.play(samples, sample_rate=sr)
 
-    # ── Streaming playback (Piper only) ──────────────────────────────────
-
-    def _say_streaming(self, text: str, output) -> None:
-        """Stream Piper synthesis chunks directly to *output* as they arrive.
-
-        The first chunk reaches the speaker before the last sentence has been
-        synthesized, cutting perceived latency on the long boot diagnostic and
-        keeping the USB DAC warm between sentences (no gap → no click/pop).
+    def render_duration(self, text: str) -> float:
         """
-        from piper.config import SynthesisConfig
-        voice = self._load_voice()
-        cfg = self._cfg
-        syn_cfg = SynthesisConfig(
-            length_scale=cfg.piper_length_scale,
-            noise_scale=cfg.piper_noise_scale,
-            noise_w_scale=cfg.piper_noise_w,
-        )
-        for chunk in voice.synthesize(text, syn_config=syn_cfg):
-            samples = self._normalize(chunk.audio_float_array)
-            output.write_chunk(samples, sample_rate=chunk.sample_rate)
-        output.flush()
+        Return the exact playback duration in seconds for *text*
+        without playing audio. Uses the same rendering pipeline as say().
+        """
+        if self._backend == "sim":
+            words = max(1, len(text.split()))
+            return max(0.5, 0.16 * words + 0.015 * len(text))
+        samples, sr = self._render_to_array(text)
+        return float(len(samples)) / float(sr)
 
     def render_to_wav(self, text: str, path: str) -> None:
         """Render *text* to a WAV file at *path* (no playback)."""

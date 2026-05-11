@@ -25,6 +25,7 @@ from src.services.motion_service import MotionService
 from src.services.music_service import MusicService
 from src.services.object_service import ObjectService
 from src.services.perception_service import PerceptionService
+from src.services.raw_camera_service import RawCameraService, RawCameraConfig
 from src.services.telemetry_service import TelemetryService
 from src.services.tracking_service import TrackingService
 from src.services.vision_service import VisionService
@@ -212,6 +213,21 @@ def main() -> int:
         announce_song_changes=bool(_music_cfg.get("announce_song_changes", False)),
     )
 
+    # Second camera (optional — gracefully absent if not configured or detected)
+    _cam2_cfg_raw = _cfg.get("camera2", {})
+    cam2_svc = None
+    if _cam2_cfg_raw.get("enabled", True):
+        cam2_svc = RawCameraService(
+            bus=bus,
+            camera_config=RawCameraConfig(
+                index=int(_cam2_cfg_raw.get("index", 1)),
+                width=int(_cam2_cfg_raw.get("width", 640)),
+                height=int(_cam2_cfg_raw.get("height", 480)),
+                framerate=int(_cam2_cfg_raw.get("framerate", 15)),
+                rotation_deg=int(_cam2_cfg_raw.get("rotation_deg", 0)),
+            ),
+        )
+
     services = [
         motion_svc,
         vis,
@@ -231,6 +247,8 @@ def main() -> int:
         ),
         music_svc,
     ]
+    if cam2_svc is not None:
+        services.append(cam2_svc)
     tracking_svc = TrackingService(
         bus=bus, config=_tracker_cfg, enabled=_tracking_enabled,
         face_tracking_enabled=_face_tracking_enabled,
@@ -242,7 +260,8 @@ def main() -> int:
         services.append(
             WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
                        quiet_hours=_qh, motion_service=motion_svc,
-                       tracking_service=tracking_svc, music_service=music_svc)
+                       tracking_service=tracking_svc, music_service=music_svc,
+                       camera2_service=cam2_svc)
         )
 
     return run_services(services=services, unit_name="core")
