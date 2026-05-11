@@ -110,6 +110,9 @@ function updateDashboard(data) {
   const events = data.events || [];
   renderEventLog(events);
 
+  // FPS overlays — driven by server-side frame counters (Chrome-compatible)
+  updateFpsOverlays(data);
+
   // Music state/song updates from bus events
   const musicState = last["music.state_changed"];
   if (musicState) _applyMusicState(musicState.state || "stopped");
@@ -1014,21 +1017,15 @@ function fmtAge(ts) {
 }
 
 // ── FPS counters ─────────────────────────────────────────────────
-// Counts MJPEG frame load events per second for each camera feed
-// and updates the overlay badges.
-function initFpsCounters() {
-  const feeds = [
-    { img: el("camera-stream"),  badge: el("fps-overlay-1") },
-    { img: el("camera-stream2"), badge: el("fps-overlay-2") },
-  ];
+// FPS is computed server-side and delivered via WebSocket status updates.
+// Chrome does not fire img load events per MJPEG frame, so we avoid that approach.
+function updateFpsOverlays(status) {
+  const b1 = el("fps-overlay-1");
+  const b2 = el("fps-overlay-2");
+  if (b1) b1.textContent = status.cam1_fps != null ? `${status.cam1_fps} fps` : "– fps";
+  if (b2) b2.textContent = status.cam2_fps != null ? `${status.cam2_fps} fps` : "– fps";
+}
 
-  feeds.forEach(({ img, badge }) => {
-    if (!img || !badge) return;
-    let count = 0;
-    img.addEventListener("load", () => { count++; });
-    setInterval(() => {
-      badge.textContent = count > 0 ? `${count} fps` : "– fps";
-      count = 0;
-    }, 1000);
-  });
+function initFpsCounters() {
+  // No-op: fps updates now come from the WebSocket status push (updateFpsOverlays).
 }

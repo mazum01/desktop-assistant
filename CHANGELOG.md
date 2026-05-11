@@ -6,7 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.7.19] - 2026-05-11
+## [1.7.20] - 2026-05-11
+### Fixed
+- **FPS overlays not showing in Chrome** — Chrome does not fire `img load` events
+  for each MJPEG frame after the initial load. Replaced the client-side `img.onload`
+  counter with server-side FPS tracking: `WebService._on_frame`/`_on_frame2` increment
+  per-camera counters; `_build_status_snapshot` computes fps from elapsed time and
+  resets counters each call. `cam1_fps` and `cam2_fps` are now included in the
+  WebSocket status push; the browser reads them in `updateDashboard()` →
+  `updateFpsOverlays()`.
+
+
 ### Changed
 - **VisionService: async JPEG encoder thread** — decouples `frame.copy()`,
   `_draw_overlays()`, and `cv2.imencode()` from the capture tick. The fast tick

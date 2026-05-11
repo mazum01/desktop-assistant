@@ -165,6 +165,10 @@ class WebService:
         self._unsubs: list = []
         self._running = False
         self._service_states: dict = {}   # name -> "running" | "stopped"
+        # FPS counters — incremented by _on_frame callbacks, sampled in _build_status_snapshot
+        self._cam1_frame_count: int = 0
+        self._cam2_frame_count: int = 0
+        self._fps_tick_time: float = time.monotonic()
 
     # ── Service lifecycle ─────────────────────────────────────────────
 
@@ -239,6 +243,7 @@ class WebService:
         jpeg = self._vision_svc.latest_jpeg()
         if jpeg is not None:
             self._latest_frame = jpeg
+            self._cam1_frame_count += 1
             if self._loop is not None and self._frame_event is not None:
                 self._loop.call_soon_threadsafe(self._frame_event.set)
 
@@ -249,6 +254,7 @@ class WebService:
         jpeg = self._camera2_svc.latest_jpeg()
         if jpeg is not None:
             self._latest_frame2 = jpeg
+            self._cam2_frame_count += 1
             if self._loop is not None and self._frame2_event is not None:
                 self._loop.call_soon_threadsafe(self._frame2_event.set)
 
@@ -336,12 +342,28 @@ class WebService:
         from src.core.version import get_version
         motion_pos = last.get("motion.position")
         servo_angle = float(motion_pos["angle"]) if isinstance(motion_pos, dict) and "angle" in motion_pos else None
+
+        # Compute per-camera fps from frame counters since last snapshot call.
+        now = time.monotonic()
+        elapsed = now - self._fps_tick_time
+        if elapsed > 0:
+            cam1_fps = round(self._cam1_frame_count / elapsed, 1)
+            cam2_fps = round(self._cam2_frame_count / elapsed, 1)
+        else:
+            cam1_fps = 0.0
+            cam2_fps = 0.0
+        self._cam1_frame_count = 0
+        self._cam2_frame_count = 0
+        self._fps_tick_time = now
+
         return {
             "version": get_version(),
             "ts": time.time(),
             "last": last,
             "services": dict(self._service_states),
             "servo_angle": servo_angle,
+            "cam1_fps": cam1_fps,
+            "cam2_fps": cam2_fps,
         }
 
     # ── FastAPI app ───────────────────────────────────────────────────
