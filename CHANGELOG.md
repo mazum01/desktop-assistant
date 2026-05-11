@@ -6,7 +6,25 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.8.8] - 2026-05-11
+## [1.8.9] - 2026-05-11
+### Added
+- **Live pan-slider update** — web GUI head-position slider now tracks the actual
+  servo angle in real-time via WebSocket (updated ~0.5 s) during face tracking or
+  random motion. Slider is not overwritten while the user is actively dragging.
+- **Slider drives head directly** — moving the pan slider now immediately sends a
+  debounced (80 ms) `POST /api/pan` without needing to press "Go". The "Go" button
+  is retained for precise numeric entry. `pointerdown/up/cancel` events guard against
+  auto-updates interfering with drag gestures.
+- **Center head on shutdown** — `MotionService.on_stop()` moves the servo to 180°
+  (center) before relaxing/stopping. Web GUI reboot/shutdown endpoints publish a
+  center command 1.2 s before exec. `da reboot` / `da shutdown` CLI commands also
+  call `/api/pan` to center then wait 1.2 s.
+- **Resolution-scaled camera overlays** — face ovals, object boxes, labels, and the
+  pan-angle arc compass all scale proportionally with `scale = min(w/640, h/480)`.
+  At 640×480 (scale=1.0) they are identical to before; at higher resolutions they
+  stay the same physical size on screen.
+
+
 ### Added
 - **Autofocus mode control for both cameras** — `CameraConfig` and `RawCameraConfig`
   now include `af_mode` (`"continuous"` | `"auto"` | `"manual"` | `"off"`) and

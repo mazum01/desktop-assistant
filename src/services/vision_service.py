@@ -96,7 +96,14 @@ def _face_color(face_id: str | None, index: int) -> tuple:
 
 
 def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
-    """Draw face ovals and object rectangles in-place on a BGR frame."""
+    """Draw face ovals and object rectangles in-place on a BGR frame.
+
+    All pixel dimensions scale with the frame resolution relative to a 640×480
+    baseline so overlays look the same physical size regardless of capture res.
+    """
+    h, w = frame_bgr.shape[:2]
+    scale = min(w / 640.0, h / 480.0)
+
     for idx, face in enumerate(faces):
         bbox = face.get("bbox")
         if not bbox or len(bbox) < 4:
@@ -104,30 +111,35 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
         color = _face_color(face.get("face_id"), idx)
         x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
         # Padded oval to fully surround the face
-        pw = max(4, int((x2 - x1) * 0.15))
-        ph = max(4, int((y2 - y1) * 0.20))
+        pw = max(2, int((x2 - x1) * 0.15))
+        ph = max(2, int((y2 - y1) * 0.20))
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
         rx = max(1, (x2 - x1) // 2 + pw)
         ry = max(1, (y2 - y1) // 2 + ph)
-        cv2.ellipse(frame_bgr, (cx, cy), (rx, ry), 0, 0, 360, color, 2, cv2.LINE_AA)
+        ellipse_thickness = max(1, round(2 * scale))
+        cv2.ellipse(frame_bgr, (cx, cy), (rx, ry), 0, 0, 360, color, ellipse_thickness, cv2.LINE_AA)
         label = face.get("name") or (face.get("face_id") and "unknown")
         if label:
+            font_scale = max(0.3, 0.45 * scale)
+            font_thick = max(1, round(scale))
             lx = max(0, cx - 20)
             ly = max(10, cy - ry - 4)
             cv2.putText(frame_bgr, label, (lx, ly),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+                        cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, font_thick, cv2.LINE_AA)
 
     for obj in objects:
         bbox = obj.get("bbox")
         if not bbox or len(bbox) < 4:
             continue
         x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
-        cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), _CYAN, 1, cv2.LINE_AA)
+        box_thick = max(1, round(scale))
+        cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), _CYAN, box_thick, cv2.LINE_AA)
         conf  = obj.get("confidence", 0)
         label = f"{obj.get('label', '?')} {int(conf * 100)}%"
         ly    = max(10, y1 - 4)
+        font_scale = max(0.25, 0.4 * scale)
         cv2.putText(frame_bgr, label, (x1, ly),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, _CYAN, 1, cv2.LINE_AA)
+                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, _CYAN, box_thick, cv2.LINE_AA)
 
 
 def _draw_servo_overlay(
@@ -136,35 +148,43 @@ def _draw_servo_overlay(
     servo_min: float,
     servo_max: float,
 ) -> None:
-    """Draw a servo pan-angle indicator in-place on a BGR frame."""
+    """Draw a servo pan-angle indicator in-place on a BGR frame.
+
+    All pixel dimensions scale with the frame resolution relative to 640×480.
+    """
     h, w = frame.shape[:2]
+    scale = min(w / 640.0, h / 480.0)
     servo_ctr = (servo_min + servo_max) / 2.0
 
     # ── Text label (bottom-left) ────────────────────────────────────────
     text = f"Pan: {angle:.0f}\u00b0"
     font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.55
-    thickness = 1
+    font_scale = max(0.3, 0.55 * scale)
+    thickness = max(1, round(scale))
     (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
 
-    pad = 4
-    x0, y0 = 8, h - 8 - th - pad * 2
-    bx1, by1 = x0 - pad, y0 - pad
-    bx2, by2 = x0 + tw + pad, y0 + th + pad
+    pad = max(2, int(4 * scale))
+    x0, y0 = int(8 * scale), h - int(8 * scale) - th - pad * 2
+    bx1, by1 = max(0, x0 - pad), max(0, y0 - pad)
+    bx2, by2 = min(w, x0 + tw + pad), min(h, y0 + th + pad)
 
-    # Darken only the small label background ROI (avoid full-frame copy+addWeighted)
+    # Darken only the small label background ROI
     roi = frame[by1:by2, bx1:bx2]
-    roi[:] = roi >> 1  # halve brightness in-place on the tiny region only
+    if roi.size > 0:
+        roi[:] = roi >> 1
     cv2.putText(frame, text, (x0, y0 + th), font, font_scale, _CYAN, thickness, cv2.LINE_AA)
 
     # ── Arc compass (bottom-right) ────────────────────────────────────────
-    cx, cy = w - 60, h - 55
-    radius = 40
+    radius = max(15, int(40 * scale))
+    off_x = max(radius + 4, int(60 * scale))
+    off_y = max(radius + 4, int(55 * scale))
+    cx, cy = w - off_x, h - off_y
     half_range = max(1.0, (servo_max - servo_min) / 2.0)
     arc_half_deg = 60  # visual arc spans ±60° regardless of servo range
+    arc_thick = max(1, round(2 * scale))
 
-    # Background arc (gray) — drawn as a U opening upward
-    cv2.ellipse(frame, (cx, cy), (radius, radius), 0, 210, 330, (80, 80, 80), 2, cv2.LINE_AA)
+    # Background arc (gray) — U opening upward
+    cv2.ellipse(frame, (cx, cy), (radius, radius), 0, 210, 330, (80, 80, 80), arc_thick, cv2.LINE_AA)
 
     # Normalize position within servo range → -1.0 .. +1.0
     norm = (angle - servo_ctr) / half_range
@@ -176,10 +196,13 @@ def _draw_servo_overlay(
     px = int(cx + radius * math.cos(pointer_rad))
     py = int(cy + radius * math.sin(pointer_rad))
 
-    cv2.line(frame, (cx, cy), (px, py), _CYAN, 2, cv2.LINE_AA)
-    cv2.circle(frame, (cx, cy), 3, _CYAN, -1, cv2.LINE_AA)
+    cv2.line(frame, (cx, cy), (px, py), _CYAN, arc_thick, cv2.LINE_AA)
+    dot_r = max(2, round(3 * scale))
+    cv2.circle(frame, (cx, cy), dot_r, _CYAN, -1, cv2.LINE_AA)
     # Centre tick (straight up = servo centre position)
-    cv2.line(frame, (cx, cy - radius + 6), (cx, cy - radius - 2), (120, 120, 120), 1, cv2.LINE_AA)
+    tick_len = max(3, int(8 * scale))
+    cv2.line(frame, (cx, cy - radius + tick_len - 2), (cx, cy - radius - 2),
+             (120, 120, 120), max(1, round(scale)), cv2.LINE_AA)
 
 
 

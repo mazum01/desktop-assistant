@@ -4,7 +4,37 @@ const WS_URL = `ws://${location.host}/ws`;
 let ws = null;
 let wsRetryMs = 1000;
 
-// ── WebSocket connection ──────────────────────────────────────────
+// ── Pan slider state ──────────────────────────────────────────────
+// True while the user is dragging the pan slider — auto-updates from
+// the WebSocket are suppressed during this window so they don't fight
+// the user's input.
+let _isDragging = false;
+let _panDebounceTimer = null;
+
+function _onPanSliderInput() {
+  const angle = parseFloat(document.getElementById("pan-slider").value);
+  document.getElementById("pan-angle-display").textContent = angle + "°";
+  // Debounce: send the pan command 80 ms after the user stops moving.
+  clearTimeout(_panDebounceTimer);
+  _panDebounceTimer = setTimeout(() => {
+    fetch("/api/pan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ angle }),
+    }).catch(() => {});
+  }, 80);
+}
+
+// Called once the DOM is ready (see bottom of file).
+function _initPanSlider() {
+  const slider = document.getElementById("pan-slider");
+  if (!slider) return;
+  slider.oninput = _onPanSliderInput;
+  slider.addEventListener("pointerdown",   () => { _isDragging = true; });
+  slider.addEventListener("pointerup",     () => { _isDragging = false; });
+  slider.addEventListener("pointercancel", () => { _isDragging = false; });
+}
+
 
 function connectWS() {
   ws = new WebSocket(WS_URL);
@@ -62,6 +92,13 @@ function updateDashboard(data) {
   const motion = last["motion.position"];
   if (motion) {
     el("stat-servo").textContent = `${num(motion.angle, 1)}°`;
+    if (!_isDragging) {
+      const slider = el("pan-slider");
+      if (slider) {
+        slider.value = Math.round(motion.angle);
+        el("pan-angle-display").textContent = Math.round(motion.angle) + "°";
+      }
+    }
   }
 
   const audio = last["audio.level"];
@@ -752,6 +789,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeLightbox();
   });
+  _initPanSlider();
   loadFaces();
   loadQuietHours();
   loadServoEnabled();

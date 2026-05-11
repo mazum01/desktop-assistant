@@ -764,7 +764,11 @@ class WebService:
             import subprocess
 
             async def _do_reboot():
-                await asyncio.sleep(1.0)
+                # Center the head; MotionService.on_stop() also centers but
+                # publishing here gives a 1 s head-start before the process exits.
+                if self.bus:
+                    self.bus.publish("motion.pan_to", {"angle": 180.0})
+                await asyncio.sleep(1.2)
                 subprocess.Popen(["sudo", "reboot"], close_fds=True)
 
             asyncio.ensure_future(_do_reboot())
@@ -776,7 +780,9 @@ class WebService:
             import subprocess
 
             async def _do_shutdown():
-                await asyncio.sleep(1.0)
+                if self.bus:
+                    self.bus.publish("motion.pan_to", {"angle": 180.0})
+                await asyncio.sleep(1.2)
                 subprocess.Popen(["sudo", "shutdown", "-h", "now"], close_fds=True)
 
             asyncio.ensure_future(_do_shutdown())

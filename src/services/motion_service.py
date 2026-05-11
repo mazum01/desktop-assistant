@@ -110,6 +110,16 @@ class MotionService(Service):
         self._unsubs.clear()
         if self._controller is not None:
             try:
+                # Move to center (180°) before shutting down so the head
+                # returns to a neutral position regardless of where tracking
+                # left it. Wait up to 1.5 s for the move to complete.
+                current = float(self._controller.position)
+                if abs(current - 180.0) > 2.0:
+                    log.info("MotionService: centering head before stop (%.1f° → 180°)", current)
+                    self._controller.move_to(180.0)
+            except Exception:
+                log.warning("MotionService: center-on-stop failed — continuing shutdown")
+            try:
                 self._controller.stop()
                 self._controller.relax()
             except Exception:
