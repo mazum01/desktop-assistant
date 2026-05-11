@@ -468,6 +468,25 @@ async function saveRandomMotionEnabled(enabled) {
   } catch (e) { /* ignore */ }
 }
 
+async function loadObjectDetectionEnabled() {
+  try {
+    const r = await fetch("/api/settings/object-detection");
+    if (!r.ok) return;
+    const d = await r.json();
+    el("object-detection-enabled").checked = !!d.enabled;
+  } catch (e) { /* ignore */ }
+}
+
+async function saveObjectDetectionEnabled(enabled) {
+  try {
+    await fetch("/api/settings/object-detection", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+  } catch (e) { /* ignore */ }
+}
+
 // ── Greeting settings ─────────────────────────────────────────────
 
 async function loadGreetingSettings() {
@@ -739,6 +758,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadCamRotation();
   loadCam2Rotation();
   loadCamResolution();
+  loadObjectDetectionEnabled();
   loadMusicStatus();
   connectWS();
   initFpsCounters();

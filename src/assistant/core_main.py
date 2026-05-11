@@ -23,7 +23,7 @@ from src.services.face_service import FaceService
 from src.services.ipc_bridge import IPCBridge
 from src.services.motion_service import MotionService
 from src.services.music_service import MusicService
-from src.services.object_service import ObjectService
+from src.services.object_service import ObjectService, ObjectConfig
 from src.services.perception_service import PerceptionService
 from src.services.raw_camera_service import RawCameraService, RawCameraConfig
 from src.services.telemetry_service import TelemetryService
@@ -118,6 +118,9 @@ def main() -> int:
         invert_pan=bool(_ht_cfg_raw.get("invert_pan", False)),
     )
     _perc_cfg = PerceptionConfig(recognition_enabled=_recognition_enabled)
+
+    _obj_cfg_raw = _cfg.get("object_detection", {})
+    _obj_cfg = ObjectConfig(enabled=bool(_obj_cfg_raw.get("enabled", True)))
 
     _web_cfg = _cfg.get("web_dashboard", {})
     _web_enabled = _web_cfg.get("enabled", True)
@@ -256,13 +259,14 @@ def main() -> int:
             ),
         )
 
+    obj_svc = ObjectService(bus=bus, vision_service=vis, config=_obj_cfg)
     services = [
         motion_svc,
         vis,
         AudioCaptureService(bus=bus),
         av,
         PerceptionService(bus=bus, vision_service=vis, config=_perc_cfg),
-        ObjectService(bus=bus, vision_service=vis),
+        obj_svc,
         TelemetryService(bus=bus),
         ClockService(bus=bus, enabled=_clock_enabled, quiet_hours=_qh),
         FaceService(
@@ -289,7 +293,7 @@ def main() -> int:
             WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
                        quiet_hours=_qh, motion_service=motion_svc,
                        tracking_service=tracking_svc, music_service=music_svc,
-                       camera2_service=cam2_svc)
+                       camera2_service=cam2_svc, object_service=obj_svc)
         )
 
     return run_services(services=services, unit_name="core")

@@ -18,10 +18,14 @@ perception.objects
      "frame_w": int, "frame_h": int,
      "ts": float}
 
+object.enabled_changed
+    {"enabled": bool}
+
 Topics subscribed
 -----------------
-vision.frame_ready   — triggers detection on the latest frame
-vision.describe      — triggers spoken scene description
+vision.frame_ready       — triggers detection on the latest frame
+vision.describe          — triggers spoken scene description
+object.set_enabled       — ``{"enabled": bool}`` toggle detection at runtime
 """
 
 from __future__ import annotations
@@ -44,6 +48,7 @@ log = logging.getLogger(__name__)
 class ObjectConfig:
     max_fps: float = 3.0    # object detection FPS (separate from face detection)
     conf_threshold: float = 0.40
+    enabled: bool = True    # whether object detection runs at startup
 
 
 class ObjectService(Service):
@@ -62,10 +67,15 @@ class ObjectService(Service):
         self._cfg = config or ObjectConfig()
         self._min_interval = 1.0 / max(self._cfg.max_fps, 0.1)
         self._last_detect_ts: float = 0.0
+        self._enabled: bool = self._cfg.enabled
         self._unsubs: list = []
         self._frame_queue: queue.Queue = queue.Queue(maxsize=1)
         self._worker: Optional[threading.Thread] = None
         self._stop_evt = threading.Event()
+
+    @property
+    def detection_enabled(self) -> bool:
+        return self._enabled
 
     # ── Lifecycle ──────────────────────────────────────────────────────
 
@@ -86,10 +96,14 @@ class ObjectService(Service):
         self._unsubs.append(
             self.bus.subscribe("vision.describe", self._on_describe)
         )
+        self._unsubs.append(
+            self.bus.subscribe("object.set_enabled", self._on_set_enabled)
+        )
         log.info(
-            "ObjectService started — backend=%s  max_fps=%.1f",
+            "ObjectService started — backend=%s  max_fps=%.1f  enabled=%s",
             self._detector.backend,
             self._cfg.max_fps,
+            self._enabled,
         )
 
     def on_stop(self) -> None:
@@ -113,12 +127,22 @@ class ObjectService(Service):
     # ── Bus handlers ───────────────────────────────────────────────────
 
     def _on_frame_ready(self, _topic, _payload) -> None:
+        if not self._enabled:
+            return
         if self._vision_svc is not None and not self._vision_svc.hardware_ready:
             return
         try:
             self._frame_queue.put_nowait(True)
         except queue.Full:
             pass
+
+    def _on_set_enabled(self, _topic, payload) -> None:
+        if not isinstance(payload, dict) or "enabled" not in payload:
+            return
+        self._enabled = bool(payload["enabled"])
+        log.info("ObjectService detection enabled=%s", self._enabled)
+        if self.bus is not None:
+            self.bus.publish("object.enabled_changed", {"enabled": self._enabled})
 
     def _on_describe(self, _topic, _payload) -> None:
         """Build a natural-language scene description and speak it."""

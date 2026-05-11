@@ -64,6 +64,12 @@ face_recognition:
   min_absence_s: 30               # face must have been absent this long before re-greeting
   confidence_threshold: 0.5       # minimum detection confidence to trigger a greeting
 
+object_detection:
+  # YOLOv8s object classification on the Hailo-8.
+  # Detects 80 COCO classes (person, laptop, cup, etc.) at ~3 fps.
+  # Can be toggled at runtime from the web dashboard or CLI.
+  enabled: true
+
 web_dashboard:
   # Live browser dashboard served on the local network.
   # Access at http://<pi-ip>:8080

@@ -504,6 +504,26 @@ def cmd_eq(args) -> int:
     return 1
 
 
+def cmd_object_detection(args) -> int:
+    if args.action == "status":
+        r = _request({"cmd": "last", "topic": "object.enabled_changed"})
+        payload = r.get("payload")
+        if isinstance(payload, dict):
+            enabled = payload.get("enabled", True)
+        else:
+            enabled = True  # default if no event yet
+        print(f"object detection: {'enabled' if enabled else 'disabled'}")
+        return 0
+    enabled = args.action == "enable"
+    r = _request({
+        "cmd": "publish",
+        "topic": "object.set_enabled",
+        "payload": {"enabled": enabled},
+    })
+    print("object detection", "enabled" if enabled else "disabled")
+    return 0 if r.get("ok") else 1
+
+
 def main() -> int:
     p = argparse.ArgumentParser(prog="desktop-assistant",
                                 description="Control the running assistant over ZMQ.")
@@ -595,6 +615,11 @@ def main() -> int:
     sp = sub.add_parser("watch", help="Stream all bus events")
     sp.add_argument("--topic", default="", help="Topic prefix filter (default: all)")
     sp.set_defaults(func=cmd_watch)
+
+    sp = sub.add_parser("object-detection", help="Enable/disable COCO object classification")
+    sp.add_argument("action", choices=["enable", "disable", "status"],
+                    help="enable | disable | status")
+    sp.set_defaults(func=cmd_object_detection)
 
     args = p.parse_args()
     return args.func(args)

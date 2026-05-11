@@ -28,6 +28,8 @@ GET  /api/settings/face-tracking  Get face tracking enabled state
 PUT  /api/settings/face-tracking  Set face tracking  body: {"enabled": bool}
 GET  /api/settings/random-motion  Get random motion enabled state
 PUT  /api/settings/random-motion  Set random motion  body: {"enabled": bool}
+GET  /api/settings/object-detection  Get object detection enabled state
+PUT  /api/settings/object-detection  Set object detection  body: {"enabled": bool}
 GET  /api/settings/greeting  Get greeting config
 PUT  /api/settings/greeting  Update greeting cooldown  body: {"cooldown_min": float}
 POST /api/vision/describe    Speak natural-language description of current scene
@@ -142,6 +144,7 @@ class WebService:
         tracking_service=None,
         music_service=None,
         camera2_service=None,
+        object_service=None,
     ) -> None:
         self.bus = bus
         self._host = host
@@ -153,6 +156,7 @@ class WebService:
         self._tracking_svc = tracking_service
         self._music_svc = music_service
         self._camera2_svc = camera2_service
+        self._object_svc = object_service
         self._server = None
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -621,6 +625,17 @@ class WebService:
         async def api_put_random_motion(body: _ServoBody):
             if self.bus:
                 self.bus.publish("tracking.set_random_motion", {"enabled": body.enabled})
+            return {"ok": True, "enabled": body.enabled}
+
+        @app.get("/api/settings/object-detection")
+        async def api_get_object_detection():
+            enabled = self._object_svc.detection_enabled if self._object_svc else True
+            return {"enabled": enabled}
+
+        @app.put("/api/settings/object-detection")
+        async def api_put_object_detection(body: _ServoBody):
+            if self.bus:
+                self.bus.publish("object.set_enabled", {"enabled": body.enabled})
             return {"ok": True, "enabled": body.enabled}
 
         # ── REST: greeting settings ───────────────────────────────────

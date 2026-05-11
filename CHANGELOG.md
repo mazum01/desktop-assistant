@@ -6,7 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.7.20] - 2026-05-11
+## [1.8.0] - 2026-05-11
+### Added
+- **Object detection toggle** — enable/disable COCO object classification at runtime:
+  - `ObjectService` gains `_enabled` flag and `object.set_enabled` bus handler;
+    publishes `object.enabled_changed` on state change
+  - `ObjectConfig.enabled` field (default `true`) read from `config/assistant.yaml`
+    under new `object_detection.enabled` key
+  - Web dashboard: checkbox toggle in the Settings → System section
+  - CLI: `da object-detection enable|disable|status`
+  - `WebService` exposes `GET/PUT /api/settings/object-detection`
+
+
 ### Fixed
 - **FPS overlays not showing in Chrome** — Chrome does not fire `img load` events
   for each MJPEG frame after the initial load. Replaced the client-side `img.onload`
