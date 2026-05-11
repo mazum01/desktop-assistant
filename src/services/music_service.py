@@ -72,7 +72,7 @@ class MusicService(Service):
 
     name = "music"
 
-    EQ_PRESETS = ["flat", "bass_boost", "treble_boost", "vocal", "loudness", "warm"]
+    EQ_PRESETS = ["flat", "bass_boost", "treble_boost", "vocal", "loudness", "warm", "custom"]
 
     def __init__(
         self,

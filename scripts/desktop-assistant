@@ -434,6 +434,55 @@ def cmd_watch(args) -> int:
         sock.close(linger=0)
 
 
+def cmd_camera2(args) -> int:
+    if args.camera2_cmd == "rotation":
+        r = _request({
+            "cmd": "publish",
+            "topic": "camera2.set_rotation",
+            "payload": {"rotation_deg": args.degrees},
+        })
+        print(json.dumps(r, indent=2))
+        return 0 if r.get("ok") else 1
+    return 1
+
+
+def cmd_eq(args) -> int:
+    if args.eq_cmd == "set":
+        r = _request({
+            "cmd": "publish",
+            "topic": "av.set_eq_preset",
+            "payload": {"preset": args.preset},
+        })
+        print(json.dumps(r, indent=2))
+        return 0 if r.get("ok") else 1
+    if args.eq_cmd == "custom":
+        # Parse band specs: "hz=1000,gain=3.5,q=1.0" or "1000:3.5:1.0"
+        bands = []
+        for spec in args.band:
+            if "=" in spec:
+                parts = dict(p.split("=") for p in spec.split(","))
+                hz = float(parts.get("hz", 1000))
+                gain = float(parts.get("gain", 0))
+                q = float(parts.get("q", 1.0))
+            elif ":" in spec:
+                pieces = spec.split(":")
+                hz = float(pieces[0]) if len(pieces) > 0 else 1000
+                gain = float(pieces[1]) if len(pieces) > 1 else 0
+                q = float(pieces[2]) if len(pieces) > 2 else 1.0
+            else:
+                print(f"Cannot parse band spec: {spec!r}", file=sys.stderr)
+                return 1
+            bands.append({"hz": hz, "gain_db": gain, "q": q})
+        r = _request({
+            "cmd": "publish",
+            "topic": "av.set_custom_eq",
+            "payload": {"bands": bands},
+        })
+        print(json.dumps(r, indent=2))
+        return 0 if r.get("ok") else 1
+    return 1
+
+
 def main() -> int:
     p = argparse.ArgumentParser(prog="desktop-assistant",
                                 description="Control the running assistant over ZMQ.")
@@ -498,6 +547,22 @@ def main() -> int:
     face_sub.add_parser("greeting-settings", help="Show current greeting configuration")
 
     sp.set_defaults(func=cmd_face)
+
+    sp = sub.add_parser("camera2", help="Camera 2 controls")
+    cam2_sub = sp.add_subparsers(dest="camera2_cmd", required=True)
+    cp = cam2_sub.add_parser("rotation", help="Set camera 2 rotation angle")
+    cp.add_argument("degrees", type=int, help="Rotation in degrees (0-359)")
+    sp.set_defaults(func=cmd_camera2)
+
+    sp = sub.add_parser("eq", help="Audio EQ controls (voice TTS)")
+    eq_sub = sp.add_subparsers(dest="eq_cmd", required=True)
+    eqp = eq_sub.add_parser("set", help="Set named EQ preset")
+    eqp.add_argument("preset", choices=["flat","bass_boost","treble_boost","vocal","loudness","warm"],
+                     help="EQ preset name")
+    eqc = eq_sub.add_parser("custom",
+                             help='Set custom EQ bands. Each band: "hz=<hz>,gain=<dB>,q=<q>" or "hz:gain:q"')
+    eqc.add_argument("band", nargs="+", help="Band specification")
+    sp.set_defaults(func=cmd_eq)
 
     sp = sub.add_parser("watch", help="Stream all bus events")
     sp.add_argument("--topic", default="", help="Topic prefix filter (default: all)")

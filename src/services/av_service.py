@@ -12,6 +12,9 @@ Topics subscribed:
     av.utterance          {"text": str}            — user said something;
                                                      handle version queries
     av.announce_version   None                     — speak the current version
+    av.set_eq_preset      {"preset": str}          — switch named EQ preset
+    av.set_custom_eq      {"bands": [...]}         — set user-defined EQ bands;
+                           each band: {"hz": float, "gain_db": float, "q": float}
 
 Topics published:
     av.spoke              {"text": str}
@@ -21,10 +24,12 @@ Topics published:
 
 from __future__ import annotations
 
+import json
 import logging
 import queue
 import threading
 import time
+from pathlib import Path
 from typing import Optional
 
 from src.core.bus import MessageBus
@@ -32,9 +37,11 @@ from src.core.service import Service
 
 log = logging.getLogger(__name__)
 
-
-# Sentinel used to wake the worker for shutdown.
 _SHUTDOWN = object()
+
+_STATE_DIR   = Path.home() / ".config" / "desktop-assistant"
+_EQ_STATE_FILE       = _STATE_DIR / "eq_preset.txt"
+_CUSTOM_EQ_STATE_FILE = _STATE_DIR / "custom_eq.json"
 
 
 class AVService(Service):
@@ -80,6 +87,8 @@ class AVService(Service):
         self._unsubs.append(
             self.bus.subscribe("av.announce_version", self._on_announce_version)
         )
+        self._unsubs.append(self.bus.subscribe("av.set_eq_preset",  self._on_set_eq_preset))
+        self._unsubs.append(self.bus.subscribe("av.set_custom_eq",  self._on_set_custom_eq))
 
         # Start the serializing audio worker before any handler can
         # enqueue work into it.
@@ -98,6 +107,25 @@ class AVService(Service):
 
         if self._announce_on_start:
             self._enqueue(self._do_announce_startup, label="announce_startup")
+
+        # Restore persisted EQ state
+        _STATE_DIR.mkdir(parents=True, exist_ok=True)
+        if _CUSTOM_EQ_STATE_FILE.exists():
+            try:
+                bands = json.loads(_CUSTOM_EQ_STATE_FILE.read_text())
+                if self._audio is not None:
+                    self._audio.set_custom_eq_bands(bands)
+                log.info("AVService: restored custom EQ (%d band(s))", len(bands))
+            except Exception as exc:
+                log.warning("AVService: failed to restore custom EQ: %s", exc)
+        elif _EQ_STATE_FILE.exists():
+            try:
+                preset = _EQ_STATE_FILE.read_text().strip()
+                if preset and self._audio is not None:
+                    self._audio.set_eq_preset(preset)
+                log.info("AVService: restored EQ preset %r", preset)
+            except Exception as exc:
+                log.warning("AVService: failed to restore EQ preset: %s", exc)
 
     def on_stop(self) -> None:
         for unsub in self._unsubs:
@@ -200,6 +228,43 @@ class AVService(Service):
 
     def _on_announce_version(self, _topic, _payload) -> None:
         self._enqueue(self._do_announce_request, label="announce_request")
+
+    def _on_set_eq_preset(self, _topic, payload) -> None:
+        if not isinstance(payload, dict):
+            return
+        preset = payload.get("preset", "")
+        if not preset:
+            return
+        if self._audio is not None:
+            self._audio.set_eq_preset(preset)
+        # Persist
+        try:
+            _STATE_DIR.mkdir(parents=True, exist_ok=True)
+            _EQ_STATE_FILE.write_text(preset)
+            # Clear custom EQ file — named preset takes over
+            if _CUSTOM_EQ_STATE_FILE.exists():
+                _CUSTOM_EQ_STATE_FILE.unlink()
+        except Exception as exc:
+            log.warning("AVService: failed to persist EQ preset: %s", exc)
+        log.info("AVService: EQ preset → %r", preset)
+
+    def _on_set_custom_eq(self, _topic, payload) -> None:
+        if not isinstance(payload, dict):
+            return
+        bands = payload.get("bands")
+        if not isinstance(bands, list):
+            return
+        if self._audio is not None:
+            self._audio.set_custom_eq_bands(bands)
+        # Persist
+        try:
+            _STATE_DIR.mkdir(parents=True, exist_ok=True)
+            _CUSTOM_EQ_STATE_FILE.write_text(json.dumps(bands))
+            # Write "custom" to the preset file so on_start picks correct branch
+            _EQ_STATE_FILE.write_text("custom")
+        except Exception as exc:
+            log.warning("AVService: failed to persist custom EQ: %s", exc)
+        log.info("AVService: custom EQ set (%d band(s))", len(bands))
 
     # ── Worker bodies ──────────────────────────────────────────────────
 

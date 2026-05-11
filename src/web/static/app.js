@@ -542,10 +542,8 @@ function setCamRotationPreset(val) {
   const display = el("cam-rotation-display");
   if (slider) { slider.value = val; }
   if (display) { display.textContent = val + "°"; }
-  // Reset select so user can pick the same value again
   const sel = el("cam-rotation-preset");
   if (sel) sel.value = "";
-  // Auto-apply when a preset is chosen
   saveCamRotation();
 }
 
@@ -556,6 +554,52 @@ async function saveCamRotation() {
   const rotation_deg = parseInt(slider.value, 10);
   try {
     const r = await fetch("/api/settings/camera/rotation", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rotation_deg }),
+    });
+    if (r.ok) {
+      if (st) { st.textContent = "Saved ✓"; st.style.color = "var(--green)"; }
+    } else {
+      if (st) { st.textContent = "Error " + r.status; st.style.color = "var(--red)"; }
+    }
+  } catch (e) {
+    if (st) { st.textContent = "Error"; st.style.color = "var(--red)"; }
+  }
+  setTimeout(() => { if (st) st.textContent = ""; }, 3000);
+}
+
+async function loadCam2Rotation() {
+  try {
+    const r = await fetch("/api/settings/camera2/rotation");
+    if (!r.ok) return;
+    const d = await r.json();
+    const deg = d.rotation_deg ?? 0;
+    const slider = el("cam2-rotation-slider");
+    const display = el("cam2-rotation-display");
+    if (slider) slider.value = deg;
+    if (display) display.textContent = deg + "°";
+  } catch (e) { /* ignore */ }
+}
+
+function setCam2RotationPreset(val) {
+  if (val === "") return;
+  const slider = el("cam2-rotation-slider");
+  const display = el("cam2-rotation-display");
+  if (slider) { slider.value = val; }
+  if (display) { display.textContent = val + "°"; }
+  const sel = el("cam2-rotation-preset");
+  if (sel) sel.value = "";
+  saveCam2Rotation();
+}
+
+async function saveCam2Rotation() {
+  const slider = el("cam2-rotation-slider");
+  const st = el("cam2-rotation-status");
+  if (!slider) return;
+  const rotation_deg = parseInt(slider.value, 10);
+  try {
+    const r = await fetch("/api/settings/camera2/rotation", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rotation_deg }),
@@ -653,6 +697,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadRandomMotionEnabled();
   loadGreetingSettings();
   loadCamRotation();
+  loadCam2Rotation();
   loadMusicStatus();
   connectWS();
   // Refresh face registry every 30s; music status every 2s
@@ -799,12 +844,105 @@ async function musicSetVolume(level) {
 }
 
 async function musicSetEq(preset) {
+  const panel = el("custom-eq-panel");
+  if (panel) panel.style.display = (preset === "custom") ? "block" : "none";
+  if (preset === "custom") {
+    await loadCustomEq();
+    return; // don't PUT named preset — wait for user to click Apply
+  }
   try {
     await fetch("/api/music/eq", {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ preset }),
     });
   } catch (e) { /* ignore */ }
+}
+
+async function loadCustomEq() {
+  try {
+    const r = await fetch("/api/music/eq/custom");
+    if (!r.ok) return;
+    const d = await r.json();
+    renderCustomEqRows(d.bands || []);
+  } catch (e) { /* ignore */ }
+}
+
+function renderCustomEqRows(bands) {
+  const tbody = el("custom-eq-rows");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  const defaultBands = bands.length ? bands : [
+    {hz: 80,   gain_db: 0, q: 1.0},
+    {hz: 250,  gain_db: 0, q: 1.0},
+    {hz: 1000, gain_db: 0, q: 1.0},
+    {hz: 4000, gain_db: 0, q: 1.0},
+    {hz: 12000,gain_db: 0, q: 1.0},
+  ];
+  defaultBands.forEach((b, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td style="padding:2px 6px;color:var(--muted)">${i+1}</td>
+      <td style="padding:2px 4px"><input type="number" class="ceq-hz" value="${b.hz}" min="20" max="20000" step="10"
+            style="width:72px"></td>
+      <td style="padding:2px 4px">
+        <input type="range" class="ceq-gain" value="${b.gain_db}" min="-12" max="12" step="0.5"
+               style="width:90px"
+               oninput="this.nextElementSibling.textContent=parseFloat(this.value).toFixed(1)+'dB'">
+        <span style="font-size:0.8em;min-width:44px;display:inline-block">${parseFloat(b.gain_db).toFixed(1)}dB</span>
+      </td>
+      <td style="padding:2px 4px"><input type="number" class="ceq-q" value="${b.q}" min="0.1" max="10" step="0.1"
+            style="width:54px"></td>
+      <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function customEqAddBand() {
+  const tbody = el("custom-eq-rows");
+  if (!tbody) return;
+  const idx = tbody.rows.length + 1;
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td style="padding:2px 6px;color:var(--muted)">${idx}</td>
+    <td style="padding:2px 4px"><input type="number" class="ceq-hz" value="1000" min="20" max="20000" step="10"
+          style="width:72px"></td>
+    <td style="padding:2px 4px">
+      <input type="range" class="ceq-gain" value="0" min="-12" max="12" step="0.5"
+             style="width:90px"
+             oninput="this.nextElementSibling.textContent=parseFloat(this.value).toFixed(1)+'dB'">
+      <span style="font-size:0.8em;min-width:44px;display:inline-block">0.0dB</span>
+    </td>
+    <td style="padding:2px 4px"><input type="number" class="ceq-q" value="1.0" min="0.1" max="10" step="0.1"
+          style="width:54px"></td>
+    <td><button class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">✕</button></td>`;
+  tbody.appendChild(tr);
+}
+
+async function customEqSave() {
+  const tbody = el("custom-eq-rows");
+  const st = el("custom-eq-status");
+  if (!tbody) return;
+  const bands = [];
+  tbody.querySelectorAll("tr").forEach(tr => {
+    const hz      = parseFloat(tr.querySelector(".ceq-hz")?.value  || 1000);
+    const gain_db = parseFloat(tr.querySelector(".ceq-gain")?.value || 0);
+    const q       = parseFloat(tr.querySelector(".ceq-q")?.value   || 1.0);
+    bands.push({ hz, gain_db, q });
+  });
+  try {
+    const r = await fetch("/api/music/eq/custom", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bands }),
+    });
+    if (r.ok) {
+      if (st) { st.textContent = "Applied ✓"; st.style.color = "var(--green)"; }
+    } else {
+      if (st) { st.textContent = "Error " + r.status; st.style.color = "var(--red)"; }
+    }
+  } catch (e) {
+    if (st) { st.textContent = "Error"; st.style.color = "var(--red)"; }
+  }
+  setTimeout(() => { if (st) st.textContent = ""; }, 3000);
 }
 
 // ── Utils ─────────────────────────────────────────────────────────

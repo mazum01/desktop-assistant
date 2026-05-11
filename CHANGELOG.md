@@ -6,6 +6,24 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.9] - 2026-05-11
+### Added
+- **Camera 2 live rotation** — `RawCameraService` now supports live rotation via
+  `camera2.set_rotation` bus topic; persists under lock. `rotation_deg` property
+  exposed for API reads.
+- `GET/PUT /api/settings/camera2/rotation` REST endpoints in WebService.
+- Web UI: Cam 2 rotation slider + preset selector (parallel to Cam 1 control).
+- **Custom EQ bands** — `AudioOutputConfig` gains `custom_eq_bands`; `AudioOutput`
+  adds `set_custom_eq_bands()` and `_build_custom_sos()` using peaking biquad filters.
+- `AVService` subscribes to `av.set_eq_preset` and `av.set_custom_eq`; restores EQ
+  state from `~/.config/desktop-assistant/eq_preset.txt` / `custom_eq.json` on startup.
+- `GET/PUT /api/music/eq/custom` REST endpoints.
+- Web UI: Custom EQ panel (hidden until "Custom…" preset selected) with per-band
+  Hz / gain / Q sliders, add/remove bands, Apply button.
+- `da camera2 rotation <degrees>` CLI command.
+- `da eq set <preset>` and `da eq custom <band-specs...>` CLI commands.
+- Added `"custom"` to `MusicService.EQ_PRESETS` list.
+
 ## [1.7.8] - 2026-05-11
 ### Added
 - `da face` CLI subcommand group: `meet <name>`, `list`, `forget-all`,

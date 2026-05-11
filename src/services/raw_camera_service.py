@@ -8,8 +8,12 @@ WebService can serve a ``/stream2`` MJPEG endpoint.
 No face detection, object detection, or overlay drawing is performed — this
 service is intentionally minimal to keep CPU overhead low.
 
+Topics subscribed:
+    camera2.set_rotation  {"rotation_deg": int}  — live rotation update
+
 Topics published:
     vision.frame2_ready   {"index": int, "ts": float}
+    camera2.rotation_changed  {"rotation_deg": int}
 """
 
 from __future__ import annotations
@@ -60,6 +64,7 @@ class RawCameraService(Service):
         self._lock = threading.Lock()
         self._latest_jpeg: Optional[bytes] = None
         self._index = 0
+        self._rotation_deg: int = self._cam_cfg.rotation_deg % 360
 
         # Derived tick rate from config
         if self._cam_cfg.framerate > 0:
@@ -82,6 +87,9 @@ class RawCameraService(Service):
             self._camera.start()
         except Exception:
             log.exception("RawCameraService: camera.start() failed")
+
+        if self.bus:
+            self.bus.subscribe("camera2.set_rotation", self._on_set_rotation)
 
         log.info(
             "RawCameraService started; cam_index=%d hw_ready=%s %dx%d@%dfps",
@@ -110,7 +118,9 @@ class RawCameraService(Service):
             log.exception("RawCameraService: capture_frame failed")
             return
 
-        rot = self._cam_cfg.rotation_deg
+        with self._lock:
+            rot = self._rotation_deg
+
         if rot:
             frame = _rotate_frame(frame, rot)
 
@@ -132,8 +142,25 @@ class RawCameraService(Service):
             return self._latest_jpeg
 
     @property
+    def rotation_deg(self) -> int:
+        with self._lock:
+            return self._rotation_deg
+
+    @property
     def hardware_ready(self) -> bool:
         return bool(getattr(self._camera, "hardware_ready", False))
+
+    # ── Bus handlers ─────────────────────────────────────────────────────
+
+    def _on_set_rotation(self, _topic, payload) -> None:
+        if not isinstance(payload, dict) or "rotation_deg" not in payload:
+            return
+        deg = int(payload["rotation_deg"]) % 360
+        with self._lock:
+            self._rotation_deg = deg
+        if self.bus:
+            self.bus.publish("camera2.rotation_changed", {"rotation_deg": deg})
+        log.info("RawCameraService: rotation set to %d°", deg)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────

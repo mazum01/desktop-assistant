@@ -42,13 +42,19 @@ class AudioOutputConfig:
     # EQ preset name (see AudioOutput.set_eq_preset / _build_sos).
     eq_preset: str = "flat"
 
+    # User-defined EQ bands for the "custom" preset.
+    # Each entry is (center_hz, gain_db, Q).  Q=1.0 is moderate bandwidth.
+    # Example: [(200, 6.0, 1.0), (8000, 4.0, 1.0)]
+    custom_eq_bands: list = None  # type: ignore  # populated in __post_init__
+
     # Back-compat fields kept so existing callers don't break.
-    device_names: tuple[str, ...] = ("pulse", "USB Audio", "C-Media", "Sabrent")
+    device_names: tuple = ("pulse", "USB Audio", "C-Media", "Sabrent")
     device_index: Optional[int] = None
     device_name: Optional[str] = None
 
     def __post_init__(self) -> None:
-        pass  # back-compat fields accepted but not used
+        if self.custom_eq_bands is None:
+            self.custom_eq_bands = []
 
 
 def find_output_device(
@@ -101,13 +107,39 @@ class AudioOutput:
     def set_eq_preset(self, preset: str) -> None:
         """Apply a named EQ preset to subsequent audio chunks."""
         self._cfg.eq_preset = preset
+        # Invalidate cache for custom preset since bands may have changed
+        for key in list(self._eq_cache):
+            if key.startswith("custom@"):
+                del self._eq_cache[key]
         log.info("EQ preset set to %r", preset)
+
+    def set_custom_eq_bands(self, bands: list) -> None:
+        """Set user-defined EQ bands and switch to 'custom' preset.
+
+        *bands* is a list of dicts: [{"hz": float, "gain_db": float, "q": float}, ...]
+        Each entry is a peaking EQ filter.  Missing q defaults to 1.0.
+        """
+        self._cfg.custom_eq_bands = [
+            (float(b["hz"]), float(b["gain_db"]), float(b.get("q", 1.0)))
+            for b in bands
+        ]
+        # Invalidate cache
+        for key in list(self._eq_cache):
+            if key.startswith("custom@"):
+                del self._eq_cache[key]
+        self._cfg.eq_preset = "custom"
+        log.info("Custom EQ set: %d band(s)", len(self._cfg.custom_eq_bands))
 
     def _get_sos(self, preset: str, sample_rate: int):
         """Return cached SOS biquad coefficients for *preset* at *sample_rate*."""
         key = f"{preset}@{sample_rate}"
         if key not in self._eq_cache:
-            self._eq_cache[key] = _build_sos(preset, sample_rate)
+            if preset == "custom":
+                self._eq_cache[key] = _build_custom_sos(
+                    self._cfg.custom_eq_bands, sample_rate
+                )
+            else:
+                self._eq_cache[key] = _build_sos(preset, sample_rate)
         return self._eq_cache[key]
 
     # ── aplay subprocess management ──────────────────────────────────────
@@ -427,3 +459,42 @@ def _build_sos(preset: str, sample_rate: int):
         return _np.vstack([lo, hi])
 
     return None
+
+
+def _build_custom_sos(bands: list, sample_rate: int):
+    """Build SOS coefficients from user-defined peaking EQ bands.
+
+    *bands* is a list of (center_hz, gain_db, Q) tuples.
+    Returns stacked SOS array or None if scipy is unavailable or bands is empty.
+    """
+    if not bands:
+        return None
+    try:
+        import numpy as _np
+        from scipy.signal import iirpeak, tf2sos  # type: ignore
+    except ImportError:
+        return None
+
+    fs = float(sample_rate)
+    sections = []
+    for center_hz, gain_db, q in bands:
+        if gain_db == 0.0:
+            continue  # flat band — skip
+        try:
+            if gain_db > 0:
+                b, a = iirpeak(float(center_hz), float(q), fs=fs)
+                # Scale peak gain — iirpeak gives unity; apply gain manually
+                gain_lin = 10 ** (gain_db / 20.0)
+                b = b * gain_lin
+            else:
+                # Notch-like: apply negative gain via iirpeak then invert
+                b, a = iirpeak(float(center_hz), float(q), fs=fs)
+                gain_lin = 10 ** (gain_db / 20.0)
+                b = b * gain_lin
+            sections.append(tf2sos(b, a))
+        except Exception:
+            continue
+
+    if not sections:
+        return None
+    return _np.vstack(sections)

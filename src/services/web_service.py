@@ -31,8 +31,12 @@ PUT  /api/settings/random-motion  Set random motion  body: {"enabled": bool}
 GET  /api/settings/greeting  Get greeting config
 PUT  /api/settings/greeting  Update greeting cooldown  body: {"cooldown_min": float}
 POST /api/vision/describe    Speak natural-language description of current scene
-GET  /api/settings/camera/rotation  Get camera rotation angle
-PUT  /api/settings/camera/rotation  Set camera rotation  body: {"rotation_deg": int 0-359}
+GET  /api/settings/camera/rotation   Get camera 1 rotation angle
+PUT  /api/settings/camera/rotation   Set camera 1 rotation  body: {"rotation_deg": int 0-359}
+GET  /api/settings/camera2/rotation  Get camera 2 rotation angle
+PUT  /api/settings/camera2/rotation  Set camera 2 rotation  body: {"rotation_deg": int 0-359}
+GET  /api/music/eq/custom  Get current custom EQ bands
+PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
 """
 
 import asyncio
@@ -102,6 +106,16 @@ class _MusicVolumeBody(BaseModel):
 
 class _MusicEqBody(BaseModel):
     preset: str
+
+
+class _CustomEqBand(BaseModel):
+    hz: float
+    gain_db: float
+    q: float = 1.0
+
+
+class _CustomEqBody(BaseModel):
+    bands: list[_CustomEqBand]
 
 
 class WebService:
@@ -690,6 +704,20 @@ class WebService:
                 self.bus.publish("camera.set_rotation", {"rotation_deg": deg})
             return {"ok": True, "rotation_deg": deg}
 
+        # ── Camera 2 rotation ──────────────────────────────────────────
+
+        @app.get("/api/settings/camera2/rotation")
+        async def api_get_camera2_rotation():
+            deg = self._camera2_svc.rotation_deg if self._camera2_svc else 0
+            return {"rotation_deg": deg}
+
+        @app.put("/api/settings/camera2/rotation")
+        async def api_put_camera2_rotation(body: _CameraRotationBody):
+            deg = int(body.rotation_deg) % 360
+            if self.bus:
+                self.bus.publish("camera2.set_rotation", {"rotation_deg": deg})
+            return {"ok": True, "rotation_deg": deg}
+
         # ── Music (Pandora/pianobar) ────────────────────────────────────
 
         @app.get("/api/music/status")
@@ -735,6 +763,29 @@ class WebService:
             if self._music_svc:
                 self._music_svc.set_eq_preset(body.preset)
             return {"ok": True, "preset": body.preset}
+
+        @app.get("/api/music/eq/custom")
+        async def api_custom_eq_get():
+            import json as _json
+            from pathlib import Path as _Path
+            state_file = _Path.home() / ".config" / "desktop-assistant" / "custom_eq.json"
+            bands = []
+            if state_file.exists():
+                try:
+                    bands = _json.loads(state_file.read_text())
+                except Exception:
+                    pass
+            return {"bands": bands}
+
+        @app.put("/api/music/eq/custom")
+        async def api_custom_eq_set(body: _CustomEqBody):
+            bands = [{"hz": b.hz, "gain_db": b.gain_db, "q": b.q} for b in body.bands]
+            if self.bus:
+                self.bus.publish("av.set_custom_eq", {"bands": bands})
+                # Also update music_svc eq_preset tracker so UI stays consistent
+                if self._music_svc:
+                    self._music_svc._eq_preset = "custom"
+            return {"ok": True, "bands": bands}
 
         class _MusicPlayBody(BaseModel):
             station_id: Optional[int] = None
