@@ -6,7 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.8.1] - 2026-05-11
+## [1.8.2] - 2026-05-11
+### Fixed
+- **Restore top-level `da ping`** — `ping` was moved exclusively under `system ping`
+  in v1.8.1, breaking the commonly used `da ping` health check shortcut. Added it back
+  as a top-level alias (both `da ping` and `da system ping` now work).
+
+
 ### Fixed
 - **CLI fully restored** — the `scripts/desktop-assistant` script had regressed to ~630
   lines and was missing all structured subcommand groups added at v1.7.0. Full command

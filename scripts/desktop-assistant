@@ -782,6 +782,7 @@ def cmd_help(args) -> int:
         "status":           "Health and telemetry dashboard (temp, fan, servo, vision, audio).\n"
                             "                  --json  Emit raw JSON instead of the human-readable table.",
         "topics":           "List every bus topic that has at least one active subscriber.",
+        "ping":             "Round-trip latency check — shortcut for 'system ping'.",
         "last":             "Show the most recent payload published on a given topic.\n"
                             "                  Usage: last <topic>",
         "watch":            "Stream live bus events to stdout (Ctrl-C to stop).\n"
@@ -1425,6 +1426,7 @@ def main() -> int:
     ssp.set_defaults(func=cmd_music_eq)
 
     sub.add_parser("topics", help="List subscribed topics").set_defaults(func=cmd_topics)
+    sub.add_parser("ping", help="Round-trip latency check (shortcut for 'system ping')").set_defaults(func=cmd_ping)
 
     sp = sub.add_parser("status", help="Show health/telemetry dashboard")
     sp.add_argument("--json", action="store_true", help="Emit raw JSON")
