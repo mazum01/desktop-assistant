@@ -112,10 +112,19 @@ class IPCBridge(Service):
         self._unsub_stopped = None
         self._start_time = 0.0
         self._rpc_handlers: dict[str, callable] = {}
+        self._all_services: list = []  # seeded by core_main after list is built
 
     def on_start(self) -> None:
         import time as _time
         self._start_time = _time.time()
+
+        # Seed status from services that already started before us.
+        for svc in self._all_services:
+            if svc is self:
+                continue
+            _name = getattr(svc, "name", None)
+            if _name and hasattr(svc, "is_running") and svc.is_running():
+                self._service_status[_name] = {"running": True, "ts": _time.time()}
 
         # Track service.started / stopped for the status command.
         def _on_started(_topic, payload):

@@ -6,7 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.8.2] - 2026-05-11
+## [1.8.3] - 2026-05-11
+### Fixed
+- **Services panel now shows all services** — `WebService` and `IPCBridge` both start at
+  the end of the service list, so all earlier services had already published their
+  `service.started` events before either one was subscribed. Both now seed their status
+  registry at `on_start()` time by iterating the full services list and calling
+  `is_running()` on each peer. Expected services in the panel: `motion`, `vision`,
+  `audio_capture`, `av`, `perception`, `object`, `telemetry`, `clock`, `face`, `music`,
+  `raw_camera2` (if cam2 enabled), `tracking`, `ipc_bridge`, `web`.
+- `core_main.py`: After building the full `services` list, sets `_all_services` on both
+  `ipc` and `web_svc` so they receive the reference before `run_services()` starts.
+
+
 ### Fixed
 - **Restore top-level `da ping`** — `ping` was moved exclusively under `system ping`
   in v1.8.1, breaking the commonly used `da ping` health check shortcut. Added it back

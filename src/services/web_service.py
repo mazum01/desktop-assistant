@@ -157,6 +157,7 @@ class WebService:
         self._music_svc = music_service
         self._camera2_svc = camera2_service
         self._object_svc = object_service
+        self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -196,6 +197,14 @@ class WebService:
             self._unsubs.append(
                 self.bus.subscribe("vision.frame2_ready", self._on_frame2)
             )
+        # Seed status from services that already started before us.
+        for svc in self._all_services:
+            if svc is self:
+                continue
+            _name = getattr(svc, "name", None)
+            if _name and hasattr(svc, "is_running") and svc.is_running():
+                self._service_states[_name] = "running"
+
         # Subscribe to service lifecycle events for the Services panel
         self._unsubs.append(
             self.bus.subscribe("service.started", self._on_service_started)

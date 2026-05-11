@@ -288,13 +288,14 @@ def main() -> int:
     )
     services.append(tracking_svc)
     services.append(ipc)
+    ipc._all_services = services  # seed service registry at startup
     if _web_enabled:
-        services.append(
-            WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
-                       quiet_hours=_qh, motion_service=motion_svc,
-                       tracking_service=tracking_svc, music_service=music_svc,
-                       camera2_service=cam2_svc, object_service=obj_svc)
-        )
+        web_svc = WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
+                             quiet_hours=_qh, motion_service=motion_svc,
+                             tracking_service=tracking_svc, music_service=music_svc,
+                             camera2_service=cam2_svc, object_service=obj_svc)
+        services.append(web_svc)
+        web_svc._all_services = services  # seed service registry at startup
 
     return run_services(services=services, unit_name="core")
 
