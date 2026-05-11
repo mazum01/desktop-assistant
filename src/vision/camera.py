@@ -85,8 +85,10 @@ class Camera:
         self._frame_lock = threading.Lock()
         self._capture_thread: Optional[threading.Thread] = None
         self._diag_logged = False  # log first-frame pixel info once
-        # Lens position read from ISP metadata each frame (diopters, -1 = unknown)
+        # Lens position and AF state read from ISP metadata (diopters, -1 = unknown)
+        # AfState: 0=Idle, 1=Scanning, 2=Focused, 3=Failed
         self._lens_position: float = -1.0
+        self._af_state: int = -1
         self._lens_lock = threading.Lock()
 
         if not _PICAMERA2_AVAILABLE:
@@ -140,10 +142,18 @@ class Camera:
 
     @property
     def current_lens_position(self) -> Optional[float]:
-        """Last known lens position in diopters read from ISP metadata.
-        Returns None if no metadata has been received yet."""
+        """Last known lens position in diopters, only when cam is focused.
+
+        Returns None while AF is scanning (AfState=1) or not yet ready.
+        This prevents broadcasting an unstable/transient position during
+        focus hunts, so downstream cameras don't lock to garbage data.
+        """
         with self._lens_lock:
-            return self._lens_position if self._lens_position >= 0 else None
+            if self._lens_position < 0:
+                return None          # no metadata yet
+            if self._af_state == 1:
+                return None          # scanning — position is unstable
+            return self._lens_position
 
     def set_lens_position(self, position: float) -> None:
         """Switch to manual AF and lock to *position* diopters (0 = ∞, 1 = 1 m).
@@ -224,15 +234,22 @@ class Camera:
         )
 
     def _on_frame_metadata(self, request) -> None:
-        """picamera2 pre_callback: extract LensPosition from every ISP request.
+        """picamera2 pre_callback: extract LensPosition and AfState from every ISP request.
         Called on picamera2's internal thread; must not block."""
         try:
-            lp = request.get_metadata().get("LensPosition")
-            if lp is not None:
-                with self._lens_lock:
+            meta = request.get_metadata()
+            lp = meta.get("LensPosition")
+            af = meta.get("AfState", -1)
+            with self._lens_lock:
+                if self._lens_position < 0 and lp is not None:
+                    log.info("Camera %d: pre_callback active; LensPosition=%.3f AfState=%s",
+                             self._cfg.index, lp, af)
+                if lp is not None:
                     self._lens_position = float(lp)
-        except Exception:
-            pass  # never raise from a callback
+                if af >= 0:
+                    self._af_state = int(af)
+        except Exception as exc:
+            log.debug("Camera %d: _on_frame_metadata error: %s", self._cfg.index, exc)
 
     def _capture_loop(self) -> None:
         """Continuously pull frames from the ISP via capture_array().

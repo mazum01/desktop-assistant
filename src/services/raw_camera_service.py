@@ -204,6 +204,9 @@ class RawCameraService(Service):
         if self._camera is None:
             return
         pos = float(payload["position"])
+        if not getattr(self, "_lens_sync_logged", False):
+            log.info("RawCameraService: first focus sync LensPosition=%.3f", pos)
+            self._lens_sync_logged = True
         self._camera.set_lens_position(pos)
 
 

@@ -6,7 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.8.14] - 2026-05-11
+## [1.8.15] - 2026-05-11
+### Fixed
+- **Focus sync locking cam1 to infinity during AF scan** — `current_lens_position`
+  now returns `None` when cam0's AfState=1 (Scanning), so `vision.lens_position`
+  is only published when cam0 is actually focused (AfState=2). Previously, the
+  transient LensPosition=0.0 captured during the startup AF sweep was immediately
+  applied to cam1, freezing it at infinity focus.
+- Camera now stores `_af_state` (from ISP metadata) alongside `_lens_position`.
+
+
 ### Added
 - **Cross-camera focus sync** — Camera 0 (main VisionService cam) is now the
   autofocus master. Its ISP-reported `LensPosition` (diopters) is read every

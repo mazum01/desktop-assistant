@@ -351,11 +351,15 @@ class VisionService(Service):
 
         # Throttled lens-position relay: publish ~2 Hz so RawCameraService can
         # mirror cam0's focus onto cam1 without flooding the bus.
+        # Only publishes when cam0 is FOCUSED (AfState=2), not while scanning.
         self._lens_publish_counter += 1
         if self._lens_publish_counter >= 15:
             self._lens_publish_counter = 0
             lp = getattr(self._camera, "current_lens_position", None)
             if lp is not None:
+                if not getattr(self, "_lens_publish_logged", False):
+                    log.info("VisionService: first vision.lens_position publish %.3f", lp)
+                    self._lens_publish_logged = True
                 self.bus.publish("vision.lens_position", {"position": lp})
 
         # Snapshot overlay state and hand off to the encoder thread.
