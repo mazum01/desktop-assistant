@@ -6,7 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.8.9] - 2026-05-11
+## [1.8.10] - 2026-05-11
+### Fixed
+- **Camera color (red appeared blue)** — changed `stream_format` from `"BGR888"` to
+  `"RGB888"` (the camera's native format) and added an explicit
+  `cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)` in the capture loop. This makes the
+  RGB→BGR conversion unambiguous and independent of libcamera/picamera2 version
+  behaviour. Both cameras (cam0 and cam1 via `RawCameraService`) benefit because
+  `RawCameraConfig` inherits the same default.
+
+
 ### Added
 - **Live pan-slider update** — web GUI head-position slider now tracks the actual
   servo angle in real-time via WebSocket (updated ~0.5 s) during face tracking or

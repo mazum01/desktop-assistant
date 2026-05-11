@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
+import cv2
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class CameraConfig:
     width: int = 640
     height: int = 480
     framerate: int = 30
-    stream_format: str = "BGR888"   # native cv2 byte order; was RGB888
+    stream_format: str = "RGB888"   # native camera output; converted to BGR in capture loop
     # Software rotation applied after capture. 0–359 degrees.
     # Multiples of 90 are lossless (cv2.rotate); other angles keep the same
     # canvas size via cv2.warpAffine (corners are slightly cropped).
@@ -197,19 +198,22 @@ class Camera:
         )
 
     def _capture_loop(self) -> None:
-        """Continuously pull frames from the ISP into _latest_array.
+        """Continuously pull frames from the ISP into _latest_array as BGR.
 
-        Stores the raw picamera2 array view (possibly DMA-backed). The DMA→heap
-        copy is deferred to capture_frame() so that only one thread touches DMA
-        memory at a time, preventing cache-contention slowdowns.
+        picamera2 delivers RGB888 (native camera format). We explicitly convert
+        to BGR so all downstream OpenCV operations (overlays, imencode) work
+        correctly and the final JPEG displays with proper colors in the browser.
         """
         while self._running:
             try:
                 arr = self._cam.capture_array("main")
                 if not self._running:
                     break
+                # Convert RGB → BGR explicitly (rather than relying on BGR888
+                # format which behaves inconsistently across libcamera versions).
+                bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
                 with self._frame_lock:
-                    self._latest_array = arr
+                    self._latest_array = bgr
             except Exception:
                 if not self._running:
                     break
