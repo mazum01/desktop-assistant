@@ -6,7 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.7.11] - 2026-05-11
+## [1.7.12] - 2026-05-11
+### Fixed
+- Camera feeds now always display side-by-side (`flex-wrap: nowrap`; scrolls
+  horizontally on very narrow viewports instead of stacking vertically).
+- Both feeds rendered in an identical `aspect-ratio: 4/3` box so they appear
+  the same size regardless of stream resolution; letterboxed if aspect differs.
+
+ - 2026-05-11
 ### Added
 - **Camera resolution adjustment** — both cameras share a single resolution setting.
   Publishing `camera.set_resolution` `{"width": int, "height": int}` on the bus changes

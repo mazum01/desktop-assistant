@@ -88,12 +88,14 @@ main {
 /* ── Camera ──────────────────────────────────────────────────── */
 .camera-feeds {
   display: flex;
+  flex-wrap: nowrap;    /* always side-by-side */
   gap: 12px;
   align-items: flex-start;
+  overflow-x: auto;     /* scroll on very narrow viewports instead of stacking */
 }
 .camera-feed-wrap {
   flex: 1 1 0;
-  min-width: 0;
+  min-width: 240px;     /* never collapse below this */
 }
 .camera-label {
   font-size: 11px;
@@ -103,11 +105,20 @@ main {
   letter-spacing: 0.05em;
   margin-bottom: 4px;
 }
-.camera-wrap { position: relative; display: block; width: 100%; }
+/* Consistent 4:3 box for both feeds — black-bars if aspect differs */
+.camera-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  border-radius: 6px;
+  overflow: hidden;
+}
 #camera-stream, #camera-stream2 {
   width: 100%;
-  max-height: 480px;
-  object-fit: contain;
+  height: 100%;
+  object-fit: contain;  /* letterbox if stream aspect doesn't match */
   border-radius: 6px;
   background: #000;
   display: block;
