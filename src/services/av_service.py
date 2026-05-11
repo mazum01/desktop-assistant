@@ -121,11 +121,16 @@ class AVService(Service):
         elif _EQ_STATE_FILE.exists():
             try:
                 preset = _EQ_STATE_FILE.read_text().strip()
-                if preset and self._audio is not None:
+                if preset and preset != "custom" and self._audio is not None:
                     self._audio.set_eq_preset(preset)
                 log.info("AVService: restored EQ preset %r", preset)
             except Exception as exc:
                 log.warning("AVService: failed to restore EQ preset: %s", exc)
+
+        # Restore PipeWire system EQ (filter-chain config already on disk from
+        # last session — just re-elect the EQ sink as default without restarting).
+        threading.Thread(target=self._restore_pipewire_eq, daemon=True,
+                         name="pw-eq-restore").start()
 
     def on_stop(self) -> None:
         for unsub in self._unsubs:
@@ -233,7 +238,7 @@ class AVService(Service):
         if not isinstance(payload, dict):
             return
         preset = payload.get("preset", "")
-        if not preset:
+        if not preset or preset == "custom":
             return
         if self._audio is not None:
             self._audio.set_eq_preset(preset)
@@ -247,6 +252,9 @@ class AVService(Service):
         except Exception as exc:
             log.warning("AVService: failed to persist EQ preset: %s", exc)
         log.info("AVService: EQ preset → %r", preset)
+        # Apply system-wide via PipeWire (runs in background — takes ~1-2 s).
+        threading.Thread(target=self._apply_pipewire_preset, args=(preset,),
+                         daemon=True, name="pw-eq").start()
 
     def _on_set_custom_eq(self, _topic, payload) -> None:
         if not isinstance(payload, dict):
@@ -265,6 +273,43 @@ class AVService(Service):
         except Exception as exc:
             log.warning("AVService: failed to persist custom EQ: %s", exc)
         log.info("AVService: custom EQ set (%d band(s))", len(bands))
+        # Apply system-wide via PipeWire.
+        threading.Thread(target=self._apply_pipewire_custom, args=(bands,),
+                         daemon=True, name="pw-eq-custom").start()
+
+    def _apply_pipewire_preset(self, preset: str) -> None:
+        try:
+            from src.audio import pipewire_eq
+            if pipewire_eq.apply_preset(preset):
+                # PipeWire handles EQ for all audio — disable Python biquad on TTS
+                # to avoid double-processing.
+                if self._audio is not None:
+                    self._audio.set_eq_preset("flat")
+            else:
+                log.info("AVService: PipeWire EQ unavailable; using software EQ for TTS")
+        except Exception as exc:
+            log.warning("AVService: PipeWire EQ apply failed: %s", exc)
+
+    def _apply_pipewire_custom(self, bands: list) -> None:
+        try:
+            from src.audio import pipewire_eq
+            if pipewire_eq.apply_custom_bands(bands):
+                if self._audio is not None:
+                    self._audio.set_eq_preset("flat")
+            else:
+                log.info("AVService: PipeWire EQ unavailable; using software EQ for TTS")
+        except Exception as exc:
+            log.warning("AVService: PipeWire EQ apply failed: %s", exc)
+
+    def _restore_pipewire_eq(self) -> None:
+        """Re-elect DA EQ sink as default at startup without restarting filter-chain."""
+        try:
+            from src.audio import pipewire_eq
+            pipewire_eq.ensure_default()
+            if pipewire_eq.is_active() and self._audio is not None:
+                self._audio.set_eq_preset("flat")
+        except Exception as exc:
+            log.warning("AVService: PipeWire EQ restore failed: %s", exc)
 
     # ── Worker bodies ──────────────────────────────────────────────────
 

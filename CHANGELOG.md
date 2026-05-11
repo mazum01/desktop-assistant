@@ -6,7 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.8.6] - 2026-05-11
+## [1.8.7] - 2026-05-11
+### Added
+- **System-level EQ via PipeWire filter-chain** — new `src/audio/pipewire_eq.py`
+  module writes a PipeWire filter-chain config (`~/.config/pipewire/filter-chain.conf.d/da-eq.conf`),
+  restarts the `filter-chain` user service, and sets the resulting "DA Equalizer" virtual
+  sink as the system default. All audio — pianobar, TTS, beeps — routes through it, so
+  EQ changes are heard on music for the first time.
+- 5-band biquad presets (lowshelf + 3× peaking + highshelf) for all named presets:
+  `flat`, `bass_boost`, `treble_boost`, `vocal`, `loudness`, `warm`.
+- Custom EQ bands from the web UI are converted to PipeWire peaking filters.
+- On daemon restart, `AVService` calls `ensure_default()` to re-elect the EQ sink
+  without restarting filter-chain (config persisted from last session).
+- When PipeWire EQ is active, the Python software biquad path is set to `flat` to
+  avoid double-processing TTS audio.
+
+
 ### Fixed
 - **Vision service no longer shows red at startup** — `camera.is_ready` property added
   to `Camera`; returns `True` only after the capture thread deposits the first frame.
