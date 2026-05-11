@@ -225,6 +225,16 @@ class WebService:
             self._unsubs.append(
                 self.bus.subscribe(_topic, lambda t, p, n=_n: self._on_service_error(n))
             )
+        # Auto-recover from error state when "healthy" events arrive.
+        _recovery_map = {
+            "vision.jpeg_ready": "vision",
+            "audio.chunk":       "audio_capture",
+        }
+        for _topic, _svc_name in _recovery_map.items():
+            _n = _svc_name
+            self._unsubs.append(
+                self.bus.subscribe(_topic, lambda t, p, n=_n: self._on_service_recovered(n))
+            )
 
         # Subscribe to all events for event log
         for topic in (
@@ -298,6 +308,11 @@ class WebService:
         # Only degrade if currently shown as running — don't override "stopped".
         if self._service_states.get(service_name) == "running":
             self._service_states[service_name] = "error"
+
+    def _on_service_recovered(self, service_name: str) -> None:
+        """Clear error state when a healthy-signal event arrives for a service."""
+        if self._service_states.get(service_name) == "error":
+            self._service_states[service_name] = "running"
 
     def _on_event(self, topic: str, payload) -> None:
         # Strip the heavy per-face array from perception events so the

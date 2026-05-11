@@ -6,7 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.8.5] - 2026-05-11
+## [1.8.6] - 2026-05-11
+### Fixed
+- **Vision service no longer shows red at startup** — `camera.is_ready` property added
+  to `Camera`; returns `True` only after the capture thread deposits the first frame.
+  `VisionService.run_tick()` silently skips ticks until the camera is ready, preventing
+  spurious `vision.error` events during the startup initialization race.
+- **Services auto-recover from error state** — `WebService` and `IPCBridge` now
+  subscribe to healthy-signal events (`vision.jpeg_ready` → `vision`,
+  `audio.chunk` → `audio_capture`) and clear the `error` state back to `running`
+  when the service resumes normal operation.
+
+
 ### Fixed
 - **EQ preset now persists across daemon restarts** — `MusicService.set_eq_preset()`
   writes the selected preset to `~/.config/desktop-assistant/music_eq_preset.txt` and

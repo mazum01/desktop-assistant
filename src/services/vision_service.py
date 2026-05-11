@@ -290,6 +290,10 @@ class VisionService(Service):
     def run_tick(self) -> None:
         if self._camera is None:
             return
+        # Camera background thread hasn't deposited the first frame yet —
+        # this is a normal startup race, not an error condition.
+        if not getattr(self._camera, "is_ready", True):
+            return
         try:
             frame = self._camera.capture_frame()
         except Exception:

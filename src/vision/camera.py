@@ -101,6 +101,11 @@ class Camera:
         return not self._sim
 
     @property
+    def is_ready(self) -> bool:
+        """True once the capture thread has deposited the first frame (or in sim mode)."""
+        return self._running and (self._sim or self._latest_array is not None)
+
+    @property
     def is_running(self) -> bool:
         return self._running
 

@@ -157,6 +157,20 @@ class IPCBridge(Service):
         for _topic, _name in _err_map.items():
             self.bus.subscribe(_topic, _make_err_handler(_name))
 
+        # Auto-recover from error state when healthy-signal events arrive.
+        _recovery_map = {
+            "vision.jpeg_ready": "vision",
+            "audio.chunk":       "audio_capture",
+        }
+        def _make_recovery_handler(svc_name):
+            def _on_ok(_topic, _payload):
+                entry = self._service_status.get(svc_name)
+                if entry and entry.get("error"):
+                    self._service_status[svc_name] = {**entry, "error": False}
+            return _on_ok
+        for _topic, _name in _recovery_map.items():
+            self.bus.subscribe(_topic, _make_recovery_handler(_name))
+
         if not _ZMQ_AVAILABLE:
             log.warning(
                 "pyzmq not installed — IPC bridge disabled "
