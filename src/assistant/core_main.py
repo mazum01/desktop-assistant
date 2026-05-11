@@ -82,9 +82,13 @@ def main() -> int:
     # Camera config must be built first so we can derive the effective
     # frame width (which changes when rotation is 90° or 270°).
     _cam_cfg_raw = _cfg.get("camera", {})
+    _cam2_cfg_raw_early = _cfg.get("camera2", {})
     from src.vision.camera import CameraConfig as _CameraConfig
     _camera_rotation_deg = int(_rt.get("camera", {}).get(
         "rotation_deg", _cam_cfg_raw.get("rotation_deg", 0)
+    )) % 360
+    _camera2_rotation_deg = int(_rt.get("camera2", {}).get(
+        "rotation_deg", _cam2_cfg_raw_early.get("rotation_deg", 0)
     )) % 360
     _cam_width  = int(_rt.get("camera", {}).get("width",  _cam_cfg_raw.get("width", 640)))
     _cam_height = int(_rt.get("camera", {}).get("height", _cam_cfg_raw.get("height", 480)))
@@ -143,6 +147,9 @@ def main() -> int:
             "width": _cam_width,
             "height": _cam_height,
         },
+        "camera2": {
+            "rotation_deg": _camera2_rotation_deg,
+        },
     }
 
     def _on_servo_changed(_t, payload):
@@ -179,6 +186,11 @@ def main() -> int:
             if tracking_svc is not None:
                 tracking_svc.update_frame_width(new_fw)
 
+    def _on_camera2_rotation_changed(_t, payload):
+        if isinstance(payload, dict) and "rotation_deg" in payload:
+            _rt_state["camera2"]["rotation_deg"] = int(payload["rotation_deg"]) % 360
+            _save_runtime(_rt_state)
+
     def _on_camera_resolution_changed(_t, payload):
         if isinstance(payload, dict) and "width" in payload and "height" in payload:
             new_w = int(payload["width"])
@@ -196,6 +208,7 @@ def main() -> int:
     bus.subscribe("tracking.face_tracking_changed", _on_face_tracking_changed)
     bus.subscribe("tracking.random_motion_changed", _on_random_motion_changed)
     bus.subscribe("camera.rotation_changed",        _on_camera_rotation_changed)
+    bus.subscribe("camera2.rotation_changed",       _on_camera2_rotation_changed)
     bus.subscribe("camera.resolution_changed",      _on_camera_resolution_changed)
 
     tracking_svc: "TrackingService | None" = None  # forward-ref for rotation callback
@@ -239,7 +252,7 @@ def main() -> int:
                 width=_cam_width,
                 height=_cam_height,
                 framerate=int(_cam2_cfg_raw.get("framerate", 15)),
-                rotation_deg=int(_cam2_cfg_raw.get("rotation_deg", 0)),
+                rotation_deg=_camera2_rotation_deg,  # from runtime state
             ),
         )
 

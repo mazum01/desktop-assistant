@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.14] - 2026-05-11
+### Fixed
+- Camera 2 rotation is now persisted across daemon restarts.
+  - `core_main.py` reads `_rt["camera2"]["rotation_deg"]` at startup (was reading YAML only).
+  - Subscribes to `camera2.rotation_changed` and saves to runtime state JSON.
+  - `_rt_state` now includes a `"camera2"` section.
+
 ## [1.7.13] - 2026-05-11
 ### Added
 - Live FPS counter overlaid on each camera feed (bottom-left corner, yellow badge).
