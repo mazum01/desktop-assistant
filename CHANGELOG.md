@@ -6,7 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.8.16] - 2026-05-11
+## [1.8.17] - 2026-05-11
+### Removed
+- **Cross-camera focus sync** — Removed the `vision.lens_position` publish/subscribe
+  pipeline (VisionService → RawCameraService) that mirrored cam0's lens position onto
+  cam1. Both cameras are now back to independent continuous AF (AfMode=2). Syncing
+  cam0's focus onto cam2 in manual mode was unreliable: cam0 often focuses at infinity,
+  locking cam2 there too. Both IMX708 Wide sensors have PDAF and focus well independently.
+- Removed `_lens_publish_counter` from VisionService `__init__`.
+- Removed `_on_lens_position()` handler and timeout watchdog from RawCameraService.
+- Removed `vision.lens_position` bus subscription from RawCameraService.
+
+
 ### Fixed
 - **cam2 locking to infinity when cam0 has no close subject** — `RawCameraService`
   now tracks the last time a `vision.lens_position` message was received. If no

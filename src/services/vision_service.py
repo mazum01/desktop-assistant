@@ -246,8 +246,7 @@ class VisionService(Service):
         self._encode_queue: queue.Queue = queue.Queue(maxsize=1)
         self._encoder_running: bool = False
         self._encoder_thread: Optional[threading.Thread] = None
-        # Counter for throttling vision.lens_position publishes (~2 Hz at 30fps)
-        self._lens_publish_counter: int = 0
+
 
     def on_start(self) -> None:
         if self._camera is None:
@@ -348,19 +347,6 @@ class VisionService(Service):
             "vision.frame_ready",
             {"index": idx, "shape": tuple(frame.shape), "ts": time.time()},
         )
-
-        # Throttled lens-position relay: publish ~2 Hz so RawCameraService can
-        # mirror cam0's focus onto cam1 without flooding the bus.
-        # Only publishes when cam0 is FOCUSED (AfState=2), not while scanning.
-        self._lens_publish_counter += 1
-        if self._lens_publish_counter >= 15:
-            self._lens_publish_counter = 0
-            lp = getattr(self._camera, "current_lens_position", None)
-            if lp is not None:
-                if not getattr(self, "_lens_publish_logged", False):
-                    log.info("VisionService: first vision.lens_position publish %.3f", lp)
-                    self._lens_publish_logged = True
-                self.bus.publish("vision.lens_position", {"position": lp})
 
         # Snapshot overlay state and hand off to the encoder thread.
         # Drop the frame if the encoder is still busy (queue full).
