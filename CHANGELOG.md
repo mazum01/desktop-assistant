@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.8.1] - 2026-05-11
+### Fixed
+- **CLI fully restored** — the `scripts/desktop-assistant` script had regressed to ~630
+  lines and was missing all structured subcommand groups added at v1.7.0. Full command
+  set is restored and all new commands since v1.7.0 are included:
+  - Restored: `system`, `face`, `vision`, `music`, `servo`, `face-tracking`,
+    `random-motion` groups with all their sub-commands
+  - Restored: `say`, `joke`, `time`, `watch`, `topics`, `publish`, `last`, `status`
+    top-level commands
+  - Added: `camera rotation` and `camera rotation-status` under the `camera` group
+  - Added: `camera2 rotation` and `camera2 rotation-status` under new `camera2` group
+  - Added: `eq set` and `eq custom` under new `eq` group (voice/TTS EQ)
+  - Added: `object-detection enable|disable|status` (carried from v1.8.0)
+  - Added: `_publish()` helper (was referenced but never defined; caused error in
+    `face greeting-cooldown`)
+  - `cmd_help()` updated to exactly match all registered subparsers
+
 ## [1.8.0] - 2026-05-11
 ### Added
 - **Object detection toggle** — enable/disable COCO object classification at runtime:
