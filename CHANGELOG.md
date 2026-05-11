@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.8] - 2026-05-11
+### Added
+- `da face` CLI subcommand group: `meet <name>`, `list`, `forget-all`,
+  `forget-guests`, `greeting-cooldown <minutes>`, `greeting-settings`
+- `FaceService._on_set_cooldown` now accepts and applies all greeting settings
+  fields (`jitter_pct`, `min_absence_s`, `confidence_threshold`) in addition to
+  `cooldown_min`
+- `api_put_greeting` web endpoint now broadcasts all updated fields to the live
+  daemon (previously only `cooldown_min` was forwarded)
+### Fixed
+- Restored orphaned `cmd_say` function body that had been left as floating code
+  outside any function definition in `scripts/desktop-assistant`
+- Removed unreachable code fragment after `return True` in
+  `FaceRegistry.merge_faces()`
+
+---
+
 ## [1.7.7] - 2026-05-11
 ### Added
 - Second CSI camera support: new `RawCameraService` captures from camera index 1

@@ -210,6 +210,111 @@ def cmd_move_servo(args) -> int:
     return 0 if r.get("ok") else 1
 
 
+def cmd_face(args) -> int:
+    sub = args.face_cmd
+    if sub == "meet":
+        name = args.name.strip()
+        if not name:
+            print("Error: name cannot be empty", file=sys.stderr)
+            return 1
+        r = _request({"cmd": "publish", "topic": "face.meet", "payload": {"name": name}})
+        if r.get("ok"):
+            print(f"Named most-recently-seen face: {name!r}")
+        else:
+            print(json.dumps(r, indent=2))
+        return 0 if r.get("ok") else 1
+
+    elif sub == "greeting-cooldown":
+        r = _request({
+            "cmd": "publish",
+            "topic": "tracking.set_greeting_cooldown",
+            "payload": {"cooldown_min": args.minutes},
+        })
+        if r.get("ok"):
+            print(f"Greeting cooldown set to {args.minutes:.1f} min")
+        else:
+            print(json.dumps(r, indent=2))
+        return 0 if r.get("ok") else 1
+
+    elif sub == "greeting-settings":
+        import yaml
+        from pathlib import Path
+        cfg_path = Path(__file__).resolve().parent.parent / "config" / "assistant.yaml"
+        cfg: dict = {}
+        if cfg_path.exists():
+            cfg = yaml.safe_load(cfg_path.read_text()) or {}
+        fr = cfg.get("face_recognition", {})
+        print(f"  cooldown_min         : {fr.get('greeting_cooldown_min', 30.0)}")
+        print(f"  jitter_pct           : {fr.get('greeting_cooldown_jitter_pct', 25.0)}")
+        print(f"  min_absence_s        : {fr.get('min_absence_s', 30.0)}")
+        print(f"  confidence_threshold : {fr.get('confidence_threshold', 0.5)}")
+        print(f"  enabled              : {fr.get('enabled', True)}")
+        return 0
+
+    elif sub == "list":
+        r = _request({"cmd": "last", "topic": "face.identified"})
+        if not r.get("ok"):
+            print(json.dumps(r, indent=2))
+            return 1
+        # Use the registry directly for a full list (reads YAML config path)
+        try:
+            import yaml
+            from pathlib import Path
+            sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+            from src.perception.face_registry import FaceRegistry
+            reg = FaceRegistry()
+            faces = reg.list_faces()
+            reg.close()
+            if not faces:
+                print("No faces in registry.")
+            else:
+                print(f"{'Name':<20} {'ID':<12} {'Seen':<6} {'Last seen'}")
+                print("-" * 60)
+                import time
+                for f in faces:
+                    age = int(time.time() - f["last_seen"])
+                    h, s = divmod(age, 3600)
+                    m, s = divmod(s, 60)
+                    age_str = f"{h}h{m:02d}m" if h else f"{m}m{s:02d}s"
+                    print(f"{f['name']:<20} {f['id'][:8]:<12} {f['seen_count']:<6} {age_str} ago")
+        except Exception as exc:
+            print(f"Error reading registry: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    elif sub == "forget-all":
+        try:
+            import yaml
+            from pathlib import Path
+            sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+            from src.perception.face_registry import FaceRegistry
+            reg = FaceRegistry()
+            count = reg.delete_all_faces()
+            reg.close()
+            print(f"Deleted {count} face(s) from registry.")
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    elif sub == "forget-guests":
+        try:
+            import yaml
+            from pathlib import Path
+            sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+            from src.perception.face_registry import FaceRegistry
+            reg = FaceRegistry()
+            count = reg.delete_guest_faces()
+            reg.close()
+            print(f"Deleted {count} guest face(s) from registry.")
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    return 0
+
+
 def cmd_say(args) -> int:
     r = _request({
         "cmd": "publish",
@@ -373,6 +478,26 @@ def main() -> int:
     sp = sub.add_parser("say", help="Speak a phrase via TTS")
     sp.add_argument("text")
     sp.set_defaults(func=cmd_say)
+
+    sp = sub.add_parser("face", help="Face registry and greeting commands")
+    face_sub = sp.add_subparsers(dest="face_cmd", required=True)
+
+    fp = face_sub.add_parser("meet", help="Name the most-recently-seen face")
+    fp.add_argument("name", help="Name to assign")
+
+    face_sub.add_parser("list", help="List all known faces in the registry")
+
+    face_sub.add_parser("forget-all", help="Delete all faces from the registry")
+
+    face_sub.add_parser("forget-guests", help="Delete all unnamed Guest faces")
+
+    fp = face_sub.add_parser("greeting-cooldown",
+                             help="Set the base greeting re-trigger cooldown")
+    fp.add_argument("minutes", type=float, help="Cooldown in minutes (e.g. 30)")
+
+    face_sub.add_parser("greeting-settings", help="Show current greeting configuration")
+
+    sp.set_defaults(func=cmd_face)
 
     sp = sub.add_parser("watch", help="Stream all bus events")
     sp.add_argument("--topic", default="", help="Topic prefix filter (default: all)")

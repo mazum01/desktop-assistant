@@ -189,9 +189,22 @@ class FaceService(Service):
     # ── Bus handlers ─────────────────────────────────────────────────────
 
     def _on_set_cooldown(self, _topic, payload) -> None:
-        if isinstance(payload, dict) and "cooldown_min" in payload:
+        if not isinstance(payload, dict):
+            return
+        if "cooldown_min" in payload:
             self._cooldown_min = float(payload["cooldown_min"])
-            log.info("FaceService: greeting cooldown updated to %.1f min", self._cooldown_min)
+        if "jitter_pct" in payload:
+            self._jitter_pct = float(payload["jitter_pct"])
+        if "min_absence_s" in payload:
+            self._min_absence_s = float(payload["min_absence_s"])
+        if "confidence_threshold" in payload:
+            self._confidence_threshold = float(payload["confidence_threshold"])
+        log.info(
+            "FaceService: greeting settings updated — cooldown=%.1f min ±%.0f%%, "
+            "min_absence=%.0f s, confidence=%.2f",
+            self._cooldown_min, self._jitter_pct, self._min_absence_s,
+            self._confidence_threshold,
+        )
 
     def _on_faces(self, _topic, payload) -> None:
         if not isinstance(payload, dict):

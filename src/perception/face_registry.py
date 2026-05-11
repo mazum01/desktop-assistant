@@ -385,12 +385,6 @@ class FaceRegistry:
         self._conn.commit()
         log.info("Merged face %s into %s (%r)", absorb_id[:8], keep_id[:8], keep["name"])
         return True
-        """Return all known faces sorted by last_seen descending."""
-        rows = self._conn.execute(
-            "SELECT id, name, first_seen, last_seen, last_greeted, seen_count "
-            "FROM faces ORDER BY last_seen DESC"
-        ).fetchall()
-        return [dict(r) for r in rows]
 
     def delete_all_faces(self) -> int:
         """Remove every face and all embeddings. Returns count of faces deleted."""

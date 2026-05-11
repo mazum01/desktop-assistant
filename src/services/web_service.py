@@ -593,10 +593,20 @@ class WebService:
         @app.put("/api/settings/greeting")
         async def api_put_greeting(body: _GreetingBody):
             if self.bus:
-                self.bus.publish("tracking.set_greeting_cooldown", {
-                    "cooldown_min": body.cooldown_min
-                })
-            return {"ok": True, "cooldown_min": body.cooldown_min}
+                payload: dict = {"cooldown_min": body.cooldown_min}
+                if body.jitter_pct is not None:
+                    payload["jitter_pct"] = body.jitter_pct
+                if body.min_absence_s is not None:
+                    payload["min_absence_s"] = body.min_absence_s
+                if body.confidence_threshold is not None:
+                    payload["confidence_threshold"] = body.confidence_threshold
+                self.bus.publish("tracking.set_greeting_cooldown", payload)
+            return {"ok": True, **{k: v for k, v in {
+                "cooldown_min": body.cooldown_min,
+                "jitter_pct": body.jitter_pct,
+                "min_absence_s": body.min_absence_s,
+                "confidence_threshold": body.confidence_threshold,
+            }.items() if v is not None}}
 
 
         @app.post("/api/say")
