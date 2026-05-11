@@ -166,6 +166,16 @@ class Camera:
             log.debug("Camera %d: set_lens_position(%.3f) failed: %s",
                       self._cfg.index, position, exc)
 
+    def set_continuous_af(self) -> None:
+        """Return the camera to continuous autofocus mode.
+        Thread-safe; used by RawCameraService when focus-sync updates stop arriving."""
+        if self._sim or self._cam is None or not self._running:
+            return
+        try:
+            self._cam.set_controls({"AfMode": 2, "AfSpeed": 1})
+        except Exception as exc:
+            log.debug("Camera %d: set_continuous_af() failed: %s", self._cfg.index, exc)
+
     # ── Lifecycle ───────────────────────────────────────────────────────
 
     def start(self) -> None:

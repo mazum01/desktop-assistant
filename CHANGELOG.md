@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.8.16] - 2026-05-11
+### Fixed
+- **cam2 locking to infinity when cam0 has no close subject** — `RawCameraService`
+  now tracks the last time a `vision.lens_position` message was received. If no
+  focused position arrives for >3 s (e.g. cam0 is scanning or pointing at a distant
+  scene), cam2 reverts to continuous AF so it can independently track nearby subjects.
+  Tracked via `_last_sync_ts`, `_sync_active`, and `_FOCUS_SYNC_TIMEOUT=3.0` fields.
+  The watchdog runs in `run_tick()`.
+### Added
+- `Camera.set_continuous_af()` — new method that calls `set_controls({"AfMode": 2,
+  "AfSpeed": 1})` to restore continuous autofocus; used by the RawCameraService
+  watchdog.
+
 ## [1.8.15] - 2026-05-11
 ### Fixed
 - **Focus sync locking cam1 to infinity during AF scan** — `current_lens_position`

@@ -11,7 +11,9 @@ service is intentionally minimal to keep CPU overhead low.
 Topics subscribed:
     camera2.set_rotation   {"rotation_deg": int}  — live rotation update
     vision.lens_position   {"position": float}    — cam0 lens position; mirrors
-                                                    onto cam1 for focus sync
+                                                    onto cam1 for focus sync.
+                                                    If no update arrives for 3s,
+                                                    cam2 reverts to continuous AF.
 
 Topics published:
     vision.frame2_ready   {"index": int, "ts": float}
@@ -71,6 +73,13 @@ class RawCameraService(Service):
         self._index = 0
         self._rotation_deg: int = self._cam_cfg.rotation_deg % 360
 
+        # Focus sync state: tracks when we last received a focused lens position.
+        # If no update arrives for _FOCUS_SYNC_TIMEOUT seconds, cam2 reverts to
+        # continuous AF so it can independently track nearby subjects.
+        self._last_sync_ts: float = 0.0
+        self._sync_active: bool = False
+        self._FOCUS_SYNC_TIMEOUT: float = 3.0
+
         # Derived tick rate from config
         if self._cam_cfg.framerate > 0:
             self.tick_seconds = 1.0 / self._cam_cfg.framerate
@@ -121,6 +130,16 @@ class RawCameraService(Service):
     def run_tick(self) -> None:
         if self._camera is None:
             return
+
+        # Focus-sync watchdog: if cam0 hasn't sent a focused lens position for
+        # _FOCUS_SYNC_TIMEOUT seconds, revert cam2 to continuous AF so it can
+        # independently track nearby subjects.
+        if self._sync_active:
+            if time.time() - self._last_sync_ts > self._FOCUS_SYNC_TIMEOUT:
+                log.info("RawCameraService: focus-sync timeout, reverting cam2 to continuous AF")
+                self._sync_active = False
+                self._camera.set_continuous_af()
+
         try:
             frame = self._camera.capture_frame()
         except Exception:
@@ -198,7 +217,8 @@ class RawCameraService(Service):
             log.exception("Failed to change camera 2 resolution to %dx%d", w, h)
 
     def _on_lens_position(self, _topic, payload) -> None:
-        """Mirror cam0's lens position onto cam1 for focus sync."""
+        """Mirror cam0's lens position onto cam1 for focus sync.
+        Updates the sync timestamp so the watchdog knows cam0 is still focused."""
         if not isinstance(payload, dict) or "position" not in payload:
             return
         if self._camera is None:
@@ -207,6 +227,8 @@ class RawCameraService(Service):
         if not getattr(self, "_lens_sync_logged", False):
             log.info("RawCameraService: first focus sync LensPosition=%.3f", pos)
             self._lens_sync_logged = True
+        self._last_sync_ts = time.time()
+        self._sync_active = True
         self._camera.set_lens_position(pos)
 
 
