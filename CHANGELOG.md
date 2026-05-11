@@ -6,7 +6,26 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.7.15] - 2026-05-11
+## [1.7.16] - 2026-05-11
+### Changed
+- **Camera: background capture thread** — `Camera.start()` now spawns a dedicated
+  `cam{N}-capture` daemon thread that continuously calls `capture_array("main")` and
+  stores the latest frame. `capture_frame()` is now non-blocking (copies from buffer),
+  decoupling service tick rate from ISP pipeline latency.
+- **NoiseReductionMode: Off** — added `NoiseReductionMode: 0` to picamera2 controls in
+  `Camera.start()`. Eliminates per-frame ISP noise-reduction processing, the primary
+  cause of ~4fps throughput at 640×480.
+- **BGR888 format** — `CameraConfig.stream_format` default changed from "RGB888" to
+  "BGR888". Frames are now native cv2 byte order; eliminates the latent R↔B color swap
+  in JPEG output and removes any implicit conversion overhead.
+- **Servo overlay optimized** — `_draw_servo_overlay` no longer does a full-frame
+  `frame.copy()` + `cv2.addWeighted`. Now uses an in-place ROI right-shift (`>> 1`)
+  on only the ~80×20 label background region — ~7000× less data touched per frame.
+- **`capture_still` properly stops background thread** — now calls `self.stop()` /
+  `self.start()` instead of directly manipulating `_cam`, preventing a race condition
+  with the background capture thread during still captures.
+
+
 ### Changed
 - MJPEG stream generators now use `asyncio.Event` + `loop.call_soon_threadsafe()`
   instead of `run_in_executor(threading.Event.wait)` — eliminates thread-pool

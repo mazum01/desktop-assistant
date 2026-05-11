@@ -79,7 +79,7 @@ class TestCameraConfig:
         assert cfg.width == 640
         assert cfg.height == 480
         assert cfg.framerate == 30
-        assert cfg.stream_format == "RGB888"
+        assert cfg.stream_format == "BGR888"
 
     def test_custom_values(self):
         cfg = CameraConfig(index=1, width=640, height=480, framerate=60)

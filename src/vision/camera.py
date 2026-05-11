@@ -12,6 +12,7 @@ or the camera is not detected — identical pattern to ServoController.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -34,8 +35,7 @@ class CameraConfig:
     width: int = 640
     height: int = 480
     framerate: int = 30
-    # Format used for stream captures; "RGB888" gives H×W×3 numpy arrays
-    stream_format: str = "RGB888"
+    stream_format: str = "BGR888"   # native cv2 byte order; was RGB888
     # Software rotation applied after capture. 0–359 degrees.
     # Multiples of 90 are lossless (cv2.rotate); other angles keep the same
     # canvas size via cv2.warpAffine (corners are slightly cropped).
@@ -62,6 +62,11 @@ class Camera:
         self._cam: Optional[object] = None
         self._running = False
         self._sim = False
+
+        # Background capture thread state
+        self._latest_array: Optional[np.ndarray] = None
+        self._frame_lock = threading.Lock()
+        self._capture_thread: Optional[threading.Thread] = None
 
         if not _PICAMERA2_AVAILABLE:
             log.warning("[sim] picamera2 not installed — camera in sim mode")
@@ -124,25 +129,66 @@ class Camera:
                 "format": self._cfg.stream_format,
             },
             buffer_count=6,  # more ISP pipeline headroom → lower capture latency
-            controls={"FrameRate": float(self._cfg.framerate)},
+            controls={
+                "FrameRate": float(self._cfg.framerate),
+                "NoiseReductionMode": 0,  # Off — eliminates ISP NR latency
+            },
         )
         self._cam.configure(video_cfg)
         self._cam.start()
         # Brief warm-up so auto-exposure settles
         time.sleep(0.5)
         self._running = True
+
+        # Spawn a dedicated capture thread so capture_frame() is non-blocking.
+        # The thread continuously grabs frames; the service tick just copies
+        # the latest one without waiting for the ISP pipeline.
+        self._capture_thread = threading.Thread(
+            target=self._capture_loop,
+            daemon=True,
+            name=f"cam{self._cfg.index}-capture",
+        )
+        self._capture_thread.start()
+        # Wait for the first frame so capture_frame() is immediately usable
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            with self._frame_lock:
+                if self._latest_array is not None:
+                    break
+            time.sleep(0.01)
         log.info(
             "Camera %d started: %dx%d @ %dfps",
             self._cfg.index, self._cfg.width, self._cfg.height, self._cfg.framerate,
         )
 
+    def _capture_loop(self) -> None:
+        """Continuously pull frames from the ISP into _latest_array."""
+        while self._running:
+            try:
+                arr = self._cam.capture_array("main")
+                if not self._running:
+                    break
+                with self._frame_lock:
+                    self._latest_array = arr
+            except Exception:
+                if not self._running:
+                    break
+                log.debug("Camera %d: capture error in loop", self._cfg.index)
+                time.sleep(0.01)
+
     def stop(self) -> None:
-        """Stop the camera stream and release resources."""
+        """Stop the camera stream, background capture thread, and release resources."""
         if not self._running:
             return
+        self._running = False  # signal capture thread to exit
+        # Stop the camera first so any blocking capture_array() call unblocks
         if not self._sim and self._cam is not None:
             self._cam.stop()
-        self._running = False
+        if self._capture_thread is not None:
+            self._capture_thread.join(timeout=2.0)
+            self._capture_thread = None
+        with self._frame_lock:
+            self._latest_array = None
         log.info("Camera %d stopped", self._cfg.index)
 
     def set_resolution(self, width: int, height: int) -> None:
@@ -177,18 +223,21 @@ class Camera:
 
     def capture_frame(self) -> np.ndarray:
         """
-        Return the latest frame as a numpy array (H×W×3, uint8, RGB).
-        In sim mode returns a black frame of the configured resolution.
+        Return the latest captured frame as a numpy array (H×W×3, uint8, BGR).
+
+        Non-blocking after start() — the background capture thread continuously
+        updates the frame buffer; this method just copies and returns the latest.
+        In sim mode returns a synthetic test frame.
         Raises RuntimeError if the camera has not been started.
         """
         if not self._running:
             raise RuntimeError("Camera.start() must be called before capture_frame()")
         if self._sim:
-            import cv2, time as _time
+            import cv2
             frame = np.full(
                 (self._cfg.height, self._cfg.width, 3), 40, dtype=np.uint8
             )
-            ts = _time.strftime("%H:%M:%S")
+            ts = time.strftime("%H:%M:%S")
             cv2.putText(frame, "CAMERA  SIM  MODE", (50, self._cfg.height // 2 - 40),
                         cv2.FONT_HERSHEY_DUPLEX, 2.0, (100, 160, 220), 3, cv2.LINE_AA)
             cv2.putText(frame, ts, (50, self._cfg.height // 2 + 40),
@@ -196,7 +245,10 @@ class Camera:
             cv2.rectangle(frame, (20, 20), (self._cfg.width - 20, self._cfg.height - 20),
                           (60, 80, 100), 2)
             return frame
-        return self._cam.capture_array("main")
+        with self._frame_lock:
+            if self._latest_array is None:
+                raise RuntimeError("Camera.start() must be called before capture_frame()")
+            return self._latest_array.copy()
 
     def capture_still(self, path: str) -> None:
         """
@@ -209,7 +261,8 @@ class Camera:
             return
         was_running = self._running
         if was_running:
-            self._cam.stop()
+            # Properly stop the background capture thread before reconfiguring
+            self.stop()
 
         still_cfg = self._cam.create_still_configuration()
         self._cam.configure(still_cfg)
@@ -218,16 +271,8 @@ class Camera:
         self._cam.stop()
 
         if was_running:
-            video_cfg = self._cam.create_video_configuration(
-                main={
-                    "size": (self._cfg.width, self._cfg.height),
-                    "format": self._cfg.stream_format,
-                },
-                buffer_count=6,
-                controls={"FrameRate": float(self._cfg.framerate)},
-            )
-            self._cam.configure(video_cfg)
-            self._cam.start()
+            # Restart video mode including the background capture thread
+            self.start()
 
         log.info("Still saved to %s", path)
 

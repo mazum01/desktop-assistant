@@ -142,9 +142,12 @@ def _draw_servo_overlay(
 
     pad = 4
     x0, y0 = 8, h - 8 - th - pad * 2
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (x0 - pad, y0 - pad), (x0 + tw + pad, y0 + th + pad), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
+    bx1, by1 = x0 - pad, y0 - pad
+    bx2, by2 = x0 + tw + pad, y0 + th + pad
+
+    # Darken only the small label background ROI (avoid full-frame copy+addWeighted)
+    roi = frame[by1:by2, bx1:bx2]
+    roi[:] = roi >> 1  # halve brightness in-place on the tiny region only
     cv2.putText(frame, text, (x0, y0 + th), font, font_scale, _CYAN, thickness, cv2.LINE_AA)
 
     # ── Arc compass (bottom-right) ────────────────────────────────────────
@@ -283,7 +286,6 @@ class VisionService(Service):
         if rot:
             frame = _rotate_frame(frame, rot)
 
-        # picamera2 "RGB888" actually delivers BGR in the buffer.
         # Snapshot detection caches while we have the lock.
         with self._det_lock:
             faces   = self._latest_faces
