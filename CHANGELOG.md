@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.8.5] - 2026-05-11
+### Fixed
+- **EQ preset now persists across daemon restarts** — `MusicService.set_eq_preset()`
+  writes the selected preset to `~/.config/desktop-assistant/music_eq_preset.txt` and
+  restores it on `on_start()`. The `"custom"` preset is also persisted when the user
+  applies custom EQ bands via the web API. The custom EQ panel is now shown
+  automatically on page load when the persisted preset is `"custom"`.
+- **Object detection enabled/disabled now persists** — `ObjectService._on_set_enabled()`
+  writes `true`/`false` to `~/.config/desktop-assistant/object_detection_enabled.txt`
+  and restores the state on `on_start()`, overriding the config default.
+
 ## [1.8.4] - 2026-05-11
 ### Added
 - **Service error (red) state in Services panel** — `WebService` now subscribes to

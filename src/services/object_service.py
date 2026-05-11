@@ -30,18 +30,23 @@ object.set_enabled       — ``{"enabled": bool}`` toggle detection at runtime
 
 from __future__ import annotations
 
+import json
 import logging
 import queue
 import threading
 import time
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from src.core.bus import MessageBus
 from src.core.service import Service
 
 log = logging.getLogger(__name__)
+
+_STATE_DIR              = Path.home() / ".config" / "desktop-assistant"
+_OBJ_DETECT_STATE_FILE  = _STATE_DIR / "object_detection_enabled.txt"
 
 
 @dataclass
@@ -80,6 +85,15 @@ class ObjectService(Service):
     # ── Lifecycle ──────────────────────────────────────────────────────
 
     def on_start(self) -> None:
+        # Restore persisted enabled state (overrides ObjectConfig default).
+        if _OBJ_DETECT_STATE_FILE.exists():
+            try:
+                saved = _OBJ_DETECT_STATE_FILE.read_text().strip().lower()
+                self._enabled = saved != "false"
+                log.info("ObjectService: restored detection_enabled=%s", self._enabled)
+            except Exception as exc:
+                log.warning("ObjectService: failed to restore enabled state: %s", exc)
+
         if self._detector is None:
             from src.perception.object_detector import ObjectDetector
             self._detector = ObjectDetector(conf_threshold=self._cfg.conf_threshold)
@@ -141,6 +155,12 @@ class ObjectService(Service):
             return
         self._enabled = bool(payload["enabled"])
         log.info("ObjectService detection enabled=%s", self._enabled)
+        # Persist so the setting survives daemon restarts.
+        try:
+            _STATE_DIR.mkdir(parents=True, exist_ok=True)
+            _OBJ_DETECT_STATE_FILE.write_text("true" if self._enabled else "false")
+        except Exception as exc:
+            log.warning("ObjectService: failed to persist enabled state: %s", exc)
         if self.bus is not None:
             self.bus.publish("object.enabled_changed", {"enabled": self._enabled})
 

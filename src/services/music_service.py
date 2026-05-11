@@ -56,6 +56,9 @@ _PIANOBAR_FIFO        = _PIANOBAR_CONFIG_DIR / "ctl"
 _PIANOBAR_EVENT_SCRIPT = _PIANOBAR_CONFIG_DIR / "da-event.sh"
 _PIANOBAR_META_JSON   = _PIANOBAR_CONFIG_DIR / "da-meta.json"
 
+_DA_STATE_DIR         = Path.home() / ".config" / "desktop-assistant"
+_MUSIC_EQ_STATE_FILE  = _DA_STATE_DIR / "music_eq_preset.txt"
+
 _RE_SONG           = re.compile(r'\|>\s+"(.+?)"\s+by\s+"(.+?)"\s+on\s+"(.+?)"')
 _RE_STATION        = re.compile(r'^\s*(\d+)\)\s+(?:[qQ]\s+)?(.+?)$')
 _RE_SELECT         = re.compile(r'[Ss]elect station|[Cc]hoose station')
@@ -168,6 +171,11 @@ class MusicService(Service):
             return
         self._eq_preset = preset
         self.bus.publish("av.set_eq_preset", {"preset": preset})
+        try:
+            _DA_STATE_DIR.mkdir(parents=True, exist_ok=True)
+            _MUSIC_EQ_STATE_FILE.write_text(preset)
+        except Exception as exc:
+            log.warning("MusicService: failed to persist EQ preset: %s", exc)
         log.info("EQ preset changed to %r", preset)
 
     # ── Lifecycle ─────────────────────────────────────────────────────
@@ -176,6 +184,15 @@ class MusicService(Service):
         if not self._enabled:
             log.info("MusicService disabled via config")
             return
+        # Restore persisted EQ preset (in-memory only — AVService handles the audio side).
+        if _MUSIC_EQ_STATE_FILE.exists():
+            try:
+                saved = _MUSIC_EQ_STATE_FILE.read_text().strip()
+                if saved in self.EQ_PRESETS:
+                    self._eq_preset = saved
+                    log.info("MusicService: restored EQ preset %r", saved)
+            except Exception as exc:
+                log.warning("MusicService: failed to restore EQ preset: %s", exc)
         self._unsubs += [
             self.bus.subscribe("music.play",         self._on_play),
             self.bus.subscribe("music.stop",         self._on_stop),

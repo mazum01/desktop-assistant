@@ -796,6 +796,10 @@ async function loadMusicStatus() {
     // EQ
     if (d.eq_preset) {
       el("music-eq-select").value = d.eq_preset;
+      // Show custom EQ panel immediately if preset is "custom".
+      const panel = el("custom-eq-panel");
+      if (panel) panel.style.display = (d.eq_preset === "custom") ? "block" : "none";
+      if (d.eq_preset === "custom") loadCustomEq();
     }
   } catch (e) { /* ignore */ }
 }
