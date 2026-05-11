@@ -1,5 +1,9 @@
 camera:
+  height: 480
   rotation_deg: 270
+  width: 640
+camera2:
+  rotation_deg: 90
 head_tracking:
   face_tracking_enabled: true
   random_motion_enabled: false

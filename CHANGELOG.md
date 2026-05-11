@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.17] - 2026-05-11
+### Changed
+- **Camera: removed background capture thread** — reverted to direct `capture_array()`
+  in the service tick. The background-thread approach caused concurrent DMA/heap memory
+  operations that inflated `frame.copy()` from ~5ms to 89ms. With `NoiseReductionMode=0`
+  already in place, `capture_array()` blocks ~33ms (one ISP frame interval), making
+  a background thread unnecessary. `Camera` class is now simpler: no `_capture_loop`,
+  no `_frame_lock`, no `_latest_array`. `capture_frame()` calls `capture_array()` directly
+  and returns `arr.copy()` (immediate heap copy from DMA buffer).
+- **VisionService timing** — added finer `copy`/`draw`/`encode` split in timing log to
+  distinguish frame copy from overlay drawing for future profiling.
+
 ## [1.7.16] - 2026-05-11
 ### Changed
 - **Camera: background capture thread** — `Camera.start()` now spawns a dedicated

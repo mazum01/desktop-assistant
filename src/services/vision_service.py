@@ -273,12 +273,14 @@ class VisionService(Service):
     def run_tick(self) -> None:
         if self._camera is None:
             return
+        _t0 = time.monotonic()
         try:
             frame = self._camera.capture_frame()
         except Exception:
             log.exception("capture_frame failed")
             self.bus.publish("vision.error", {"reason": "capture_failed"})
             return
+        _t1 = time.monotonic()
 
         # Apply software rotation before any processing or display.
         with self._rotation_lock:
@@ -294,6 +296,7 @@ class VisionService(Service):
         # Draw overlays then encode. Work on a copy so latest_frame()
         # consumers always see a clean (no-overlay) frame.
         display = frame.copy()
+        _t1b = time.monotonic()
         _draw_overlays(display, faces, objects)
 
         # Servo position overlay — drawn on top of all other annotations.
@@ -303,15 +306,27 @@ class VisionService(Service):
             servo_max = self._servo_max_deg
         if servo_angle is not None:
             _draw_servo_overlay(display, servo_angle, servo_min, servo_max)
+        _t2 = time.monotonic()
 
         ok, buf = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 60])
         jpeg = bytes(buf) if ok else None
+        _t3 = time.monotonic()
 
         with self._lock:
             self._latest = frame
             self._latest_jpeg = jpeg
             self._index += 1
             idx = self._index
+
+        log.info(
+            "tick ms: capture=%.1f copy=%.1f draw=%.1f encode=%.1f total=%.1f",
+            (_t1  - _t0)  * 1000,
+            (_t1b - _t1)  * 1000,
+            (_t2  - _t1b) * 1000,
+            (_t3  - _t2)  * 1000,
+            (_t3  - _t0)  * 1000,
+        ) if idx % 30 == 0 else None
+
         self.bus.publish(
             "vision.frame_ready",
             {"index": idx, "shape": tuple(frame.shape), "ts": time.time()},
