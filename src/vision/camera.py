@@ -12,6 +12,7 @@ or the camera is not detected — identical pattern to ServoController.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -61,6 +62,11 @@ class Camera:
         self._cam: Optional[object] = None
         self._running = False
         self._sim = False
+
+        # Background capture thread state
+        self._latest_array: Optional[np.ndarray] = None
+        self._frame_lock = threading.Lock()
+        self._capture_thread: Optional[threading.Thread] = None
 
         if not _PICAMERA2_AVAILABLE:
             log.warning("[sim] picamera2 not installed — camera in sim mode")
@@ -133,18 +139,62 @@ class Camera:
         # Brief warm-up so auto-exposure settles
         time.sleep(0.5)
         self._running = True
+
+        # Spawn a dedicated capture thread that continuously pulls frames from
+        # the ISP. This decouples ISP delivery timing from GIL contention in the
+        # service tick thread — the tick just copies the latest frame immediately
+        # without waiting for the ISP pipeline.
+        self._capture_thread = threading.Thread(
+            target=self._capture_loop,
+            daemon=True,
+            name=f"cam{self._cfg.index}-capture",
+        )
+        self._capture_thread.start()
+        # Wait for the first frame so capture_frame() is immediately usable
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            with self._frame_lock:
+                if self._latest_array is not None:
+                    break
+            time.sleep(0.01)
         log.info(
             "Camera %d started: %dx%d @ %dfps",
             self._cfg.index, self._cfg.width, self._cfg.height, self._cfg.framerate,
         )
 
+    def _capture_loop(self) -> None:
+        """Continuously pull frames from the ISP into _latest_array.
+
+        Stores the raw picamera2 array view (possibly DMA-backed). The DMA→heap
+        copy is deferred to capture_frame() so that only one thread touches DMA
+        memory at a time, preventing cache-contention slowdowns.
+        """
+        while self._running:
+            try:
+                arr = self._cam.capture_array("main")
+                if not self._running:
+                    break
+                with self._frame_lock:
+                    self._latest_array = arr
+            except Exception:
+                if not self._running:
+                    break
+                log.debug("Camera %d: capture error in loop", self._cfg.index)
+                time.sleep(0.01)
+
     def stop(self) -> None:
-        """Stop the camera stream and release resources."""
+        """Stop the camera stream, background capture thread, and release resources."""
         if not self._running:
             return
-        self._running = False
+        self._running = False  # signal capture thread to exit
+        # Stop the camera first so any blocking capture_array() call unblocks
         if not self._sim and self._cam is not None:
             self._cam.stop()
+        if self._capture_thread is not None:
+            self._capture_thread.join(timeout=2.0)
+            self._capture_thread = None
+        with self._frame_lock:
+            self._latest_array = None
         log.info("Camera %d stopped", self._cfg.index)
 
     def set_resolution(self, width: int, height: int) -> None:
@@ -179,11 +229,12 @@ class Camera:
 
     def capture_frame(self) -> np.ndarray:
         """
-        Capture and return a frame as a numpy array (H×W×3, uint8, BGR).
+        Return the latest captured frame as a numpy array (H×W×3, uint8, BGR).
 
-        Blocks until the ISP delivers the next frame (~1/framerate seconds).
-        With NoiseReductionMode=0 this is typically ≤33ms at 30fps.
-        Returns a heap-resident copy so the caller can modify it freely.
+        Acquires the frame lock briefly to copy the latest DMA buffer to heap
+        memory. The DMA→heap copy (≈28ms due to page-fault warmup) happens here
+        so that only one thread reads from DMA memory at a time, avoiding the
+        cache-contention latency caused by concurrent DMA reads.
         In sim mode returns a synthetic test frame.
         Raises RuntimeError if the camera has not been started.
         """
@@ -202,11 +253,10 @@ class Camera:
             cv2.rectangle(frame, (20, 20), (self._cfg.width - 20, self._cfg.height - 20),
                           (60, 80, 100), 2)
             return frame
-        arr = self._cam.capture_array("main")
-        # Copy immediately to heap memory — picamera2 may return a view into a
-        # DMA/mmap buffer; this ensures callers read from warm CPU cache and
-        # the ISP buffer is released back to libcamera as soon as possible.
-        return arr.copy()
+        with self._frame_lock:
+            if self._latest_array is None:
+                raise RuntimeError("Camera.start() must be called before capture_frame()")
+            return self._latest_array.copy()
 
     def capture_still(self, path: str) -> None:
         """

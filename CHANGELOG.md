@@ -6,7 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.7.17] - 2026-05-11
+## [1.7.18] - 2026-05-11
+### Changed
+- **Camera: restored background capture thread (v1.7.16 design)** — the no-background-thread
+  approach (v1.7.17) suffered severe GIL contention from Hailo inference, causing
+  `capture_array()` to block 77–169ms instead of ~33ms. Restored background thread
+  that decouples ISP frame delivery from GIL pressure; DMA→heap copy happens in
+  `capture_frame()` inside the lock (prevents concurrent DMA access). Added comments
+  explaining the design rationale.
+- **VisionService: finer timing log** — split "overlays" into "copy", "draw", and "encode"
+  phases for future profiling.
+
+
 ### Changed
 - **Camera: removed background capture thread** — reverted to direct `capture_array()`
   in the service tick. The background-thread approach caused concurrent DMA/heap memory
