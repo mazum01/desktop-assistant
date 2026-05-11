@@ -155,6 +155,13 @@ class ObjectService(Service):
             return
         self._enabled = bool(payload["enabled"])
         log.info("ObjectService detection enabled=%s", self._enabled)
+        if not self._enabled:
+            # Drain any queued frames so the worker won't process stale work.
+            while not self._frame_queue.empty():
+                try:
+                    self._frame_queue.get_nowait()
+                except Exception:
+                    break
         # Persist so the setting survives daemon restarts.
         try:
             _STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -189,6 +196,10 @@ class ObjectService(Service):
 
             frame = self._get_frame()
             if frame is None:
+                continue
+
+            # Guard: enabled flag may have been cleared while this frame was queued.
+            if not self._enabled:
                 continue
 
             try:

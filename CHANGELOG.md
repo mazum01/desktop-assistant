@@ -6,7 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.8.12] - 2026-05-11
+## [1.8.13] - 2026-05-11
+### Fixed
+- **Object boxes still persisted after v1.8.12 fix** — the detection worker
+  loop was not checking `_enabled` before publishing results, so frames already
+  in the queue were processed and repopulated `_latest_objects` *after* the
+  clear. Fixed by: (1) checking `_enabled` in `_detection_loop` before
+  publishing; (2) draining the frame queue in `_on_set_enabled` when disabling.
+
+
 ### Fixed
 - **Object boxes persist after disabling detection** — `VisionService` now
   subscribes to `object.enabled_changed`; when detection is disabled it
