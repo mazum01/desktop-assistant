@@ -738,6 +738,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadCamResolution();
   loadMusicStatus();
   connectWS();
+  initFpsCounters();
   // Refresh face registry every 30s; music status every 2s
   setInterval(loadFaces, 30000);
   setInterval(loadMusicStatus, 2000);
@@ -1010,4 +1011,24 @@ function fmtAge(ts) {
   if (age < 3600) return `${Math.floor(age/60)}m ago`;
   if (age < 86400) return `${Math.floor(age/3600)}h ago`;
   return new Date(ts * 1000).toLocaleDateString();
+}
+
+// ── FPS counters ─────────────────────────────────────────────────
+// Counts MJPEG frame load events per second for each camera feed
+// and updates the overlay badges.
+function initFpsCounters() {
+  const feeds = [
+    { img: el("camera-stream"),  badge: el("fps-overlay-1") },
+    { img: el("camera-stream2"), badge: el("fps-overlay-2") },
+  ];
+
+  feeds.forEach(({ img, badge }) => {
+    if (!img || !badge) return;
+    let count = 0;
+    img.addEventListener("load", () => { count++; });
+    setInterval(() => {
+      badge.textContent = count > 0 ? `${count} fps` : "– fps";
+      count = 0;
+    }, 1000);
+  });
 }

@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.7.13] - 2026-05-11
+### Added
+- Live FPS counter overlaid on each camera feed (bottom-left corner, yellow badge).
+  Counts MJPEG frame load events per second client-side — no server changes needed.
+
 ## [1.7.12] - 2026-05-11
 ### Fixed
 - Camera feeds now always display side-by-side (`flex-wrap: nowrap`; scrolls

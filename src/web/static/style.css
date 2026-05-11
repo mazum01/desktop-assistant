@@ -142,6 +142,18 @@ main {
   font-size: 12px;
   font-weight: 600;
 }
+.fps-overlay {
+  position: absolute;
+  bottom: 8px; left: 8px;
+  background: rgba(0,0,0,.65);
+  color: #f0c040;
+  border: 1px solid rgba(240,192,64,.5);
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ── Telemetry grid ──────────────────────────────────────────── */
 .grid-4 {
