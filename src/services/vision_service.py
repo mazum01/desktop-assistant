@@ -121,8 +121,8 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
         cv2.ellipse(frame_bgr, (cx, cy), (rx, ry), 0, 0, 360, color, ellipse_thickness, cv2.LINE_AA)
         label = face.get("name") or (face.get("face_id") and "unknown")
         if label:
-            font_scale = max(0.3, 0.45 * scale)
-            font_thick = max(1, round(scale))
+            font_scale = max(0.45, 0.65 * scale)
+            font_thick = max(1, round(1.5 * scale))
             lx = max(0, cx - 20)
             ly = max(10, cy - ry - 4)
             cv2.putText(frame_bgr, label, (lx, ly),
@@ -138,7 +138,7 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
         conf  = obj.get("confidence", 0)
         label = f"{obj.get('label', '?')} {int(conf * 100)}%"
         ly    = max(10, y1 - 4)
-        font_scale = max(0.25, 0.4 * scale)
+        font_scale = max(0.4, 0.58 * scale)
         cv2.putText(frame_bgr, label, (x1, ly),
                     cv2.FONT_HERSHEY_SIMPLEX, font_scale, _CYAN, box_thick, cv2.LINE_AA)
 
@@ -160,8 +160,8 @@ def _draw_servo_overlay(
     # ── Text label (bottom-left) ────────────────────────────────────────
     text = f"Pan: {angle:.0f}\u00b0"
     font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = max(0.3, 0.55 * scale)
-    thickness = max(1, round(scale))
+    font_scale = max(0.45, 0.75 * scale)
+    thickness = max(1, round(1.5 * scale))
     (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
 
     pad = max(2, int(4 * scale))

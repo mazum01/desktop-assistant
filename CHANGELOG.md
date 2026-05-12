@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.8.19] - 2026-05-12
+### Changed
+- **Larger overlay text, scaled with resolution** — increased font scale multipliers
+  (relative to 640×480 baseline) across all three overlay draw functions:
+  - Face name label: `0.45×scale` → `0.65×scale` (min 0.45)
+  - Object detection label: `0.4×scale` → `0.58×scale` (min 0.4)
+  - Servo pan indicator: `0.55×scale` → `0.75×scale` (min 0.45)
+  - Face/servo label stroke thickness: `round(scale)` → `round(1.5×scale)`
+  Text remains proportional to resolution — same physical size in 640×480,
+  larger and easier to read at higher resolutions.
+
 ## [1.8.18] - 2026-05-12
 ### Fixed
 - **Head hunting during face tracking** — Two-part fix for the servo oscillating
