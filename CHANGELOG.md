@@ -6,6 +6,29 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.11.0] - 2026-05-12
+### Added
+- **Skills framework** (`src/skills/`): `Skill` ABC and `SkillRegistry` — voice-intent
+  dispatch system that maps natural-language utterances to assistant actions.
+  First-match-wins ordering; skills return a spoken string or `None` (silent).
+- **SkillsService** (`src/services/skills_service.py`): subscribes to `av.utterance`,
+  builds the skill registry at startup, and dispatches incoming utterances.
+  Wired into `core_main.py`.
+- **9 built-in skills**:
+  - `GreetingSkill` — time-aware greetings (morning/afternoon/evening/generic buckets)
+  - `TellTimeSkill` — speaks current local time in 12-hour AM/PM format
+  - `TellJokeSkill` — publishes `av.tell_joke` → ClockService fetches and speaks a joke
+  - `MeetFaceSkill` — publishes `face.meet` → FaceService registers a name for the visible face
+  - `DescribeSceneSkill` — publishes `vision.describe` → ObjectService speaks scene description
+  - `MotionControlSkill` — "look left/right/center" → `motion.pan_to` at 145°/215°/180°
+  - `MusicControlSkill` — play/stop/pause/skip/thumbs-up/thumbs-down → `music.*` topics
+  - `ObjectDetectToggleSkill` — enable/disable YOLOv8s object detection via `object.set_enabled`
+  - `FaceTrackingToggleSkill` — "follow me" / "stop following me" → `tracking.set_face_tracking`
+- **70 new tests** in `tests/test_skills.py` and `tests/test_skills_service.py`.
+- **Architecture diagram updated** to include `SkillsService`, `ObjectService`, `MusicService`,
+  and `perception/object_detector.py` driver node (all previously missing).  Rebuilt to
+  `.pdf`, `.svg`, `.png`.
+
 ## [1.10.0] - 2026-05-12
 ### Added
 - **`max_fps`, `conf_threshold`, `max_objects` now configurable** via `config/assistant.yaml`

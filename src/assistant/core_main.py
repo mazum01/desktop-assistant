@@ -27,6 +27,7 @@ from src.services.object_service import ObjectService, ObjectConfig
 from src.services.perception_service import PerceptionService
 from src.services.raw_camera_service import RawCameraService, RawCameraConfig
 from src.services.telemetry_service import TelemetryService
+from src.services.skills_service import SkillsService
 from src.services.tracking_service import TrackingService
 from src.services.vision_service import VisionService
 from src.core.quiet_hours import QuietHours
@@ -288,6 +289,7 @@ def main() -> int:
             quiet_hours=_qh,
         ),
         music_svc,
+        SkillsService(bus=bus),
     ]
     if cam2_svc is not None:
         services.append(cam2_svc)

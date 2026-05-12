@@ -13,7 +13,7 @@ digraph DesktopAssistant {
     ranksep=0.6;
     fontname="Helvetica";
     labelloc="t";
-    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v1.2.1 — Quiet hours · Face thumbnails · ClockService · Online embedding accumulation</font>>;
+    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v1.11.0 — Skills framework · ObjectService · MusicService · Object detector letterbox cache</font>>;
     fontsize=16;
 
     node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin=0.15];
@@ -58,6 +58,7 @@ digraph DesktopAssistant {
         drv_van    [label="audio/version_announcer.py", fillcolor="#a5c8ff"];
         drv_hailo  [label="perception/hailo_inference.py\n(VDevice wrapper)",  fillcolor="#a5c8ff"];
         drv_facedet [label="perception/face_detector.py\n(SCRFD decode + Haar fallback)", fillcolor="#a5c8ff"];
+        drv_objdet  [label="perception/object_detector.py\n(YOLOv8s + letterbox cache)", fillcolor="#a5c8ff"];
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -106,6 +107,9 @@ digraph DesktopAssistant {
         svc_track   [label="TrackingService\n← perception.faces\n→ motion.pan_to\n20Hz spring-damper tracking\nidle random gaze", fillcolor="#a8d88d"];
         svc_web     [label="WebService (FastAPI)\nGET / — dashboard SPA\nGET /stream — MJPEG 640×360 feed\nWS /ws — live JSON status\nGET /api/faces — list (has_thumb flag)\nGET /api/faces/{id}/thumb — face JPEG\nPUT /api/faces/{id} — rename\nDEL /api/faces/{id} — delete one\nDEL /api/faces — delete all\nGET|PUT /api/settings/quiet-hours\nPOST /api/say|pan|version\nport 8080", fillcolor="#a8d88d"];
         svc_clock   [label="ClockService\n+ ClockAnnouncer\n→ av.say (hourly/half-hourly)\nrespects QuietHours", fillcolor="#a8d88d"];
+        svc_object  [label="ObjectService\n← vision.frame_ready / object.set_enabled\n→ object.detections\n2fps · max_objects cap · BGR→RGB fix", fillcolor="#a8d88d"];
+        svc_music   [label="MusicService\n← music.play / stop / pause / next\n← music.thumbs_up / thumbs_down\nPandora / audio playback", fillcolor="#a8d88d"];
+        svc_skills  [label="SkillsService\n← av.utterance\n→ av.say / vision.describe / av.tell_joke\n→ face.meet / motion.pan_to / music.*\n→ object.set_enabled\n→ tracking.set_face_tracking\nSkillRegistry — first-match dispatch", fillcolor="#a8d88d"];
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -136,6 +140,7 @@ digraph DesktopAssistant {
     hw_hailo  -> drv_hailo  [label="PCIe"];
 
     drv_hailo -> drv_facedet;
+    drv_hailo -> drv_objdet;
 
     drv_tmp117 -> drv_thmgr;
     drv_fan    -> drv_thmgr;
@@ -150,6 +155,7 @@ digraph DesktopAssistant {
     drv_thmgr -> svc_thermal;
     drv_servo -> svc_motion;
     drv_facedet -> svc_perception;
+    drv_objdet  -> svc_object;
     drv_cam   -> svc_vision;
     drv_ain   -> svc_audio;
     drv_aout  -> svc_av;
@@ -187,6 +193,13 @@ digraph DesktopAssistant {
     svc_vision -> svc_web   [label="latest_frame()", style=dashed, color="#888888"];
     core_bus -> svc_clock   [color="#226622"];
     svc_clock -> core_bus   [color="#226622"];
+    core_bus -> svc_object  [color="#226622"];
+    svc_object -> core_bus  [color="#226622"];
+    svc_vision -> svc_object [label="latest_frame()", style=dashed, color="#888888"];
+    core_bus -> svc_music   [color="#226622"];
+    svc_music -> core_bus   [color="#226622"];
+    core_bus -> svc_skills  [color="#226622"];
+    svc_skills -> core_bus  [color="#226622"];
 
     core_qh -> svc_clock    [label="suppresses\nannouncements", style=dashed, color="#888888"];
     core_qh -> svc_face     [label="suppresses\ngreetings",     style=dashed, color="#888888"];
@@ -204,6 +217,9 @@ digraph DesktopAssistant {
     svc_face    -> core_svc [style=dotted];
     svc_track   -> core_svc [style=dotted];
     svc_clock   -> core_svc [style=dotted];
+    svc_object  -> core_svc [style=dotted];
+    svc_music   -> core_svc [style=dotted];
+    svc_skills  -> core_svc [style=dotted];
     // (WebService does not extend Service base class)
 
     // ─────────────────────────────────────────────────────────────────
@@ -218,5 +234,5 @@ digraph DesktopAssistant {
     // ─────────────────────────────────────────────────────────────────
     // Boot ordering
     // ─────────────────────────────────────────────────────────────────
-    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_av; svc_perception; svc_telemetry; svc_ipc; svc_face; svc_track; svc_web; svc_clock;}
+    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_av; svc_perception; svc_telemetry; svc_ipc; svc_face; svc_track; svc_web; svc_clock; svc_object; svc_music; svc_skills;}
 }
