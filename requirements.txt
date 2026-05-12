@@ -26,5 +26,8 @@ uvicorn[standard]>=0.29.0
 python-multipart>=0.0.9
 psutil>=5.9.0
 
+# Native C++ extensions (build with scripts/build_scrfd_decode.sh)
+pybind11>=2.12.0
+
 # Testing
 pytest>=8.0
