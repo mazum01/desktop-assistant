@@ -51,6 +51,18 @@ _INPUT_SIZE = 640          # model expects 640×640 RGB uint8
 _STRIDES = [8, 16, 32]     # feature-map strides → sizes 80×80, 40×40, 20×20
 _NUM_ANCHORS = 2           # anchors per spatial cell at each scale
 
+# Attempt to load the C++ accelerated decoder; fall back to pure Python silently.
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).parent / "scrfd_decode"))
+    from scrfd_decode_cpp import decode_scrfd as _decode_scrfd_cpp  # type: ignore
+    _HAS_CPP_DECODE = True
+    log.debug("scrfd_decode_cpp loaded — using C++ decoder")
+except Exception:
+    _decode_scrfd_cpp = None  # type: ignore
+    _HAS_CPP_DECODE = False
+    log.debug("scrfd_decode_cpp not available — using Python decoder")
+
 
 @dataclass
 class FaceDetection:
@@ -306,6 +318,37 @@ class FaceDetector:
                 continue
             size = arr.shape[0]  # H (==W for SCRFD)
             by_size.setdefault(size, {})[name] = arr
+
+        # ── C++ fast path ──────────────────────────────────────────────
+        if _HAS_CPP_DECODE:
+            score_maps = []
+            bbox_maps  = []
+            kps_maps   = []
+            used_strides = []
+            for stride in _STRIDES:
+                fm_size = input_size // stride
+                tensors = by_size.get(fm_size, {})
+                if not tensors:
+                    continue
+                by_ch: dict[int, np.ndarray] = {v.shape[-1]: v for v in tensors.values()}
+                score_map = by_ch.get(2)
+                bbox_map  = by_ch.get(8)
+                kps_map   = by_ch.get(20)
+                if score_map is None or bbox_map is None:
+                    continue
+                score_maps.append(score_map.astype(np.float32, copy=False))
+                bbox_maps.append(bbox_map.astype(np.float32, copy=False))
+                kps_maps.append(kps_map.astype(np.float32, copy=False) if kps_map is not None else None)
+                used_strides.append(stride)
+
+            if used_strides:
+                boxes, scores, kps = _decode_scrfd_cpp(
+                    score_maps, bbox_maps, kps_maps,
+                    used_strides, self._conf_thr_logit,
+                )
+                return boxes, scores, kps if kps is not None else None
+
+        # ── Pure-Python fallback ───────────────────────────────────────
 
         all_boxes_arrays: list = []
         all_scores_arrays: list = []
