@@ -66,6 +66,11 @@ class FaceRegistry:
         self._ensure_schema()
         self._thumbs_dir = Path(thumbs_dir) if thumbs_dir else _DEFAULT_THUMBS
         self._thumbs_dir.mkdir(parents=True, exist_ok=True)
+        # In-memory embedding matrix cache: one BLAS matmul instead of N scalar np.dot calls.
+        # Shape: (N, 512) float32.  Invalidated on any write.
+        self._emb_matrix: Optional[np.ndarray] = None   # (N, 512)
+        self._emb_face_ids: list = []                    # parallel list of face_id strings
+        self._emb_names: list = []                       # parallel list of name strings
         log.info("FaceRegistry opened: %s", path)
 
     # ── Schema ───────────────────────────────────────────────────────────
@@ -104,30 +109,48 @@ class FaceRegistry:
     ) -> Optional[Tuple[str, str, float]]:
         """Find the closest known face above the similarity threshold.
 
+        Uses a cached (N, 512) matrix so the comparison is a single BLAS
+        matmul instead of N separate np.dot scalar calls.
+
         Returns ``(face_id, name, score)`` or ``None`` if no match.
         """
+        if self._emb_matrix is None:
+            self._build_emb_cache()
+
+        mat = self._emb_matrix
+        if mat is None or mat.shape[0] == 0:
+            return None
+
+        scores = mat @ embedding          # (N,) — one BLAS call
+        idx = int(np.argmax(scores))
+        best_score = float(scores[idx])
+
+        if best_score >= self._threshold:
+            return self._emb_face_ids[idx], self._emb_names[idx], best_score
+        return None
+
+    def _build_emb_cache(self) -> None:
+        """Load all embeddings from DB into an (N, 512) float32 matrix."""
         rows = self._conn.execute(
             "SELECT fe.face_id, fe.embedding, f.name "
             "FROM face_embeddings fe JOIN faces f ON fe.face_id = f.id"
         ).fetchall()
-
-        best_score = -1.0
-        best_id = None
-        best_name = None
-
+        vecs, ids, names = [], [], []
         for row in rows:
             stored = np.frombuffer(row["embedding"], dtype=np.float32)
             if stored.shape[0] != _EMBED_DIM:
                 continue
-            score = float(np.dot(embedding, stored))  # both L2-normalised
-            if score > best_score:
-                best_score = score
-                best_id = row["face_id"]
-                best_name = row["name"]
+            vecs.append(stored)
+            ids.append(row["face_id"])
+            names.append(row["name"])
+        self._emb_matrix = np.stack(vecs, axis=0) if vecs else np.empty((0, _EMBED_DIM), dtype=np.float32)
+        self._emb_face_ids = ids
+        self._emb_names = names
 
-        if best_score >= self._threshold and best_id is not None:
-            return best_id, best_name, best_score
-        return None
+    def _invalidate_emb_cache(self) -> None:
+        self._emb_matrix = None
+        self._emb_face_ids = []
+        self._emb_names = []
 
     def register(self, embedding: np.ndarray) -> Tuple[str, str]:
         """Create a new identity and store its first embedding.
@@ -149,6 +172,7 @@ class FaceRegistry:
             (str(uuid.uuid4()), face_id, embedding.tobytes(), now),
         )
         self._conn.commit()
+        self._invalidate_emb_cache()
         log.info("Registered new face %s as %r", face_id[:8], auto_name)
         return face_id, auto_name
 
@@ -159,6 +183,7 @@ class FaceRegistry:
         )
         self._conn.commit()
         if cur.rowcount:
+            self._invalidate_emb_cache()
             log.info("Named face %s → %r", face_id[:8], name)
             return True
         log.warning("set_name: face_id %r not found", face_id)
@@ -270,6 +295,7 @@ class FaceRegistry:
             self._conn.execute("DELETE FROM faces WHERE id = ?", (fid,))
             self.delete_thumbnail(fid)
         self._conn.commit()
+        self._invalidate_emb_cache()
         log.info("Deleted %d guest face(s) from registry", count)
         return count
 
@@ -383,6 +409,7 @@ class FaceRegistry:
         self._conn.execute("DELETE FROM faces WHERE id = ?", (absorb_id,))
         self.delete_thumbnail(absorb_id)
         self._conn.commit()
+        self._invalidate_emb_cache()
         log.info("Merged face %s into %s (%r)", absorb_id[:8], keep_id[:8], keep["name"])
         return True
 
@@ -399,6 +426,7 @@ class FaceRegistry:
         self._conn.execute("DELETE FROM face_embeddings")
         self._conn.execute("DELETE FROM faces")
         self._conn.commit()
+        self._invalidate_emb_cache()
         log.info("Deleted all %d face(s) from registry", count)
         return count
 
@@ -407,6 +435,7 @@ class FaceRegistry:
         cur = self._conn.execute("DELETE FROM face_embeddings WHERE face_id = ?", (face_id,))
         cur2 = self._conn.execute("DELETE FROM faces WHERE id = ?", (face_id,))
         self._conn.commit()
+        self._invalidate_emb_cache()
         self.delete_thumbnail(face_id)
         return cur2.rowcount > 0
 
@@ -425,6 +454,7 @@ class FaceRegistry:
             (str(uuid.uuid4()), face_id, embedding.tobytes(), time.time()),
         )
         self._conn.commit()
+        self._invalidate_emb_cache()
 
     def add_embedding_if_needed(
         self, face_id: str, embedding: np.ndarray, cap: int = _EMBED_CAP
@@ -453,6 +483,7 @@ class FaceRegistry:
             (str(uuid.uuid4()), face_id, embedding.tobytes(), time.time()),
         )
         self._conn.commit()
+        self._invalidate_emb_cache()
         return True
 
     def save_thumbnail(self, face_id: str, crop: np.ndarray) -> bool:

@@ -74,6 +74,8 @@ class ObjectDetector:
         self._engine = None
         self._sim = False
         self._backend = "sim"
+        # Reusable model-input buffer; always 640×640×3 (model input size, not video resolution).
+        self._letterbox_buf = np.zeros((_TARGET_SIZE, _TARGET_SIZE, 3), dtype=np.uint8)
         self._init_engine()
 
     def _init_engine(self) -> None:
@@ -127,18 +129,21 @@ class ObjectDetector:
     # ── Internal ───────────────────────────────────────────────────────
 
     def _letterbox(self, frame: np.ndarray) -> np.ndarray:
-        """Resize *frame* to 640×640 with letterboxing (black padding)."""
+        """Resize *frame* to 640×640 with letterboxing into the preallocated buffer."""
         import cv2
         src_h, src_w = frame.shape[:2]
         scale = min(_TARGET_SIZE / src_h, _TARGET_SIZE / src_w)
         new_w = int(src_w * scale)
         new_h = int(src_h * scale)
         resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-        canvas = np.zeros((_TARGET_SIZE, _TARGET_SIZE, 3), dtype=np.uint8)
+        if not hasattr(self, "_letterbox_buf"):
+            self._letterbox_buf = np.zeros((_TARGET_SIZE, _TARGET_SIZE, 3), dtype=np.uint8)
+        buf = self._letterbox_buf
+        buf.fill(0)
         pad_top  = (_TARGET_SIZE - new_h) // 2
         pad_left = (_TARGET_SIZE - new_w) // 2
-        canvas[pad_top:pad_top + new_h, pad_left:pad_left + new_w] = resized
-        return canvas
+        buf[pad_top:pad_top + new_h, pad_left:pad_left + new_w] = resized
+        return buf
 
     def _decode(
         self,

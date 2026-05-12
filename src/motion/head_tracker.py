@@ -252,4 +252,4 @@ class HeadTracker:
         return random.uniform(lo, hi)
 
     def _clamp(self, angle: float) -> float:
-        return float(np.clip(angle, self._cfg.servo_min, self._cfg.servo_max))
+        return float(min(max(angle, self._cfg.servo_min), self._cfg.servo_max))

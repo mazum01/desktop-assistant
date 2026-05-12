@@ -6,6 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.9.1] - 2026-05-12
+### Changed
+- `ObjectDetector._letterbox()`: preallocated reusable 640×640×3 buffer in `__init__`
+  (lazy-init fallback for test fixtures using `__new__`), eliminating 1.2 MB heap
+  alloc per inference call — mirrors the FaceDetector v1.8.22 change.
+- `HeadTracker._clamp()`: replaced `np.clip()` scalar call with `min(max())` —
+  avoids numpy dispatch overhead at 20 Hz.
+- `FaceRegistry.find_match()`: replaced per-row `np.dot()` scalar loop with a
+  cached `(N, 512)` float32 matrix; matching is now one BLAS `matmul` + `argmax`
+  call. Cache is invalidated on every write (`register`, `set_name`,
+  `add_embedding`, `add_embedding_if_needed`, `merge_faces`, `delete_face`,
+  `delete_guest_faces`, `delete_all_faces`).
+
+---
+
 ## [1.9.0] - 2026-05-12
 ### Added
 - Dad jokes auto-refresh from icanhazdadjoke.com: fetches 60 jokes per refresh, cached
