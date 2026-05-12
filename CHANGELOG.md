@@ -6,6 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.9.8] - 2026-05-12
+### Fixed
+- **CPU spike caused by embedding cache full-rebuild on every face detection frame.**
+  `add_embedding_if_needed()` previously called `_invalidate_emb_cache()` on every
+  successful match, forcing a full SQLite read + `np.stack()` on the next `find_match()`
+  call (~50–100 ms at ~10 fps = near-continuous load).
+  - Added `_emb_row_ids` list (parallel to `_emb_matrix`) to enable targeted row lookup.
+  - Added `_append_to_cache()`: appends one row with `np.vstack` — no SQLite touch.
+  - Added `_replace_in_cache()`: replaces one row in-place (the prune-and-replace path);
+    matrix shape unchanged, zero allocation.
+  - `add_embedding_if_needed()` / `add_embedding()` now update the cache incrementally.
+  - `register()` appends to cache instead of invalidating.
+  - `set_name()` patches `_emb_names` in-place instead of invalidating.
+  - Full cache rebuild (`_invalidate_emb_cache`) is now reserved for structural changes
+    only: `delete_face()` and `clear()`.
+
 ## [1.9.7] - 2026-05-12
 ### Changed
 - `_put_text_outlined()`: black stroke outline is only drawn when the text color is

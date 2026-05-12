@@ -67,10 +67,12 @@ class FaceRegistry:
         self._thumbs_dir = Path(thumbs_dir) if thumbs_dir else _DEFAULT_THUMBS
         self._thumbs_dir.mkdir(parents=True, exist_ok=True)
         # In-memory embedding matrix cache: one BLAS matmul instead of N scalar np.dot calls.
-        # Shape: (N, 512) float32.  Invalidated on any write.
+        # Shape: (N, 512) float32.  Invalidated only on structural changes (face add/delete).
+        # Embedding additions are applied incrementally to avoid full SQLite rebuilds.
         self._emb_matrix: Optional[np.ndarray] = None   # (N, 512)
         self._emb_face_ids: list = []                    # parallel list of face_id strings
         self._emb_names: list = []                       # parallel list of name strings
+        self._emb_row_ids: list = []                     # parallel list of embedding row UUIDs
         log.info("FaceRegistry opened: %s", path)
 
     # ── Schema ───────────────────────────────────────────────────────────
@@ -132,10 +134,10 @@ class FaceRegistry:
     def _build_emb_cache(self) -> None:
         """Load all embeddings from DB into an (N, 512) float32 matrix."""
         rows = self._conn.execute(
-            "SELECT fe.face_id, fe.embedding, f.name "
+            "SELECT fe.id, fe.face_id, fe.embedding, f.name "
             "FROM face_embeddings fe JOIN faces f ON fe.face_id = f.id"
         ).fetchall()
-        vecs, ids, names = [], [], []
+        vecs, ids, names, row_ids = [], [], [], []
         for row in rows:
             stored = np.frombuffer(row["embedding"], dtype=np.float32)
             if stored.shape[0] != _EMBED_DIM:
@@ -143,14 +145,59 @@ class FaceRegistry:
             vecs.append(stored)
             ids.append(row["face_id"])
             names.append(row["name"])
+            row_ids.append(row["id"])
         self._emb_matrix = np.stack(vecs, axis=0) if vecs else np.empty((0, _EMBED_DIM), dtype=np.float32)
         self._emb_face_ids = ids
         self._emb_names = names
+        self._emb_row_ids = row_ids
 
     def _invalidate_emb_cache(self) -> None:
         self._emb_matrix = None
         self._emb_face_ids = []
         self._emb_names = []
+        self._emb_row_ids = []
+
+    def _append_to_cache(
+        self, row_id: str, face_id: str, name: str, embedding: np.ndarray
+    ) -> None:
+        """Append one embedding row to the in-memory cache without a full rebuild.
+
+        No-op if the cache hasn't been built yet (will be built lazily on next
+        find_match call).
+        """
+        if self._emb_matrix is None:
+            return
+        vec = embedding.astype(np.float32)
+        if vec.shape[0] != _EMBED_DIM:
+            return
+        self._emb_matrix = np.vstack([self._emb_matrix, vec[np.newaxis, :]])
+        self._emb_face_ids.append(face_id)
+        self._emb_names.append(name)
+        self._emb_row_ids.append(row_id)
+
+    def _replace_in_cache(
+        self, old_row_id: str, new_row_id: str, face_id: str, name: str, embedding: np.ndarray
+    ) -> None:
+        """Replace one embedding row in-place (prune-and-replace path).
+
+        Finds *old_row_id* by index and overwrites it with the new vector — no
+        array reallocation needed since the matrix shape stays the same.
+        No-op if the cache isn't built or the old row isn't found.
+        """
+        if self._emb_matrix is None:
+            return
+        try:
+            idx = self._emb_row_ids.index(old_row_id)
+        except ValueError:
+            # Old row wasn't in cache; just append instead
+            self._append_to_cache(new_row_id, face_id, name, embedding)
+            return
+        vec = embedding.astype(np.float32)
+        if vec.shape[0] != _EMBED_DIM:
+            return
+        self._emb_matrix[idx] = vec
+        self._emb_row_ids[idx] = new_row_id
+        # face_id and name are unchanged for a prune-replace on the same identity
 
     def register(self, embedding: np.ndarray) -> Tuple[str, str]:
         """Create a new identity and store its first embedding.
@@ -160,6 +207,7 @@ class FaceRegistry:
         now = time.time()
         face_id = str(uuid.uuid4())
         auto_name = self._next_guest_name()
+        row_id = str(uuid.uuid4())
 
         self._conn.execute(
             "INSERT INTO faces (id, name, first_seen, last_seen, last_greeted, last_absent, seen_count) "
@@ -169,10 +217,10 @@ class FaceRegistry:
         self._conn.execute(
             "INSERT INTO face_embeddings (id, face_id, embedding, created_at) "
             "VALUES (?, ?, ?, ?)",
-            (str(uuid.uuid4()), face_id, embedding.tobytes(), now),
+            (row_id, face_id, embedding.tobytes(), now),
         )
         self._conn.commit()
-        self._invalidate_emb_cache()
+        self._append_to_cache(row_id, face_id, auto_name, embedding)
         log.info("Registered new face %s as %r", face_id[:8], auto_name)
         return face_id, auto_name
 
@@ -183,7 +231,10 @@ class FaceRegistry:
         )
         self._conn.commit()
         if cur.rowcount:
-            self._invalidate_emb_cache()
+            # Update names in-place — no full rebuild needed.
+            for i, fid in enumerate(self._emb_face_ids):
+                if fid == face_id:
+                    self._emb_names[i] = name
             log.info("Named face %s → %r", face_id[:8], name)
             return True
         log.warning("set_name: face_id %r not found", face_id)
@@ -448,13 +499,19 @@ class FaceRegistry:
 
     def add_embedding(self, face_id: str, embedding: np.ndarray) -> None:
         """Add an additional embedding sample for an existing identity."""
+        row_id = str(uuid.uuid4())
         self._conn.execute(
             "INSERT INTO face_embeddings (id, face_id, embedding, created_at) "
             "VALUES (?, ?, ?, ?)",
-            (str(uuid.uuid4()), face_id, embedding.tobytes(), time.time()),
+            (row_id, face_id, embedding.tobytes(), time.time()),
         )
         self._conn.commit()
-        self._invalidate_emb_cache()
+        # Look up current name from cache (avoid DB round-trip)
+        name = next(
+            (self._emb_names[i] for i, fid in enumerate(self._emb_face_ids) if fid == face_id),
+            "?",
+        )
+        self._append_to_cache(row_id, face_id, name, embedding)
 
     def add_embedding_if_needed(
         self, face_id: str, embedding: np.ndarray, cap: int = _EMBED_CAP
@@ -462,6 +519,7 @@ class FaceRegistry:
         """Add a new embedding sample for *face_id* unless the cap is reached.
 
         Old embeddings are pruned (oldest first) to keep the total ≤ *cap*.
+        Updates the in-memory cache incrementally — no full SQLite rebuild.
         Returns True if an embedding was added.
         """
         if np.all(embedding == 0):
@@ -471,8 +529,10 @@ class FaceRegistry:
             "ORDER BY created_at ASC",
             (face_id,),
         ).fetchall()
-        if len(rows) >= cap:
-            # Prune oldest to make room
+        new_row_id = str(uuid.uuid4())
+        at_cap = len(rows) >= cap
+        oldest_id: Optional[str] = None
+        if at_cap:
             oldest_id = rows[0]["id"]
             self._conn.execute(
                 "DELETE FROM face_embeddings WHERE id = ?", (oldest_id,)
@@ -480,10 +540,18 @@ class FaceRegistry:
         self._conn.execute(
             "INSERT INTO face_embeddings (id, face_id, embedding, created_at) "
             "VALUES (?, ?, ?, ?)",
-            (str(uuid.uuid4()), face_id, embedding.tobytes(), time.time()),
+            (new_row_id, face_id, embedding.tobytes(), time.time()),
         )
         self._conn.commit()
-        self._invalidate_emb_cache()
+        # Update cache incrementally — no full rebuild
+        name = next(
+            (self._emb_names[i] for i, fid in enumerate(self._emb_face_ids) if fid == face_id),
+            "?",
+        )
+        if at_cap and oldest_id is not None:
+            self._replace_in_cache(oldest_id, new_row_id, face_id, name, embedding)
+        else:
+            self._append_to_cache(new_row_id, face_id, name, embedding)
         return True
 
     def save_thumbnail(self, face_id: str, crop: np.ndarray) -> bool:
