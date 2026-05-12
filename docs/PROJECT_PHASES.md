@@ -104,3 +104,19 @@ reboot.)**
 - Update / rollback script
 - User docs
 **Exit Criteria:** Cold-boot to ready state &lt; 60 s; survives 24 h soak.
+
+---
+
+## Future Upgrades
+
+### Silent Servo Replacement
+**Motivation:** The DS3218 servo is audibly noisy (brushed DC motor + PWM buzz).
+**Recommended replacement:** Feetech STS3032 or Dynamixel XL430-W250.
+- Both are half-duplex TTL UART bus servos — nearly silent, position feedback built in.
+- Configurable range (can match or exceed the DS3218's 270°).
+- Interface: single resistor bridge (~1 kΩ) between Pi GPIO TX, RX, and servo data pin.
+  No dedicated interface board required.
+- Python libraries: `feetech-servo-sdk` (Feetech) or `dynamixel-sdk` (Robotis).
+- Requires minor servo driver rewrite in `src/hardware/servo.py` to replace PCA9685 PWM
+  commands with serial protocol packets.
+- Pi hardware UART (`/dev/ttyAMA0`) must be free; disable serial console in `raspi-config`.
