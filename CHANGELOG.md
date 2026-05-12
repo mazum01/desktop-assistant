@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.9.3] - 2026-05-12
+### Added
+- CLI: new `da quiet-hours` command — `status`, `enable`, `disable`, `set --start HH:MM --end HH:MM`
+  routes through the existing `GET/PUT /api/settings/quiet-hours` web endpoints.
+
+### Fixed
+- CLI: stale module docstring listed `da version`, `da pan --to`, `da move-servo` as top-level
+  commands; updated to show current correct examples (`servo pan`, `servo move`, `system version`).
+- CLI: removed dead `_wait_for_spoken_text()` function (57 lines, never called after `da say --wait`
+  was removed).
+- CLI: removed duplicate `da vision rotation` / `da vision rotation-status` sub-commands which
+  shadowed the canonical `da camera rotation` / `da camera rotation-status`; removed now-dead
+  `cmd_vision_rotation` and `cmd_vision_rotation_status` handler functions.
+- CLI: updated `cmd_help()` `vision` entry — no longer claims "object detection" (that is its own
+  command group); now correctly lists only `vision describe`.
+- CLI: updated `vision` parser `help=` string to match new scope.
+
 ## [1.9.2] - 2026-05-12
 ### Added
 - Web dashboard: new **System Resources** card with live CPU and memory sparkline

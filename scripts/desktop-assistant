@@ -4,14 +4,17 @@ desktop-assistant CLI — control the running daemon over ZeroMQ.
 
 Examples:
     desktop-assistant ping
-    desktop-assistant pan --to 90
-    desktop-assistant move-servo 90 1500
+    desktop-assistant status
+    desktop-assistant servo pan --to 90
+    desktop-assistant servo move 90 1500
     desktop-assistant say "hello world"
-    desktop-assistant version
+    desktop-assistant system version
     desktop-assistant topics
     desktop-assistant last thermal.temp
     desktop-assistant watch                  # stream all bus events
     desktop-assistant watch --topic motion   # filter by prefix
+    desktop-assistant quiet-hours status
+    desktop-assistant quiet-hours set --start 22:00 --end 07:00
 
 Talks to the IPCBridge service over ZMQ at:
     REP : ipc:///tmp/desktop-assistant.rep
@@ -102,65 +105,6 @@ def _estimate_tts_duration_s(text: str) -> float:
     # Offline heuristic fallback
     words = max(1, len(text.split()))
     return max(0.75, 0.16 * words + 0.018 * len(text) + 0.2)
-
-
-def _wait_for_spoken_text(expected_text: str, timeout_s: float, request_id: str | None = None) -> bool:
-    """Wait until av.spoke confirms the requested text (or request id)."""
-    ctx = zmq.Context.instance()
-    sub = ctx.socket(zmq.SUB)
-    sub.setsockopt(zmq.LINGER, 0)
-    sub.setsockopt_string(zmq.SUBSCRIBE, "av.spoke")
-    sub.connect(PUB_ENDPOINT)
-
-    # Allow the SUB socket to join before the matching av.say is published.
-    time.sleep(0.15)
-
-    deadline = time.monotonic() + timeout_s
-    poller = zmq.Poller()
-    poller.register(sub, zmq.POLLIN)
-
-    try:
-        while time.monotonic() < deadline:
-            remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
-            events = dict(poller.poll(timeout=remaining_ms))
-            if sub not in events:
-                continue
-            try:
-                topic, raw_payload = sub.recv_multipart(flags=zmq.NOBLOCK)
-            except zmq.error.Again:
-                continue
-            if topic.decode("utf-8") != "av.spoke":
-                continue
-            try:
-                payload = json.loads(raw_payload.decode("utf-8"))
-            except Exception:
-                continue
-            if not isinstance(payload, dict):
-                continue
-            if request_id is not None and payload.get("request_id") == request_id:
-                return True
-            if payload.get("text") == expected_text:
-                return True
-    finally:
-        sub.close(linger=0)
-
-    # Backward-compatible fallback when PUB/SUB delivery misses due to
-    # join timing or older services only expose the most recent payload.
-    baseline = _request({"cmd": "last", "topic": "av.spoke"}, timeout_ms=1500)
-    baseline_payload = baseline.get("payload") if baseline.get("ok") else None
-
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        r = _request({"cmd": "last", "topic": "av.spoke"}, timeout_ms=1500)
-        if r.get("ok"):
-            payload = r.get("payload")
-            if isinstance(payload, dict):
-                if request_id is not None and payload.get("request_id") == request_id:
-                    return True
-                if payload.get("text") == expected_text and payload != baseline_payload:
-                    return True
-        time.sleep(0.05)
-    return False
 
 
 def cmd_ping(_args) -> int:
@@ -799,6 +743,70 @@ def cmd_object_detection(args) -> int:
     return 0 if ok else 1
 
 
+# ── Quiet Hours subcommands ───────────────────────────────────────────────────
+
+def cmd_quiet_hours(args) -> int:
+    """Get or set quiet-hours configuration."""
+    action = args.qh_action
+    if action == "status":
+        try:
+            d = _http_get("/api/settings/quiet-hours")
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        enabled = d.get("enabled", False)
+        start   = d.get("start", "?")
+        end     = d.get("end", "?")
+        on  = "\033[32menabled\033[0m"
+        off = "\033[33mdisabled\033[0m"
+        print()
+        print("  Quiet Hours")
+        print(f"    State   : {on if enabled else off}")
+        print(f"    Hours   : {start} → {end}")
+        print()
+        return 0
+
+    if action in ("enable", "disable"):
+        try:
+            current = _http_get("/api/settings/quiet-hours")
+        except Exception as exc:
+            print(f"Error reading current config: {exc}", file=sys.stderr)
+            return 1
+        try:
+            _http_put("/api/settings/quiet-hours", {
+                "enabled": action == "enable",
+                "start":   current.get("start", "21:00"),
+                "end":     current.get("end",   "06:00"),
+            })
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Quiet hours {'enabled' if action == 'enable' else 'disabled'}.")
+        return 0
+
+    if action == "set":
+        try:
+            current = _http_get("/api/settings/quiet-hours")
+        except Exception as exc:
+            print(f"Error reading current config: {exc}", file=sys.stderr)
+            return 1
+        start = args.start or current.get("start", "21:00")
+        end   = args.end   or current.get("end",   "06:00")
+        try:
+            _http_put("/api/settings/quiet-hours", {
+                "enabled": current.get("enabled", False),
+                "start": start,
+                "end":   end,
+            })
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Quiet hours set: {start} → {end}  (currently {'enabled' if current.get('enabled') else 'disabled'})")
+        return 0
+
+    return 1
+
+
 def cmd_help(args) -> int:
     """Print a formatted command reference, or detailed help for one command."""
     commands = {
@@ -847,10 +855,9 @@ def cmd_help(args) -> int:
                             "                  face merge <keep> <absorb>  Merge two face identities.\n"
                             "                  face greeting-cooldown <min>  Set re-greeting cooldown.\n"
                             "                  face greeting-settings  Show all greeting config values.",
-        "vision":           "Vision and object detection. Sub-commands:\n"
-                            "                  vision describe             Speak a description of everything seen.\n"
-                            "                  vision rotation <deg>       Set camera 1 rotation (0–359°).\n"
-                            "                  vision rotation-status      Show current camera 1 rotation angle.",
+        "vision":           "Vision and scene description. Sub-commands:\n"
+                            "                  vision describe             Speak a natural-language description of everything seen.\n"
+                            "                  (For camera rotation, see 'camera rotation'.)",
         "camera":           "Camera 1 settings. Sub-commands:\n"
                             "                  camera resolution <WxH>     Set capture resolution (e.g. 640x480).\n"
                             "                  camera rotation <deg>       Set camera 1 rotation (0–359°).\n"
@@ -878,6 +885,11 @@ def cmd_help(args) -> int:
                             "                  music status                Show playback state and current song.\n"
                             "                  music volume [LEVEL]        Get or set system volume 0–100.\n"
                             "                  music eq [PRESET]           Get or set music EQ preset.",
+        "quiet-hours":      "Quiet-hours (TTS silence window) configuration. Sub-commands:\n"
+                            "                  quiet-hours status               Show current state and hours.\n"
+                            "                  quiet-hours enable               Enable quiet hours.\n"
+                            "                  quiet-hours disable              Disable quiet hours.\n"
+                            "                  quiet-hours set [--start HH:MM] [--end HH:MM]  Set the window.",
         "help":             "Show this command reference, or help for a specific command.\n"
                             "                  Usage: help [command]",
     }
@@ -1152,46 +1164,6 @@ def cmd_vision_describe(_args) -> int:
     return 0 if r.get("ok") else 1
 
 
-def cmd_vision_rotation(args) -> int:
-    """Set camera rotation angle (0–359°)."""
-    deg = int(args.degrees) % 360
-    r = _request({"cmd": "publish", "topic": "camera.set_rotation",
-                  "payload": {"rotation_deg": deg}})
-    if r.get("ok"):
-        print(f"Camera rotation set to {deg}°")
-    else:
-        print(json.dumps(r, indent=2))
-    return 0 if r.get("ok") else 1
-
-
-def cmd_vision_rotation_status(_args) -> int:
-    """Show the current camera rotation angle."""
-    from pathlib import Path
-    import yaml as _yaml
-
-    _base = Path(__file__).resolve().parents[1]
-    _cfg_path = _base / "config" / "assistant.yaml"
-    _rt_path  = _base / "config" / "runtime_state.yaml"
-
-    _cfg = {}
-    try:
-        _cfg = _yaml.safe_load(_cfg_path.read_text()) or {} if _cfg_path.exists() else {}
-    except Exception:
-        pass
-    _rt = {}
-    try:
-        _rt = _yaml.safe_load(_rt_path.read_text()) or {} if _rt_path.exists() else {}
-    except Exception:
-        pass
-
-    deg = _rt.get("camera", {}).get(
-        "rotation_deg",
-        _cfg.get("camera", {}).get("rotation_deg", 0),
-    )
-    print(f"  Camera rotation : {deg}°")
-    return 0
-
-
 def cmd_music_play(args) -> int:
     """Start or resume Pandora playback, optionally selecting a station by name."""
     payload: dict = {}
@@ -1375,14 +1347,10 @@ def main() -> int:
     face_sub.add_parser("greeting-settings", help="Show all current greeting configuration values").set_defaults(func=cmd_greeting_settings)
 
     # ── vision subcommand group ──────────────────────────────────────
-    vis_sp = sub.add_parser("vision", help="Vision and object detection commands")
+    vis_sp = sub.add_parser("vision", help="Vision and scene description commands")
     vis_sub = vis_sp.add_subparsers(dest="vis_cmd", metavar="<subcommand>")
     vis_sub.required = True
     vis_sub.add_parser("describe", help="Speak a natural-language description of everything currently seen").set_defaults(func=cmd_vision_describe)
-    vis_sub.add_parser("rotation-status", help="Show current camera 1 rotation angle").set_defaults(func=cmd_vision_rotation_status)
-    ssp = vis_sub.add_parser("rotation", help="Set camera 1 rotation angle (0–359°)")
-    ssp.add_argument("degrees", type=int, help="Rotation in degrees (0–359)")
-    ssp.set_defaults(func=cmd_vision_rotation)
 
     # ── camera 1 subcommand group ────────────────────────────────────
     cam_sp = sub.add_parser("camera", help="Camera 1 settings (resolution, rotation)")
@@ -1528,6 +1496,18 @@ def main() -> int:
     sp = sub.add_parser("watch", help="Stream all bus events")
     sp.add_argument("--topic", default="", help="Topic prefix filter (default: all)")
     sp.set_defaults(func=cmd_watch)
+
+    # ── Quiet hours subcommand group ─────────────────────────────────
+    qh_sp = sub.add_parser("quiet-hours", help="Configure quiet-hours TTS silence window")
+    qh_sub = qh_sp.add_subparsers(dest="qh_action", metavar="<subcommand>")
+    qh_sub.required = True
+    qh_sub.add_parser("status",  help="Show current quiet-hours state and window").set_defaults(func=cmd_quiet_hours)
+    qh_sub.add_parser("enable",  help="Enable quiet hours").set_defaults(func=cmd_quiet_hours)
+    qh_sub.add_parser("disable", help="Disable quiet hours").set_defaults(func=cmd_quiet_hours)
+    ssp = qh_sub.add_parser("set", help="Set the quiet-hours window")
+    ssp.add_argument("--start", default=None, help="Start time HH:MM (e.g. 22:00)")
+    ssp.add_argument("--end",   default=None, help="End time HH:MM   (e.g. 07:00)")
+    ssp.set_defaults(func=cmd_quiet_hours)
 
     args = p.parse_args()
     if args.cmd is None:
