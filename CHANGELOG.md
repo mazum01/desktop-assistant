@@ -6,6 +6,30 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.10.0] - 2026-05-12
+### Added
+- **`max_fps`, `conf_threshold`, `max_objects` now configurable** via `config/assistant.yaml`
+  under the `object_detection` key.  All three parameters were previously hardcoded.
+- **`max_objects` cap** (default 8): detections are sorted by confidence and only the top
+  `max_objects` are sent to the overlay, limiting encoder overlay work when many objects
+  are visible.
+
+### Changed
+- **Object detection default FPS reduced from 3.0 → 2.0** to halve Hailo-8 scheduling
+  contention between YOLOv8s (object) and SCRFD (face) inference slots.
+- **Letterbox geometry is now cached** in `ObjectDetector`.  Scale, padding, and new
+  dimensions are recomputed only when the source frame dimensions change (e.g. resolution
+  switch); `buf.fill(0)` is likewise deferred to geometry changes only.
+- **`_decode()` reuses cached letterbox params** instead of independently recomputing
+  `scale / pad_top / pad_left` on every call.
+- **BGR → RGB correction in `_letterbox()`**.  YOLOv8s expects RGB input; the camera
+  delivers BGR.  The channel swap is now applied during letterbox copy via a NumPy view
+  (`resized[:, :, ::-1]`) — no extra allocation.
+- **Rate-limit pre-check in `ObjectService._on_frame_ready()`**: incoming `vision.frame_ready`
+  signals are discarded when the last detection was too recent (< 90% of `min_interval`).
+  This drops worker thread wakeups from 30/sec to ≈2/sec, reducing thread-scheduling
+  overhead and lock contention on the frame queue.
+
 ## [1.9.9] - 2026-05-12
 ### Fixed
 - **Encoder thread framerate regression (30fps → 15fps)** caused by thick-stroke

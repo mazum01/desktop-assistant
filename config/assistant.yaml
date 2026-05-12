@@ -74,9 +74,12 @@ face_recognition:
 
 object_detection:
   # YOLOv8s object classification on the Hailo-8.
-  # Detects 80 COCO classes (person, laptop, cup, etc.) at ~3 fps.
+  # Detects 80 COCO classes (person, laptop, cup, etc.) at ~2 fps.
   # Can be toggled at runtime from the web dashboard or CLI.
   enabled: true
+  max_fps: 2.0              # inference rate; lower = less Hailo contention with face detection
+  conf_threshold: 0.40      # minimum detection confidence
+  max_objects: 8            # max objects sent to overlay per frame (sorted by confidence)
 
 web_dashboard:
   # Live browser dashboard served on the local network.

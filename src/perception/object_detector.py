@@ -76,6 +76,13 @@ class ObjectDetector:
         self._backend = "sim"
         # Reusable model-input buffer; always 640×640×3 (model input size, not video resolution).
         self._letterbox_buf = np.zeros((_TARGET_SIZE, _TARGET_SIZE, 3), dtype=np.uint8)
+        # Cached letterbox geometry — recomputed only when source frame dimensions change.
+        self._lb_src_shape: tuple = (0, 0)
+        self._lb_scale: float = 1.0
+        self._lb_new_w: int = _TARGET_SIZE
+        self._lb_new_h: int = _TARGET_SIZE
+        self._lb_pad_top: int = 0
+        self._lb_pad_left: int = 0
         self._init_engine()
 
     def _init_engine(self) -> None:
@@ -129,21 +136,29 @@ class ObjectDetector:
     # ── Internal ───────────────────────────────────────────────────────
 
     def _letterbox(self, frame: np.ndarray) -> np.ndarray:
-        """Resize *frame* to 640×640 with letterboxing into the preallocated buffer."""
+        """Resize *frame* (BGR) to 640×640 with letterboxing into the preallocated buffer.
+
+        Geometry (scale, padding) is cached after the first call; ``buf.fill(0)``
+        is only executed when frame dimensions change (e.g. resolution switch).
+        The output is RGB because YOLOv8s expects RGB input.
+        """
         import cv2
         src_h, src_w = frame.shape[:2]
-        scale = min(_TARGET_SIZE / src_h, _TARGET_SIZE / src_w)
-        new_w = int(src_w * scale)
-        new_h = int(src_h * scale)
-        resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-        if not hasattr(self, "_letterbox_buf"):
-            self._letterbox_buf = np.zeros((_TARGET_SIZE, _TARGET_SIZE, 3), dtype=np.uint8)
-        buf = self._letterbox_buf
-        buf.fill(0)
-        pad_top  = (_TARGET_SIZE - new_h) // 2
-        pad_left = (_TARGET_SIZE - new_w) // 2
-        buf[pad_top:pad_top + new_h, pad_left:pad_left + new_w] = resized
-        return buf
+        if (src_h, src_w) != self._lb_src_shape:
+            scale = min(_TARGET_SIZE / src_h, _TARGET_SIZE / src_w)
+            self._lb_new_w   = int(src_w * scale)
+            self._lb_new_h   = int(src_h * scale)
+            self._lb_scale   = scale
+            self._lb_pad_top  = (_TARGET_SIZE - self._lb_new_h) // 2
+            self._lb_pad_left = (_TARGET_SIZE - self._lb_new_w) // 2
+            self._lb_src_shape = (src_h, src_w)
+            self._letterbox_buf.fill(0)  # re-zero only on geometry change
+        resized = cv2.resize(frame, (self._lb_new_w, self._lb_new_h),
+                             interpolation=cv2.INTER_LINEAR)
+        pt, pl = self._lb_pad_top, self._lb_pad_left
+        # Copy as RGB (model expects RGB; camera delivers BGR)
+        self._letterbox_buf[pt:pt + self._lb_new_h, pl:pl + self._lb_new_w] = resized[:, :, ::-1]
+        return self._letterbox_buf
 
     def _decode(
         self,
@@ -161,12 +176,17 @@ class ObjectDetector:
         The HEF metadata reports ``(80, 5, 100)`` as the max-capacity shape, but
         the actual runtime value is the variable-length list format.
         """
-        # Letterbox params (must mirror _letterbox exactly)
-        scale    = min(_TARGET_SIZE / src_h, _TARGET_SIZE / src_w)
-        new_w    = int(src_w * scale)
-        new_h    = int(src_h * scale)
-        pad_top  = (_TARGET_SIZE - new_h) // 2
-        pad_left = (_TARGET_SIZE - new_w) // 2
+        # Reuse cached letterbox params when possible (avoids duplicate float math).
+        if (src_h, src_w) == self._lb_src_shape:
+            scale    = self._lb_scale
+            pad_top  = self._lb_pad_top
+            pad_left = self._lb_pad_left
+        else:
+            scale    = min(_TARGET_SIZE / src_h, _TARGET_SIZE / src_w)
+            new_w    = int(src_w * scale)
+            new_h    = int(src_h * scale)
+            pad_top  = (_TARGET_SIZE - new_h) // 2
+            pad_left = (_TARGET_SIZE - new_w) // 2
 
         detections: List[Detection] = []
 

@@ -51,9 +51,10 @@ _OBJ_DETECT_STATE_FILE  = _STATE_DIR / "object_detection_enabled.txt"
 
 @dataclass
 class ObjectConfig:
-    max_fps: float = 3.0    # object detection FPS (separate from face detection)
+    max_fps: float = 2.0        # object detection FPS (separate from face detection)
     conf_threshold: float = 0.40
-    enabled: bool = True    # whether object detection runs at startup
+    max_objects: int = 8        # cap on detections sent to the overlay per frame
+    enabled: bool = True        # whether object detection runs at startup
 
 
 class ObjectService(Service):
@@ -145,6 +146,10 @@ class ObjectService(Service):
             return
         if self._vision_svc is not None and not self._vision_svc.hardware_ready:
             return
+        # Pre-check: skip waking the worker if we know it's too soon.
+        # Reading _last_detect_ts from another thread is safe in CPython (GIL).
+        if time.monotonic() - self._last_detect_ts < self._min_interval * 0.9:
+            return
         try:
             self._frame_queue.put_nowait(True)
         except queue.Full:
@@ -214,6 +219,10 @@ class ObjectService(Service):
                 faces_payload = self.bus.last("perception.faces")
                 if faces_payload and faces_payload.get("faces"):
                     detections = [d for d in detections if d.label != "person"]
+
+            # Cap to max_objects (detections are already sorted by confidence).
+            if len(detections) > self._cfg.max_objects:
+                detections = detections[:self._cfg.max_objects]
 
             src_h, src_w = frame.shape[:2]
             self.bus.publish(

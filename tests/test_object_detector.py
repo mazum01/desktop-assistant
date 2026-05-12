@@ -14,6 +14,13 @@ def sim_detector():
     d._engine = None
     d._sim = True
     d._backend = "sim"
+    d._letterbox_buf = np.zeros((640, 640, 3), dtype=np.uint8)
+    d._lb_src_shape = (0, 0)
+    d._lb_scale = 1.0
+    d._lb_new_w = 640
+    d._lb_new_h = 640
+    d._lb_pad_top = 0
+    d._lb_pad_left = 0
     return d
 
 

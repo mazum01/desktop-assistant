@@ -123,7 +123,12 @@ def main() -> int:
     _perc_cfg = PerceptionConfig(recognition_enabled=_recognition_enabled)
 
     _obj_cfg_raw = _cfg.get("object_detection", {})
-    _obj_cfg = ObjectConfig(enabled=bool(_obj_cfg_raw.get("enabled", True)))
+    _obj_cfg = ObjectConfig(
+        enabled=bool(_obj_cfg_raw.get("enabled", True)),
+        max_fps=float(_obj_cfg_raw.get("max_fps", 2.0)),
+        conf_threshold=float(_obj_cfg_raw.get("conf_threshold", 0.40)),
+        max_objects=int(_obj_cfg_raw.get("max_objects", 8)),
+    )
 
     _web_cfg = _cfg.get("web_dashboard", {})
     _web_enabled = _web_cfg.get("enabled", True)
