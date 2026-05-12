@@ -277,6 +277,13 @@ class MusicService(Service):
 
         # pianobar refuses to produce output unless stdout is a TTY.
         # Allocate a pseudo-terminal so we can capture its output.
+        #
+        # PULSE_LATENCY_MSEC=500 requests a 500 ms PulseAudio playback buffer.
+        # Default (~100 ms) is tight enough that brief CPU spikes (from Hailo
+        # inference, camera capture, etc.) cause buffer underruns and choppy
+        # audio. 500 ms is imperceptible for streaming music but absorbs any
+        # scheduling jitter from other services running on the same cores.
+        env = {**os.environ, "PULSE_LATENCY_MSEC": "500"}
         try:
             self._pty_master, slave_fd = pty.openpty()
             self._proc = subprocess.Popen(
@@ -286,6 +293,7 @@ class MusicService(Service):
                 stdin=slave_fd,
                 close_fds=True,
                 preexec_fn=os.setsid,
+                env=env,
             )
             os.close(slave_fd)
         except FileNotFoundError:

@@ -11,20 +11,31 @@ so this module has no direct dependency on AVService.
 
 from __future__ import annotations
 
+import json
 import logging
 import random
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Callable, Optional
+from urllib.request import Request, urlopen
+from urllib.error import URLError
 
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Dad-joke pool
+# Dad-joke pool — seeded locally, refreshed from icanhazdadjoke.com daily
 # ---------------------------------------------------------------------------
 
-_DAD_JOKES: list[str] = [
+_JOKE_CACHE_FILE = Path.home() / ".config" / "desktop-assistant" / "dad_jokes.json"
+_JOKE_REFRESH_INTERVAL = 24 * 3600  # seconds between API refreshes
+_JOKE_FETCH_COUNT = 50              # jokes to fetch per refresh
+_JOKE_API_URL = "https://icanhazdadjoke.com/search?limit=30&page={page}"
+_JOKE_HEADERS = {"Accept": "application/json", "User-Agent": "Desktop-Assistant/1.0"}
+
+# Fallback hardcoded pool used when the cache is cold and the network is down.
+_FALLBACK_JOKES: list[str] = [
     "Why don't scientists trust atoms? Because they make up everything.",
     "I told my wife she was drawing her eyebrows too high. She looked surprised.",
     "What do you call cheese that isn't yours? Nacho cheese.",
@@ -52,16 +63,115 @@ _DAD_JOKES: list[str] = [
     "Why did the tomato turn red? Because it saw the salad dressing.",
 ]
 
+# Active joke pool — replaced on successful refresh. Protected by _joke_lock.
+_joke_lock: threading.Lock = threading.Lock()
+_DAD_JOKES: list[str] = list(_FALLBACK_JOKES)
 _last_joke_index: int = -1
+
+
+def _load_joke_cache() -> list[str]:
+    """Load jokes from disk cache. Returns empty list if cache is missing or invalid."""
+    try:
+        if _JOKE_CACHE_FILE.exists():
+            data = json.loads(_JOKE_CACHE_FILE.read_text())
+            jokes = data.get("jokes", [])
+            if isinstance(jokes, list) and len(jokes) >= 10:
+                return jokes
+    except Exception as exc:
+        log.debug("joke cache load failed: %s", exc)
+    return []
+
+
+def _save_joke_cache(jokes: list[str]) -> None:
+    try:
+        _JOKE_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _JOKE_CACHE_FILE.write_text(
+            json.dumps({"jokes": jokes, "fetched_at": time.time()}, indent=2)
+        )
+    except Exception as exc:
+        log.warning("joke cache save failed: %s", exc)
+
+
+def _cache_age_seconds() -> float:
+    """Return seconds since last successful fetch, or infinity if no cache."""
+    try:
+        if _JOKE_CACHE_FILE.exists():
+            data = json.loads(_JOKE_CACHE_FILE.read_text())
+            return time.time() - float(data.get("fetched_at", 0))
+    except Exception:
+        pass
+    return float("inf")
+
+
+def _fetch_jokes_from_api() -> list[str]:
+    """Fetch up to _JOKE_FETCH_COUNT jokes from icanhazdadjoke.com.
+
+    Returns a non-empty list on success or raises on network/parse failure.
+    """
+    jokes: list[str] = []
+    pages = max(1, _JOKE_FETCH_COUNT // 30)
+    for page in range(1, pages + 1):
+        url = _JOKE_API_URL.format(page=page)
+        req = Request(url, headers=_JOKE_HEADERS)
+        with urlopen(req, timeout=10) as resp:
+            body = json.loads(resp.read().decode())
+        for item in body.get("results", []):
+            text = item.get("joke", "").strip()
+            if text:
+                jokes.append(text)
+        if not body.get("results"):
+            break
+    return jokes
+
+
+def _refresh_joke_pool(force: bool = False) -> None:
+    """Background job: refresh jokes from API if the cache is stale."""
+    global _DAD_JOKES
+    if not force and _cache_age_seconds() < _JOKE_REFRESH_INTERVAL:
+        return
+    try:
+        jokes = _fetch_jokes_from_api()
+        if jokes:
+            random.shuffle(jokes)
+            _save_joke_cache(jokes)
+            with _joke_lock:
+                _DAD_JOKES = jokes
+            log.info("Dad-joke pool refreshed: %d jokes from API", len(jokes))
+    except (URLError, OSError) as exc:
+        log.info("Dad-joke refresh skipped (network): %s", exc)
+    except Exception as exc:
+        log.warning("Dad-joke refresh failed: %s", exc)
+
+
+def _init_joke_pool() -> None:
+    """Load cache on startup; trigger background refresh if stale."""
+    global _DAD_JOKES
+    cached = _load_joke_cache()
+    if cached:
+        with _joke_lock:
+            _DAD_JOKES = cached
+        log.info("Dad-joke pool loaded from cache: %d jokes", len(cached))
+    # Refresh in background — doesn't block startup
+    threading.Thread(
+        target=_refresh_joke_pool,
+        name="joke-refresh-init",
+        daemon=True,
+    ).start()
+
+
+# Seed the pool immediately at import time.
+_init_joke_pool()
 
 
 def _pick_joke() -> str:
     """Return a random joke, avoiding immediate repeats."""
     global _last_joke_index
-    choices = [i for i in range(len(_DAD_JOKES)) if i != _last_joke_index]
+    with _joke_lock:
+        pool = _DAD_JOKES
+    choices = [i for i in range(len(pool)) if i != _last_joke_index]
     idx = random.choice(choices)
     _last_joke_index = idx
-    return _DAD_JOKES[idx]
+    return pool[idx]
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +246,12 @@ class ClockAnnouncer:
             daemon=True,
         )
         self._thread.start()
+        # Daily joke-pool refresh thread (completely independent of the clock loop).
+        threading.Thread(
+            target=self._run_joke_refresh,
+            name="joke-refresh",
+            daemon=True,
+        ).start()
         log.info("ClockAnnouncer started (enabled=%s)", self.enabled)
 
     def stop(self) -> None:
@@ -165,6 +281,17 @@ class ClockAnnouncer:
 
             fire_time = datetime.now()
             self._announce(fire_time)
+
+    def _run_joke_refresh(self) -> None:
+        """Periodically refresh the joke pool from the API while running."""
+        while not self._stop_event.is_set():
+            # Check every hour; _refresh_joke_pool gates on _JOKE_REFRESH_INTERVAL.
+            slept = 0.0
+            while slept < 3600 and not self._stop_event.is_set():
+                time.sleep(min(60.0, 3600 - slept))
+                slept += 60.0
+            if not self._stop_event.is_set():
+                _refresh_joke_pool()
 
     def _announce(self, dt: datetime) -> None:
         if not self.enabled:

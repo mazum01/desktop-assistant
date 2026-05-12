@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.9.0] - 2026-05-12
+### Added
+- Dad jokes auto-refresh from icanhazdadjoke.com: fetches 60 jokes per refresh, cached
+  to `~/.config/desktop-assistant/dad_jokes.json`, refreshed daily in a daemon thread.
+  Falls back to the original 25 hardcoded jokes if offline or cache is empty.
+- `ClockAnnouncer` now spawns a dedicated `joke-refresh` daemon thread that fires
+  `_refresh_joke_pool()` every hour (gated by the 24h interval check).
+### Fixed
+- Music audio choppy/underwater: pianobar now launched with `PULSE_LATENCY_MSEC=500`
+  giving the PulseAudio client a 500ms buffer, preventing underruns under CPU load.
+
+---
+
 ## [1.8.22] - 2026-05-12
 ### Changed
 - **Face detection pipeline speedups (part 2 of 2)** — two more wins on the
