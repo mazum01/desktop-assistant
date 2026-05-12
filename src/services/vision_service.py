@@ -135,21 +135,30 @@ def _put_text_outlined(
     accent: tuple,
     thickness: int,
 ) -> None:
-    """Draw *text* with a black outline and adaptive foreground color.
+    """Draw *text* with high contrast on any background.
 
-    Samples the background luminance of the text bounding-box and chooses a
-    foreground color that contrasts with it.  *accent* is used as a tint hint
-    on dark backgrounds (brightened toward white); on bright backgrounds the
-    text is near-black regardless of accent.
+    Samples the background luminance of the text bounding-box:
+      - Dark background: darkens a pill behind the text + draws bright text.
+        A background rect is orders of magnitude faster than a thick stroke
+        outline, and avoids the O(thickness²) cv2.putText cost.
+      - Bright background: draws near-black text directly — no background
+        treatment needed since the text already has natural contrast.
     """
-    (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
+    (tw, th), baseline = cv2.getTextSize(text, font, font_scale, thickness)
     luma = _bg_luminance(frame, org[0], org[1], tw, th)
     color = _contrast_color(luma, accent)
-    # Only draw outline when text is light — black outline on dark text over a
-    # bright background makes it harder to read, not easier.
+
     if luma <= 128:
-        outline_thick = thickness + max(2, round(thickness * 1.5))
-        cv2.putText(frame, text, org, font, font_scale, (0, 0, 0), outline_thick, cv2.LINE_AA)
+        # Dark background — darken a rect behind the text for contrast
+        pad = max(1, round(2 * font_scale))
+        rx1 = max(0, org[0] - pad)
+        ry1 = max(0, org[1] - th - pad)
+        rx2 = min(frame.shape[1], org[0] + tw + pad)
+        ry2 = min(frame.shape[0], org[1] + baseline + pad)
+        roi = frame[ry1:ry2, rx1:rx2]
+        if roi.size > 0:
+            roi[:] = (roi >> 1)   # 50% darken — fast bitshift, no float conversion
+
     cv2.putText(frame, text, org, font, font_scale, color, thickness, cv2.LINE_AA)
 
 
@@ -190,7 +199,7 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
         label = face.get("name") or (face.get("face_id") and "unknown")
         if label:
             font_scale = max(0.8, 1.1 * scale)
-            font_thick = max(1, round(2 * scale))
+            font_thick = max(1, round(scale))   # 1 at 640×480, 2 at 1280×960
             lx = max(0, cx - 20)
             ly = max(10, cy - ry - 4)
             _put_text_outlined(frame_bgr, label, (lx, ly),
@@ -207,7 +216,7 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
         label = f"{obj.get('label', '?')} {int(conf * 100)}%"
         ly    = max(10, y1 - 4)
         font_scale = max(0.8, 1.1 * scale)
-        font_thick = max(1, round(2 * scale))
+        font_thick = max(1, round(scale))   # 1 at 640×480
         _put_text_outlined(frame_bgr, label, (x1, ly),
                            cv2.FONT_HERSHEY_SIMPLEX, font_scale, _CYAN, font_thick)
 
@@ -230,18 +239,12 @@ def _draw_servo_overlay(
     text = f"Pan: {angle:.0f}\u00b0"
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = max(0.7, 1.1 * scale)
-    thickness = max(1, round(2 * scale))
+    thickness = max(1, round(scale))   # 1 at 640×480
     (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
 
     pad = max(2, int(4 * scale))
     x0, y0 = int(8 * scale), h - int(8 * scale) - th - pad * 2
-    bx1, by1 = max(0, x0 - pad), max(0, y0 - pad)
-    bx2, by2 = min(w, x0 + tw + pad), min(h, y0 + th + pad)
 
-    # Darken only the small label background ROI
-    roi = frame[by1:by2, bx1:bx2]
-    if roi.size > 0:
-        roi[:] = roi >> 1
     _put_text_outlined(frame, text, (x0, y0 + th), font, font_scale, _CYAN, thickness)
 
     # ── Arc compass (bottom-right) ────────────────────────────────────────

@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.9.9] - 2026-05-12
+### Fixed
+- **Encoder thread framerate regression (30fps → 15fps)** caused by thick-stroke
+  `cv2.putText` outlines introduced in v1.9.5–v1.9.6.  A `putText` with
+  `thickness=5` at font_scale 1.1 is ~25× more expensive than `thickness=1` due to
+  the O(thickness²) per-glyph rasterization cost.
+- Replaced stroke outline with a fast **bit-shift darken rect** (`roi >> 1`) behind
+  the text — same visual contrast, no per-pixel font rasterization overhead.
+- Reduced `font_thick` from `max(1, round(2*scale))` to `max(1, round(scale))` at
+  all three draw sites (face labels, object labels, pan overlay).
+- Removed the redundant manual darken-ROI from the pan overlay (now handled
+  internally by `_put_text_outlined`).
+
 ## [1.9.8] - 2026-05-12
 ### Fixed
 - **CPU spike caused by embedding cache full-rebuild on every face detection frame.**
