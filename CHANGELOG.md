@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.9.7] - 2026-05-12
+### Changed
+- `_put_text_outlined()`: black stroke outline is only drawn when the text color is
+  light (dark background). On bright backgrounds the dark text is rendered without
+  an outline, which was previously muddying legibility.
+
 ## [1.9.6] - 2026-05-12
 ### Changed
 - Overlay text color is now adaptive: `_bg_luminance()` samples the BT.601 perceived

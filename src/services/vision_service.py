@@ -145,8 +145,11 @@ def _put_text_outlined(
     (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
     luma = _bg_luminance(frame, org[0], org[1], tw, th)
     color = _contrast_color(luma, accent)
-    outline_thick = thickness + max(2, round(thickness * 1.5))
-    cv2.putText(frame, text, org, font, font_scale, (0, 0, 0), outline_thick, cv2.LINE_AA)
+    # Only draw outline when text is light — black outline on dark text over a
+    # bright background makes it harder to read, not easier.
+    if luma <= 128:
+        outline_thick = thickness + max(2, round(thickness * 1.5))
+        cv2.putText(frame, text, org, font, font_scale, (0, 0, 0), outline_thick, cv2.LINE_AA)
     cv2.putText(frame, text, org, font, font_scale, color, thickness, cv2.LINE_AA)
 
 
