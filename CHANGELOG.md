@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.9.5] - 2026-05-12
+### Changed
+- Overlay text size increased: face labels `max(0.8, 1.1×scale)`, object labels
+  `max(0.8, 1.1×scale)`, pan overlay `max(0.7, 1.1×scale)` — up from 0.55/0.75×.
+- Added `_put_text_outlined()` helper — draws a thick black stroke behind all face
+  and object labels so text is readable on any background colour.
+
 ## [1.9.4] - 2026-05-12
 ### Added
 - `src/perception/scrfd_decode/scrfd_decode.cpp` — pybind11 C++ extension that
