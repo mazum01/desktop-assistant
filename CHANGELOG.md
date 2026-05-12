@@ -6,6 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.8.20] - 2026-05-12
+### Changed
+- **Face detection pipeline speedups** — four cumulative wins:
+  - `PerceptionConfig.max_fps` raised from 2.0 → 10.0. On Hailo-8, SCRFD-10G
+    runs well above 10 fps; the previous 2 fps cap was a CPU-Haar holdover.
+  - `FaceDetector._decode_scrfd` fully vectorised. Removed the per-detection
+    Python loop that built xywh tuples and per-anchor keypoint copies — now
+    builds numpy arrays per scale/anchor and concatenates once.
+  - `FaceEmbedder._align` switched from `cv2.LMEDS` to plain least-squares
+    similarity fit. LMEDS is iterative robust fitting; pointless for exactly
+    5 matched landmarks.
+  - `PerceptionService` added an embed-skip fast path: if the same face is
+    still in roughly the same location within 1 s of the last identification,
+    reuse the cached identity instead of re-running ArcFace + registry lookup.
+
 ## [1.8.19] - 2026-05-12
 ### Changed
 - **Larger overlay text, scaled with resolution** — increased font scale multipliers

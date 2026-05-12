@@ -287,9 +287,9 @@ class FaceDetector:
             size = arr.shape[0]  # H (==W for SCRFD)
             by_size.setdefault(size, {})[name] = arr
 
-        all_boxes: list = []
-        all_scores: list = []
-        all_kps: list = []
+        all_boxes_arrays: list = []
+        all_scores_arrays: list = []
+        all_kps_arrays: list = []
         has_kps = False
 
         for stride in _STRIDES:
@@ -308,11 +308,9 @@ class FaceDetector:
                 continue
 
             H, W = fm_size, fm_size
-            # Anchor centres: (H, W, 2, 2) → centre (cy, cx) for each cell
             cols = np.arange(W, dtype=np.float32)
             rows = np.arange(H, dtype=np.float32)
             grid_x, grid_y = np.meshgrid(cols, rows)
-            # centre in model-input pixel space
             cx = (grid_x + 0.5) * stride  # (H, W)
             cy = (grid_y + 0.5) * stride
 
@@ -329,47 +327,53 @@ class FaceDetector:
                 kps = None
 
             for a in range(_NUM_ANCHORS):
-                score_a = scores[:, :, a]  # (H, W)
+                score_a = scores[:, :, a]
                 mask = score_a > self._conf_thr
                 if not np.any(mask):
                     continue
 
                 ys, xs = np.where(mask)
-                s = score_a[ys, xs]
+                s = score_a[ys, xs]                       # (N_a,)
+                cx_a = cx[ys, xs]                         # (N_a,)
+                cy_a = cy[ys, xs]                         # (N_a,)
 
-                l = bbox[ys, xs, a, 0] * stride
-                t = bbox[ys, xs, a, 1] * stride
-                r = bbox[ys, xs, a, 2] * stride
-                b = bbox[ys, xs, a, 3] * stride
+                lt_rb = bbox[ys, xs, a] * stride          # (N_a, 4)  cols: l, t, r, b
+                x1 = cx_a - lt_rb[:, 0]
+                y1 = cy_a - lt_rb[:, 1]
+                x2 = cx_a + lt_rb[:, 2]
+                y2 = cy_a + lt_rb[:, 3]
 
-                x1 = cx[ys, xs] - l
-                y1 = cy[ys, xs] - t
-                x2 = cx[ys, xs] + r
-                y2 = cy[ys, xs] + b
+                # xywh for NMSBoxes
+                xywh = np.stack(
+                    (x1, y1, x2 - x1, y2 - y1), axis=1
+                ).astype(np.float32)                       # (N_a, 4)
 
-                for i in range(len(ys)):
-                    all_boxes.append((
-                        float(x1[i]), float(y1[i]),
-                        float(x2[i] - x1[i]),   # cv2.dnn.NMSBoxes wants [x,y,w,h]
-                        float(y2[i] - y1[i]),
-                    ))
-                    all_scores.append(float(s[i]))
-                    if kps is not None:
-                        kp = kps[ys[i], xs[i], a]  # (10,)
-                        pts = kp.copy()
-                        pts[0::2] = pts[0::2] * stride + cx[ys[i], xs[i]]
-                        pts[1::2] = pts[1::2] * stride + cy[ys[i], xs[i]]
-                        all_kps.append(pts)
-                    else:
-                        all_kps.append(None)
+                all_boxes_arrays.append(xywh)
+                all_scores_arrays.append(s.astype(np.float32))
 
-        # Convert xywh boxes back to x1y1x2y2 after NMS pass
-        # (NMSBoxes returns indices into all_boxes which are xywh)
-        boxes_x1y1x2y2 = [
-            (b[0], b[1], b[0] + b[2], b[1] + b[3]) for b in all_boxes
-        ]
+                if kps is not None:
+                    kp = kps[ys, xs, a].copy()             # (N_a, 10)
+                    kp[:, 0::2] = kp[:, 0::2] * stride + cx_a[:, None]
+                    kp[:, 1::2] = kp[:, 1::2] * stride + cy_a[:, None]
+                    all_kps_arrays.append(kp)
 
-        return boxes_x1y1x2y2, all_scores, all_kps if has_kps else None
+        if not all_boxes_arrays:
+            return [], [], None
+
+        all_boxes_xywh = np.concatenate(all_boxes_arrays, axis=0)    # (N, 4)
+        all_scores_arr = np.concatenate(all_scores_arrays, axis=0)   # (N,)
+        all_kps_arr = (
+            np.concatenate(all_kps_arrays, axis=0) if has_kps and all_kps_arrays else None
+        )
+
+        # Convert xywh → x1y1x2y2 once, vectorized
+        x1 = all_boxes_xywh[:, 0]
+        y1 = all_boxes_xywh[:, 1]
+        x2 = x1 + all_boxes_xywh[:, 2]
+        y2 = y1 + all_boxes_xywh[:, 3]
+        boxes_x1y1x2y2 = np.stack((x1, y1, x2, y2), axis=1)          # (N, 4)
+
+        return boxes_x1y1x2y2, all_scores_arr, all_kps_arr
 
     # ── CPU Haar path ──────────────────────────────────────────────────
 

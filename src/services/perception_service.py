@@ -49,7 +49,7 @@ _ZERO_EMB = _np.zeros(512, dtype=_np.float32)  # placeholder when embedder is un
 
 @dataclass
 class PerceptionConfig:
-    max_fps: float = 2.0           # detection FPS — CPU face-detect is slow; 2 fps is plenty
+    max_fps: float = 10.0          # detection FPS — Hailo SCRFD runs ≫10 fps; CPU Haar caps itself naturally
     conf_threshold: float = 0.65   # raised from 0.45 to cut false positives on real frames
     nms_threshold: float = 0.4     # NMS IoU threshold
     recognition_enabled: bool = True  # enable ArcFace identity recognition
@@ -79,6 +79,10 @@ class PerceptionService(Service):
         self._pos_cache: list = []
         self._cache_ttl: float = 10.0    # 10s — bridges brief detection gaps only, not person changes
         self._cache_dist: float = 160.0 # pixel radius to consider "same face" (wider tolerance)
+        # Tight TTL used to skip re-embedding entirely when the same face was
+        # just identified at the same location. Short enough that a person
+        # swap can't slip through, long enough to cover several detection ticks.
+        self._reuse_ttl: float = 1.0
         # Detection runs in its own thread so it never blocks the VisionService tick.
         self._frame_queue: queue.Queue = queue.Queue(maxsize=1)
         self._worker: Optional[threading.Thread] = None
@@ -209,6 +213,21 @@ class PerceptionService(Service):
 
                 # Identity recognition — only when landmarks are available for alignment
                 if self._embedder and self._registry and f.landmarks and len(f.landmarks) >= 5:
+                    # Fast path: same face at same position within reuse_ttl —
+                    # skip embedding + registry match entirely.
+                    fresh = self._find_cached_face(
+                        f.centroid[0], f.centroid[1], max_age=self._reuse_ttl,
+                    )
+                    if fresh:
+                        face_id, name = fresh
+                        self._registry.update_seen(face_id)
+                        self._update_pos_cache(face_id, name, f.centroid[0], f.centroid[1])
+                        entry["face_id"] = face_id
+                        entry["name"] = name
+                        entry["is_new"] = False
+                        entry["match_score"] = 0.0
+                        face_list.append(entry)
+                        continue
                     try:
                         emb = self._embedder.embed(frame, f.landmarks)
                         embedder_ok = self._embedder.hardware_ready and emb.any()
@@ -278,13 +297,20 @@ class PerceptionService(Service):
 
     # ── Internal ──────────────────────────────────────────────────────
 
-    def _find_cached_face(self, cx: float, cy: float):
-        """Return (face_id, name) from position cache if a nearby face was seen recently."""
+    def _find_cached_face(self, cx: float, cy: float, max_age: Optional[float] = None):
+        """Return (face_id, name) from position cache if a nearby face was seen recently.
+
+        ``max_age`` overrides the default ``_cache_ttl`` when provided — used for
+        the embed-skip fast path which needs a much tighter time window.
+        """
         now = time.monotonic()
+        ttl = max_age if max_age is not None else self._cache_ttl
         self._pos_cache = [e for e in self._pos_cache if now - e["ts"] < self._cache_ttl]
         best = None
         best_dist = float("inf")
         for entry in self._pos_cache:
+            if now - entry["ts"] > ttl:
+                continue
             dist = ((cx - entry["cx"]) ** 2 + (cy - entry["cy"]) ** 2) ** 0.5
             if dist < self._cache_dist and dist < best_dist:
                 best_dist = dist
