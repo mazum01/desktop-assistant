@@ -84,8 +84,15 @@ class FaceDetector:
     ) -> None:
         self._conf_thr = conf_threshold
         self._nms_thr = nms_threshold
+        # Pre-sigmoid threshold: SCRFD score outputs come back post-sigmoid (in [0,1]),
+        # so we can threshold in raw space using logit(conf_thr) and avoid running
+        # sigmoid across ~8400 grid cells per frame. Final survivor scores still get
+        # sigmoid applied for downstream confidence reporting.
+        self._conf_thr_logit = float(np.log(conf_threshold / max(1e-6, 1.0 - conf_threshold)))
         self._engine: Optional[HailoInference] = None
         self._haar: Optional[cv2.CascadeClassifier] = None
+        # Reusable letterbox buffer; allocated once to avoid 1.2 MB np.zeros per frame.
+        self._letterbox_buf = np.zeros((_INPUT_SIZE, _INPUT_SIZE, 3), dtype=np.uint8)
         self._backend = self._init_backend(hef_path)
 
     # ── Backend selection ──────────────────────────────────────────────
@@ -182,7 +189,7 @@ class FaceDetector:
 
     def _detect_hailo(self, frame: np.ndarray) -> List[FaceDetection]:
         h_orig, w_orig = frame.shape[:2]
-        blob, scale_x, scale_y, pad_x, pad_y = self._preprocess(frame)
+        blob, scale_x, scale_y, pad_x, pad_y = self._preprocess(frame, self._letterbox_buf)
 
         outputs = self._engine.infer({"input_layer1": blob})
         if not outputs:
@@ -238,9 +245,18 @@ class FaceDetector:
     @staticmethod
     def _preprocess(
         frame: np.ndarray,
+        buf: Optional[np.ndarray] = None,
     ) -> tuple[np.ndarray, float, float, float, float]:
         """
         Letterbox-resize frame to 640×640 uint8.
+
+        Parameters
+        ----------
+        frame : np.ndarray
+            BGR uint8 input frame of any size.
+        buf : np.ndarray, optional
+            Reusable (640, 640, 3) uint8 buffer. When provided, avoids a
+            per-frame allocation. Pad regions are zeroed in-place.
 
         Returns
         -------
@@ -254,7 +270,11 @@ class FaceDetector:
         scale = min(_INPUT_SIZE / w, _INPUT_SIZE / h)
         new_w, new_h = int(w * scale), int(h * scale)
         resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-        blob = np.zeros((_INPUT_SIZE, _INPUT_SIZE, 3), dtype=np.uint8)
+        if buf is None:
+            blob = np.zeros((_INPUT_SIZE, _INPUT_SIZE, 3), dtype=np.uint8)
+        else:
+            blob = buf
+            blob.fill(0)
         pad_x = (_INPUT_SIZE - new_w) // 2
         pad_y = (_INPUT_SIZE - new_h) // 2
         blob[pad_y : pad_y + new_h, pad_x : pad_x + new_w] = resized
@@ -314,26 +334,34 @@ class FaceDetector:
             cx = (grid_x + 0.5) * stride  # (H, W)
             cy = (grid_y + 0.5) * stride
 
-            # score_map: (H, W, 2) → sigmoid
-            scores = 1.0 / (1.0 + np.exp(-score_map.astype(np.float32)))  # (H, W, 2)
+            # score_map: (H, W, 2) — raw pre-sigmoid logits. Threshold in
+            # logit space using logit(conf_thr) to skip sigmoid across ~8400
+            # cells per frame; sigmoid is then applied only to the small set
+            # of survivors below. Bit-exact equivalent of the previous
+            # "sigmoid everywhere, then threshold" behavior.
+            score_map_f = score_map.astype(np.float32, copy=False)
 
             # bbox_map: (H, W, 8) → (H, W, 2, 4)
-            bbox = bbox_map.astype(np.float32).reshape(H, W, _NUM_ANCHORS, 4)
+            bbox = bbox_map.astype(np.float32, copy=False).reshape(H, W, _NUM_ANCHORS, 4)
 
             if kps_map is not None:
-                kps = kps_map.astype(np.float32).reshape(H, W, _NUM_ANCHORS, 10)
+                kps = kps_map.astype(np.float32, copy=False).reshape(H, W, _NUM_ANCHORS, 10)
                 has_kps = True
             else:
                 kps = None
 
             for a in range(_NUM_ANCHORS):
-                score_a = scores[:, :, a]
-                mask = score_a > self._conf_thr
+                score_a = score_map_f[:, :, a]
+                mask = score_a > self._conf_thr_logit
                 if not np.any(mask):
                     continue
 
                 ys, xs = np.where(mask)
-                s = score_a[ys, xs]                       # (N_a,)
+                # Sigmoid only on survivor cells (correctness preserved so
+                # downstream confidence reporting stays in [0,1] probability
+                # space).
+                logits = score_a[ys, xs]
+                s = 1.0 / (1.0 + np.exp(-logits))         # (N_a,)
                 cx_a = cx[ys, xs]                         # (N_a,)
                 cy_a = cy[ys, xs]                         # (N_a,)
 

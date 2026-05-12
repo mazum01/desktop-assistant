@@ -6,6 +6,29 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.8.22] - 2026-05-12
+### Changed
+- **Face detection pipeline speedups (part 2 of 2)** — two more wins on the
+  Hailo-8 SCRFD path:
+  - **Preallocated letterbox buffer.** `FaceDetector._preprocess` no longer
+    allocates a fresh `np.zeros((640, 640, 3), uint8)` per frame. The buffer
+    is created once in `__init__` and reused; pad regions are zeroed in-place.
+    The static signature is preserved (`buf` is an optional arg) so existing
+    tests and any external callers keep working.
+  - **Deferred sigmoid in SCRFD decode.** The score-map sigmoid used to run
+    across all ~8400 anchor cells per frame just to threshold against
+    `conf_thr`. Since `sigmoid` is monotonic, we now threshold in raw logit
+    space using `logit(conf_thr)` and only apply sigmoid to the small handful
+    of survivor cells. Bit-exact equivalent of the previous behavior.
+- **Remaining two optimizations marked blocked**:
+  - NMS-baked SCRFD HEF: not present on disk; would require sourcing or
+    recompiling via the Hailo Model Zoo.
+  - Async Hailo inference pipelining: the `hailo_platform` 4.18 Python API
+    does not expose a clean async submit/collect interface; would require a
+    significant refactor of `HailoInference` and risks regressing the object
+    detector that shares it. Deferred until the API improves or the user
+    explicitly requests it.
+
 ## [1.8.21] - 2026-05-12
 ### Fixed
 - **Face recognition broken in v1.8.20** — the `cv2.estimateAffinePartial2D`
