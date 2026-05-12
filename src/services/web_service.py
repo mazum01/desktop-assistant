@@ -44,6 +44,7 @@ PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
 """
 
 import asyncio
+import collections
 import io
 import json
 import logging
@@ -51,6 +52,8 @@ import threading
 import time
 from pathlib import Path
 from typing import Optional
+
+import psutil
 
 from src.core.quiet_hours import QuietHours
 
@@ -174,6 +177,11 @@ class WebService:
         self._cam1_frame_count: int = 0
         self._cam2_frame_count: int = 0
         self._fps_tick_time: float = time.monotonic()
+        # CPU/memory history — 60 samples (≈ 60 s at 1 Hz)
+        self._cpu_history: collections.deque = collections.deque(maxlen=60)
+        self._mem_history: collections.deque = collections.deque(maxlen=60)
+        # Prime the non-blocking cpu_percent sampler so the first real read is accurate
+        psutil.cpu_percent(interval=None)
 
     # ── Service lifecycle ─────────────────────────────────────────────
 
@@ -404,6 +412,11 @@ class WebService:
         self._cam2_frame_count = 0
         self._fps_tick_time = now
 
+        cpu = psutil.cpu_percent(interval=None)
+        mem = psutil.virtual_memory().percent
+        self._cpu_history.append(round(cpu, 1))
+        self._mem_history.append(round(mem, 1))
+
         return {
             "version": get_version(),
             "ts": time.time(),
@@ -412,6 +425,10 @@ class WebService:
             "servo_angle": servo_angle,
             "cam1_fps": cam1_fps,
             "cam2_fps": cam2_fps,
+            "cpu_percent": cpu,
+            "mem_percent": mem,
+            "cpu_history": list(self._cpu_history),
+            "mem_history": list(self._mem_history),
         }
 
     # ── FastAPI app ───────────────────────────────────────────────────

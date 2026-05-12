@@ -70,6 +70,25 @@
       </div>
     </section>
 
+    <!-- ── System Resources ────────────────────────────────────── -->
+    <section class="card">
+      <h2>System Resources</h2>
+      <div class="resource-graphs">
+        <div class="resource-graph-wrap">
+          <div class="resource-graph-label">
+            CPU <span id="stat-cpu" class="resource-pct">—</span>
+          </div>
+          <canvas id="cpu-graph" class="resource-canvas" width="400" height="60"></canvas>
+        </div>
+        <div class="resource-graph-wrap">
+          <div class="resource-graph-label">
+            Memory <span id="stat-mem" class="resource-pct">—</span>
+          </div>
+          <canvas id="mem-graph" class="resource-canvas" width="400" height="60"></canvas>
+        </div>
+      </div>
+    </section>
+
     <!-- ── Services ────────────────────────────────────────────── -->
     <section class="card">
       <h2>Services &nbsp;<button class="btn btn-warning btn-sm" onclick="restartDaemon()" title="Restart the desktop-assistant-core systemd service">⟳ Restart Daemon</button></h2>

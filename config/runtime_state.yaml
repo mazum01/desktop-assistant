@@ -1,7 +1,7 @@
 camera:
-  height: 480
+  height: 720
   rotation_deg: 270
-  width: 640
+  width: 1280
 camera2:
   rotation_deg: 90
 head_tracking:

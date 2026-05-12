@@ -154,6 +154,16 @@ function updateDashboard(data) {
   // FPS overlays — driven by server-side frame counters (Chrome-compatible)
   updateFpsOverlays(data);
 
+  // System resource graphs
+  if (data.cpu_history != null) {
+    el("stat-cpu").textContent = `${Math.round(data.cpu_percent ?? 0)}%`;
+    drawSparkline("cpu-graph", data.cpu_history, "#58a6ff");
+  }
+  if (data.mem_history != null) {
+    el("stat-mem").textContent = `${Math.round(data.mem_percent ?? 0)}%`;
+    drawSparkline("mem-graph", data.mem_history, "#3fb950");
+  }
+
   // Music state/song updates from bus events
   const musicState = last["music.state_changed"];
   if (musicState) _applyMusicState(musicState.state || "stopped");
@@ -161,6 +171,68 @@ function updateDashboard(data) {
   if (musicSong) _applyMusicSong(musicSong);
   const musicStations = last["music.stations_updated"];
   if (musicStations) _applyMusicStations(musicStations.stations || []);
+}
+
+// ── Sparkline graph ───────────────────────────────────────────────
+
+function drawSparkline(canvasId, values, color) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  // Resize backing store if needed
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  if (!values || values.length < 2) return;
+
+  const pad = 4;
+  const graphW = w - pad * 2;
+  const graphH = h - pad * 2;
+  const step = graphW / (values.length - 1);
+
+  // Fill area under the line
+  ctx.beginPath();
+  ctx.moveTo(pad, pad + graphH);
+  for (let i = 0; i < values.length; i++) {
+    const x = pad + i * step;
+    const y = pad + graphH - (Math.min(values[i], 100) / 100) * graphH;
+    i === 0 ? ctx.lineTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.lineTo(pad + (values.length - 1) * step, pad + graphH);
+  ctx.closePath();
+  ctx.fillStyle = color + "28";  // ~16% opacity fill
+  ctx.fill();
+
+  // Draw line
+  ctx.beginPath();
+  for (let i = 0; i < values.length; i++) {
+    const x = pad + i * step;
+    const y = pad + graphH - (Math.min(values[i], 100) / 100) * graphH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+
+  // Draw 50% and 100% reference lines
+  ctx.setLineDash([2, 4]);
+  ctx.strokeStyle = "rgba(139,148,158,0.25)";
+  ctx.lineWidth = 1;
+  [50, 100].forEach(pct => {
+    const y = pad + graphH - (pct / 100) * graphH;
+    ctx.beginPath();
+    ctx.moveTo(pad, y);
+    ctx.lineTo(pad + graphW, y);
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
 }
 
 // ── Health badge ──────────────────────────────────────────────────

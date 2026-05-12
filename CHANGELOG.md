@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.9.2] - 2026-05-12
+### Added
+- Web dashboard: new **System Resources** card with live CPU and memory sparkline
+  graphs (60-second rolling history). Charts are rendered via Canvas 2D — no
+  external library dependency.
+- `WebService._build_status_snapshot()` now samples `psutil.cpu_percent()` and
+  `psutil.virtual_memory().percent` each WebSocket tick and includes
+  `cpu_percent`, `mem_percent`, `cpu_history`, and `mem_history` in the snapshot.
+- `psutil>=5.9.0` added to `requirements.txt`.
+
 ## [1.9.1] - 2026-05-12
 ### Changed
 - `ObjectDetector._letterbox()`: preallocated reusable 640×640×3 buffer in `__init__`
