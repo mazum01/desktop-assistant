@@ -85,16 +85,66 @@ def _rotate_frame(frame: np.ndarray, degrees: int) -> np.ndarray:
     return cv2.warpAffine(frame, M, (w, h))
 
 
+def _bg_luminance(frame: np.ndarray, x: int, y: int, tw: int, th: int) -> float:
+    """Return perceived luminance [0..255] of the text bounding-box ROI.
+
+    Uses BT.601 weights on the mean BGR of the clipped region.
+    Falls back to 128 (mid-grey) if the ROI is empty.
+    """
+    h, w = frame.shape[:2]
+    x1 = max(0, x)
+    y1 = max(0, y - th)
+    x2 = min(w, x + tw)
+    y2 = min(h, y)
+    if x2 <= x1 or y2 <= y1:
+        return 128.0
+    roi = frame[y1:y2, x1:x2]
+    if roi.size == 0:
+        return 128.0
+    mean_b, mean_g, mean_r = cv2.mean(roi)[:3]
+    # BT.601 perceived luminance
+    return 0.114 * mean_b + 0.587 * mean_g + 0.299 * mean_r
+
+
+def _contrast_color(luma: float, accent: tuple | None = None) -> tuple:
+    """Return a high-contrast text color for the given background luminance.
+
+    If *accent* is provided and the background is dark, blend the accent toward
+    white to ensure it stays bright.  On bright backgrounds always return near-black.
+    """
+    if luma > 128:
+        # Bright background → dark text
+        return (15, 15, 15)
+    # Dark background → use accent brightened toward white, or pure white
+    if accent is not None:
+        b, g, r = accent
+        # Boost each channel toward 255 so even dark accents stay readable
+        b = min(255, int(b * 0.4 + 255 * 0.6))
+        g = min(255, int(g * 0.4 + 255 * 0.6))
+        r = min(255, int(r * 0.4 + 255 * 0.6))
+        return (b, g, r)
+    return (255, 255, 255)
+
+
 def _put_text_outlined(
     frame: np.ndarray,
     text: str,
     org: tuple,
     font: int,
     font_scale: float,
-    color: tuple,
+    accent: tuple,
     thickness: int,
 ) -> None:
-    """Draw *text* with a black outline for readability on any background."""
+    """Draw *text* with a black outline and adaptive foreground color.
+
+    Samples the background luminance of the text bounding-box and chooses a
+    foreground color that contrasts with it.  *accent* is used as a tint hint
+    on dark backgrounds (brightened toward white); on bright backgrounds the
+    text is near-black regardless of accent.
+    """
+    (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
+    luma = _bg_luminance(frame, org[0], org[1], tw, th)
+    color = _contrast_color(luma, accent)
     outline_thick = thickness + max(2, round(thickness * 1.5))
     cv2.putText(frame, text, org, font, font_scale, (0, 0, 0), outline_thick, cv2.LINE_AA)
     cv2.putText(frame, text, org, font, font_scale, color, thickness, cv2.LINE_AA)
@@ -189,7 +239,7 @@ def _draw_servo_overlay(
     roi = frame[by1:by2, bx1:bx2]
     if roi.size > 0:
         roi[:] = roi >> 1
-    cv2.putText(frame, text, (x0, y0 + th), font, font_scale, _CYAN, thickness, cv2.LINE_AA)
+    _put_text_outlined(frame, text, (x0, y0 + th), font, font_scale, _CYAN, thickness)
 
     # ── Arc compass (bottom-right) ────────────────────────────────────────
     radius = max(15, int(40 * scale))

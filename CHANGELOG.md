@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.9.6] - 2026-05-12
+### Changed
+- Overlay text color is now adaptive: `_bg_luminance()` samples the BT.601 perceived
+  luminance of the text bounding-box ROI; `_contrast_color()` returns near-black on
+  bright backgrounds or a brightened accent on dark backgrounds.
+- `_put_text_outlined()` now performs the luminance sample internally — callers pass
+  an accent hint instead of a fixed color.
+- Pan-angle label migrated to `_put_text_outlined()` (was a bare `cv2.putText`).
+
 ## [1.9.5] - 2026-05-12
 ### Changed
 - Overlay text size increased: face labels `max(0.8, 1.1×scale)`, object labels
