@@ -42,15 +42,20 @@ class HeadTrackerConfig:
     fov_degrees: float = 100.0   # camera horizontal field of view
 
     # Spring-damper tracking
-    spring_k: float = 3.5        # stiffness — higher = faster tracking
-    damping: float = 3.8         # closer to critical (2*sqrt(3.5)≈3.74) for minimal overshoot
+    spring_k: float = 2.0        # stiffness — higher = faster tracking
+    damping: float = 3.2         # slightly overdamped (2*sqrt(2.0)≈2.83) for smooth settle
     max_speed_deg_s: float = 60.0
 
     # Gain applied to the face-offset target (0.0–1.0). Lower = less aggressive correction.
-    tracking_gain: float = 0.6
+    tracking_gain: float = 0.35
 
     # Dead zone — fraction of frame width before the head starts following
-    dead_zone_frac: float = 0.05
+    dead_zone_frac: float = 0.08
+
+    # EMA smoothing factor for the face centroid (0 < alpha <= 1.0).
+    # Lower = more smoothing, slower response. 0.25 filters detection jitter
+    # while keeping ~100 ms lag at 20 Hz.
+    face_ema_alpha: float = 0.25
 
     # Flip pan direction if the servo linkage or mount reverses left/right
     invert_pan: bool = False
@@ -96,6 +101,9 @@ class HeadTracker:
         self._position: float = initial_servo_angle   # current servo angle (deg)
         self._velocity: float = 0.0                   # deg/sec
 
+        # EMA-smoothed face centroid — filters per-frame detection jitter
+        self._ema_face_cx: Optional[float] = None
+
         # Micro-saccade state
         self._saccade_offset: float = 0.0
         self._next_saccade_t: float = time.monotonic() + self._next_saccade_interval()
@@ -140,6 +148,10 @@ class HeadTracker:
         if current_servo_angle is not None:
             self._position = float(current_servo_angle)
 
+        if face_cx is None:
+            # Reset EMA when face is lost so the next detection starts fresh
+            self._ema_face_cx = None
+
         if face_cx is not None:
             return self._update_tracking(face_cx, dt)
         return self._update_idle(dt)
@@ -149,9 +161,18 @@ class HeadTracker:
     def _update_tracking(self, face_cx: float, dt: float) -> float:
         self._last_face_t = time.monotonic()
 
-        # Map face X → desired servo angle offset from current position
+        # EMA smoothing — damps per-frame bounding-box jitter before the
+        # spring-damper sees it, reducing high-frequency hunting.
+        alpha = self._cfg.face_ema_alpha
+        if self._ema_face_cx is None:
+            self._ema_face_cx = face_cx
+        else:
+            self._ema_face_cx = alpha * face_cx + (1.0 - alpha) * self._ema_face_cx
+        smooth_cx = self._ema_face_cx
+
+        # Map smoothed face X → desired servo angle offset from current position
         cfg = self._cfg
-        offset_frac = (face_cx - cfg.frame_width / 2.0) / cfg.frame_width
+        offset_frac = (smooth_cx - cfg.frame_width / 2.0) / cfg.frame_width
         offset_deg = offset_frac * cfg.fov_degrees
 
         # Dead zone — ignore tiny movements

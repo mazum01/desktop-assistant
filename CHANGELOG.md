@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.8.18] - 2026-05-12
+### Fixed
+- **Head hunting during face tracking** — Two-part fix for the servo oscillating
+  around a detected face:
+  1. **EMA face smoothing** — `HeadTracker._update_tracking()` now applies an
+     exponential moving average (`face_ema_alpha=0.25`) to the raw face centroid
+     before computing the servo target. This filters per-frame bounding-box jitter
+     (±10–30 px) that was the primary source of high-frequency hunting.
+     EMA state resets when the face is lost so the next detection starts fresh.
+  2. **Tuned control parameters**: `spring_k` 3.5→2.0 (less stiff), `damping`
+     3.8→3.2 (still overdamped relative to new spring), `tracking_gain` 0.6→0.35
+     (less aggressive per-frame correction), `dead_zone_frac` 0.05→0.08 (wider
+     dead band, ~100 px at 1280 wide).
+### Added
+- `HeadTrackerConfig.face_ema_alpha` field (default 0.25); configurable via
+  `head_tracking.face_ema_alpha` in `config/assistant.yaml`.
+
 ## [1.8.17] - 2026-05-11
 ### Removed
 - **Cross-camera focus sync** — Removed the `vision.lens_position` publish/subscribe
