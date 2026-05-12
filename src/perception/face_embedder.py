@@ -156,10 +156,10 @@ class FaceEmbedder:
         BGR array ready for inference.
         """
         src = np.array(landmarks[:5], dtype=np.float32)
-        # Method 0 = ordinary least-squares similarity fit. LMEDS is iterative
-        # and robust-outlier oriented, which is overkill for exactly 5 matched
-        # landmarks and costs several ms per face.
-        M, _ = cv2.estimateAffinePartial2D(src, _ARCFACE_REF, method=0)
+        # NOTE: keep LMEDS here — switching to other methods (or 0) degrades
+        # the 5-point similarity fit and breaks ArcFace recognition (every face
+        # gets a different embedding even across consecutive frames).
+        M, _ = cv2.estimateAffinePartial2D(src, _ARCFACE_REF, method=cv2.LMEDS)
         if M is None:
             # Fallback: rough crop centred on the bounding box
             raise ValueError("estimateAffinePartial2D returned None")

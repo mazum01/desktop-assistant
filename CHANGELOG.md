@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.8.21] - 2026-05-12
+### Fixed
+- **Face recognition broken in v1.8.20** — the `cv2.estimateAffinePartial2D`
+  method swap from `LMEDS` to `0` produced degenerate affine transforms,
+  yielding garbage ArcFace embeddings. Every appearance of a known face was
+  treated as a brand-new guest. Reverted to `cv2.LMEDS` and left a comment
+  warning future-us not to swap it. The other three v1.8.20 speedups remain.
+
 ## [1.8.20] - 2026-05-12
 ### Changed
 - **Face detection pipeline speedups** — four cumulative wins:
