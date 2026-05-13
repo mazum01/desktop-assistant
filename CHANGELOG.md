@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.13.1] - 2026-05-13
+### Fixed
+- `SkillsService._on_utterance` was missing the `_topic` parameter, causing a
+  `TypeError` on every utterance dispatch — skills never fired from web GUI or
+  voice input.
+
 ## [1.13.0] - 2026-05-13
 ### Added
 - **Skill config framework** (`src/skills/base.py`) — `ConfigField` dataclass

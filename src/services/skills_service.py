@@ -117,7 +117,7 @@ class SkillsService(Service):
     # Bus handlers
     # ------------------------------------------------------------------
 
-    def _on_utterance(self, payload: dict) -> None:
+    def _on_utterance(self, _topic, payload: dict) -> None:
         text = payload.get("text", "").strip()
         if not text:
             return
