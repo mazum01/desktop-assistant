@@ -1,11 +1,11 @@
 camera:
   height: 720
-  rotation_deg: 270
+  rotation_deg: 0
   width: 1280
 camera2:
-  rotation_deg: 90
+  rotation_deg: 0
 head_tracking:
-  face_tracking_enabled: true
+  face_tracking_enabled: false
   random_motion_enabled: false
 servo:
   enabled: true

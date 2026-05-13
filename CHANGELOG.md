@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.13.2] - 2026-05-13
+### Fixed
+- CI workflow: added `libportaudio2` system dep and `opencv-python-headless`,
+  `pyyaml`, `fastapi` Python packages so all test modules can be collected on
+  the Ubuntu GitHub Actions runner (previously all 3 Python matrix jobs failed
+  at collection with `ModuleNotFoundError: cv2 / yaml / fastapi` and an
+  `OSError: PortAudio library not found`).
+
 ## [1.13.1] - 2026-05-13
 ### Fixed
 - `SkillsService._on_utterance` was missing the `_topic` parameter, causing a

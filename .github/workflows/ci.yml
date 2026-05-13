@@ -27,18 +27,16 @@ jobs:
       - name: Install system deps (zmq)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends libzmq3-dev
+          sudo apt-get install -y --no-install-recommends libzmq3-dev libportaudio2
 
       - name: Install Python deps
-        # Pi-only packages (lgpio, picamera2, sounddevice with PortAudio,
-        # adafruit-blinka, etc.) won't all install cleanly on a generic
-        # Ubuntu runner, but the codebase is built so missing imports
-        # gracefully fall back to simulation. We install the cross-platform
-        # dependencies and let the rest stay un-importable.
+        # Pi-only packages (lgpio, picamera2, adafruit-blinka, etc.) won't all
+        # install cleanly on a generic Ubuntu runner, but the codebase gracefully
+        # falls back to simulation for missing hardware imports.
         run: |
           python -m pip install --upgrade pip
           pip install pytest pyzmq numpy soundfile sounddevice || true
-          # Install only what loads on Ubuntu CI; failures are tolerated.
+          pip install opencv-python-headless pyyaml fastapi || true
           pip install smbus2 || true
 
       - name: Pytest
