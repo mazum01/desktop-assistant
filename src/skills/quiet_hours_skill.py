@@ -19,6 +19,7 @@ class QuietHoursSkill(Skill):
     name = "quiet_hours"
 
     def __init__(self, quiet_hours=None) -> None:
+        super().__init__()
         self._qh = quiet_hours
 
     @property

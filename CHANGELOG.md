@@ -6,6 +6,40 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.13.0] - 2026-05-13
+### Added
+- **Skill config framework** (`src/skills/base.py`) — `ConfigField` dataclass
+  (`name, label, type, default, description, options, min, max, secret`) lets skills
+  declare typed configuration fields.  `Skill.enabled` flag; disabled skills are
+  skipped by `SkillRegistry.dispatch()`.  Optional `start(bus)` / `stop()` lifecycle
+  hooks for background-threaded skills.  `SkillRegistry.find(name)` by-name lookup.
+- **WeatherSkill** (`src/skills/weather_skill.py`) — "what's the weather", "will it
+  rain", "temperature outside" → fetches current conditions from `wttr.in` (no API
+  key).  Config: `location` (default: auto-detect), `units` (imperial/metric).
+- **ReminderSkill** (`src/skills/reminder_skill.py`) — "remind me to X in N
+  minutes/hours" / "at HH:MM" → background thread fires `av.say` when due.  "list
+  reminders", "clear all reminders" commands.  Config: `snooze_min`, display-only
+  `pending` field.
+- **SmartHomeSkill** (`src/skills/smart_home_skill.py`) — Home Assistant REST API
+  stub for "turn on/off <device>", "set thermostat to N", "lock the front door".
+  Disabled by default (requires HA config).  Config: `base_url`, `token` (secret),
+  `default_room`.
+- **NewsSkill** (`src/skills/news_skill.py`) — "what's in the news", "top headline",
+  "any news today" → fetches headlines from configurable RSS feed via stdlib only.
+  Config: `feed_url` (default: BBC News), `max_headlines`.
+- **Web GUI skill config panel** — skills table now has Enabled toggle switch and ⚙
+  button per skill.  Clicking ⚙ expands an inline form auto-generated from
+  `config_schema` (bool/int/float/str/select/display field types).  Save POSTs to new
+  REST endpoints.
+- **REST endpoints** — `POST /api/skills/{name}/enabled` (toggle), `GET /api/skills/
+  {name}/config`, `POST /api/skills/{name}/config` (per-field update).  `GET
+  /api/skills` now returns `enabled`, `has_config`, `config_schema`, `config_values`.
+- **CLI** — `da skills enable <name>`, `da skills disable <name>`, `da skills config
+  <name>` (show), `da skills config <name> key=value …` (set).  `da help` updated.
+- **Tests** — `test_skill_config_framework.py`, `test_weather_skill.py`,
+  `test_reminder_skill.py`, `test_smart_home_skill.py`, `test_news_skill.py` (69 new
+  tests; total 476 tests, all passing).
+
 ## [1.12.0] - 2026-05-13
 ### Added
 - **HelpSkill** (`src/skills/help_skill.py`) — "what can you do", "list skills",

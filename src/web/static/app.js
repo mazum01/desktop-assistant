@@ -818,9 +818,7 @@ async function toggleSkills() {
   const visible = panel.style.display !== "none";
   panel.style.display = visible ? "none" : "block";
   btn.textContent = visible ? "Show" : "Hide";
-  if (!visible && !_skillsLoaded) {
-    await loadSkills();
-  }
+  if (!visible) await loadSkills();  // always reload to show current state
 }
 
 async function loadSkills() {
@@ -830,15 +828,131 @@ async function loadSkills() {
     const r = await fetch("/api/skills");
     const data = await r.json();
     if (!data.skills || !data.skills.length) {
-      tbody.innerHTML = "<tr><td colspan='2'>No skills registered.</td></tr>";
+      tbody.innerHTML = "<tr><td colspan='4'>No skills registered.</td></tr>";
       return;
     }
-    tbody.innerHTML = data.skills.map(s =>
-      `<tr><td><code>${esc(s.name)}</code></td><td>${esc(s.example)}</td></tr>`
-    ).join("");
+    tbody.innerHTML = data.skills.map(s => _skillRow(s)).join("");
     _skillsLoaded = true;
   } catch (e) {
-    tbody.innerHTML = "<tr><td colspan='2'>Failed to load skills.</td></tr>";
+    tbody.innerHTML = "<tr><td colspan='4'>Failed to load skills.</td></tr>";
+  }
+}
+
+function _skillRow(s) {
+  const toggleId  = `skill-toggle-${s.name}`;
+  const checked   = s.enabled ? "checked" : "";
+  const cfgBtn    = s.has_config
+    ? `<button class="btn btn-sm" title="Configure ${s.name}" onclick="toggleSkillConfig('${s.name}')">⚙</button>`
+    : "";
+  const mainRow = `
+    <tr id="skill-row-${s.name}">
+      <td>
+        <label class="toggle-label" title="${s.enabled ? 'Enabled' : 'Disabled'}">
+          <input type="checkbox" id="${toggleId}" ${checked}
+            onchange="setSkillEnabled('${s.name}', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+      <td><code>${esc(s.name)}</code></td>
+      <td>${esc(s.example)}</td>
+      <td>${cfgBtn}</td>
+    </tr>`;
+  const cfgRow = s.has_config
+    ? `<tr id="skill-cfg-${s.name}" style="display:none">
+         <td colspan="4" style="padding:8px 12px;background:var(--bg2,#1e1e2e)">
+           ${_skillConfigForm(s)}
+         </td>
+       </tr>`
+    : "";
+  return mainRow + cfgRow;
+}
+
+function _skillConfigForm(s) {
+  if (!s.config_schema || !s.config_schema.length) return "";
+  const fields = s.config_schema.map(f => {
+    const val = s.config_values ? (s.config_values[f.name] ?? f.default ?? "") : (f.default ?? "");
+    let input = "";
+    if (f.type === "bool") {
+      input = `<input type="checkbox" id="scf-${s.name}-${f.name}" ${val ? "checked" : ""}>`;
+    } else if (f.type === "select") {
+      const opts = (f.options || []).map(o =>
+        `<option value="${esc(o)}" ${o === val ? "selected" : ""}>${esc(o)}</option>`
+      ).join("");
+      input = `<select id="scf-${s.name}-${f.name}" class="text-input" style="width:auto">${opts}</select>`;
+    } else if (f.type === "display") {
+      input = `<span style="font-style:italic;color:var(--text-dim)">${esc(String(val))}</span>`;
+    } else {
+      const secret = f.secret ? 'type="password"' : 'type="text"';
+      const numAttr = (f.type === "int" || f.type === "float")
+        ? `type="number" ${f.min != null ? `min="${f.min}"` : ""} ${f.max != null ? `max="${f.max}"` : ""} ${f.type === "int" ? 'step="1"' : 'step="any"'}`
+        : secret;
+      input = `<input ${numAttr} id="scf-${s.name}-${f.name}" value="${esc(String(val))}" class="text-input" style="width:180px">`;
+    }
+    return `
+      <div style="display:flex;align-items:center;gap:8px;margin:4px 0">
+        <label style="min-width:160px;font-size:13px" title="${esc(f.description)}">${esc(f.label)}</label>
+        ${input}
+      </div>`;
+  }).join("");
+  const saveableFields = s.config_schema.filter(f => f.type !== "display");
+  const saveBtn = saveableFields.length
+    ? `<button class="btn btn-primary btn-sm" style="margin-top:6px"
+         onclick="saveSkillConfig('${s.name}')">Save</button>`
+    : "";
+  return `<div>${fields}${saveBtn}</div>`;
+}
+
+async function setSkillEnabled(name, enabled) {
+  try {
+    await fetch(`/api/skills/${name}/enabled`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+  } catch (e) {
+    alert("Error updating skill: " + e.message);
+  }
+}
+
+function toggleSkillConfig(name) {
+  const row = document.getElementById(`skill-cfg-${name}`);
+  if (!row) return;
+  row.style.display = row.style.display === "none" ? "table-row" : "none";
+}
+
+async function saveSkillConfig(name) {
+  const skill = await (await fetch(`/api/skills/${name}/config`)).json();
+  const schema = skill.schema || [];
+  const errors = [];
+  for (const f of schema) {
+    if (f.type === "display") continue;
+    const inp = document.getElementById(`scf-${name}-${f.name}`);
+    if (!inp) continue;
+    let value;
+    if (f.type === "bool") value = inp.checked;
+    else if (f.type === "int") value = parseInt(inp.value, 10);
+    else if (f.type === "float") value = parseFloat(inp.value);
+    else value = inp.value;
+    try {
+      const r = await fetch(`/api/skills/${name}/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: f.name, value }),
+      });
+      if (!r.ok) {
+        const body = await r.json();
+        errors.push(`${f.name}: ${body.detail || r.statusText}`);
+      }
+    } catch (e) {
+      errors.push(`${f.name}: ${e.message}`);
+    }
+  }
+  if (errors.length) {
+    alert("Save errors:\n" + errors.join("\n"));
+  } else {
+    // Collapse config row on success
+    toggleSkillConfig(name);
+    _skillsLoaded = false;  // Force reload next open to reflect new values
   }
 }
 

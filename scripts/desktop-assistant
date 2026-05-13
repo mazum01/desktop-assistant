@@ -891,7 +891,11 @@ def cmd_help(args) -> int:
                             "                  quiet-hours disable              Disable quiet hours.\n"
                             "                  quiet-hours set [--start HH:MM] [--end HH:MM]  Set the window.",
         "skills":           "Voice skills management. Sub-commands:\n"
-                            "                  skills list           List all registered voice skills with example phrases.",
+                            "                  skills list                   List all skills with enabled state and example phrase.\n"
+                            "                  skills enable  <name>          Enable a skill.\n"
+                            "                  skills disable <name>          Disable a skill.\n"
+                            "                  skills config  <name>          Show current config for a skill.\n"
+                            "                  skills config  <name> k=v …    Set one or more config values.",
         "help":             "Show this command reference, or help for a specific command.\n"
                             "                  Usage: help [command]",
     }
@@ -1167,25 +1171,111 @@ def cmd_vision_describe(_args) -> int:
 
 
 def cmd_skills(args) -> int:
-    """List all registered voice skills from the web API."""
-    try:
-        data = _http_get("/api/skills")
-    except Exception as exc:
-        print(f"Error: {exc}")
-        return 1
-    skills = data.get("skills", [])
-    if not skills:
-        print("No skills registered.")
-        return 0
-    width = max(len(s["name"]) for s in skills) + 2
-    print()
-    print(f"{'Skill':<{width}}  Example phrase")
-    print("─" * 70)
-    for s in skills:
-        print(f"  {s['name']:<{width}}{s.get('example', '')}")
-    print()
-    return 0
+    """List, enable, disable, or configure voice skills."""
+    sub = getattr(args, "skills_cmd", "list")
 
+    if sub == "list":
+        try:
+            data = _http_get("/api/skills")
+        except Exception as exc:
+            print(f"Error: {exc}")
+            return 1
+        skills = data.get("skills", [])
+        if not skills:
+            print("No skills registered.")
+            return 0
+        name_w = max(len(s["name"]) for s in skills) + 2
+        print()
+        print(f"  {'Enabled':<8} {'Skill':<{name_w}}  Example phrase")
+        print("  " + "─" * 72)
+        for s in skills:
+            enabled_str = "✓" if s.get("enabled", True) else "✗"
+            cfg_marker  = " ⚙" if s.get("has_config") else ""
+            print(f"  {enabled_str:<8} {s['name']:<{name_w}}{s.get('example', '')}{cfg_marker}")
+        print()
+        return 0
+
+    if sub == "enable":
+        name = args.skill_name
+        try:
+            r = _http_post(f"/api/skills/{name}/enabled", {"enabled": True})
+        except Exception as exc:
+            print(f"Error: {exc}")
+            return 1
+        print(f"Skill '{name}' enabled.")
+        return 0
+
+    if sub == "disable":
+        name = args.skill_name
+        try:
+            r = _http_post(f"/api/skills/{name}/enabled", {"enabled": False})
+        except Exception as exc:
+            print(f"Error: {exc}")
+            return 1
+        print(f"Skill '{name}' disabled.")
+        return 0
+
+    if sub == "config":
+        name = args.skill_name
+        pairs = getattr(args, "settings", [])
+        if not pairs:
+            # Show current config
+            try:
+                data = _http_get(f"/api/skills/{name}/config")
+            except Exception as exc:
+                print(f"Error: {exc}")
+                return 1
+            schema = data.get("schema", [])
+            values = data.get("values", {})
+            if not schema:
+                print(f"Skill '{name}' has no configurable fields.")
+                return 0
+            print()
+            print(f"  Config for skill: {name}")
+            print("  " + "─" * 50)
+            for f in schema:
+                val = values.get(f["name"], f.get("default", ""))
+                desc = f"  ({f['description']})" if f.get("description") else ""
+                print(f"  {f['name']:<24} = {val}{desc}")
+            print()
+            return 0
+        else:
+            # Apply key=value pairs
+            errors = []
+            for pair in pairs:
+                if "=" not in pair:
+                    errors.append(f"  Invalid: {pair!r} (expected key=value)")
+                    continue
+                key, _, value = pair.partition("=")
+                # Attempt numeric coercion
+                try:
+                    parsed: object
+                    try:
+                        parsed = int(value)
+                    except ValueError:
+                        try:
+                            parsed = float(value)
+                        except ValueError:
+                            if value.lower() in ("true", "false"):
+                                parsed = value.lower() == "true"
+                            else:
+                                parsed = value
+                    try:
+                        _http_post(f"/api/skills/{name}/config", {"key": key, "value": parsed})
+                    except Exception as exc:
+                        errors.append(f"  {key}: {exc}")
+                        continue
+                    print(f"  {key} = {parsed}")
+                except Exception as exc:
+                    errors.append(f"  {key}: {exc}")
+            if errors:
+                for e in errors:
+                    print(e)
+                return 1
+            return 0
+
+    print(f"Unknown skills sub-command: {sub!r}")
+    return 1
 
 
 def cmd_music_play(args) -> int:
@@ -1535,9 +1625,25 @@ def main() -> int:
 
     # ── Skills subcommand group ───────────────────────────────────────
     sk_sp = sub.add_parser("skills", help="Voice skills management")
-    sk_sub = sk_sp.add_subparsers(dest="sk_cmd", metavar="<subcommand>")
+    sk_sub = sk_sp.add_subparsers(dest="skills_cmd", metavar="<subcommand>")
     sk_sub.required = True
-    sk_sub.add_parser("list", help="List all registered voice skills with example phrases").set_defaults(func=cmd_skills)
+
+    sk_sub.add_parser("list", help="List all registered voice skills").set_defaults(func=cmd_skills)
+
+    ssp = sk_sub.add_parser("enable", help="Enable a skill by name")
+    ssp.add_argument("skill_name", metavar="<name>")
+    ssp.set_defaults(func=cmd_skills)
+
+    ssp = sk_sub.add_parser("disable", help="Disable a skill by name")
+    ssp.add_argument("skill_name", metavar="<name>")
+    ssp.set_defaults(func=cmd_skills)
+
+    ssp = sk_sub.add_parser("config",
+                             help="Show or set config for a skill (key=value …)")
+    ssp.add_argument("skill_name", metavar="<name>")
+    ssp.add_argument("settings", nargs="*", metavar="key=value",
+                     help="Config fields to set.  Omit to show current config.")
+    ssp.set_defaults(func=cmd_skills)
 
     args = p.parse_args()
     if args.cmd is None:

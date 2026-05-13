@@ -14,6 +14,7 @@ class SystemStatusSkill(Skill):
     name = "system_status"
 
     def __init__(self, live_data: dict) -> None:
+        super().__init__()
         self._data = live_data  # updated externally by SkillsService
 
     @property

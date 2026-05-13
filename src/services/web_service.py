@@ -130,6 +130,15 @@ class _CustomEqBody(BaseModel):
     bands: list[_CustomEqBand]
 
 
+class _SkillEnabledBody(BaseModel):
+    enabled: bool
+
+
+class _SkillConfigBody(BaseModel):
+    key: str
+    value: object
+
+
 class WebService:
     """Async FastAPI server running in a background thread."""
 
@@ -758,23 +767,63 @@ class WebService:
                 return JSONResponse({"skills": []})
             skills_info = []
             for skill in self._skills_svc.registry.skills:
-                # Derive a human-readable example from the first pattern
                 patterns = skill.patterns
                 example = ""
                 if patterns:
                     raw = patterns[0].pattern
-                    # Strip regex metacharacters to get a readable phrase
                     example = (raw
                                .replace(r"\b", "").replace(r"(", "").replace(r")", "")
                                .replace(r"[", "").replace(r"]", "")
                                .replace("?", "").replace("+", "").replace("*", "")
                                .replace("\\", "").strip())
+                schema = skill.config_schema
+                config_values = skill.get_config() if schema else {}
                 skills_info.append({
-                    "name":    skill.name,
-                    "example": example,
+                    "name":          skill.name,
+                    "enabled":       skill.enabled,
+                    "example":       example,
                     "pattern_count": len(patterns),
+                    "has_config":    bool(schema),
+                    "config_schema": [f.as_dict() for f in schema],
+                    "config_values": config_values,
                 })
             return JSONResponse({"skills": skills_info})
+
+        @app.post("/api/skills/{skill_name}/enabled")
+        async def api_skill_enabled(skill_name: str, body: _SkillEnabledBody):
+            if self._skills_svc is None:
+                raise HTTPException(503, "skills unavailable")
+            skill = self._skills_svc.find_skill(skill_name)
+            if skill is None:
+                raise HTTPException(404, f"Skill {skill_name!r} not found")
+            skill.enabled = body.enabled
+            return {"ok": True, "name": skill_name, "enabled": skill.enabled}
+
+        @app.get("/api/skills/{skill_name}/config")
+        async def api_skill_config_get(skill_name: str):
+            if self._skills_svc is None:
+                raise HTTPException(503, "skills unavailable")
+            skill = self._skills_svc.find_skill(skill_name)
+            if skill is None:
+                raise HTTPException(404, f"Skill {skill_name!r} not found")
+            return JSONResponse({
+                "name":   skill_name,
+                "schema": [f.as_dict() for f in skill.config_schema],
+                "values": skill.get_config(),
+            })
+
+        @app.post("/api/skills/{skill_name}/config")
+        async def api_skill_config_set(skill_name: str, body: _SkillConfigBody):
+            if self._skills_svc is None:
+                raise HTTPException(503, "skills unavailable")
+            skill = self._skills_svc.find_skill(skill_name)
+            if skill is None:
+                raise HTTPException(404, f"Skill {skill_name!r} not found")
+            try:
+                skill.set_config(body.key, body.value)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc))
+            return {"ok": True, "name": skill_name, "key": body.key, "value": body.value}
 
         @app.post("/api/utterance")
         async def api_utterance(body: _SayBody):

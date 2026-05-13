@@ -30,12 +30,16 @@ from src.skills.help_skill import HelpSkill
 from src.skills.meet_face import MeetFaceSkill
 from src.skills.motion_control import MotionControlSkill
 from src.skills.music_control import MusicControlSkill
+from src.skills.news_skill import NewsSkill
 from src.skills.object_detect_toggle import ObjectDetectToggleSkill
 from src.skills.quiet_hours_skill import QuietHoursSkill
+from src.skills.reminder_skill import ReminderSkill
+from src.skills.smart_home_skill import SmartHomeSkill
 from src.skills.system_status_skill import SystemStatusSkill
 from src.skills.tell_joke import TellJokeSkill
 from src.skills.tell_time import TellTimeSkill
 from src.skills.volume_skill import VolumeSkill
+from src.skills.weather_skill import WeatherSkill
 
 log = logging.getLogger(__name__)
 
@@ -59,12 +63,17 @@ class SkillsService(Service):
     def registry(self) -> SkillRegistry:
         return self._registry
 
+    def find_skill(self, name: str):
+        """Return the skill with *name*, or None."""
+        return self._registry.find(name)
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
     def _build_registry(self) -> None:
         """Register skills in priority order (first match wins)."""
+        self._reminder_skill = ReminderSkill()
         for skill in [
             GreetingSkill(),
             TellTimeSkill(),
@@ -76,6 +85,10 @@ class SkillsService(Service):
             ObjectDetectToggleSkill(),
             FaceTrackingToggleSkill(),
             VolumeSkill(),
+            WeatherSkill(),
+            self._reminder_skill,
+            NewsSkill(),
+            SmartHomeSkill(),
             QuietHoursSkill(quiet_hours=self._quiet_hours),
             SystemStatusSkill(live_data=self._live_data),
             HelpSkill(),
@@ -92,9 +105,12 @@ class SkillsService(Service):
     def on_start(self) -> None:
         self.bus.subscribe("av.utterance",  self._on_utterance)
         self.bus.subscribe("thermal.temp",  self._on_thermal)
+        # Start skills that have background threads
+        self._reminder_skill.start(self.bus)
         log.info("SkillsService started.")
 
     def on_stop(self) -> None:
+        self._reminder_skill.stop()
         log.info("SkillsService stopped.")
 
     # ------------------------------------------------------------------
