@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.11.3] - 2026-05-12
+### Fixed
+- **Face deletion in-memory purge**: deleting a face (single, guest bulk, or
+  registry clear) now immediately evicts that face from `PerceptionService._pos_cache`
+  and from `FaceService` in-memory sets (`_greeted_new_ids`, `_prev_face_ids`,
+  `_absent_counter`).  Previously the deleted face could be re-matched for up to
+  10 s from the position cache and would never receive a fresh greeting.
+- `WebService` now publishes `face.deleted {"face_id": …}` on `DEL /api/faces/{id}`.
+  Previously only bulk-delete endpoints published bus events.
+- `WebService` now includes `face_ids` list in the `face.guests_cleared` payload so
+  subscribers can surgically remove only the deleted IDs.
+- `PerceptionService._pos_cache` access is now protected by `_pos_cache_lock`
+  (threading.Lock) to prevent races between the detection worker thread and bus
+  event handlers calling `_find_cached_face` / `_update_pos_cache`.
+- `FaceRegistry.delete_guest_faces()` now returns `(count, [ids])` instead of just
+  `count` so the WebService can publish the deleted face IDs.
+
 ## [1.11.2] - 2026-05-12
 ### Fixed
 - `SkillsService` was overriding `start()` / `stop()` directly, bypassing the

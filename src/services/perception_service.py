@@ -77,6 +77,7 @@ class PerceptionService(Service):
         self._last_detect_ts: float = 0.0
         self._unsubs: list = []
         self._pos_cache: list = []
+        self._pos_cache_lock = threading.Lock()
         self._cache_ttl: float = 10.0    # 10s — bridges brief detection gaps only, not person changes
         self._cache_dist: float = 160.0 # pixel radius to consider "same face" (wider tolerance)
         # Tight TTL used to skip re-embedding entirely when the same face was
@@ -120,6 +121,15 @@ class PerceptionService(Service):
 
         self._unsubs.append(
             self.bus.subscribe("vision.frame_ready", self._on_frame_ready)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("face.deleted", self._on_face_deleted)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("face.guests_cleared", self._on_faces_cleared)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("face.registry_cleared", self._on_faces_cleared)
         )
         log.info(
             "PerceptionService started — backend=%s  max_fps=%.1f  recognition=%s",
@@ -171,6 +181,28 @@ class PerceptionService(Service):
             self._frame_queue.put_nowait(True)
         except queue.Full:
             pass  # worker still processing — skip this frame
+
+    def _on_face_deleted(self, _topic, payload) -> None:
+        """Purge a single deleted face from the position cache."""
+        if not isinstance(payload, dict):
+            return
+        face_id = payload.get("face_id")
+        if not face_id:
+            return
+        with self._pos_cache_lock:
+            self._pos_cache = [e for e in self._pos_cache if e["face_id"] != face_id]
+        log.debug("PerceptionService: purged face_id %s from pos_cache", face_id[:8])
+
+    def _on_faces_cleared(self, _topic, payload) -> None:
+        """Purge deleted faces from the position cache after a bulk delete."""
+        if isinstance(payload, dict) and "face_ids" in payload:
+            ids = set(payload["face_ids"])
+            with self._pos_cache_lock:
+                self._pos_cache = [e for e in self._pos_cache if e["face_id"] not in ids]
+        else:
+            with self._pos_cache_lock:
+                self._pos_cache.clear()
+        log.debug("PerceptionService: pos_cache purged on bulk face delete")
 
     # ── Detection worker (runs in its own thread) ──────────────────────
 
@@ -305,26 +337,28 @@ class PerceptionService(Service):
         """
         now = time.monotonic()
         ttl = max_age if max_age is not None else self._cache_ttl
-        self._pos_cache = [e for e in self._pos_cache if now - e["ts"] < self._cache_ttl]
-        best = None
-        best_dist = float("inf")
-        for entry in self._pos_cache:
-            if now - entry["ts"] > ttl:
-                continue
-            dist = ((cx - entry["cx"]) ** 2 + (cy - entry["cy"]) ** 2) ** 0.5
-            if dist < self._cache_dist and dist < best_dist:
-                best_dist = dist
-                best = entry
-        return (best["face_id"], best["name"]) if best else None
+        with self._pos_cache_lock:
+            self._pos_cache = [e for e in self._pos_cache if now - e["ts"] < self._cache_ttl]
+            best = None
+            best_dist = float("inf")
+            for entry in self._pos_cache:
+                if now - entry["ts"] > ttl:
+                    continue
+                dist = ((cx - entry["cx"]) ** 2 + (cy - entry["cy"]) ** 2) ** 0.5
+                if dist < self._cache_dist and dist < best_dist:
+                    best_dist = dist
+                    best = entry
+            return (best["face_id"], best["name"]) if best else None
 
     def _update_pos_cache(self, face_id: str, name: str, cx: float, cy: float) -> None:
         """Add or refresh a face entry in the position cache."""
         now = time.monotonic()
-        for entry in self._pos_cache:
-            if entry["face_id"] == face_id:
-                entry.update({"cx": cx, "cy": cy, "name": name, "ts": now})
-                return
-        self._pos_cache.append({"face_id": face_id, "name": name, "cx": cx, "cy": cy, "ts": now})
+        with self._pos_cache_lock:
+            for entry in self._pos_cache:
+                if entry["face_id"] == face_id:
+                    entry.update({"cx": cx, "cy": cy, "name": name, "ts": now})
+                    return
+            self._pos_cache.append({"face_id": face_id, "name": name, "cx": cx, "cy": cy, "ts": now})
 
     def _get_frame(self):
         if self._vision_svc is not None:

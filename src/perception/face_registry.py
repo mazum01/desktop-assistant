@@ -330,25 +330,24 @@ class FaceRegistry:
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def delete_guest_faces(self) -> int:
+    def delete_guest_faces(self) -> tuple[int, list[str]]:
         """Delete all faces whose name starts with 'Guest '.
 
         Removes their embeddings and thumbnails too.
-        Returns the number of faces deleted.
+        Returns ``(count, [deleted_face_ids])``.
         """
         rows = self._conn.execute(
             "SELECT id FROM faces WHERE name LIKE 'Guest %'"
         ).fetchall()
-        count = len(rows)
-        for row in rows:
-            fid = row["id"]
+        deleted_ids = [row["id"] for row in rows]
+        for fid in deleted_ids:
             self._conn.execute("DELETE FROM face_embeddings WHERE face_id = ?", (fid,))
             self._conn.execute("DELETE FROM faces WHERE id = ?", (fid,))
             self.delete_thumbnail(fid)
         self._conn.commit()
         self._invalidate_emb_cache()
-        log.info("Deleted %d guest face(s) from registry", count)
-        return count
+        log.info("Deleted %d guest face(s) from registry", len(deleted_ids))
+        return len(deleted_ids), deleted_ids
 
     def find_match_by_crop(
         self, crop: np.ndarray, threshold: float = 0.75

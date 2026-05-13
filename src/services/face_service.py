@@ -167,6 +167,9 @@ class FaceService(Service):
         self._unsubs.append(
             self.bus.subscribe("tracking.set_greeting_cooldown", self._on_set_cooldown)
         )
+        self._unsubs.append(self.bus.subscribe("face.deleted", self._on_face_deleted))
+        self._unsubs.append(self.bus.subscribe("face.guests_cleared", self._on_faces_cleared))
+        self._unsubs.append(self.bus.subscribe("face.registry_cleared", self._on_faces_cleared))
         log.info(
             "FaceService started (cooldown=%.0f min ±%.0f%%, min_absence=%.0f s)",
             self._cooldown_min, self._jitter_pct, self._min_absence_s,
@@ -205,6 +208,32 @@ class FaceService(Service):
             self._cooldown_min, self._jitter_pct, self._min_absence_s,
             self._confidence_threshold,
         )
+
+    def _on_face_deleted(self, _topic, payload) -> None:
+        """Purge a single deleted face from in-memory state."""
+        if not isinstance(payload, dict):
+            return
+        face_id = payload.get("face_id")
+        if not face_id:
+            return
+        self._greeted_new_ids.discard(face_id)
+        self._prev_face_ids.discard(face_id)
+        self._absent_counter.pop(face_id, None)
+        log.debug("FaceService: purged face_id %s from in-memory state", face_id[:8])
+
+    def _on_faces_cleared(self, _topic, payload) -> None:
+        """Purge deleted faces from in-memory state after a bulk delete."""
+        if isinstance(payload, dict) and "face_ids" in payload:
+            ids = set(payload["face_ids"])
+            self._greeted_new_ids -= ids
+            self._prev_face_ids -= ids
+            for fid in ids:
+                self._absent_counter.pop(fid, None)
+        else:
+            self._greeted_new_ids.clear()
+            self._prev_face_ids.clear()
+            self._absent_counter.clear()
+        log.debug("FaceService: in-memory state purged on bulk face delete")
 
     def _on_faces(self, _topic, payload) -> None:
         if not isinstance(payload, dict):

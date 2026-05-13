@@ -577,9 +577,9 @@ class WebService:
         async def api_delete_guest_faces():
             if not self._registry:
                 raise HTTPException(503, "registry unavailable")
-            count = self._registry.delete_guest_faces()
+            count, deleted_ids = self._registry.delete_guest_faces()
             if self.bus:
-                self.bus.publish("face.guests_cleared", {"count": count})
+                self.bus.publish("face.guests_cleared", {"count": count, "face_ids": deleted_ids})
             return {"ok": True, "deleted": count}
 
         @app.post("/api/faces/merge")
@@ -631,6 +631,8 @@ class WebService:
             ok = self._registry.delete_face(face_id)
             if not ok:
                 raise HTTPException(404, "face not found")
+            if self.bus:
+                self.bus.publish("face.deleted", {"face_id": face_id})
             return {"ok": True}
 
         # ── Servo settings ─────────────────────────────────────────────
