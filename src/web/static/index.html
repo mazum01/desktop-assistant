@@ -404,6 +404,25 @@
       </div>
     </section>
 
+    <!-- ── Skills ──────────────────────────────────────────────────── -->
+    <section class="card">
+      <h2>🎯 Voice Skills <button class="btn btn-secondary btn-sm" onclick="toggleSkills()" id="skills-toggle-btn">Show</button></h2>
+      <div id="skills-panel" style="display:none">
+        <p style="font-size:13px;color:var(--text-dim);margin:4px 0 8px 0">
+          Speak these phrases (or type them in the Say box) to trigger a skill.
+          Skills are matched in priority order — first match wins.
+        </p>
+        <table class="help-table" id="skills-table">
+          <thead><tr><th>Skill</th><th>Example phrase</th></tr></thead>
+          <tbody id="skills-tbody"><tr><td colspan="2">Loading…</td></tr></tbody>
+        </table>
+        <div class="btn-row" style="margin-top:8px">
+          <input type="text" id="utterance-input" placeholder="Type an utterance to test…" class="text-input" style="flex:1" />
+          <button class="btn btn-primary" onclick="sendUtterance()">Dispatch</button>
+        </div>
+      </div>
+    </section>
+
         <!-- ── Event Log ───────────────────────────────────────────── -->
     <section class="card">
       <h2>Event Log <span class="subtext">(last 20)</span></h2>
@@ -455,6 +474,7 @@
               <tr><td><code>da music thumbs-up / thumbs-down</code></td><td>Love or ban current song</td></tr>
               <tr><td><code>da music stations</code></td><td>List available stations</td></tr>
               <tr><td><code>da music status</code></td><td>Show current playback state</td></tr>
+              <tr><td><code>da skills list</code></td><td>List all registered voice skills</td></tr>
               <tr><td><code>da watch</code></td><td>Stream all bus events (Ctrl-C to stop)</td></tr>
               <tr><td><code>da help</code></td><td>Full command reference</td></tr>
             </table>
@@ -470,6 +490,7 @@
               <li><strong>Greeting Settings</strong> — Configure face greeting cooldown, jitter, minimum absence, and confidence threshold.</li>
               <li><strong>Music (Pandora)</strong> — Play, pause, skip, love/ban songs, and select stations via pianobar.</li>
               <li><strong>Quiet Hours</strong> — Suppress TTS announcements during a configured time window.</li>
+              <li><strong>Voice Skills</strong> — Live list of all registered skills with example phrases. Test utterances directly from the browser.</li>
               <li><strong>Event Log</strong> — Last 20 bus events (newest first).</li>
               <li><strong>System Power</strong> — Reboot or shut down the Pi from the browser.</li>
             </ul>

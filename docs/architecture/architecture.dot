@@ -13,7 +13,7 @@ digraph DesktopAssistant {
     ranksep=0.6;
     fontname="Helvetica";
     labelloc="t";
-    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v1.11.0 — Skills framework · ObjectService · MusicService · Object detector letterbox cache</font>>;
+    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v1.12.0 — 4 new skills · NotificationService · audio-reactive head motion · speaking_motion config</font>>;
     fontsize=16;
 
     node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin=0.15];
@@ -99,17 +99,18 @@ digraph DesktopAssistant {
         svc_motion  [label="MotionService\n← motion.pan_to / relax / stop\n→ motion.position / moved", fillcolor="#a8d88d"];
         svc_vision  [label="VisionService\n→ vision.frame_ready\n← vision.capture_still\n+ latest_frame()",        fillcolor="#a8d88d"];
         svc_audio   [label="AudioCaptureService\n→ audio.level / chunk\n+ latest_chunk()",                          fillcolor="#a8d88d"];
-        svc_av      [label="AVService\n← av.say / beep / utterance / announce_version\n→ av.spoke / version_announced", fillcolor="#a8d88d"];
+        svc_av      [label="AVService\n← av.say / beep / utterance / announce_version\n→ av.spoke / av.speaking_started / version_announced", fillcolor="#a8d88d"];
         svc_perception [label="PerceptionService\n← vision.frame_ready\n→ perception.faces / perception.error\n+ FaceEmbedder (ArcFace) + FaceRegistry", fillcolor="#a8d88d"];
         svc_telemetry [label="TelemetryService\n← thermal.* / motion.position / audio.level\n→ telemetry.flush\nSQLite ring buffer", fillcolor="#a8d88d"];
         svc_ipc     [label="IPCBridge (core)\nPUB ipc:///tmp/desktop-assistant.pub\nREP ipc:///tmp/desktop-assistant.rep\nSUB ← thermal.pub (upstream)\ncmds: ping / topics / last / publish / status", fillcolor="#a8d88d"];
         svc_face    [label="FaceService\n← perception.faces / face.meet\n→ av.say (greetings)\n→ face.identified\ncooldown-based re-greet", fillcolor="#a8d88d"];
-        svc_track   [label="TrackingService\n← perception.faces\n→ motion.pan_to\n20Hz spring-damper tracking\nidle random gaze", fillcolor="#a8d88d"];
-        svc_web     [label="WebService (FastAPI)\nGET / — dashboard SPA\nGET /stream — MJPEG 640×360 feed\nWS /ws — live JSON status\nGET /api/faces — list (has_thumb flag)\nGET /api/faces/{id}/thumb — face JPEG\nPUT /api/faces/{id} — rename\nDEL /api/faces/{id} — delete one\nDEL /api/faces — delete all\nGET|PUT /api/settings/quiet-hours\nPOST /api/say|pan|version\nport 8080", fillcolor="#a8d88d"];
+        svc_track   [label="TrackingService\n← perception.faces\n→ motion.pan_to\n← av.speaking_started / av.spoke\n20Hz spring-damper tracking\nidle random gaze · speaking nod", fillcolor="#a8d88d"];
+        svc_web     [label="WebService (FastAPI)\nGET / — dashboard SPA\nGET /stream — MJPEG 640×360 feed\nWS /ws — live JSON status\nGET /api/faces — list (has_thumb flag)\nGET /api/skills — registered skills\nGET /api/faces/{id}/thumb — face JPEG\nPUT /api/faces/{id} — rename\nDEL /api/faces/{id} — delete one\nDEL /api/faces — delete all\nGET|PUT /api/settings/quiet-hours\nPOST /api/say|pan|version|utterance\nport 8080", fillcolor="#a8d88d"];
         svc_clock   [label="ClockService\n+ ClockAnnouncer\n→ av.say (hourly/half-hourly)\nrespects QuietHours", fillcolor="#a8d88d"];
         svc_object  [label="ObjectService\n← vision.frame_ready / object.set_enabled\n→ object.detections\n2fps · max_objects cap · BGR→RGB fix", fillcolor="#a8d88d"];
-        svc_music   [label="MusicService\n← music.play / stop / pause / next\n← music.thumbs_up / thumbs_down\nPandora / audio playback", fillcolor="#a8d88d"];
-        svc_skills  [label="SkillsService\n← av.utterance\n→ av.say / vision.describe / av.tell_joke\n→ face.meet / motion.pan_to / music.*\n→ object.set_enabled\n→ tracking.set_face_tracking\nSkillRegistry — first-match dispatch", fillcolor="#a8d88d"];
+        svc_music   [label="MusicService\n← music.play / stop / pause / next\n← music.thumbs_up / thumbs_down / set_volume\nPandora / audio playback", fillcolor="#a8d88d"];
+        svc_skills  [label="SkillsService\n← av.utterance / thermal.temp\n→ av.say / vision.describe / av.tell_joke\n→ face.meet / motion.pan_to / music.*\n→ object.set_enabled / music.set_volume\n→ tracking.set_face_tracking\nSkillRegistry — first-match dispatch\n13 skills: help · system_status\n   volume · quiet_hours + 9 others", fillcolor="#a8d88d"];
+        svc_notif   [label="NotificationService\n← thermal.temp / perception.faces\n← av.speaking_started / av.spoke\n→ av.say (thermal alerts, absence alerts)\nrate-limited · quiet-hours aware", fillcolor="#a8d88d"];
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -200,10 +201,13 @@ digraph DesktopAssistant {
     svc_music -> core_bus   [color="#226622"];
     core_bus -> svc_skills  [color="#226622"];
     svc_skills -> core_bus  [color="#226622"];
+    core_bus -> svc_notif   [color="#226622"];
+    svc_notif -> core_bus   [color="#226622"];
 
     core_qh -> svc_clock    [label="suppresses\nannouncements", style=dashed, color="#888888"];
     core_qh -> svc_face     [label="suppresses\ngreetings",     style=dashed, color="#888888"];
     core_qh -> svc_web      [label="config R/W",               style=dashed, color="#888888"];
+    core_qh -> svc_notif    [label="suppresses\nalerts",        style=dashed, color="#888888"];
 
     svc_thermal -> core_svc [style=dotted, label="extends"];
     svc_thermal_ipc -> core_svc [style=dotted];
@@ -220,6 +224,7 @@ digraph DesktopAssistant {
     svc_object  -> core_svc [style=dotted];
     svc_music   -> core_svc [style=dotted];
     svc_skills  -> core_svc [style=dotted];
+    svc_notif   -> core_svc [style=dotted];
     // (WebService does not extend Service base class)
 
     // ─────────────────────────────────────────────────────────────────
@@ -234,5 +239,5 @@ digraph DesktopAssistant {
     // ─────────────────────────────────────────────────────────────────
     // Boot ordering
     // ─────────────────────────────────────────────────────────────────
-    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_av; svc_perception; svc_telemetry; svc_ipc; svc_face; svc_track; svc_web; svc_clock; svc_object; svc_music; svc_skills;}
+    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_av; svc_perception; svc_telemetry; svc_ipc; svc_face; svc_track; svc_web; svc_clock; svc_object; svc_music; svc_skills; svc_notif;}
 }

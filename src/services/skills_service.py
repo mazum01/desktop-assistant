@@ -7,23 +7,35 @@ publish on that topic with the payload ``{"text": "<utterance>"}``.
 ``AVService`` also subscribes to ``av.utterance`` for version-query handling;
 both subscribers receive every event — there is no conflict because no skill
 pattern overlaps with the version-query regex in ``VersionAnnouncer``.
+
+Topics subscribed
+-----------------
+av.utterance        ``{"text": str}``
+thermal.temp        ``{"celsius": float}``  — feeds SystemStatusSkill live data
+av.spoke            (used to update cpu_percent in live_data)
 """
 
 from __future__ import annotations
 
 import logging
 
+import psutil
+
 from src.core.service import Service
 from src.skills.base import SkillRegistry
 from src.skills.describe_scene import DescribeSceneSkill
 from src.skills.face_tracking_toggle import FaceTrackingToggleSkill
 from src.skills.greeting import GreetingSkill
+from src.skills.help_skill import HelpSkill
 from src.skills.meet_face import MeetFaceSkill
 from src.skills.motion_control import MotionControlSkill
 from src.skills.music_control import MusicControlSkill
 from src.skills.object_detect_toggle import ObjectDetectToggleSkill
+from src.skills.quiet_hours_skill import QuietHoursSkill
+from src.skills.system_status_skill import SystemStatusSkill
 from src.skills.tell_joke import TellJokeSkill
 from src.skills.tell_time import TellTimeSkill
+from src.skills.volume_skill import VolumeSkill
 
 log = logging.getLogger(__name__)
 
@@ -31,10 +43,21 @@ log = logging.getLogger(__name__)
 class SkillsService(Service):
     """Voice-intent dispatch service."""
 
-    def __init__(self, bus) -> None:
+    def __init__(self, bus, quiet_hours=None) -> None:
         super().__init__(bus)
+        self._quiet_hours = quiet_hours
+        # Shared live telemetry dict injected into SystemStatusSkill
+        self._live_data: dict = {}
         self._registry = SkillRegistry()
         self._build_registry()
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    @property
+    def registry(self) -> SkillRegistry:
+        return self._registry
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -52,6 +75,10 @@ class SkillsService(Service):
             MusicControlSkill(),
             ObjectDetectToggleSkill(),
             FaceTrackingToggleSkill(),
+            VolumeSkill(),
+            QuietHoursSkill(quiet_hours=self._quiet_hours),
+            SystemStatusSkill(live_data=self._live_data),
+            HelpSkill(),
         ]:
             self._registry.register(skill)
         log.info("SkillsService: %d skills registered: %s",
@@ -63,7 +90,8 @@ class SkillsService(Service):
     # ------------------------------------------------------------------
 
     def on_start(self) -> None:
-        self.bus.subscribe("av.utterance", self._on_utterance)
+        self.bus.subscribe("av.utterance",  self._on_utterance)
+        self.bus.subscribe("thermal.temp",  self._on_thermal)
         log.info("SkillsService started.")
 
     def on_stop(self) -> None:
@@ -77,6 +105,15 @@ class SkillsService(Service):
         text = payload.get("text", "").strip()
         if not text:
             return
+        # Refresh CPU before SystemStatusSkill might be dispatched
+        self._live_data["cpu_percent"] = psutil.cpu_percent(interval=None)
         matched = self._registry.dispatch(text, self.bus)
         if not matched:
             log.debug("SkillsService: no skill matched %r", text)
+
+    def _on_thermal(self, _topic, payload) -> None:
+        if isinstance(payload, dict):
+            if "celsius" in payload:
+                self._live_data["temperature"] = float(payload["celsius"])
+            if "fan_duty" in payload:
+                self._live_data["fan_duty"] = float(payload["fan_duty"])

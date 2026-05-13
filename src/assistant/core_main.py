@@ -33,6 +33,7 @@ from src.services.vision_service import VisionService
 from src.core.quiet_hours import QuietHours
 from src.services.web_service import WebService
 from src.core.runtime_state import load as _load_runtime, save as _save_runtime
+from src.services.notification_service import NotificationService
 
 # The thermal service runs in a separate process. Its IPCBridge PUBs on
 # this endpoint; we SUBscribe to it from the core IPCBridge and re-emit
@@ -112,6 +113,7 @@ def main() -> int:
         return cam_h if rot_deg in (90, 270) else cam_w
 
     _ht_cfg_raw = _cfg.get("head_tracking", {})
+    _speaking_motion_cfg = _ht_cfg_raw.get("speaking_motion", {})
     _tracker_cfg = HeadTrackerConfig(
         frame_width=_tracking_frame_width(_cam_width, _cam_height, _camera_rotation_deg),
         fov_degrees=float(_ht_cfg_raw.get("fov_degrees", 100.0)),
@@ -131,6 +133,10 @@ def main() -> int:
         conf_threshold=float(_obj_cfg_raw.get("conf_threshold", 0.40)),
         max_objects=int(_obj_cfg_raw.get("max_objects", 8)),
     )
+
+    _notif_cfg = _cfg.get("notifications", {})
+    _notif_thermal_cfg = _notif_cfg.get("thermal_alerts", {})
+    _notif_absence_cfg = _notif_cfg.get("absence_alerts", {})
 
     _web_cfg = _cfg.get("web_dashboard", {})
     _web_enabled = _web_cfg.get("enabled", True)
@@ -290,8 +296,9 @@ def main() -> int:
             quiet_hours=_qh,
         ),
         music_svc,
-        SkillsService(bus=bus),
     ]
+    skills_svc = SkillsService(bus=bus, quiet_hours=_qh)
+    services.append(skills_svc)
     if cam2_svc is not None:
         services.append(cam2_svc)
     tracking_svc = TrackingService(
@@ -299,15 +306,32 @@ def main() -> int:
         face_tracking_enabled=_face_tracking_enabled,
         random_motion_enabled=_random_motion_enabled,
         person_seek_enabled=_person_seek_enabled,
+        speaking_motion_enabled=bool(_speaking_motion_cfg.get("enabled", True)),
+        speaking_motion_amplitude_deg=float(_speaking_motion_cfg.get("amplitude_deg", 1.5)),
+        speaking_motion_freq_hz=float(_speaking_motion_cfg.get("freq_hz", 2.5)),
     )
     services.append(tracking_svc)
+
+    notif_svc = NotificationService(
+        bus=bus,
+        quiet_hours=_qh,
+        thermal_alerts_enabled=bool(_notif_thermal_cfg.get("enabled", True)),
+        warn_celsius=float(_notif_thermal_cfg.get("warn_celsius", 75.0)),
+        critical_celsius=float(_notif_thermal_cfg.get("critical_celsius", 85.0)),
+        thermal_rate_limit_min=float(_notif_thermal_cfg.get("min_interval_min", 10.0)),
+        absence_alerts_enabled=bool(_notif_absence_cfg.get("enabled", True)),
+        absence_min=float(_notif_absence_cfg.get("absence_min", 30.0)),
+        absence_rate_limit_min=float(_notif_absence_cfg.get("min_interval_min", 60.0)),
+    )
+    services.append(notif_svc)
     services.append(ipc)
     ipc._all_services = services  # seed service registry at startup
     if _web_enabled:
         web_svc = WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
                              quiet_hours=_qh, motion_service=motion_svc,
                              tracking_service=tracking_svc, music_service=music_svc,
-                             camera2_service=cam2_svc, object_service=obj_svc)
+                             camera2_service=cam2_svc, object_service=obj_svc,
+                             skills_service=skills_svc)
         services.append(web_svc)
         web_svc._all_services = services  # seed service registry at startup
 

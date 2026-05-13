@@ -315,6 +315,7 @@ class AVService(Service):
 
     def _do_say(self, text: str, request_id: str | None = None) -> None:
         try:
+            self.bus.publish("av.speaking_started", {"text": text, "ts": time.time()})
             self._tts.say(text, output=self._audio)
             payload = {"text": text, "ts": time.time()}
             if request_id is not None:

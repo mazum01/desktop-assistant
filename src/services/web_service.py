@@ -148,6 +148,7 @@ class WebService:
         music_service=None,
         camera2_service=None,
         object_service=None,
+        skills_service=None,
     ) -> None:
         self.bus = bus
         self._host = host
@@ -160,6 +161,7 @@ class WebService:
         self._music_svc = music_service
         self._camera2_svc = camera2_service
         self._object_svc = object_service
+        self._skills_svc = skills_service
         self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
         self._thread: Optional[threading.Thread] = None
@@ -747,6 +749,41 @@ class WebService:
                 raise HTTPException(503, "bus unavailable")
             self.bus.publish("av.say", {"text": body.text})
             return {"ok": True}
+
+        # ── Skills ────────────────────────────────────────────────────
+
+        @app.get("/api/skills")
+        async def api_skills():
+            if self._skills_svc is None:
+                return JSONResponse({"skills": []})
+            skills_info = []
+            for skill in self._skills_svc.registry.skills:
+                # Derive a human-readable example from the first pattern
+                patterns = skill.patterns
+                example = ""
+                if patterns:
+                    raw = patterns[0].pattern
+                    # Strip regex metacharacters to get a readable phrase
+                    example = (raw
+                               .replace(r"\b", "").replace(r"(", "").replace(r")", "")
+                               .replace(r"[", "").replace(r"]", "")
+                               .replace("?", "").replace("+", "").replace("*", "")
+                               .replace("\\", "").strip())
+                skills_info.append({
+                    "name":    skill.name,
+                    "example": example,
+                    "pattern_count": len(patterns),
+                })
+            return JSONResponse({"skills": skills_info})
+
+        @app.post("/api/utterance")
+        async def api_utterance(body: _SayBody):
+            """Dispatch text as a voice utterance to the skills engine."""
+            if not self.bus:
+                raise HTTPException(503, "bus unavailable")
+            self.bus.publish("av.utterance", {"text": body.text})
+            return {"ok": True}
+
 
         @app.post("/api/pan")
         async def api_pan(body: _PanBody):

@@ -6,6 +6,53 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.12.0] - 2026-05-13
+### Added
+- **HelpSkill** (`src/skills/help_skill.py`) — "what can you do", "list skills",
+  "help" → spoken capability summary.
+- **SystemStatusSkill** (`src/skills/system_status_skill.py`) — "how hot are you",
+  "what's the temperature", "system status" → reports live CPU temp, fan duty, and
+  CPU usage.  Live data is injected via a shared dict updated by SkillsService when
+  `thermal.temp` arrives.
+- **QuietHoursSkill** (`src/skills/quiet_hours_skill.py`) — "enable/disable quiet
+  hours", "are you in quiet mode" → toggles quiet hours via the QuietHours object and
+  publishes `settings.quiet_hours_updated`.
+- **VolumeSkill** (`src/skills/volume_skill.py`) — "set volume to 60", "louder",
+  "mute" → publishes `music.set_volume {"level": int}` or `{"delta": int}`.
+- **MusicService**: added `music.set_volume` bus subscription; supports both absolute
+  `{"level": int}` and relative `{"delta": int}` payloads.
+- **AVService**: publishes `av.speaking_started {"text": str, "ts": float}` immediately
+  before each TTS utterance (was previously only publishing `av.spoke` after completion).
+- **TrackingService**: subscribes to `av.speaking_started` / `av.spoke`; adds a
+  sinusoidal nod offset (configurable amplitude + frequency) to the servo target while
+  DA is speaking, making it look more alive.  Config under `head_tracking.speaking_motion`.
+- **NotificationService** (`src/services/notification_service.py`) — proactive speech
+  service: speaks thermal warnings at configurable thresholds, and a check-in message
+  if no face has been seen for `absence_min` minutes.  Rate-limited per notification
+  type; respects quiet hours.
+- **`GET /api/skills`** endpoint in WebService — returns name + example phrase for all
+  registered skills.
+- **`POST /api/utterance`** endpoint in WebService — dispatches text directly to the
+  skills engine (same as speaking it).
+- **Skills panel** in web dashboard — collapsible panel lists all registered voice
+  skills with example phrases and a text box to dispatch utterances for testing.
+- **`da skills list`** CLI command — lists all registered voice skills with example
+  phrases from `GET /api/skills`.
+- `config/assistant.yaml`: new `notifications:` section (thermal_alerts, absence_alerts)
+  and `head_tracking.speaking_motion` sub-section.
+- Architecture diagram updated for NotificationService, speaking motion, new API
+  endpoints, and 13-skill SkillsService.
+- **`SkillRegistry.skills`** property (read-only list view of registered skills).
+
+### Changed
+- `SkillsService`: accepts `quiet_hours=` parameter (passed to QuietHoursSkill);
+  subscribes to `thermal.temp` to keep `_live_data` dict fresh for SystemStatusSkill;
+  exposes `registry` property so WebService can enumerate skills.
+- `WebService`: accepts `skills_service=` constructor parameter.
+- `core_main.py`: passes `skills_service=skills_svc` to WebService; wires
+  NotificationService with config from `notifications:` YAML section; passes
+  speaking-motion config to TrackingService.
+
 ## [1.11.3] - 2026-05-12
 ### Fixed
 - **Face deletion in-memory purge**: deleting a face (single, guest bulk, or

@@ -807,6 +807,59 @@ function toggleHelp() {
   btn.textContent = visible ? "Show" : "Hide";
 }
 
+// ── Skills panel ─────────────────────────────────────────────────
+
+let _skillsLoaded = false;
+
+async function toggleSkills() {
+  const panel = el("skills-panel");
+  const btn   = el("skills-toggle-btn");
+  if (!panel || !btn) return;
+  const visible = panel.style.display !== "none";
+  panel.style.display = visible ? "none" : "block";
+  btn.textContent = visible ? "Show" : "Hide";
+  if (!visible && !_skillsLoaded) {
+    await loadSkills();
+  }
+}
+
+async function loadSkills() {
+  const tbody = el("skills-tbody");
+  if (!tbody) return;
+  try {
+    const r = await fetch("/api/skills");
+    const data = await r.json();
+    if (!data.skills || !data.skills.length) {
+      tbody.innerHTML = "<tr><td colspan='2'>No skills registered.</td></tr>";
+      return;
+    }
+    tbody.innerHTML = data.skills.map(s =>
+      `<tr><td><code>${esc(s.name)}</code></td><td>${esc(s.example)}</td></tr>`
+    ).join("");
+    _skillsLoaded = true;
+  } catch (e) {
+    tbody.innerHTML = "<tr><td colspan='2'>Failed to load skills.</td></tr>";
+  }
+}
+
+async function sendUtterance() {
+  const input = el("utterance-input");
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  try {
+    await fetch("/api/utterance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    input.value = "";
+  } catch (e) {
+    alert("Error dispatching utterance: " + e.message);
+  }
+}
+
+
 async function restartDaemon() {
   if (!confirm("Restart the desktop-assistant-core service?")) return;
   const btn = document.querySelector('[onclick="restartDaemon()"]');

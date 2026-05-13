@@ -201,6 +201,7 @@ class MusicService(Service):
             self.bus.subscribe("music.thumbs_up",    self._on_thumbs_up),
             self.bus.subscribe("music.thumbs_down",  self._on_thumbs_down),
             self.bus.subscribe("music.set_station",  self._on_set_station),
+            self.bus.subscribe("music.set_volume",   self._on_set_volume),
         ]
         log.info("MusicService started (enabled=%s)", self._enabled)
 
@@ -251,6 +252,22 @@ class MusicService(Service):
     def _on_set_station(self, _t, payload) -> None:
         if isinstance(payload, dict) and "station_id" in payload:
             self._switch_station(int(payload["station_id"]))
+
+    def _on_set_volume(self, _t, payload) -> None:
+        """Handle ``music.set_volume`` bus event.
+
+        Payload may contain:
+        - ``{"level": int}``  — set absolute volume 0–100
+        - ``{"delta": int}``  — adjust relative to current (positive = louder)
+        """
+        if not isinstance(payload, dict):
+            return
+        if "level" in payload:
+            self.set_volume(int(payload["level"]))
+        elif "delta" in payload:
+            current = self.get_volume()
+            if current >= 0:
+                self.set_volume(current + int(payload["delta"]))
 
     # ── pianobar management ───────────────────────────────────────────
 

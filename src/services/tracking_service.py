@@ -15,6 +15,11 @@ the head pan toward the person so SCRFD can pick up their face.  Once a face
 locks on, face tracking takes over immediately; person seek is inactive while
 a face is tracked.
 
+**Speaking motion** — while DA is talking (``av.speaking_started`` …
+``av.spoke``) the head nods with a gentle sinusoidal offset so the robot
+looks more alive.  Amplitude and frequency are config-tunable under
+``head_tracking.speaking_motion_*``.
+
 Topics subscribed
 -----------------
 perception.faces    ``{faces: [{centroid, confidence, …}], …}``
@@ -23,6 +28,8 @@ motion.position     ``{angle: float}``  — servo position feedback
 tracking.set_face_tracking   ``{"enabled": bool}``
 tracking.set_random_motion   ``{"enabled": bool}``
 tracking.set_person_seek     ``{"enabled": bool}``
+av.speaking_started ``{"text": str, "ts": float}``
+av.spoke            ``{"text": str, "ts": float}``
 
 Topics published
 ----------------
@@ -35,6 +42,7 @@ tracking.person_seek_changed     ``{"enabled": bool}``
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from typing import Optional
@@ -66,6 +74,9 @@ class TrackingService(Service):
         face_tracking_enabled: bool = True,
         random_motion_enabled: bool = True,
         person_seek_enabled: bool = True,
+        speaking_motion_enabled: bool = True,
+        speaking_motion_amplitude_deg: float = 1.5,
+        speaking_motion_freq_hz: float = 2.5,
     ) -> None:
         super().__init__(bus=bus)
         self._tracker_cfg = config or HeadTrackerConfig()
@@ -73,6 +84,11 @@ class TrackingService(Service):
         self._face_tracking_enabled = face_tracking_enabled
         self._random_motion_enabled = random_motion_enabled
         self._person_seek_enabled = person_seek_enabled
+        # Speaking motion: gentle sinusoidal nod while DA is talking
+        self._speaking_motion_enabled = speaking_motion_enabled
+        self._speaking_motion_amplitude = speaking_motion_amplitude_deg
+        self._speaking_motion_freq = speaking_motion_freq_hz
+        self._speaking_until: float = 0.0  # monotonic timestamp; >now means DA is speaking
         self._tracker: Optional[HeadTracker] = None
         self._current_face_cx: Optional[float] = None
         self._current_servo_angle: Optional[float] = None
@@ -124,6 +140,8 @@ class TrackingService(Service):
         self._unsubs.append(self.bus.subscribe("tracking.set_face_tracking", self._on_set_face_tracking))
         self._unsubs.append(self.bus.subscribe("tracking.set_random_motion", self._on_set_random_motion))
         self._unsubs.append(self.bus.subscribe("tracking.set_person_seek", self._on_set_person_seek))
+        self._unsubs.append(self.bus.subscribe("av.speaking_started", self._on_speaking_started))
+        self._unsubs.append(self.bus.subscribe("av.spoke", self._on_spoke))
 
         self._stop_event.clear()
         self._thread = threading.Thread(
@@ -238,6 +256,14 @@ class TrackingService(Service):
             with self._lock:
                 self._current_servo_angle = float(payload["angle"])
 
+    def _on_speaking_started(self, _topic, _payload) -> None:
+        """Mark the head as 'speaking' until av.spoke arrives (max 60 s safety cap)."""
+        self._speaking_until = time.monotonic() + 60.0
+
+    def _on_spoke(self, _topic, _payload) -> None:
+        """Clear the speaking window as soon as TTS finishes."""
+        self._speaking_until = 0.0
+
     # ── Tracking loop ────────────────────────────────────────────────────
 
     def _loop(self) -> None:
@@ -281,6 +307,13 @@ class TrackingService(Service):
                 dt=dt,
                 current_servo_angle=servo_angle,
             )
+
+            # Speaking motion: add a sinusoidal nod while DA is talking.
+            if self._speaking_motion_enabled and now < self._speaking_until:
+                nod = self._speaking_motion_amplitude * math.sin(
+                    2.0 * math.pi * self._speaking_motion_freq * now
+                )
+                target = target + nod
 
             move_ms = _UPDATE_INTERVAL * 1000.0 * 2.0
             self.bus.publish("motion.pan_to", {

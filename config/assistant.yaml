@@ -20,6 +20,11 @@ head_tracking:
   tracking_gain: 0.35       # scale face-offset correction (0.0–1.0); lower = less aggressive
   face_ema_alpha: 0.25      # EMA smoothing on face centroid (lower = more smoothing, less jitter)
   invert_pan: false          # flip pan direction (set true if servo mount reverses left/right)
+  speaking_motion:
+    # Gentle sinusoidal head nod while DA is speaking via TTS.
+    enabled: true
+    amplitude_deg: 1.5      # peak nod offset in degrees (reduce if too distracting)
+    freq_hz: 2.5            # nod oscillation frequency
 
 servo:
   # Enable/disable all servo motion (head pan).
@@ -105,3 +110,15 @@ music:
   #   password = yourpassword
   enabled: true
   announce_song_changes: false  # if true, speaks "Now playing…" on each new track
+
+notifications:
+  # Proactive speech: thermal alerts and long-absence check-ins.
+  thermal_alerts:
+    enabled: true
+    warn_celsius: 75.0          # speak a warning at this temperature
+    critical_celsius: 85.0      # speak a critical alert at this temperature
+    min_interval_min: 10        # minimum minutes between repeated thermal notifications
+  absence_alerts:
+    enabled: true
+    absence_min: 30             # minutes with no face seen before speaking
+    min_interval_min: 60        # minimum minutes between repeated absence alerts

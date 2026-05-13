@@ -81,6 +81,11 @@ class SkillRegistry:
     def skill_names(self) -> list[str]:
         return [s.name for s in self._skills]
 
+    @property
+    def skills(self) -> list[Skill]:
+        """Return the ordered list of registered skills (read-only view)."""
+        return list(self._skills)
+
     def dispatch(self, text: str, bus) -> bool:
         """Try each skill in registration order; execute the first match.
 
