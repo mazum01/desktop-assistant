@@ -15,8 +15,8 @@ head_tracking:
   person_seek_enabled: true      # pan toward detected person when no face locked
   fov_degrees: 100.0        # IMX708 wide horizontal field of view estimate
   dead_zone_frac: 0.06      # fraction of frame width ignored before tracking activates
-  tracking_gain: 0.55       # fraction of Kalman-predicted face offset applied as servo target
-  max_speed_deg_s: 150.0    # hard velocity cap (servo physical limit ~300°/s)
+  tracking_gain: 0.28       # fraction of Kalman-predicted face offset applied as servo target
+  max_speed_deg_s: 120.0    # hard velocity cap (servo physical limit ~300°/s)
   invert_pan: false          # flip pan direction (set true if servo mount reverses left/right)
   # Kalman filter — smooths face centroid, estimates velocity, predicts ahead
   kalman_r: 400.0            # measurement noise variance (px²); higher = more smoothing
@@ -24,10 +24,10 @@ head_tracking:
   kalman_q_vel: 50.0         # process noise, velocity (higher = tracks fast motion better)
   lookahead_s: 0.02          # predict face position this far ahead (seconds)
   # Minimum-jerk trajectory — replaces spring-damper for human-like motion profiles
-  replan_threshold_deg: 3.0  # only replan trajectory when target shifts by this many degrees
-  move_base_s: 0.25          # minimum trajectory duration (s)
-  move_scale_s_per_deg: 0.010  # extra duration per degree of travel
-  move_max_s: 0.80           # cap on trajectory duration (s)
+  replan_threshold_deg: 2.0  # only replan trajectory when target shifts by this many degrees
+  move_base_s: 0.18          # minimum trajectory duration (s)
+  move_scale_s_per_deg: 0.012  # extra duration per degree of travel
+  move_max_s: 0.60           # cap on trajectory duration (s)
   speaking_motion:
     # Gentle sinusoidal head nod while DA is speaking via TTS.
     enabled: true
