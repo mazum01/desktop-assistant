@@ -320,6 +320,7 @@ main {
 .btn-danger    { background: rgba(248,81,73,.15); color: var(--red); border: 1px solid var(--red); }
 .btn-warning   { background: rgba(210,153,34,.15); color: var(--yellow, #d2991e); border: 1px solid var(--yellow, #d2991e); }
 .btn-save      { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid var(--green); }
+.btn-train     { background: rgba(88,166,255,.15); color: var(--blue, #58a6ff); border: 1px solid var(--blue, #58a6ff); }
 .btn-sm        { padding: 3px 9px; font-size: 12px; }
 .btn-row       { display: flex; gap: 12px; flex-wrap: wrap; }
 

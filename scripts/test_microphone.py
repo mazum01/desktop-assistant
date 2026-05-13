@@ -36,7 +36,7 @@ except Exception as exc:
 
 print()
 print("── Recording 5 seconds (speak now) ──")
-mic = AudioInput(AudioInputConfig(sample_rate=16000, channels=1))
+mic = AudioInput(AudioInputConfig(sample_rate=44100, channels=1))
 samples = mic.record(seconds=5.0)
 
 # ── Stats ─────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ pcm = (samples * 32767).astype(np.int16)
 with wave.open(wav_path, "wb") as wf:
     wf.setnchannels(1)
     wf.setsampwidth(2)
-    wf.setframerate(16000)
+    wf.setframerate(44100)
     wf.writeframes(pcm.tobytes())
 print()
 print(f"  ✓ Saved recording to {wav_path}")

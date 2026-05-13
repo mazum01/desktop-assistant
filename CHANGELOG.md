@@ -6,6 +6,41 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.14.1] - 2026-05-13
+### Changed
+- Replaced spring-damper head-tracking controller with **Kalman filter + minimum-jerk trajectory planner** for smoother, human-like motion profiles.
+  - `FaceKalman` (new `src/motion/face_kalman.py`): 1-D Kalman filter [position, velocity] estimates face centroid and velocity, enables lookahead prediction.
+  - `_MinJerkPlanner` inside `head_tracker.py`: 5th-order polynomial (Flash & Hogan 1985) for smooth saccade and idle gaze movements; replans from current position+velocity to preserve momentum.
+  - Removed `spring_k`, `damping`, `face_ema_alpha` from `HeadTrackerConfig`; added `kalman_r`, `kalman_q_pos`, `kalman_q_vel`, `lookahead_s`, `replan_threshold_deg`, `move_base_s`, `move_scale_s_per_deg`, `move_max_s`.
+  - `max_speed_deg_s` raised from 60→250 to allow natural saccade speeds; replan threshold prevents constant replanning on noisy face detections.
+- Updated `config/assistant.yaml` `head_tracking:` section with new Kalman and min-jerk parameters.
+- Updated `src/assistant/core_main.py` to construct `HeadTrackerConfig` with new parameters.
+- Updated `tests/test_head_tracker.py`: removed obsolete spring-damper fixture params; added min-jerk smoothness and face-lost deceleration tests.
+- Added `tests/test_face_kalman.py`: coverage for Kalman init, smoothing, velocity tracking, reset, predict, and variable dt.
+
+## [1.14.0] - 2026-05-13
+### Added
+- Face registry **📷 Train** button: captures the current camera frame, runs face
+  detection, generates an ArcFace embedding, and adds it to the selected identity's
+  training data in FaceRegistry. Updates the face thumbnail with the new crop.
+- `PerceptionService.capture_training_image(face_id)` method handles the
+  frame grab → detect → embed → registry write pipeline.
+- `POST /api/faces/{id}/train` REST endpoint in WebService; returns embedding/
+  thumbnail update status. Publishes `face.training_capture` bus event on success.
+- `btn-train` CSS class added to dashboard stylesheet.
+
+---
+
+## [1.13.3] - 2026-05-13
+### Fixed
+- `AudioInputConfig.sample_rate` default changed from 16000 → 44100 Hz to match
+  CM108 USB audio adapter's native rate; prevents PortAudio probe failure and
+  sim-mode fallback when using Sabrent AU-MMSA.
+- `scripts/test_microphone.py` WAV writer now uses 44100 Hz sample rate to
+  match the actual capture rate (WAV was previously written with wrong header).
+
+---
+
 ## [1.13.2] - 2026-05-13
 ### Fixed
 - CI workflow: added `libportaudio2` system dep and `opencv-python-headless`,

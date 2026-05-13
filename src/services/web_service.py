@@ -17,6 +17,7 @@ DEL  /api/faces           Delete ALL faces
 DEL  /api/faces/guests    Delete only Guest-named faces
 POST /api/faces/merge     Merge two faces  body: {"keep_id": "...", "absorb_id": "..."}
 DEL  /api/faces/{id}      Delete a face and all its embeddings
+POST /api/faces/{id}/train  Capture current frame and add embedding/thumbnail to face
 POST /api/say             Speak text   body: {"text": "hello"}
 POST /api/pan             Pan servo    body: {"angle": 180.0}
 POST /api/version         Speak version number
@@ -158,6 +159,7 @@ class WebService:
         camera2_service=None,
         object_service=None,
         skills_service=None,
+        perception_service=None,
     ) -> None:
         self.bus = bus
         self._host = host
@@ -171,6 +173,7 @@ class WebService:
         self._camera2_svc = camera2_service
         self._object_svc = object_service
         self._skills_svc = skills_service
+        self._perception_svc = perception_service
         self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
         self._thread: Optional[threading.Thread] = None
@@ -634,6 +637,26 @@ class WebService:
             if self.bus:
                 self.bus.publish("face.meet", {"name": body.name, "face_id": face_id})
             return {"ok": True}
+
+        @app.post("/api/faces/{face_id}/train")
+        async def api_train_face(face_id: str):
+            """Capture the current camera frame and add an embedding/thumbnail for face_id."""
+            if not self._registry:
+                raise HTTPException(503, "registry unavailable")
+            if not self._perception_svc:
+                raise HTTPException(503, "perception service unavailable")
+            import asyncio
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, self._perception_svc.capture_training_image, face_id
+            )
+            if not result.get("ok"):
+                reason = result.get("reason", "unknown")
+                code = 404 if reason == "face_not_found" else 503
+                raise HTTPException(code, reason)
+            if self.bus:
+                self.bus.publish("face.training_capture", {"face_id": face_id, **result})
+            return result
 
         @app.delete("/api/faces/{face_id}")
         async def api_delete_face(face_id: str):

@@ -410,3 +410,66 @@ class PerceptionService(Service):
             self._registry.save_thumbnail(face_id, crop)
         self._update_pos_cache(face_id, auto_name, detection.centroid[0], detection.centroid[1])
         return face_id, auto_name
+
+    # ── Training capture (called from WebService API) ──────────────────
+
+    def capture_training_image(self, face_id: str) -> dict:
+        """Grab the current camera frame, detect the most prominent face, and add
+        an embedding + refresh the thumbnail for *face_id*.
+
+        Returns a result dict:
+            {"ok": True,  "embeddings_added": int, "thumbnail_updated": bool,
+             "bbox": [x1,y1,x2,y2], "confidence": float}
+            {"ok": False, "reason": str}
+        """
+        if self._registry is None:
+            return {"ok": False, "reason": "registry_unavailable"}
+        if self._detector is None:
+            return {"ok": False, "reason": "detector_unavailable"}
+        if self._registry.get_face(face_id) is None:
+            return {"ok": False, "reason": "face_not_found"}
+
+        frame = self._get_frame()
+        if frame is None:
+            return {"ok": False, "reason": "no_frame"}
+
+        try:
+            detections = self._detector.detect(frame)
+        except Exception:
+            log.exception("capture_training_image: detection failed")
+            return {"ok": False, "reason": "detection_failed"}
+
+        if not detections:
+            return {"ok": False, "reason": "no_face_detected"}
+
+        # Pick highest-confidence detection
+        best = max(detections, key=lambda f: f.confidence)
+        crop = self._extract_crop(frame, best.bbox)
+
+        # Generate and store embedding when ArcFace is available
+        added = 0
+        if self._embedder and best.landmarks and len(best.landmarks) >= 5:
+            try:
+                emb = self._embedder.embed(frame, best.landmarks)
+                if emb is not None and emb.any():
+                    self._registry.add_embedding_if_needed(face_id, emb)
+                    added = 1
+            except Exception:
+                log.exception("capture_training_image: embedding failed")
+
+        # Always refresh thumbnail so the registry shows the latest image
+        thumb_ok = False
+        if crop is not None:
+            thumb_ok = self._registry.save_thumbnail(face_id, crop)
+
+        log.info(
+            "capture_training_image: face=%s added=%d thumb=%s conf=%.2f",
+            face_id[:8], added, thumb_ok, best.confidence,
+        )
+        return {
+            "ok": True,
+            "embeddings_added": added,
+            "thumbnail_updated": thumb_ok,
+            "bbox": [int(v) for v in best.bbox],
+            "confidence": round(best.confidence, 3),
+        }

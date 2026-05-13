@@ -34,7 +34,7 @@ class AudioInputConfig:
     # Empty device_name → use system default input.
     device_name: str = ""
     device_index: Optional[int] = None
-    sample_rate: int = 16000  # 16 kHz is standard for STT / wake-word
+    sample_rate: int = 44100  # CM108 USB audio native rate; resample downstream for STT
     channels: int = 1
 
 

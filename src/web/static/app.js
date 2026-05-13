@@ -321,6 +321,7 @@ function makeFaceRow(face) {
     <td>${lastSeen}</td>
     <td>${count}×</td>
     <td>
+      <button class="btn btn-train btn-sm" id="train-btn-${esc(face.id)}" onclick="captureTrainingImage('${esc(face.id)}')">📷 Train</button>
       <button class="btn btn-danger btn-sm" onclick="deleteFace('${esc(face.id)}')">Delete</button>
     </td>
   `;
@@ -407,6 +408,31 @@ async function deleteFace(faceId) {
     const r = await fetch(`/api/faces/${faceId}`, { method: "DELETE" });
     if (r.ok) loadFaces();
   } catch (e) { /* ignore */ }
+}
+
+async function captureTrainingImage(faceId) {
+  const btn = document.getElementById(`train-btn-${faceId}`);
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ Capturing…"; }
+  try {
+    const r = await fetch(`/api/faces/${faceId}/train`, { method: "POST" });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      if (btn) { btn.textContent = "✅ Done"; btn.style.background = "var(--green)"; }
+      // Reload faces so updated thumbnail appears
+      setTimeout(() => loadFaces(), 800);
+    } else {
+      const msg = d.detail || "failed";
+      if (btn) { btn.textContent = "❌ " + msg; btn.style.background = "var(--red)"; }
+      setTimeout(() => {
+        if (btn) { btn.disabled = false; btn.textContent = "📷 Train"; btn.style.background = ""; }
+      }, 2500);
+    }
+  } catch (e) {
+    if (btn) { btn.textContent = "❌ Error"; btn.style.background = "var(--red)"; }
+    setTimeout(() => {
+      if (btn) { btn.disabled = false; btn.textContent = "📷 Train"; btn.style.background = ""; }
+    }, 2500);
+  }
 }
 
 async function loadQuietHours() {

@@ -278,12 +278,13 @@ def main() -> int:
         )
 
     obj_svc = ObjectService(bus=bus, vision_service=vis, config=_obj_cfg)
+    perc_svc = PerceptionService(bus=bus, vision_service=vis, config=_perc_cfg)
     services = [
         motion_svc,
         vis,
         AudioCaptureService(bus=bus),
         av,
-        PerceptionService(bus=bus, vision_service=vis, config=_perc_cfg),
+        perc_svc,
         obj_svc,
         TelemetryService(bus=bus),
         ClockService(bus=bus, enabled=_clock_enabled, quiet_hours=_qh),
@@ -331,7 +332,7 @@ def main() -> int:
                              quiet_hours=_qh, motion_service=motion_svc,
                              tracking_service=tracking_svc, music_service=music_svc,
                              camera2_service=cam2_svc, object_service=obj_svc,
-                             skills_service=skills_svc)
+                             skills_service=skills_svc, perception_service=perc_svc)
         services.append(web_svc)
         web_svc._all_services = services  # seed service registry at startup
 
