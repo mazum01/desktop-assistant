@@ -95,12 +95,12 @@ def test_registry_skill_names():
 # ---------------------------------------------------------------------------
 
 def test_skills_service_subscribes_and_dispatches():
-    """SkillsService must subscribe to av.utterance on start()."""
+    """SkillsService must subscribe to av.utterance on on_start()."""
     from src.services.skills_service import SkillsService
 
     bus = MagicMock()
     svc = SkillsService(bus)
-    svc.start()
+    svc.on_start()
     bus.subscribe.assert_any_call("av.utterance", svc._on_utterance)
 
 

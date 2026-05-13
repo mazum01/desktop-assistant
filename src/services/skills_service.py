@@ -62,14 +62,11 @@ class SkillsService(Service):
     # Service lifecycle
     # ------------------------------------------------------------------
 
-    def start(self) -> None:
+    def on_start(self) -> None:
         self.bus.subscribe("av.utterance", self._on_utterance)
         log.info("SkillsService started.")
 
-    def tick(self) -> None:
-        pass
-
-    def stop(self) -> None:
+    def on_stop(self) -> None:
         log.info("SkillsService stopped.")
 
     # ------------------------------------------------------------------

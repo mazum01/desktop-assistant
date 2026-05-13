@@ -6,7 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.11.1] - 2026-05-12
+## [1.11.2] - 2026-05-12
+### Fixed
+- `SkillsService` was overriding `start()` / `stop()` directly, bypassing the
+  `Service` base-class thread machinery.  Renamed to `on_start()` / `on_stop()`
+  so `_running` is set correctly and the boot self-test no longer reports
+  "service did not start".
+
+
 ### Added
 - **Person-seek tracking**: when `perception.objects` contains a `person` detection
   and no face is currently locked, `TrackingService` pans toward the person's
