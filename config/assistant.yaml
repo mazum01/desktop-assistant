@@ -12,6 +12,7 @@ head_tracking:
   enabled: true
   face_tracking_enabled: true    # servo follows detected faces
   random_motion_enabled: true    # idle random gaze when no face visible
+  person_seek_enabled: true      # pan toward detected person when no face locked
   fov_degrees: 100.0        # IMX708 wide horizontal field of view estimate
   spring_k: 2.0             # tracking stiffness (higher = snappier)
   damping: 3.2              # slightly overdamped (2*sqrt(2.0)≈2.83) — smooth settle

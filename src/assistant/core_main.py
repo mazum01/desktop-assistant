@@ -59,6 +59,7 @@ def main() -> int:
         "random_motion_enabled",
         _cfg.get("head_tracking", {}).get("random_motion_enabled", True),
     )
+    _person_seek_enabled = _cfg.get("head_tracking", {}).get("person_seek_enabled", True)
     _recognition_enabled = _cfg.get("face_recognition", {}).get("enabled", True)
     _fr_cfg = _cfg.get("face_recognition", {})
     _greeting_cooldown_min = float(_fr_cfg.get("greeting_cooldown_min", 30.0))
@@ -297,6 +298,7 @@ def main() -> int:
         bus=bus, config=_tracker_cfg, enabled=_tracking_enabled,
         face_tracking_enabled=_face_tracking_enabled,
         random_motion_enabled=_random_motion_enabled,
+        person_seek_enabled=_person_seek_enabled,
     )
     services.append(tracking_svc)
     services.append(ipc)

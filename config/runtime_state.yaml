@@ -6,7 +6,7 @@ camera2:
   rotation_deg: 90
 head_tracking:
   face_tracking_enabled: true
-  random_motion_enabled: false
+  random_motion_enabled: true
 servo:
   enabled: true
   soft_max_deg: 360.0

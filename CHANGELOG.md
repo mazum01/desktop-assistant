@@ -6,7 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.11.0] - 2026-05-12
+## [1.11.1] - 2026-05-12
+### Added
+- **Person-seek tracking**: when `perception.objects` contains a `person` detection
+  and no face is currently locked, `TrackingService` pans toward the person's
+  horizontal centre using the same spring-damper path as face tracking.  Once
+  SCRFD picks up a face the face lock takes over immediately.  Person hints
+  expire after 2 s (≈ 4 missed detection frames).
+- `person_seek_enabled: true` config flag in `config/assistant.yaml` under
+  `head_tracking`.  Toggleable at runtime via `tracking.set_person_seek` bus
+  topic; changes are broadcast on `tracking.person_seek_changed`.
+- 13 new tests in `tests/test_tracking_service.py` covering hint population,
+  staleness, face-takes-priority, and toggle semantics.
+
+
 ### Added
 - **Skills framework** (`src/skills/`): `Skill` ABC and `SkillRegistry` — voice-intent
   dispatch system that maps natural-language utterances to assistant actions.
