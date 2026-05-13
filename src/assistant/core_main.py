@@ -117,12 +117,18 @@ def main() -> int:
     _tracker_cfg = HeadTrackerConfig(
         frame_width=_tracking_frame_width(_cam_width, _cam_height, _camera_rotation_deg),
         fov_degrees=float(_ht_cfg_raw.get("fov_degrees", 100.0)),
-        spring_k=float(_ht_cfg_raw.get("spring_k", 2.0)),
-        damping=float(_ht_cfg_raw.get("damping", 3.2)),
-        max_speed_deg_s=float(_ht_cfg_raw.get("max_speed_deg_s", 60.0)),
-        tracking_gain=float(_ht_cfg_raw.get("tracking_gain", 0.35)),
-        face_ema_alpha=float(_ht_cfg_raw.get("face_ema_alpha", 0.25)),
+        dead_zone_frac=float(_ht_cfg_raw.get("dead_zone_frac", 0.06)),
+        tracking_gain=float(_ht_cfg_raw.get("tracking_gain", 0.92)),
+        max_speed_deg_s=float(_ht_cfg_raw.get("max_speed_deg_s", 250.0)),
         invert_pan=bool(_ht_cfg_raw.get("invert_pan", False)),
+        kalman_r=float(_ht_cfg_raw.get("kalman_r", 400.0)),
+        kalman_q_pos=float(_ht_cfg_raw.get("kalman_q_pos", 1.0)),
+        kalman_q_vel=float(_ht_cfg_raw.get("kalman_q_vel", 50.0)),
+        lookahead_s=float(_ht_cfg_raw.get("lookahead_s", 0.05)),
+        replan_threshold_deg=float(_ht_cfg_raw.get("replan_threshold_deg", 2.0)),
+        move_base_s=float(_ht_cfg_raw.get("move_base_s", 0.15)),
+        move_scale_s_per_deg=float(_ht_cfg_raw.get("move_scale_s_per_deg", 0.005)),
+        move_max_s=float(_ht_cfg_raw.get("move_max_s", 0.55)),
     )
     _perc_cfg = PerceptionConfig(recognition_enabled=_recognition_enabled)
 
