@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.14.3] - 2026-05-14
+### Added
+- **Stereo depth localization**: dual-method depth estimation now wired into `perception.faces` payload (`depth_m`, `pos_3d` per face).
+  - *Face-size method* (always-on): `Z = focal_px × face_width_m / bbox_width_px` using configured FOV + 0.145 m average face width; accurate ±15% for 0.3–4 m frontal faces.
+  - *Stereo template method*: `StereoService` subscribes to `perception.faces`, grabs both camera frames, runs `cv2.TM_CCOEFF_NORMED` template matching, computes disparity from cam1→cam2 horizontal offset; `Z = focal_px × baseline_m / disparity_px`. 56 mm baseline → ~15 px disparity at 1 m.
+- **`src/perception/depth_estimator.py`** — utility library: `focal_px_from_fov`, `face_size_depth`, `stereo_depth_from_disparity`, `to_3d`, `StereoFaceMatcher`.
+- **`src/services/stereo_service.py`** — event-driven `StereoService` with `StereoConfig`; publishes `vision.face_depth`.
+- Depth display in face-tracking video overlay (e.g., `"Guest 1  1.23m"`).
+- `depth:` config section in `config/assistant.yaml` (baseline_mm, known_face_width_m, min/max depth).
+- `RawCameraService.latest_frame()` — thread-safe access to latest raw numpy frame for stereo matching.
+- `tests/test_depth_estimator.py` — 13 unit tests for all depth utilities.
+
 ## [1.14.2] - 2026-05-13
 ### Added
 - **Live head-tracking tuning UI** (Web Dashboard → "Head Tracking Tuning" card): 11 sliders for `tracking_gain`, `dead_zone_frac`, `max_speed_deg_s`, Kalman `r`/`q_pos`/`q_vel`, `lookahead_s`, `replan_threshold_deg`, and min-jerk `move_base_s`/`move_scale_s_per_deg`/`move_max_s`. Changes apply live without a restart.

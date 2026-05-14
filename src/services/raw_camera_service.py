@@ -68,6 +68,7 @@ class RawCameraService(Service):
 
         self._lock = threading.Lock()
         self._latest_jpeg: Optional[bytes] = None
+        self._latest_frame: Optional["np.ndarray"] = None
         self._index = 0
         self._rotation_deg: int = self._cam_cfg.rotation_deg % 360
 
@@ -142,6 +143,7 @@ class RawCameraService(Service):
 
         with self._lock:
             self._latest_jpeg = jpeg
+            self._latest_frame = frame
             self._index += 1
             idx = self._index
 
@@ -152,6 +154,11 @@ class RawCameraService(Service):
     def latest_jpeg(self) -> Optional[bytes]:
         with self._lock:
             return self._latest_jpeg
+
+    def latest_frame(self) -> Optional["np.ndarray"]:
+        """Return the most recent raw BGR frame, or None if unavailable."""
+        with self._lock:
+            return self._latest_frame
 
     @property
     def rotation_deg(self) -> int:

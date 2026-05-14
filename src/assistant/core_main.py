@@ -24,8 +24,9 @@ from src.services.ipc_bridge import IPCBridge
 from src.services.motion_service import MotionService
 from src.services.music_service import MusicService
 from src.services.object_service import ObjectService, ObjectConfig
-from src.services.perception_service import PerceptionService
+from src.services.perception_service import PerceptionService, PerceptionConfig
 from src.services.raw_camera_service import RawCameraService, RawCameraConfig
+from src.services.stereo_service import StereoService, StereoConfig
 from src.services.telemetry_service import TelemetryService
 from src.services.skills_service import SkillsService
 from src.services.tracking_service import TrackingService
@@ -130,7 +131,15 @@ def main() -> int:
         move_scale_s_per_deg=float(_ht_cfg_raw.get("move_scale_s_per_deg", 0.005)),
         move_max_s=float(_ht_cfg_raw.get("move_max_s", 0.55)),
     )
-    _perc_cfg = PerceptionConfig(recognition_enabled=_recognition_enabled)
+    _depth_cfg_raw = _cfg.get("depth", {})
+    _perc_cfg = PerceptionConfig(
+        recognition_enabled=_recognition_enabled,
+        fov_degrees=float(_ht_cfg_raw.get("fov_degrees", 100.0)),
+        frame_width=_tracking_frame_width(_cam_width, _cam_height, _camera_rotation_deg),
+        known_face_width_m=float(_depth_cfg_raw.get("known_face_width_m", 0.145)),
+        min_depth_m=float(_depth_cfg_raw.get("min_depth_m", 0.25)),
+        max_depth_m=float(_depth_cfg_raw.get("max_depth_m", 6.0)),
+    )
 
     _obj_cfg_raw = _cfg.get("object_detection", {})
     _obj_cfg = ObjectConfig(
@@ -308,6 +317,23 @@ def main() -> int:
     services.append(skills_svc)
     if cam2_svc is not None:
         services.append(cam2_svc)
+    # Stereo depth service — runs only when cam2 is present and depth is enabled
+    if cam2_svc is not None and _depth_cfg_raw.get("enabled", True):
+        stereo_svc = StereoService(
+            bus=bus,
+            vision_service=vis,
+            cam2_service=cam2_svc,
+            config=StereoConfig(
+                baseline_mm=float(_depth_cfg_raw.get("baseline_mm", 56.0)),
+                known_face_width_m=float(_depth_cfg_raw.get("known_face_width_m", 0.145)),
+                fov_degrees=float(_ht_cfg_raw.get("fov_degrees", 100.0)),
+                frame_width=_tracking_frame_width(_cam_width, _cam_height, _camera_rotation_deg),
+                frame_height=_cam_height,
+                min_depth_m=float(_depth_cfg_raw.get("min_depth_m", 0.25)),
+                max_depth_m=float(_depth_cfg_raw.get("max_depth_m", 6.0)),
+            ),
+        )
+        services.append(stereo_svc)
     tracking_svc = TrackingService(
         bus=bus, config=_tracker_cfg, enabled=_tracking_enabled,
         face_tracking_enabled=_face_tracking_enabled,

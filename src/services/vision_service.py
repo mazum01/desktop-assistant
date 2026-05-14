@@ -197,6 +197,10 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
         ellipse_thickness = max(1, round(2 * scale))
         cv2.ellipse(frame_bgr, (cx, cy), (rx, ry), 0, 0, 360, color, ellipse_thickness, cv2.LINE_AA)
         label = face.get("name") or (face.get("face_id") and "unknown")
+        depth_m = face.get("depth_m")
+        if depth_m is not None:
+            depth_str = f"{depth_m:.2f}m"
+            label = f"{label}  {depth_str}" if label else depth_str
         if label:
             font_scale = max(0.8, 1.1 * scale)
             font_thick = max(1, round(scale))   # 1 at 640×480, 2 at 1280×960
@@ -341,6 +345,9 @@ class VisionService(Service):
         )
         self._unsubs.append(
             self.bus.subscribe("perception.faces", self._on_faces)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("vision.face_depth", self._on_face_depth)
         )
         self._unsubs.append(
             self.bus.subscribe("perception.objects", self._on_objects)
@@ -503,6 +510,24 @@ class VisionService(Service):
             return
         with self._det_lock:
             self._latest_faces = list(payload.get("faces", []))
+
+    def _on_face_depth(self, _topic, payload) -> None:
+        """Merge stereo/combined depth estimates into cached face list."""
+        if not isinstance(payload, dict):
+            return
+        depth_map = {
+            d["face_id"]: d
+            for d in payload.get("faces", [])
+            if d.get("face_id") is not None
+        }
+        if not depth_map:
+            return
+        with self._det_lock:
+            for face in self._latest_faces:
+                fid = face.get("face_id")
+                if fid and fid in depth_map:
+                    face["depth_m"] = depth_map[fid]["depth_m"]
+                    face["pos_3d"] = depth_map[fid].get("pos_3d")
 
     def _on_objects(self, _topic, payload) -> None:
         if not isinstance(payload, dict):

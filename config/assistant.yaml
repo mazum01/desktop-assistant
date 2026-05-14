@@ -86,6 +86,23 @@ face_recognition:
   min_absence_s: 30               # face must have been absent this long before re-greeting
   confidence_threshold: 0.5       # minimum detection confidence to trigger a greeting
 
+depth:
+  # Depth estimation for face localisation in 3D space.
+  # Two methods are fused: face-size (always on) + stereo (when cam2 is enabled).
+  #
+  # Face-size method: uses the known average frontal face width and the camera
+  # focal length (derived from camera.fov_degrees + camera.width) to estimate Z.
+  # Accurate to ±15% for frontal faces at 0.3–4 m. No calibration required.
+  #
+  # Stereo method: uses template matching between cam1 and cam2 to find the
+  # horizontal disparity, then Z = focal_px × baseline_m / disparity_px.
+  # Requires both cameras to be enabled and roughly horizontally aligned.
+  enabled: true
+  baseline_mm: 56               # physical horizontal separation between lenses
+  known_face_width_m: 0.145     # assumed average frontal face width in metres
+  min_depth_m: 0.25             # reject depth estimates below this threshold
+  max_depth_m: 6.0              # reject depth estimates above this threshold
+
 object_detection:
   # YOLOv8s object classification on the Hailo-8.
   # Detects 80 COCO classes (person, laptop, cup, etc.) at ~2 fps.

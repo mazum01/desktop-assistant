@@ -40,6 +40,7 @@ from typing import Optional
 
 from src.core.bus import MessageBus
 from src.core.service import Service
+from src.perception.depth_estimator import face_size_depth, focal_px_from_fov, to_3d
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +54,13 @@ class PerceptionConfig:
     conf_threshold: float = 0.65   # raised from 0.45 to cut false positives on real frames
     nms_threshold: float = 0.4     # NMS IoU threshold
     recognition_enabled: bool = True  # enable ArcFace identity recognition
+    # Depth estimation (face-size method — always-on when focal_px > 0)
+    focal_px: float = 0.0          # 0 = derive from fov_degrees + frame_width at runtime
+    fov_degrees: float = 100.0     # horizontal FOV of the primary camera
+    frame_width: int = 640         # primary camera frame width (for focal derivation)
+    known_face_width_m: float = 0.145
+    min_depth_m: float = 0.25
+    max_depth_m: float = 6.0
 
 
 class PerceptionService(Service):
@@ -78,12 +86,11 @@ class PerceptionService(Service):
         self._unsubs: list = []
         self._pos_cache: list = []
         self._pos_cache_lock = threading.Lock()
-        self._cache_ttl: float = 10.0    # 10s — bridges brief detection gaps only, not person changes
-        self._cache_dist: float = 160.0 # pixel radius to consider "same face" (wider tolerance)
-        # Tight TTL used to skip re-embedding entirely when the same face was
-        # just identified at the same location. Short enough that a person
-        # swap can't slip through, long enough to cover several detection ticks.
+        self._cache_ttl: float = 10.0
+        self._cache_dist: float = 160.0
         self._reuse_ttl: float = 1.0
+        # Compute focal length once (lazy — resolved at first detection)
+        self._focal_px: Optional[float] = self._cfg.focal_px if self._cfg.focal_px > 0 else None
         # Detection runs in its own thread so it never blocks the VisionService tick.
         self._frame_queue: queue.Queue = queue.Queue(maxsize=1)
         self._worker: Optional[threading.Thread] = None
@@ -317,6 +324,28 @@ class PerceptionService(Service):
 
                 face_list.append(entry)
 
+            # ── Face-size depth estimation ─────────────────────────────
+            focal = self._get_focal_px(frame)
+            if focal is not None:
+                h, w = frame.shape[:2]
+                for f_entry in face_list:
+                    bbox = f_entry.get("bbox")
+                    if not bbox:
+                        continue
+                    bbox_w = bbox[2] - bbox[0]
+                    depth = face_size_depth(
+                        bbox_w, focal,
+                        face_width_m=self._cfg.known_face_width_m,
+                    )
+                    if depth is not None and self._cfg.min_depth_m <= depth <= self._cfg.max_depth_m:
+                        cx, cy = f_entry["centroid"]
+                        x_m, y_m, z_m = to_3d(cx, cy, depth, focal, w, h)
+                        f_entry["depth_m"] = round(depth, 3)
+                        f_entry["pos_3d"] = [round(x_m, 3), round(y_m, 3), round(z_m, 3)]
+                    else:
+                        f_entry["depth_m"] = None
+                        f_entry["pos_3d"] = None
+
             self.bus.publish(
                 "perception.faces",
                 {
@@ -328,6 +357,19 @@ class PerceptionService(Service):
             )
 
     # ── Internal ──────────────────────────────────────────────────────
+
+    def _get_focal_px(self, frame) -> Optional[float]:
+        """Return focal length in pixels, computing it once from config if needed."""
+        if self._focal_px is None:
+            try:
+                h, w = frame.shape[:2]
+                self._focal_px = focal_px_from_fov(
+                    self._cfg.frame_width or w,
+                    self._cfg.fov_degrees,
+                )
+            except Exception:
+                return None
+        return self._focal_px
 
     def _find_cached_face(self, cx: float, cy: float, max_age: Optional[float] = None):
         """Return (face_id, name) from position cache if a nearby face was seen recently.
