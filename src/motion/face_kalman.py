@@ -54,6 +54,32 @@ class FaceKalman:
     def initialised(self) -> bool:
         return self._x is not None
 
+    # ── Live-tuning setters ───────────────────────────────────────────────
+
+    @property
+    def r(self) -> float:
+        return self._r
+
+    @r.setter
+    def r(self, value: float) -> None:
+        self._r = float(value)
+
+    @property
+    def q_pos(self) -> float:
+        return self._q_pos
+
+    @q_pos.setter
+    def q_pos(self, value: float) -> None:
+        self._q_pos = float(value)
+
+    @property
+    def q_vel(self) -> float:
+        return self._q_vel
+
+    @q_vel.setter
+    def q_vel(self, value: float) -> None:
+        self._q_vel = float(value)
+
     def update(self, measurement: float, dt: float) -> tuple[float, float]:
         """Feed a new centroid measurement; return (smoothed_position, velocity).
 

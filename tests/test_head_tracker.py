@@ -120,3 +120,43 @@ def test_idle_stays_within_mechanical_range(tracker):
     for _ in range(200):
         a = tracker.update(None, 0.05)
         assert 1.0 <= a <= 360.0, f"Idle angle {a} out of range"
+
+
+# ── update_config / get_config / debug state ────────────────────────────────
+
+def test_update_config_accepts_valid_field(tracker):
+    assert tracker.update_config("tracking_gain", 0.45) is True
+    assert tracker.get_config()["tracking_gain"] == pytest.approx(0.45)
+
+
+def test_update_config_rejects_unknown_field(tracker):
+    assert tracker.update_config("not_a_real_field", 1.0) is False
+
+
+def test_update_config_rejects_out_of_range(tracker):
+    assert tracker.update_config("tracking_gain", 99.0) is False
+    assert tracker.update_config("tracking_gain", -1.0) is False
+
+
+def test_update_config_kalman_propagates(tracker):
+    assert tracker.update_config("kalman_r", 750.0) is True
+    # Force a tick so Kalman is in use, then check property
+    tracker.update(640, 0.05)
+    assert float(tracker._kalman.r) == pytest.approx(750.0)
+
+
+def test_get_config_returns_all_tunable_fields(tracker):
+    cfg = tracker.get_config()
+    expected = {"tracking_gain", "dead_zone_frac", "max_speed_deg_s",
+                "kalman_r", "kalman_q_pos", "kalman_q_vel",
+                "lookahead_s", "replan_threshold_deg",
+                "move_base_s", "move_scale_s_per_deg", "move_max_s"}
+    assert expected.issubset(set(cfg.keys()))
+
+
+def test_debug_state_updates_on_tracking(tracker):
+    tracker.update(900, 0.05)
+    dbg = tracker.get_debug_state()
+    assert dbg["mode"] == "tracking"
+    assert dbg["face_raw"] == 900
+    assert dbg["face_smoothed"] is not None

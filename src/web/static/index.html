@@ -43,6 +43,53 @@
       </div>
     </section>
 
+    <!-- ── Head Tracking Tuning ────────────────────────────────── -->
+    <section class="card" id="tracking-tune-section">
+      <h2>
+        Head Tracking Tuning
+        <button class="btn btn-sm btn-secondary" onclick="toggleTuningPanel()"
+          id="tuning-toggle-btn" style="float:right">▾ Show</button>
+      </h2>
+      <div id="tuning-panel" style="display:none">
+        <div class="tuning-controls">
+          <div class="tuning-preset-row">
+            <label>Preset:</label>
+            <select id="tuning-preset-select">
+              <option value="">— select —</option>
+              <option value="default">Default</option>
+              <option value="snappy">Snappy</option>
+              <option value="smooth">Smooth</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" onclick="applyTrackingPreset()">Apply</button>
+            <button class="btn btn-secondary btn-sm" onclick="resetTrackingParams()">↺ Reset</button>
+            <button class="btn btn-primary btn-sm" onclick="saveTrackingParams()">💾 Save to config</button>
+            <span id="tuning-save-status" class="status-text"></span>
+          </div>
+
+          <div id="tuning-sliders"></div>
+
+          <div class="tuning-autotune-row">
+            <button class="btn btn-warning" onclick="startAutoTune()" id="autotune-start-btn">
+              🎯 Run Auto-Tune (~20 s)
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="cancelAutoTune()"
+              id="autotune-cancel-btn" style="display:none">Cancel</button>
+            <span id="autotune-status" class="status-text"></span>
+          </div>
+        </div>
+
+        <div class="tuning-chart-wrap">
+          <div class="tuning-chart-legend">
+            <span style="color:#888">— face raw</span> &nbsp;
+            <span style="color:#4cc">— face smoothed</span> &nbsp;
+            <span style="color:#4f4">— target angle</span> &nbsp;
+            <span style="color:#fa4">— servo angle</span>
+          </div>
+          <canvas id="tracking-chart" width="800" height="160"></canvas>
+        </div>
+      </div>
+    </section>
+
     <!-- ── Status Grid ─────────────────────────────────────────── -->
     <section class="card">
       <h2>Telemetry</h2>

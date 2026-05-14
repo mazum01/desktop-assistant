@@ -140,6 +140,15 @@ class _SkillConfigBody(BaseModel):
     value: object
 
 
+class _TrackingParamBody(BaseModel):
+    name: str
+    value: float
+
+
+class _TrackingPresetBody(BaseModel):
+    name: str
+
+
 class WebService:
     """Async FastAPI server running in a background thread."""
 
@@ -723,6 +732,81 @@ class WebService:
             if self.bus:
                 self.bus.publish("tracking.set_random_motion", {"enabled": body.enabled})
             return {"ok": True, "enabled": body.enabled}
+
+        # ── REST: head-tracking tuning ────────────────────────────────
+
+        @app.get("/api/tracking/params")
+        async def api_get_tracking_params():
+            if not self._tracking_svc:
+                return JSONResponse({"params": {}, "ranges": {}, "presets": []})
+            return JSONResponse(self._tracking_svc.get_tunable_params())
+
+        @app.post("/api/tracking/params")
+        async def api_post_tracking_param(body: _TrackingParamBody):
+            ok = bool(self._tracking_svc and self._tracking_svc.set_tunable_param(body.name, body.value))
+            return {"ok": ok, "name": body.name, "value": body.value}
+
+        @app.post("/api/tracking/save")
+        async def api_post_tracking_save():
+            if self.bus:
+                self.bus.publish("tracking.save_params", {})
+            return {"ok": True}
+
+        @app.post("/api/tracking/preset")
+        async def api_post_tracking_preset(body: _TrackingPresetBody):
+            if self.bus:
+                self.bus.publish("tracking.apply_preset", {"name": body.name})
+            return {"ok": True, "name": body.name}
+
+        @app.post("/api/tracking/reset")
+        async def api_post_tracking_reset():
+            if self.bus:
+                self.bus.publish("tracking.reset_params", {})
+            return {"ok": True}
+
+        @app.post("/api/tracking/autotune/start")
+        async def api_post_tracking_autotune_start():
+            if self.bus:
+                self.bus.publish("tracking.start_autotune", {})
+            return {"ok": True}
+
+        @app.post("/api/tracking/autotune/cancel")
+        async def api_post_tracking_autotune_cancel():
+            if self.bus:
+                self.bus.publish("tracking.cancel_autotune", {})
+            return {"ok": True}
+
+        @app.websocket("/ws/tracking-debug")
+        async def ws_tracking_debug(ws: WebSocket):
+            """Live stream of tracking.debug + autotune events at ~10 Hz."""
+            await ws.accept()
+            queue: asyncio.Queue = asyncio.Queue(maxsize=128)
+            loop = asyncio.get_event_loop()
+
+            def _on_event(_topic, payload):
+                try:
+                    loop.call_soon_threadsafe(queue.put_nowait, (_topic, payload))
+                except Exception:
+                    pass
+
+            unsubs = []
+            if self.bus:
+                unsubs.append(self.bus.subscribe("tracking.debug", _on_event))
+                unsubs.append(self.bus.subscribe("tracking.autotune_progress", _on_event))
+                unsubs.append(self.bus.subscribe("tracking.autotune_done", _on_event))
+                unsubs.append(self.bus.subscribe("tracking.param_changed", _on_event))
+                unsubs.append(self.bus.subscribe("tracking.preset_applied", _on_event))
+                unsubs.append(self.bus.subscribe("tracking.save_params_done", _on_event))
+            try:
+                while True:
+                    topic, payload = await queue.get()
+                    await ws.send_text(json.dumps({"topic": topic, "payload": payload}, default=str))
+            except (WebSocketDisconnect, Exception):
+                pass
+            finally:
+                for u in unsubs:
+                    try: u()
+                    except Exception: pass
 
         @app.get("/api/settings/object-detection")
         async def api_get_object_detection():

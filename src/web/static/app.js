@@ -1069,6 +1069,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadMusicStatus();
   connectWS();
   initFpsCounters();
+  loadTrackingParams();
   // Refresh face registry every 30s; music status every 2s
   setInterval(loadFaces, 30000);
   setInterval(loadMusicStatus, 2000);
@@ -1359,4 +1360,261 @@ function updateFpsOverlays(status) {
 
 function initFpsCounters() {
   // No-op: fps updates now come from the WebSocket status push (updateFpsOverlays).
+}
+
+// ── Head Tracking Tuning ────────────────────────────────────────
+
+const _TRACKING_LABELS = {
+  tracking_gain:        ["Gain",          ""],
+  dead_zone_frac:       ["Dead Zone",     "frac"],
+  max_speed_deg_s:      ["Max Speed",     "°/s"],
+  kalman_r:             ["Kalman R",      "px²"],
+  kalman_q_pos:         ["Kalman Q-pos",  ""],
+  kalman_q_vel:         ["Kalman Q-vel",  ""],
+  lookahead_s:          ["Look-ahead",    "s"],
+  replan_threshold_deg: ["Replan",        "°"],
+  move_base_s:          ["Move base",     "s"],
+  move_scale_s_per_deg: ["Move scale",    "s/°"],
+  move_max_s:           ["Move max",      "s"],
+};
+
+let _trackingRanges = {};
+let _trackingDebugWS = null;
+let _trackingSamples = []; // ring buffer of {t, face_x_raw, face_x_smoothed, target_angle, servo_angle}
+let _trackingChartRAF = null;
+let _trackingPanelOpen = false;
+
+function toggleTuningPanel() {
+  const panel = el("tuning-panel");
+  const btn = el("tuning-toggle-btn");
+  _trackingPanelOpen = !_trackingPanelOpen;
+  panel.style.display = _trackingPanelOpen ? "block" : "none";
+  btn.textContent = _trackingPanelOpen ? "▴ Hide" : "▾ Show";
+  if (_trackingPanelOpen) {
+    connectTrackingDebugWS();
+    _startTrackingChartLoop();
+  } else {
+    if (_trackingDebugWS) { try { _trackingDebugWS.close(); } catch (e) {} _trackingDebugWS = null; }
+    if (_trackingChartRAF) { cancelAnimationFrame(_trackingChartRAF); _trackingChartRAF = null; }
+  }
+}
+
+async function loadTrackingParams() {
+  try {
+    const r = await fetch("/api/tracking/params");
+    if (!r.ok) return;
+    const data = await r.json();
+    _trackingRanges = data.ranges || {};
+    _buildTrackingSliders(data.params || {}, _trackingRanges);
+  } catch (e) {
+    console.warn("loadTrackingParams failed", e);
+  }
+}
+
+function _buildTrackingSliders(params, ranges) {
+  const wrap = el("tuning-sliders");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  const names = Object.keys(_TRACKING_LABELS);
+  for (const name of names) {
+    if (!(name in ranges)) continue;
+    const [min, max] = ranges[name];
+    const val = params[name] !== undefined ? params[name] : (min + max) / 2;
+    const [label, unit] = _TRACKING_LABELS[name];
+    const step = _stepFor(min, max);
+    const decimals = step < 0.01 ? 4 : step < 0.1 ? 3 : step < 1 ? 2 : 0;
+    const row = document.createElement("div");
+    row.className = "tuning-slider-row";
+    row.innerHTML = `
+      <label title="${name}">${label}${unit ? " (" + unit + ")" : ""}</label>
+      <input type="range" id="ts-r-${name}" min="${min}" max="${max}" step="${step}" value="${val}">
+      <input type="number" id="ts-n-${name}" min="${min}" max="${max}" step="${step}" value="${Number(val).toFixed(decimals)}">
+    `;
+    wrap.appendChild(row);
+    const r = el(`ts-r-${name}`);
+    const n = el(`ts-n-${name}`);
+    let timer = null;
+    const onChange = (src) => {
+      const v = Number(src.value);
+      if (src === r) n.value = v.toFixed(decimals);
+      else r.value = v;
+      clearTimeout(timer);
+      timer = setTimeout(() => _putTrackingParam(name, v), 120);
+    };
+    r.addEventListener("input", () => onChange(r));
+    n.addEventListener("change", () => onChange(n));
+  }
+}
+
+function _stepFor(min, max) {
+  const span = max - min;
+  if (span <= 0.3) return 0.005;
+  if (span <= 2) return 0.01;
+  if (span <= 20) return 0.1;
+  return 1;
+}
+
+async function _putTrackingParam(name, value) {
+  try {
+    await fetch("/api/tracking/params", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, value }),
+    });
+  } catch (e) { console.warn("set param failed", name, e); }
+}
+
+async function saveTrackingParams() {
+  const status = el("tuning-save-status");
+  try {
+    const r = await fetch("/api/tracking/save", { method: "POST" });
+    status.textContent = r.ok ? "✓ saved" : "✗ failed";
+  } catch (e) { status.textContent = "✗ " + e; }
+  setTimeout(() => { status.textContent = ""; }, 3000);
+}
+
+async function resetTrackingParams() {
+  await fetch("/api/tracking/reset", { method: "POST" });
+  setTimeout(loadTrackingParams, 200);
+}
+
+async function applyTrackingPreset() {
+  const sel = el("tuning-preset-select");
+  const name = sel.value;
+  if (!name) return;
+  await fetch("/api/tracking/preset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  setTimeout(loadTrackingParams, 250);
+}
+
+async function startAutoTune() {
+  el("autotune-start-btn").style.display = "none";
+  el("autotune-cancel-btn").style.display = "inline-block";
+  el("autotune-status").textContent = "starting…";
+  await fetch("/api/tracking/autotune/start", { method: "POST" });
+}
+
+async function cancelAutoTune() {
+  await fetch("/api/tracking/autotune/cancel", { method: "POST" });
+  _autoTuneFinish();
+}
+
+function _autoTuneFinish() {
+  el("autotune-start-btn").style.display = "inline-block";
+  el("autotune-cancel-btn").style.display = "none";
+}
+
+function connectTrackingDebugWS() {
+  if (_trackingDebugWS) return;
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const url = `${proto}//${location.host}/ws/tracking-debug`;
+  try {
+    _trackingDebugWS = new WebSocket(url);
+  } catch (e) { return; }
+  _trackingDebugWS.onmessage = (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    _onTrackingEvent(msg.topic, msg.payload);
+  };
+  _trackingDebugWS.onclose = () => {
+    _trackingDebugWS = null;
+    if (_trackingPanelOpen) setTimeout(connectTrackingDebugWS, 1500);
+  };
+}
+
+function _onTrackingEvent(topic, payload) {
+  if (topic === "tracking.debug") {
+    _trackingSamples.push({ t: Date.now(), ...payload });
+    const cutoff = Date.now() - 5500;
+    while (_trackingSamples.length && _trackingSamples[0].t < cutoff) _trackingSamples.shift();
+  } else if (topic === "tracking.autotune_progress") {
+    const s = el("autotune-status");
+    if (s) s.textContent = `[${payload.stage}] ${payload.msg || ""} (${(payload.t_remaining || 0).toFixed(1)}s left)`;
+  } else if (topic === "tracking.autotune_done") {
+    const s = el("autotune-status");
+    if (s) {
+      if (payload.ok) {
+        s.textContent = `✓ done — gain=${(payload.tracking_gain||0).toFixed(2)} R=${Math.round(payload.kalman_r||0)} lag=${(payload.lag_s||0).toFixed(2)}s overshoot=${(payload.overshoot_deg||0).toFixed(1)}°`;
+      } else {
+        s.textContent = `✗ ${payload.reason || "failed"}`;
+      }
+    }
+    _autoTuneFinish();
+    setTimeout(loadTrackingParams, 300);
+  } else if (topic === "tracking.param_changed") {
+    // Update slider silently to reflect server-side change (e.g. autotune)
+    const name = payload.name;
+    const v = payload.value;
+    const r = el(`ts-r-${name}`);
+    const n = el(`ts-n-${name}`);
+    if (r) r.value = v;
+    if (n) n.value = Number(v).toFixed(3);
+  } else if (topic === "tracking.preset_applied" || topic === "tracking.save_params_done") {
+    setTimeout(loadTrackingParams, 200);
+  }
+}
+
+function _startTrackingChartLoop() {
+  const cv = el("tracking-chart");
+  if (!cv) return;
+  const draw = () => {
+    _drawTrackingChart(cv);
+    _trackingChartRAF = requestAnimationFrame(draw);
+  };
+  if (!_trackingChartRAF) _trackingChartRAF = requestAnimationFrame(draw);
+}
+
+function _drawTrackingChart(cv) {
+  const ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#181818";
+  ctx.fillRect(0, 0, W, H);
+  if (_trackingSamples.length < 2) return;
+
+  const now = Date.now();
+  const t0 = now - 5000;
+  const samples = _trackingSamples.filter(s => s.t >= t0);
+  if (samples.length < 2) return;
+
+  // Two y-axes: face_x in px (0..1280) on left; angle in deg (0..360) on right
+  // Map both to 0..1 normalized vertical space
+  const FACE_MAX = 1280;
+  const ANGLE_MAX = 360;
+  const xOf = (t) => ((t - t0) / 5000) * W;
+  const yFace = (v) => H - (v / FACE_MAX) * H;
+  const yAngle = (v) => H - (v / ANGLE_MAX) * H;
+
+  const plot = (vals, yFn, color, dashed) => {
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    if (dashed) ctx.setLineDash([4, 3]); else ctx.setLineDash([]);
+    let started = false;
+    for (const s of samples) {
+      const v = vals(s);
+      if (v === null || v === undefined || Number.isNaN(v)) { started = false; continue; }
+      const x = xOf(s.t), y = yFn(v);
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  };
+
+  // Grid
+  ctx.strokeStyle = "#2a2a2a";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  for (let i = 1; i < 5; i++) {
+    const x = (i / 5) * W;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+
+  plot(s => s.face_raw,      yFace,  "#888", true);
+  plot(s => s.face_smoothed, yFace,  "#4cc", false);
+  plot(s => s.target,        yAngle, "#4f4", true);
+  plot(s => s.servo_angle,   yAngle, "#fa4", false);
 }

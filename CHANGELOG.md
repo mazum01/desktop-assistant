@@ -6,6 +6,30 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.14.2] - 2026-05-13
+### Added
+- **Live head-tracking tuning UI** (Web Dashboard → "Head Tracking Tuning" card): 11 sliders for `tracking_gain`, `dead_zone_frac`, `max_speed_deg_s`, Kalman `r`/`q_pos`/`q_vel`, `lookahead_s`, `replan_threshold_deg`, and min-jerk `move_base_s`/`move_scale_s_per_deg`/`move_max_s`. Changes apply live without a restart.
+- **Presets**: Default / Snappy / Smooth dropdown; one-click apply.
+- **Save to config / Reset to defaults** buttons; saves persist via `ruamel.yaml` (comments preserved).
+- **Guided auto-tune** (~20 s, 2-stage):
+  - Stage 1 (5 s, "hold still"): measures face-detection noise σ → sets `kalman_r ≈ (3σ)²`.
+  - Stage 2 (~16 s, "wave head"): probes 4 candidate gains, computes lag via cross-correlation and overshoot → picks min-scoring `tracking_gain`.
+- **Live telemetry chart** (last 5 s, ~10 Hz): face_raw, face_smoothed, target_angle, servo_angle on a Canvas 2D strip via `/ws/tracking-debug` WebSocket.
+- New REST endpoints under `/api/tracking/*` (`params` GET/POST, `save`, `reset`, `preset`, `autotune/start`, `autotune/cancel`) and a `/ws/tracking-debug` WebSocket.
+- New bus topics: `tracking.set_param`, `tracking.get_params`, `tracking.save_params(_done)`, `tracking.reset_params`, `tracking.apply_preset`, `tracking.preset_applied`, `tracking.start_autotune`, `tracking.cancel_autotune`, `tracking.autotune_progress`, `tracking.autotune_done`, `tracking.param_changed`, `tracking.debug`.
+
+### Changed
+- `HeadTracker` now exposes `update_config(name, value)`, `get_config()`, and `get_debug_state()` for live tuning + telemetry; whitelist-and-range validated.
+- `FaceKalman` exposes `r`, `q_pos`, `q_vel` as live-settable properties so Kalman noise can be mutated without re-instantiating.
+- `TrackingService` publishes `tracking.debug` at 10 Hz and runs the auto-tune state machine inside the 20 Hz control loop.
+- Added `ruamel.yaml>=0.17` to `requirements.txt` (preserves comments when persisting tuned values to `config/assistant.yaml`; falls back to PyYAML if missing).
+
+### Tests
+- `tests/test_head_tracker.py`: added coverage for `update_config` whitelist/bounds, Kalman propagation, `get_config`/`get_debug_state`.
+- `tests/test_tracking_autotune.py` (new): cross-correlation lag detection on synthetic sinusoidal data; YAML round-trip with `_persist_head_tracking_params`.
+
+---
+
 ## [1.14.1] - 2026-05-13
 ### Changed
 - Replaced spring-damper head-tracking controller with **Kalman filter + minimum-jerk trajectory planner** for smoother, human-like motion profiles.

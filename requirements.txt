@@ -31,3 +31,4 @@ pybind11>=2.12.0
 
 # Testing
 pytest>=8.0
+ruamel.yaml>=0.17
