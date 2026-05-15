@@ -234,38 +234,29 @@ def _draw_servo_overlay(
     """Draw a servo pan-angle indicator in-place on a BGR frame.
 
     All pixel dimensions scale with the frame resolution relative to 640×480.
+    Draws an arc compass (bottom-right) with limit labels and current heading.
     """
     h, w = frame.shape[:2]
     scale = min(w / 640.0, h / 480.0)
     servo_ctr = (servo_min + servo_max) / 2.0
 
-    # ── Text label (bottom-left) ────────────────────────────────────────
-    text = f"Pan: {angle:.0f}\u00b0"
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = max(0.7, 1.1 * scale)
-    thickness = max(1, round(scale))   # 1 at 640×480
-    (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
-
-    pad = max(2, int(4 * scale))
-    x0, y0 = int(8 * scale), h - int(8 * scale) - th - pad * 2
-
-    _put_text_outlined(frame, text, (x0, y0 + th), font, font_scale, _CYAN, thickness)
-
-    # ── Arc compass (bottom-right) ────────────────────────────────────────
-    radius = max(15, int(40 * scale))
-    off_x = max(radius + 4, int(60 * scale))
-    off_y = max(radius + 4, int(55 * scale))
+    # ── Arc compass (bottom-right) — 50% larger than original ─────────────
+    radius = max(22, int(60 * scale))
+    off_x = max(radius + 20, int(95 * scale))
+    off_y = max(radius + 16, int(82 * scale))
     cx, cy = w - off_x, h - off_y
     half_range = max(1.0, (servo_max - servo_min) / 2.0)
     arc_half_deg = 60  # visual arc spans ±60° regardless of servo range
     arc_thick = max(1, round(2 * scale))
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    lbl_scale = max(0.35, 0.50 * scale)
+    lbl_thick = 1
 
-    # Background arc (gray) — U opening upward
+    # Background arc (gray) — ∩ shape, open end pointing down
     cv2.ellipse(frame, (cx, cy), (radius, radius), 0, 210, 330, (80, 80, 80), arc_thick, cv2.LINE_AA)
 
     # Normalize position within servo range → -1.0 .. +1.0
-    norm = (angle - servo_ctr) / half_range
-    norm = max(-1.0, min(1.0, norm))
+    norm = max(-1.0, min(1.0, (angle - servo_ctr) / half_range))
 
     # cv2 angle 270° = straight up; sweep left/right by arc_half_deg
     pointer_deg = 270.0 + norm * arc_half_deg
@@ -276,10 +267,40 @@ def _draw_servo_overlay(
     cv2.line(frame, (cx, cy), (px, py), _CYAN, arc_thick, cv2.LINE_AA)
     dot_r = max(2, round(3 * scale))
     cv2.circle(frame, (cx, cy), dot_r, _CYAN, -1, cv2.LINE_AA)
+
     # Centre tick (straight up = servo centre position)
-    tick_len = max(3, int(8 * scale))
+    tick_len = max(4, int(10 * scale))
     cv2.line(frame, (cx, cy - radius + tick_len - 2), (cx, cy - radius - 2),
              (120, 120, 120), max(1, round(scale)), cv2.LINE_AA)
+
+    # ── Limit labels at arc endpoints ─────────────────────────────────────
+    # Arc endpoints: 210° (left / servo_min) and 330° (right / servo_max)
+    lx_pt = int(cx + radius * math.cos(math.radians(210)))
+    ly_pt = int(cy + radius * math.sin(math.radians(210)))
+    rx_pt = int(cx + radius * math.cos(math.radians(330)))
+    ry_pt = int(cy + radius * math.sin(math.radians(330)))
+
+    min_txt = f"{servo_min:.0f}\u00b0"
+    max_txt = f"{servo_max:.0f}\u00b0"
+    (min_tw, min_th), _ = cv2.getTextSize(min_txt, font, lbl_scale, lbl_thick)
+    (max_tw, max_th), _ = cv2.getTextSize(max_txt, font, lbl_scale, lbl_thick)
+
+    # servo_min label: anchor right edge at left endpoint, vertically centred
+    _put_text_outlined(frame, min_txt,
+                       (lx_pt - min_tw - 2, ly_pt + min_th // 2),
+                       font, lbl_scale, (160, 160, 160), lbl_thick)
+    # servo_max label: anchor left edge at right endpoint, vertically centred
+    _put_text_outlined(frame, max_txt,
+                       (rx_pt + 2, ry_pt + max_th // 2),
+                       font, lbl_scale, (160, 160, 160), lbl_thick)
+
+    # ── Current heading angle label (below arc centre) ─────────────────────
+    angle_txt = f"{angle:.0f}\u00b0"
+    ang_scale = max(0.45, 0.65 * scale)
+    (atw, ath), _ = cv2.getTextSize(angle_txt, font, ang_scale, lbl_thick)
+    _put_text_outlined(frame, angle_txt,
+                       (cx - atw // 2, cy + ath + max(2, int(4 * scale))),
+                       font, ang_scale, _CYAN, lbl_thick)
 
 
 

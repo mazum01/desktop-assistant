@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.14.4] - 2026-05-15
+### Changed
+- **Head position overlay** (arc compass, bottom-right of video feed):
+  - Arc and pointer are now 50% larger (radius `40→60` scaled units).
+  - Limit angle labels (`servo_min°` / `servo_max°`) shown at the arc endpoints in gray.
+  - Current heading angle label shown in cyan below the arc centre.
+  - Removed the redundant `"Pan: X°"` text label that appeared bottom-left.
+
 ## [1.14.3] - 2026-05-14
 ### Added
 - **Stereo depth localization**: dual-method depth estimation now wired into `perception.faces` payload (`depth_m`, `pos_3d` per face).
