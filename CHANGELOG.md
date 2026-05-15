@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.14.5] - 2026-05-15
+### Fixed
+- Direction overlay labels no longer show `??` — replaced Unicode degree symbol (`\u00b0`) with ASCII `d` suffix since OpenCV Hershey fonts are ASCII-only.
+### Changed
+- Added semi-transparent dark background panel (`addWeighted`, 55% opacity) behind the arc compass widget for high contrast against any background.
+
 ## [1.14.4] - 2026-05-15
 ### Changed
 - **Head position overlay** (arc compass, bottom-right of video feed):

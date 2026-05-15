@@ -235,30 +235,62 @@ def _draw_servo_overlay(
 
     All pixel dimensions scale with the frame resolution relative to 640×480.
     Draws an arc compass (bottom-right) with limit labels and current heading.
+    Note: OpenCV Hershey fonts are ASCII-only — use "deg" instead of the
+    Unicode degree symbol to avoid rendering as "??".
     """
     h, w = frame.shape[:2]
     scale = min(w / 640.0, h / 480.0)
     servo_ctr = (servo_min + servo_max) / 2.0
 
-    # ── Arc compass (bottom-right) — 50% larger than original ─────────────
+    # ── Layout constants ───────────────────────────────────────────────────
     radius = max(22, int(60 * scale))
-    off_x = max(radius + 20, int(95 * scale))
-    off_y = max(radius + 16, int(82 * scale))
+    off_x = max(radius + 28, int(105 * scale))
+    off_y = max(radius + 24, int(90 * scale))
     cx, cy = w - off_x, h - off_y
     half_range = max(1.0, (servo_max - servo_min) / 2.0)
     arc_half_deg = 60  # visual arc spans ±60° regardless of servo range
     arc_thick = max(1, round(2 * scale))
     font = cv2.FONT_HERSHEY_SIMPLEX
     lbl_scale = max(0.35, 0.50 * scale)
+    ang_scale = max(0.45, 0.65 * scale)
     lbl_thick = 1
 
-    # Background arc (gray) — ∩ shape, open end pointing down
+    # Pre-measure labels (ASCII — no Unicode degree symbol)
+    min_txt = f"{servo_min:.0f}d"
+    max_txt = f"{servo_max:.0f}d"
+    angle_txt = f"{angle:.0f}d"
+    (min_tw, min_th), _ = cv2.getTextSize(min_txt, font, lbl_scale, lbl_thick)
+    (max_tw, max_th), _ = cv2.getTextSize(max_txt, font, lbl_scale, lbl_thick)
+    (atw, ath), _       = cv2.getTextSize(angle_txt, font, ang_scale, lbl_thick)
+
+    # Arc endpoints (210° = left/min, 330° = right/max in cv2 coords)
+    lx_pt = int(cx + radius * math.cos(math.radians(210)))
+    ly_pt = int(cy + radius * math.sin(math.radians(210)))
+    rx_pt = int(cx + radius * math.cos(math.radians(330)))
+    ry_pt = int(cy + radius * math.sin(math.radians(330)))
+
+    # Angle label position (below arc centre)
+    alx = cx - atw // 2
+    aly = cy + ath + max(2, int(4 * scale))
+
+    # ── Semi-transparent dark background panel ─────────────────────────────
+    pad = max(4, int(6 * scale))
+    bx1 = min(lx_pt - min_tw - 2, cx - radius) - pad
+    by1 = cy - radius - pad
+    bx2 = max(rx_pt + max_tw + 2, cx + radius) + pad
+    by2 = aly + pad
+    bx1, by1 = max(0, bx1), max(0, by1)
+    bx2, by2 = min(w - 1, bx2), min(h - 1, by2)
+
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (bx1, by1), (bx2, by2), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
+
+    # ── Background arc (gray) — ∩ shape, open end pointing down ───────────
     cv2.ellipse(frame, (cx, cy), (radius, radius), 0, 210, 330, (80, 80, 80), arc_thick, cv2.LINE_AA)
 
-    # Normalize position within servo range → -1.0 .. +1.0
+    # ── Pointer ────────────────────────────────────────────────────────────
     norm = max(-1.0, min(1.0, (angle - servo_ctr) / half_range))
-
-    # cv2 angle 270° = straight up; sweep left/right by arc_half_deg
     pointer_deg = 270.0 + norm * arc_half_deg
     pointer_rad = math.radians(pointer_deg)
     px = int(cx + radius * math.cos(pointer_rad))
@@ -273,33 +305,16 @@ def _draw_servo_overlay(
     cv2.line(frame, (cx, cy - radius + tick_len - 2), (cx, cy - radius - 2),
              (120, 120, 120), max(1, round(scale)), cv2.LINE_AA)
 
-    # ── Limit labels at arc endpoints ─────────────────────────────────────
-    # Arc endpoints: 210° (left / servo_min) and 330° (right / servo_max)
-    lx_pt = int(cx + radius * math.cos(math.radians(210)))
-    ly_pt = int(cy + radius * math.sin(math.radians(210)))
-    rx_pt = int(cx + radius * math.cos(math.radians(330)))
-    ry_pt = int(cy + radius * math.sin(math.radians(330)))
-
-    min_txt = f"{servo_min:.0f}\u00b0"
-    max_txt = f"{servo_max:.0f}\u00b0"
-    (min_tw, min_th), _ = cv2.getTextSize(min_txt, font, lbl_scale, lbl_thick)
-    (max_tw, max_th), _ = cv2.getTextSize(max_txt, font, lbl_scale, lbl_thick)
-
-    # servo_min label: anchor right edge at left endpoint, vertically centred
+    # ── Limit labels ───────────────────────────────────────────────────────
     _put_text_outlined(frame, min_txt,
                        (lx_pt - min_tw - 2, ly_pt + min_th // 2),
                        font, lbl_scale, (160, 160, 160), lbl_thick)
-    # servo_max label: anchor left edge at right endpoint, vertically centred
     _put_text_outlined(frame, max_txt,
                        (rx_pt + 2, ry_pt + max_th // 2),
                        font, lbl_scale, (160, 160, 160), lbl_thick)
 
-    # ── Current heading angle label (below arc centre) ─────────────────────
-    angle_txt = f"{angle:.0f}\u00b0"
-    ang_scale = max(0.45, 0.65 * scale)
-    (atw, ath), _ = cv2.getTextSize(angle_txt, font, ang_scale, lbl_thick)
-    _put_text_outlined(frame, angle_txt,
-                       (cx - atw // 2, cy + ath + max(2, int(4 * scale))),
+    # ── Current heading label ──────────────────────────────────────────────
+    _put_text_outlined(frame, angle_txt, (alx, aly),
                        font, ang_scale, _CYAN, lbl_thick)
 
 
