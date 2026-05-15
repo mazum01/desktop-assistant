@@ -42,6 +42,7 @@ from typing import List, Optional
 
 import cv2
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 from src.core.bus import MessageBus
 from src.core.service import Service
@@ -173,6 +174,45 @@ def _face_color(face_id: str | None, index: int) -> tuple:
     return _FACE_COLORS[index % len(_FACE_COLORS)]
 
 
+# ── PIL TrueType font cache (supports Unicode, e.g. degree symbol) ─────────
+_PIL_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+_pil_font_cache: dict[int, ImageFont.FreeTypeFont] = {}
+
+
+def _pil_font(size: int) -> ImageFont.FreeTypeFont:
+    """Return a cached PIL FreeType font at the given pixel size."""
+    if size not in _pil_font_cache:
+        try:
+            _pil_font_cache[size] = ImageFont.truetype(_PIL_FONT_PATH, size)
+        except OSError:
+            _pil_font_cache[size] = ImageFont.load_default()
+    return _pil_font_cache[size]
+
+
+def _put_text_pil(
+    frame: np.ndarray,
+    text: str,
+    xy: tuple[int, int],
+    size: int,
+    color_bgr: tuple[int, int, int],
+    shadow: bool = True,
+) -> None:
+    """Draw Unicode *text* on a BGR OpenCV frame using PIL TrueType rendering.
+
+    Converts frame→PIL→frame in-place.  *xy* is the (left, top) anchor of the
+    text bounding box.  *color_bgr* is BGR to match OpenCV convention.
+    """
+    font = _pil_font(size)
+    b, g, r = color_bgr
+    img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(img_rgb)
+    draw = ImageDraw.Draw(pil_img)
+    if shadow:
+        draw.text((xy[0] + 1, xy[1] + 1), text, font=font, fill=(0, 0, 0))
+    draw.text(xy, text, font=font, fill=(r, g, b))
+    frame[:] = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+
+
 def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
     """Draw face ovals and object rectangles in-place on a BGR frame.
 
@@ -235,8 +275,7 @@ def _draw_servo_overlay(
 
     All pixel dimensions scale with the frame resolution relative to 640×480.
     Draws an arc compass (bottom-right) with limit labels and current heading.
-    Note: OpenCV Hershey fonts are ASCII-only — use "deg" instead of the
-    Unicode degree symbol to avoid rendering as "??".
+    Labels use PIL TrueType (DejaVu Sans) to support the Unicode degree symbol.
     """
     h, w = frame.shape[:2]
     scale = min(w / 640.0, h / 480.0)
@@ -250,18 +289,26 @@ def _draw_servo_overlay(
     half_range = max(1.0, (servo_max - servo_min) / 2.0)
     arc_half_deg = 60  # visual arc spans ±60° regardless of servo range
     arc_thick = max(1, round(2 * scale))
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    lbl_scale = max(0.35, 0.50 * scale)
-    ang_scale = max(0.45, 0.65 * scale)
-    lbl_thick = 1
 
-    # Pre-measure labels (ASCII — no Unicode degree symbol)
-    min_txt = f"{servo_min:.0f}d"
-    max_txt = f"{servo_max:.0f}d"
-    angle_txt = f"{angle:.0f}d"
-    (min_tw, min_th), _ = cv2.getTextSize(min_txt, font, lbl_scale, lbl_thick)
-    (max_tw, max_th), _ = cv2.getTextSize(max_txt, font, lbl_scale, lbl_thick)
-    (atw, ath), _       = cv2.getTextSize(angle_txt, font, ang_scale, lbl_thick)
+    # PIL font sizes (pixels)
+    lbl_px  = max(10, int(14 * scale))   # limit labels
+    ang_px  = max(12, int(18 * scale))   # current heading label
+    lbl_font = _pil_font(lbl_px)
+    ang_font = _pil_font(ang_px)
+
+    # Label strings with real degree symbol
+    min_txt   = f"{servo_min:.0f}\u00b0"
+    max_txt   = f"{servo_max:.0f}\u00b0"
+    angle_txt = f"{angle:.0f}\u00b0"
+
+    # Measure with PIL (bbox returns (left, top, right, bottom))
+    def _measure(txt: str, font: ImageFont.FreeTypeFont) -> tuple[int, int]:
+        bb = font.getbbox(txt)
+        return bb[2] - bb[0], bb[3] - bb[1]
+
+    min_tw,  min_th  = _measure(min_txt, lbl_font)
+    max_tw,  max_th  = _measure(max_txt, lbl_font)
+    atw,     ath     = _measure(angle_txt, ang_font)
 
     # Arc endpoints (210° = left/min, 330° = right/max in cv2 coords)
     lx_pt = int(cx + radius * math.cos(math.radians(210)))
@@ -269,16 +316,17 @@ def _draw_servo_overlay(
     rx_pt = int(cx + radius * math.cos(math.radians(330)))
     ry_pt = int(cy + radius * math.sin(math.radians(330)))
 
-    # Angle label position (below arc centre)
+    # Angle label top-left (below arc centre)
+    ang_gap = max(2, int(4 * scale))
     alx = cx - atw // 2
-    aly = cy + ath + max(2, int(4 * scale))
+    aly = cy + ang_gap
 
     # ── Semi-transparent dark background panel ─────────────────────────────
     pad = max(4, int(6 * scale))
     bx1 = min(lx_pt - min_tw - 2, cx - radius) - pad
     by1 = cy - radius - pad
     bx2 = max(rx_pt + max_tw + 2, cx + radius) + pad
-    by2 = aly + pad
+    by2 = aly + ath + pad
     bx1, by1 = max(0, bx1), max(0, by1)
     bx2, by2 = min(w - 1, bx2), min(h - 1, by2)
 
@@ -305,17 +353,16 @@ def _draw_servo_overlay(
     cv2.line(frame, (cx, cy - radius + tick_len - 2), (cx, cy - radius - 2),
              (120, 120, 120), max(1, round(scale)), cv2.LINE_AA)
 
-    # ── Limit labels ───────────────────────────────────────────────────────
-    _put_text_outlined(frame, min_txt,
-                       (lx_pt - min_tw - 2, ly_pt + min_th // 2),
-                       font, lbl_scale, (160, 160, 160), lbl_thick)
-    _put_text_outlined(frame, max_txt,
-                       (rx_pt + 2, ry_pt + max_th // 2),
-                       font, lbl_scale, (160, 160, 160), lbl_thick)
+    # ── Limit labels (PIL — supports degree symbol) ────────────────────────
+    _put_text_pil(frame, min_txt,
+                  (lx_pt - min_tw - 2, ly_pt - min_th // 2),
+                  lbl_px, (160, 160, 160))
+    _put_text_pil(frame, max_txt,
+                  (rx_pt + 2, ry_pt - max_th // 2),
+                  lbl_px, (160, 160, 160))
 
-    # ── Current heading label ──────────────────────────────────────────────
-    _put_text_outlined(frame, angle_txt, (alx, aly),
-                       font, ang_scale, _CYAN, lbl_thick)
+    # ── Current heading label (PIL) ────────────────────────────────────────
+    _put_text_pil(frame, angle_txt, (alx, aly), ang_px, _CYAN)
 
 
 

@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.14.6] - 2026-05-15
+### Changed
+- Direction overlay labels now use **PIL TrueType** (DejaVu Sans) instead of OpenCV Hershey font, enabling proper rendering of the Unicode degree symbol (`°`). Labels show e.g. `135°`, `215°`, `175°`.
+- Added `_put_text_pil()` helper and `_pil_font()` LRU cache for reuse across frames.
+
 ## [1.14.5] - 2026-05-15
 ### Fixed
 - Direction overlay labels no longer show `??` — replaced Unicode degree symbol (`\u00b0`) with ASCII `d` suffix since OpenCV Hershey fonts are ASCII-only.
