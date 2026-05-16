@@ -42,7 +42,11 @@ from typing import List, Optional
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+try:
+    from PIL import Image, ImageDraw, ImageFont as _ImageFont
+    _PIL_AVAILABLE = True
+except ImportError:
+    _PIL_AVAILABLE = False
 
 from src.core.bus import MessageBus
 from src.core.service import Service
@@ -174,43 +178,78 @@ def _face_color(face_id: str | None, index: int) -> tuple:
     return _FACE_COLORS[index % len(_FACE_COLORS)]
 
 
-# ── PIL TrueType font cache (supports Unicode, e.g. degree symbol) ─────────
+# ── PIL ROI-patch text (degree symbol support, no full-frame conversion) ─────
 _PIL_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-_pil_font_cache: dict[int, ImageFont.FreeTypeFont] = {}
+_pil_font_cache: dict = {}
 
 
-def _pil_font(size: int) -> ImageFont.FreeTypeFont:
-    """Return a cached PIL FreeType font at the given pixel size."""
+def _pil_font(size: int):
+    """Return a cached PIL FreeType font, or None if PIL is unavailable."""
+    if not _PIL_AVAILABLE:
+        return None
     if size not in _pil_font_cache:
         try:
-            _pil_font_cache[size] = ImageFont.truetype(_PIL_FONT_PATH, size)
+            _pil_font_cache[size] = _ImageFont.truetype(_PIL_FONT_PATH, size)
         except OSError:
-            _pil_font_cache[size] = ImageFont.load_default()
+            _pil_font_cache[size] = _ImageFont.load_default()
     return _pil_font_cache[size]
 
 
-def _put_text_pil(
+def _put_text_patch(
     frame: np.ndarray,
     text: str,
-    xy: tuple[int, int],
+    xy: tuple,
     size: int,
-    color_bgr: tuple[int, int, int],
-    shadow: bool = True,
+    color_bgr: tuple,
 ) -> None:
-    """Draw Unicode *text* on a BGR OpenCV frame using PIL TrueType rendering.
+    """Draw Unicode *text* onto a small PIL patch and alpha-composite onto *frame*.
 
-    Converts frame→PIL→frame in-place.  *xy* is the (left, top) anchor of the
-    text bounding box.  *color_bgr* is BGR to match OpenCV convention.
+    Only the text bounding-box ROI is converted — no full-frame BGR/RGB
+    round-trip.  Falls back to _put_text_outlined (ASCII only) when PIL is
+    unavailable.
     """
     font = _pil_font(size)
+    if font is None:
+        fs = max(0.4, size / 28.0)
+        th = max(1, round(fs))
+        _put_text_outlined(frame, text, (xy[0], xy[1] + size),
+                           cv2.FONT_HERSHEY_SIMPLEX, fs, color_bgr, th)
+        return
+
+    fh, fw = frame.shape[:2]
     b, g, r = color_bgr
-    img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    pil_img = Image.fromarray(img_rgb)
-    draw = ImageDraw.Draw(pil_img)
-    if shadow:
-        draw.text((xy[0] + 1, xy[1] + 1), text, font=font, fill=(0, 0, 0))
-    draw.text(xy, text, font=font, fill=(r, g, b))
-    frame[:] = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+
+    dummy = Image.new("RGBA", (1, 1))
+    bbox = ImageDraw.Draw(dummy).textbbox((0, 0), text, font=font)
+    pad = 2
+    tw = bbox[2] - bbox[0] + pad * 2
+    th = bbox[3] - bbox[1] + pad * 2
+    if tw <= 0 or th <= 0:
+        return
+
+    x0, y0 = int(xy[0]), int(xy[1])
+    x1 = max(0, x0)
+    y1 = max(0, y0)
+    x2 = min(fw, x0 + tw)
+    y2 = min(fh, y0 + th)
+    if x2 <= x1 or y2 <= y1:
+        return
+
+    patch = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+    d = ImageDraw.Draw(patch)
+    ox = -bbox[0] + pad
+    oy = -bbox[1] + pad
+    d.text((ox + 1, oy + 1), text, font=font, fill=(0, 0, 0, 200))
+    d.text((ox, oy), text, font=font, fill=(r, g, b, 255))
+
+    arr = np.array(patch, dtype=np.float32)
+    alpha = arr[:, :, 3:4] / 255.0
+    patch_bgr = arr[y1 - y0: y2 - y0, x1 - x0: x2 - x0, [2, 1, 0]]
+    patch_a   = alpha[y1 - y0: y2 - y0, x1 - x0: x2 - x0]
+    roi = frame[y1:y2, x1:x2].astype(np.float32)
+    frame[y1:y2, x1:x2] = np.clip(
+        patch_bgr * patch_a + roi * (1.0 - patch_a), 0, 255
+    ).astype(np.uint8)
 
 
 def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
@@ -237,10 +276,6 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
         ellipse_thickness = max(1, round(2 * scale))
         cv2.ellipse(frame_bgr, (cx, cy), (rx, ry), 0, 0, 360, color, ellipse_thickness, cv2.LINE_AA)
         label = face.get("name") or (face.get("face_id") and "unknown")
-        depth_m = face.get("depth_m")
-        if depth_m is not None:
-            depth_str = f"{depth_m:.2f}m"
-            label = f"{label}  {depth_str}" if label else depth_str
         if label:
             font_scale = max(0.8, 1.1 * scale)
             font_thick = max(1, round(scale))   # 1 at 640×480, 2 at 1280×960
@@ -273,96 +308,81 @@ def _draw_servo_overlay(
 ) -> None:
     """Draw a servo pan-angle indicator in-place on a BGR frame.
 
-    All pixel dimensions scale with the frame resolution relative to 640×480.
-    Draws an arc compass (bottom-right) with limit labels and current heading.
-    Labels use PIL TrueType (DejaVu Sans) to support the Unicode degree symbol.
+    Bottom-right arc compass, 50% larger than the 640×480 baseline.
+    - Semi-transparent dark background panel for contrast.
+    - Gray background arc spanning the configured servo range.
+    - Cyan pointer needle from centre.
+    - Limit labels (servo_min / servo_max) at arc endpoints.
+    - Current heading label below the arc centre.
+    All labels use PIL TrueType (ROI-patch only — no full-frame conversion)
+    so the Unicode degree symbol renders correctly at negligible cost.
+    All pixel dimensions scale with frame resolution relative to 640×480.
     """
     h, w = frame.shape[:2]
     scale = min(w / 640.0, h / 480.0)
     servo_ctr = (servo_min + servo_max) / 2.0
 
-    # ── Layout constants ───────────────────────────────────────────────────
-    radius = max(22, int(60 * scale))
-    off_x = max(radius + 28, int(105 * scale))
-    off_y = max(radius + 24, int(90 * scale))
+    # ── Compass geometry ──────────────────────────────────────────────────
+    radius = max(20, int(60 * scale))       # 50% larger than original 40
+    lbl_size = max(12, int(18 * scale))     # PIL font size in pixels
+    off_x = max(radius + lbl_size * 3, int(90 * scale))
+    off_y = max(radius + lbl_size * 3, int(90 * scale))
     cx, cy = w - off_x, h - off_y
     half_range = max(1.0, (servo_max - servo_min) / 2.0)
-    arc_half_deg = 60  # visual arc spans ±60° regardless of servo range
+    arc_half_deg = 60   # visual arc spans ±60° regardless of servo range
     arc_thick = max(1, round(2 * scale))
 
-    # PIL font sizes (pixels)
-    lbl_px  = max(10, int(14 * scale))   # limit labels
-    ang_px  = max(12, int(18 * scale))   # current heading label
-    lbl_font = _pil_font(lbl_px)
-    ang_font = _pil_font(ang_px)
+    # ── Dark semi-transparent background panel ────────────────────────────
+    pad = max(10, int(14 * scale))
+    bx1 = max(0, cx - radius - pad - lbl_size * 2)
+    by1 = max(0, cy - radius - pad)
+    bx2 = min(w, cx + radius + pad + lbl_size * 2)
+    by2 = min(h, cy + radius + lbl_size * 2 + pad)
+    roi = frame[by1:by2, bx1:bx2]
+    if roi.size > 0:
+        bg = np.zeros_like(roi)
+        cv2.addWeighted(bg, 0.55, roi, 0.45, 0, roi)
 
-    # Label strings with real degree symbol
-    min_txt   = f"{servo_min:.0f}\u00b0"
-    max_txt   = f"{servo_max:.0f}\u00b0"
-    angle_txt = f"{angle:.0f}\u00b0"
+    # ── Background arc (gray) — U opening upward ─────────────────────────
+    cv2.ellipse(frame, (cx, cy), (radius, radius), 0, 210, 330,
+                (80, 80, 80), arc_thick, cv2.LINE_AA)
 
-    # Measure with PIL (bbox returns (left, top, right, bottom))
-    def _measure(txt: str, font: ImageFont.FreeTypeFont) -> tuple[int, int]:
-        bb = font.getbbox(txt)
-        return bb[2] - bb[0], bb[3] - bb[1]
+    # ── Limit labels at arc endpoints ─────────────────────────────────────
+    # cv2 angles: 210° = left endpoint, 330° = right endpoint
+    for cv2_deg, limit_val in ((210, servo_min), (330, servo_max)):
+        rad = math.radians(cv2_deg)
+        ex = int(cx + radius * math.cos(rad))
+        ey = int(cy + radius * math.sin(rad))
+        lbl = f"{limit_val:.0f}\u00b0"
+        # Place label outside the arc endpoint
+        if cv2_deg == 210:  # left side — right-align to the left of endpoint
+            _put_text_patch(frame, lbl, (ex - lbl_size * 3, ey - lbl_size // 2),
+                            lbl_size, _CYAN)
+        else:               # right side — left-align to the right of endpoint
+            _put_text_patch(frame, lbl, (ex + 4, ey - lbl_size // 2),
+                            lbl_size, _CYAN)
 
-    min_tw,  min_th  = _measure(min_txt, lbl_font)
-    max_tw,  max_th  = _measure(max_txt, lbl_font)
-    atw,     ath     = _measure(angle_txt, ang_font)
-
-    # Arc endpoints (210° = left/min, 330° = right/max in cv2 coords)
-    lx_pt = int(cx + radius * math.cos(math.radians(210)))
-    ly_pt = int(cy + radius * math.sin(math.radians(210)))
-    rx_pt = int(cx + radius * math.cos(math.radians(330)))
-    ry_pt = int(cy + radius * math.sin(math.radians(330)))
-
-    # Angle label top-left (below arc centre)
-    ang_gap = max(2, int(4 * scale))
-    alx = cx - atw // 2
-    aly = cy + ang_gap
-
-    # ── Semi-transparent dark background panel ─────────────────────────────
-    pad = max(4, int(6 * scale))
-    bx1 = min(lx_pt - min_tw - 2, cx - radius) - pad
-    by1 = cy - radius - pad
-    bx2 = max(rx_pt + max_tw + 2, cx + radius) + pad
-    by2 = aly + ath + pad
-    bx1, by1 = max(0, bx1), max(0, by1)
-    bx2, by2 = min(w - 1, bx2), min(h - 1, by2)
-
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (bx1, by1), (bx2, by2), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
-
-    # ── Background arc (gray) — ∩ shape, open end pointing down ───────────
-    cv2.ellipse(frame, (cx, cy), (radius, radius), 0, 210, 330, (80, 80, 80), arc_thick, cv2.LINE_AA)
-
-    # ── Pointer ────────────────────────────────────────────────────────────
-    norm = max(-1.0, min(1.0, (angle - servo_ctr) / half_range))
+    # ── Pointer needle ─────────────────────────────────────────────────────
+    norm = (angle - servo_ctr) / half_range
+    norm = max(-1.0, min(1.0, norm))
     pointer_deg = 270.0 + norm * arc_half_deg
     pointer_rad = math.radians(pointer_deg)
     px = int(cx + radius * math.cos(pointer_rad))
     py = int(cy + radius * math.sin(pointer_rad))
-
     cv2.line(frame, (cx, cy), (px, py), _CYAN, arc_thick, cv2.LINE_AA)
     dot_r = max(2, round(3 * scale))
     cv2.circle(frame, (cx, cy), dot_r, _CYAN, -1, cv2.LINE_AA)
 
-    # Centre tick (straight up = servo centre position)
-    tick_len = max(4, int(10 * scale))
+    # Centre tick (straight up = servo centre)
+    tick_len = max(3, int(8 * scale))
     cv2.line(frame, (cx, cy - radius + tick_len - 2), (cx, cy - radius - 2),
              (120, 120, 120), max(1, round(scale)), cv2.LINE_AA)
 
-    # ── Limit labels (PIL — supports degree symbol) ────────────────────────
-    _put_text_pil(frame, min_txt,
-                  (lx_pt - min_tw - 2, ly_pt - min_th // 2),
-                  lbl_px, (160, 160, 160))
-    _put_text_pil(frame, max_txt,
-                  (rx_pt + 2, ry_pt - max_th // 2),
-                  lbl_px, (160, 160, 160))
-
-    # ── Current heading label (PIL) ────────────────────────────────────────
-    _put_text_pil(frame, angle_txt, (alx, aly), ang_px, _CYAN)
+    # ── Current heading label below arc ───────────────────────────────────
+    hdg_lbl = f"{angle:.0f}\u00b0"
+    _put_text_patch(frame, hdg_lbl,
+                    (cx - lbl_size, cy + radius + max(4, int(6 * scale))),
+                    lbl_size, _CYAN)
 
 
 
@@ -428,9 +448,6 @@ class VisionService(Service):
         )
         self._unsubs.append(
             self.bus.subscribe("perception.faces", self._on_faces)
-        )
-        self._unsubs.append(
-            self.bus.subscribe("vision.face_depth", self._on_face_depth)
         )
         self._unsubs.append(
             self.bus.subscribe("perception.objects", self._on_objects)
@@ -593,24 +610,6 @@ class VisionService(Service):
             return
         with self._det_lock:
             self._latest_faces = list(payload.get("faces", []))
-
-    def _on_face_depth(self, _topic, payload) -> None:
-        """Merge stereo/combined depth estimates into cached face list."""
-        if not isinstance(payload, dict):
-            return
-        depth_map = {
-            d["face_id"]: d
-            for d in payload.get("faces", [])
-            if d.get("face_id") is not None
-        }
-        if not depth_map:
-            return
-        with self._det_lock:
-            for face in self._latest_faces:
-                fid = face.get("face_id")
-                if fid and fid in depth_map:
-                    face["depth_m"] = depth_map[fid]["depth_m"]
-                    face["pos_3d"] = depth_map[fid].get("pos_3d")
 
     def _on_objects(self, _topic, payload) -> None:
         if not isinstance(payload, dict):

@@ -6,7 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.14.7] - 2026-05-16
+## [1.14.8] - 2026-05-16
+### Fixed
+- **Detection cam FPS regression** (was <2 fps) caused by the v1.14.6 PIL overlay helper doing three full 1080p BGR↔RGB round-trips per frame (~94 ms total). Replaced with a `_put_text_patch()` ROI-patch approach: each text label is rendered onto a tiny PIL RGBA image (just the text bounding box) which is then alpha-composited onto the frame — no full-frame conversion, ~6 ms per frame at 1080p (16× faster).
+### Changed
+- Direction overlay restored to v1.14.5 enhanced design: 50% larger arc, semi-transparent dark background panel, limit labels at arc endpoints, current heading label below arc — all with proper `°` symbol via PIL ROI patches.
+
+
 ### Added
 - **Drag-and-drop card reordering** in the web dashboard. Grab the `⠿` handle in any card's header to drag it to a new position. Layout is persisted in `localStorage` so the arrangement survives page refresh. Dragging only activates from the handle, leaving all inputs, sliders, and buttons inside cards fully interactive.
 
