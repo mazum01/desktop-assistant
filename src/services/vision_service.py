@@ -182,6 +182,14 @@ def _face_color(face_id: str | None, index: int) -> tuple:
 _PIL_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 _pil_font_cache: dict = {}
 
+# ── Servo overlay pre-render cache ────────────────────────────────────────────
+# Static elements (dark panel + arc + limit labels) rendered once per
+# (frame_w, frame_h, servo_min, servo_max) combination.  Per-frame work is
+# reduced to a cheap numpy copy + pure-C cv2 calls, eliminating the PIL GIL
+# starvation that was capping cam1 at ~4 fps under Hailo load.
+_servo_bg_cache: dict = {}    # key → (bgr_patch, alpha_patch, geom)
+_servo_hdg_cache: dict = {}   # (lbl_size, angle_int) → pre-rendered BGR/alpha patch tuple
+
 
 def _pil_font(size: int):
     """Return a cached PIL FreeType font, or None if PIL is unavailable."""
@@ -252,6 +260,24 @@ def _put_text_patch(
     ).astype(np.uint8)
 
 
+def _scale_bboxes(detections: list, sx: float, sy: float) -> list:
+    """Return a copy of detections with bbox coordinates scaled by (sx, sy).
+
+    Called when the display frame is resized before overlay drawing so that
+    face ovals and object boxes still align on the smaller stream frame.
+    """
+    if not detections or (sx == 1.0 and sy == 1.0):
+        return detections
+    out = []
+    for d in detections:
+        bbox = d.get("bbox")
+        if bbox and len(bbox) >= 4:
+            d = dict(d)
+            d["bbox"] = [bbox[0] * sx, bbox[1] * sy, bbox[2] * sx, bbox[3] * sy]
+        out.append(d)
+    return out
+
+
 def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
     """Draw face ovals and object rectangles in-place on a BGR frame.
 
@@ -300,6 +326,84 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
                            cv2.FONT_HERSHEY_SIMPLEX, font_scale, _CYAN, font_thick)
 
 
+def _build_servo_bg_patch(
+    w: int, h: int, servo_min: float, servo_max: float
+) -> tuple:
+    """Pre-render the static servo-overlay elements to a BGR + mask patch.
+
+    Returns (bgr: H×W×3 uint8, mask: H×W uint8, geom: dict).
+    Called once per unique (w, h, servo_min, servo_max); result cached in
+    _servo_bg_cache.  All PIL / numpy-heavy work lives here, off the hot path.
+    """
+    scale = min(w / 640.0, h / 480.0)
+    radius    = max(20, int(60 * scale))
+    lbl_size  = max(12, int(18 * scale))
+    off_x     = max(radius + lbl_size * 3, int(90 * scale))
+    off_y     = max(radius + lbl_size * 3, int(90 * scale))
+    cx_full   = w - off_x
+    cy_full   = h - off_y
+    arc_thick = max(1, round(2 * scale))
+    pad       = max(10, int(14 * scale))
+    tick_len  = max(3, int(8 * scale))
+    dot_r     = max(2, round(3 * scale))
+
+    bx1 = max(0, cx_full - radius - pad - lbl_size * 2)
+    by1 = max(0, cy_full - radius - pad)
+    bx2 = min(w, cx_full + radius + pad + lbl_size * 2)
+    by2 = min(h, cy_full + radius + lbl_size * 2 + pad)
+    ph, pw = by2 - by1, bx2 - bx1
+    if ph <= 0 or pw <= 0:
+        return None
+
+    # Local (patch-space) centre coordinates
+    cx_l = cx_full - bx1
+    cy_l = cy_full - by1
+
+    # Render onto a black BGRA canvas so we carry alpha per-pixel
+    canvas = np.zeros((ph, pw, 4), dtype=np.uint8)
+
+    # Gray background arc
+    cv2.ellipse(canvas, (cx_l, cy_l), (radius, radius), 0, 210, 330,
+                (80, 80, 80, 255), arc_thick, cv2.LINE_AA)
+
+    # Centre tick (straight up)
+    cv2.line(canvas,
+             (cx_l, cy_l - radius + tick_len - 2),
+             (cx_l, cy_l - radius - 2),
+             (120, 120, 120, 255), max(1, round(scale)), cv2.LINE_AA)
+
+    # Limit labels — PIL (runs once; result stays in cache)
+    bgr_view = canvas[:, :, :3]   # share memory with canvas for PIL writes
+    for cv2_deg, limit_val in ((210, servo_min), (330, servo_max)):
+        rad = math.radians(cv2_deg)
+        ex  = int(cx_l + radius * math.cos(rad))
+        ey  = int(cy_l + radius * math.sin(rad))
+        lbl = f"{limit_val:.0f}\u00b0"
+        if cv2_deg == 210:
+            _put_text_patch(bgr_view, lbl,
+                            (ex - lbl_size * 3, ey - lbl_size // 2),
+                            lbl_size, _CYAN)
+        else:
+            _put_text_patch(bgr_view, lbl,
+                            (ex + 4, ey - lbl_size // 2),
+                            lbl_size, _CYAN)
+        # Mirror written pixels into canvas alpha so they're fully opaque
+        mask = np.any(bgr_view > 0, axis=2)
+        canvas[:, :, 3] = np.where(mask, 255, canvas[:, :, 3])
+
+    bgr       = canvas[:, :, :3].copy()
+    mask_uint8 = canvas[:, :, 3]  # 0 = transparent, 255 = opaque
+
+    geom = {
+        "cx": cx_full, "cy": cy_full,
+        "cx_l": cx_l,  "cy_l": cy_l,
+        "bx1": bx1, "by1": by1, "bx2": bx2, "by2": by2,
+        "radius": radius, "arc_thick": arc_thick,
+        "lbl_size": lbl_size, "dot_r": dot_r,
+    }
+    return bgr, mask_uint8, geom
+
+
 def _draw_servo_overlay(
     frame: np.ndarray,
     angle: float,
@@ -308,82 +412,102 @@ def _draw_servo_overlay(
 ) -> None:
     """Draw a servo pan-angle indicator in-place on a BGR frame.
 
-    Bottom-right arc compass, 50% larger than the 640×480 baseline.
-    - Semi-transparent dark background panel for contrast.
-    - Gray background arc spanning the configured servo range.
-    - Cyan pointer needle from centre.
-    - Limit labels (servo_min / servo_max) at arc endpoints.
-    - Current heading label below the arc centre.
-    All labels use PIL TrueType (ROI-patch only — no full-frame conversion)
-    so the Unicode degree symbol renders correctly at negligible cost.
-    All pixel dimensions scale with frame resolution relative to 640×480.
+    Hot-path GIL budget: near-zero.
+    Static elements (dark panel, arc, limit labels) are pre-rendered once into
+    a cached BGRA patch and alpha-composited via numpy (C, GIL-free).
+    Only the needle and heading label are redrawn each frame using pure cv2
+    C-functions (also GIL-free).  PIL is invoked only on a cache miss
+    (i.e., once per unique servo limit pair per frame resolution).
     """
     h, w = frame.shape[:2]
-    scale = min(w / 640.0, h / 480.0)
-    servo_ctr = (servo_min + servo_max) / 2.0
+    cache_key = (w, h, round(servo_min, 1), round(servo_max, 1))
+    if cache_key not in _servo_bg_cache:
+        result = _build_servo_bg_patch(w, h, servo_min, servo_max)
+        _servo_bg_cache[cache_key] = result
+    cached = _servo_bg_cache[cache_key]
+    if cached is None:
+        return
 
-    # ── Compass geometry ──────────────────────────────────────────────────
-    radius = max(20, int(60 * scale))       # 50% larger than original 40
-    lbl_size = max(12, int(18 * scale))     # PIL font size in pixels
-    off_x = max(radius + lbl_size * 3, int(90 * scale))
-    off_y = max(radius + lbl_size * 3, int(90 * scale))
-    cx, cy = w - off_x, h - off_y
-    half_range = max(1.0, (servo_max - servo_min) / 2.0)
-    arc_half_deg = 60   # visual arc spans ±60° regardless of servo range
-    arc_thick = max(1, round(2 * scale))
+    bg_bgr, bg_mask, geom = cached
+    bx1, by1, bx2, by2 = geom["bx1"], geom["by1"], geom["bx2"], geom["by2"]
+    cx, cy     = geom["cx"],  geom["cy"]
+    radius     = geom["radius"]
+    arc_thick  = geom["arc_thick"]
+    lbl_size   = geom["lbl_size"]
+    dot_r      = geom["dot_r"]
 
-    # ── Dark semi-transparent background panel ────────────────────────────
-    pad = max(10, int(14 * scale))
-    bx1 = max(0, cx - radius - pad - lbl_size * 2)
-    by1 = max(0, cy - radius - pad)
-    bx2 = min(w, cx + radius + pad + lbl_size * 2)
-    by2 = min(h, cy + radius + lbl_size * 2 + pad)
+    # ── Dark semi-transparent background panel (pure C: releases GIL) ────
     roi = frame[by1:by2, bx1:bx2]
-    if roi.size > 0:
-        bg = np.zeros_like(roi)
-        cv2.addWeighted(bg, 0.55, roi, 0.45, 0, roi)
+    if roi.size == 0:
+        return
+    # Darken existing frame content (roi *= 0.45)
+    cv2.addWeighted(roi, 0.45, np.zeros_like(roi), 0.55, 0, roi)
 
-    # ── Background arc (gray) — U opening upward ─────────────────────────
-    cv2.ellipse(frame, (cx, cy), (radius, radius), 0, 210, 330,
-                (80, 80, 80), arc_thick, cv2.LINE_AA)
+    # ── Alpha-composite pre-rendered arc + limit labels ───────────────────
+    # cv2.copyTo is a C-call (~1ms); replaces the ~9ms float32 blend path.
+    cv2.copyTo(bg_bgr, bg_mask, roi)
 
-    # ── Limit labels at arc endpoints ─────────────────────────────────────
-    # cv2 angles: 210° = left endpoint, 330° = right endpoint
-    for cv2_deg, limit_val in ((210, servo_min), (330, servo_max)):
-        rad = math.radians(cv2_deg)
-        ex = int(cx + radius * math.cos(rad))
-        ey = int(cy + radius * math.sin(rad))
-        lbl = f"{limit_val:.0f}\u00b0"
-        # Place label outside the arc endpoint
-        if cv2_deg == 210:  # left side — right-align to the left of endpoint
-            _put_text_patch(frame, lbl, (ex - lbl_size * 3, ey - lbl_size // 2),
-                            lbl_size, _CYAN)
-        else:               # right side — left-align to the right of endpoint
-            _put_text_patch(frame, lbl, (ex + 4, ey - lbl_size // 2),
-                            lbl_size, _CYAN)
-
-    # ── Pointer needle ─────────────────────────────────────────────────────
-    norm = (angle - servo_ctr) / half_range
-    norm = max(-1.0, min(1.0, norm))
-    pointer_deg = 270.0 + norm * arc_half_deg
-    pointer_rad = math.radians(pointer_deg)
+    # ── Pointer needle (cv2 C-call, no GIL hold) ─────────────────────────
+    servo_ctr  = (servo_min + servo_max) / 2.0
+    half_range = max(1.0, (servo_max - servo_min) / 2.0)
+    norm = max(-1.0, min(1.0, (angle - servo_ctr) / half_range))
+    pointer_rad = math.radians(270.0 + norm * 60.0)
     px = int(cx + radius * math.cos(pointer_rad))
     py = int(cy + radius * math.sin(pointer_rad))
     cv2.line(frame, (cx, cy), (px, py), _CYAN, arc_thick, cv2.LINE_AA)
-    dot_r = max(2, round(3 * scale))
     cv2.circle(frame, (cx, cy), dot_r, _CYAN, -1, cv2.LINE_AA)
 
-    # Centre tick (straight up = servo centre)
-    tick_len = max(3, int(8 * scale))
-    cv2.line(frame, (cx, cy - radius + tick_len - 2), (cx, cy - radius - 2),
-             (120, 120, 120), max(1, round(scale)), cv2.LINE_AA)
+    # ── Current heading label (cached PIL patch, one per integer degree) ──
+    angle_int = int(round(angle))
+    hdg_key   = (lbl_size, angle_int)
+    if hdg_key not in _servo_hdg_cache:
+        # Render once; subsequent frames reuse the pre-composited array pair
+        _render_hdg_patch(hdg_key)
+    hdg_data = _servo_hdg_cache.get(hdg_key)
+    if hdg_data is not None:
+        hdg_bgr, hdg_mask, hdg_w, hdg_h = hdg_data
+        tx = cx - lbl_size
+        ty = cy + radius + max(4, int(lbl_size * 0.33))
+        x1_h = max(0, tx);          y1_h = max(0, ty)
+        x2_h = min(w, tx + hdg_w);  y2_h = min(h, ty + hdg_h)
+        pw_h = x2_h - x1_h;        ph_h = y2_h - y1_h
+        if pw_h > 0 and ph_h > 0:
+            src_x = x1_h - tx;  src_y = y1_h - ty
+            hdg_mask_sl = hdg_mask[src_y:src_y + ph_h, src_x:src_x + pw_h]
+            roi_h = frame[y1_h:y2_h, x1_h:x2_h]
+            cv2.copyTo(hdg_bgr[src_y:src_y + ph_h, src_x:src_x + pw_h], hdg_mask_sl, roi_h)
 
-    # ── Current heading label below arc ───────────────────────────────────
-    hdg_lbl = f"{angle:.0f}\u00b0"
-    _put_text_patch(frame, hdg_lbl,
-                    (cx - lbl_size, cy + radius + max(4, int(6 * scale))),
-                    lbl_size, _CYAN)
 
+def _render_hdg_patch(key: tuple) -> None:
+    """Pre-render one heading label into _servo_hdg_cache[key].
+
+    Called at most once per unique (lbl_size, angle_int) — max 360 × few
+    distinct label sizes.  Uses PIL so the degree symbol renders correctly.
+    """
+    lbl_size, angle_int = key
+    lbl   = f"{angle_int}\u00b0"
+    font  = _pil_font(lbl_size)
+    if font is None:
+        _servo_hdg_cache[key] = None
+        return
+    dummy = Image.new("RGBA", (1, 1))
+    bbox  = ImageDraw.Draw(dummy).textbbox((0, 0), lbl, font=font)
+    pad   = 2
+    tw    = bbox[2] - bbox[0] + pad * 2
+    th    = bbox[3] - bbox[1] + pad * 2
+    if tw <= 0 or th <= 0:
+        _servo_hdg_cache[key] = None
+        return
+    patch = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+    d     = ImageDraw.Draw(patch)
+    ox    = -bbox[0] + pad
+    oy    = -bbox[1] + pad
+    d.text((ox + 1, oy + 1), lbl, font=font, fill=(0, 0, 0, 200))
+    d.text((ox, oy),          lbl, font=font, fill=(_CYAN[2], _CYAN[1], _CYAN[0], 255))
+    arr      = np.array(patch, dtype=np.uint8)
+    bgr      = arr[:, :, [2, 1, 0]].copy()
+    mask_u8  = arr[:, :, 3]  # 0 = transparent, 255 = opaque
+    _servo_hdg_cache[key] = (bgr, mask_u8, tw, th)
 
 
 class VisionService(Service):
@@ -421,6 +545,12 @@ class VisionService(Service):
         self._servo_angle: Optional[float] = None
         self._servo_min_deg: float = float(servo_min_deg)
         self._servo_max_deg: float = float(servo_max_deg)
+        # Stream downscale resolution (0 = no downscale; set from camera config)
+        self._stream_width: int = 0
+        self._stream_height: int = 0
+        if camera_config is not None:
+            self._stream_width = int(getattr(camera_config, "stream_width", 0))
+            self._stream_height = int(getattr(camera_config, "stream_height", 0))
         # Background JPEG encoder — decouples copy+draw+encode from capture tick
         self._encode_queue: queue.Queue = queue.Queue(maxsize=1)
         self._encoder_running: bool = False
@@ -550,7 +680,14 @@ class VisionService(Service):
         operations (copy, draw, imencode) don't stall the capture loop.
         Frames dropped when encoder can't keep up are silently discarded;
         the MJPEG stream simply delivers the most recent encoded frame.
+
+        If stream_width / stream_height are configured and smaller than the
+        capture resolution, the frame is resized first (no frame.copy() needed —
+        cv2.resize creates a new array).  Detection bbox coordinates are scaled
+        accordingly so overlays still align with the resized stream frame.
+        Hailo inference continues to receive full-resolution frames.
         """
+        sw, sh = self._stream_width, self._stream_height
         while self._encoder_running:
             try:
                 item = self._encode_queue.get(timeout=0.1)
@@ -558,12 +695,23 @@ class VisionService(Service):
                 continue
             frame, faces, objects, servo_angle, servo_min, servo_max, idx = item
 
-            display = frame.copy()
-            _draw_overlays(display, faces, objects)
+            fh, fw = frame.shape[:2]
+            if sw > 0 and sh > 0 and (fw > sw or fh > sh):
+                # Resize first: creates a new array, no copy() needed.
+                # Scale detection coordinates to match the display resolution.
+                display = cv2.resize(frame, (sw, sh), interpolation=cv2.INTER_LINEAR)
+                sx, sy = sw / fw, sh / fh
+                scaled_faces = _scale_bboxes(faces, sx, sy)
+                scaled_objects = _scale_bboxes(objects, sx, sy)
+            else:
+                display = frame.copy()
+                scaled_faces, scaled_objects = faces, objects
+
+            _draw_overlays(display, scaled_faces, scaled_objects)
             if servo_angle is not None:
                 _draw_servo_overlay(display, servo_angle, servo_min, servo_max)
 
-            ok, buf = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 60])
+            ok, buf = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 70])
             with self._lock:
                 self._latest_jpeg = bytes(buf) if ok else None
 
@@ -672,3 +820,7 @@ class VisionService(Service):
                 self._servo_min_deg = float(payload["min_deg"])
             if "max_deg" in payload:
                 self._servo_max_deg = float(payload["max_deg"])
+        # Invalidate the static overlay background cache so it re-renders
+        # with the new limits on the next frame.
+        _servo_bg_cache.clear()
+

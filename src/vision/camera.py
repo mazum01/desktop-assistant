@@ -57,6 +57,11 @@ class CameraConfig:
     af_mode: str = "continuous"
     # Lens position in diopters — only used when af_mode is "manual" or "off".
     lens_position: float = 0.0
+    # MJPEG stream resolution — resize frame before JPEG encoding for web delivery.
+    # 0 means use the full capture resolution. Set smaller (e.g., 640×480) to
+    # decouple encode cost from capture resolution and reduce GIL pressure.
+    stream_width: int = 0
+    stream_height: int = 0
 
 
 class Camera:

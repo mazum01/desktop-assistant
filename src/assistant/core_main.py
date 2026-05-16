@@ -103,6 +103,8 @@ def main() -> int:
         rotation_deg=_camera_rotation_deg,
         af_mode=str(_cam_cfg_raw.get("af_mode", "continuous")),
         lens_position=float(_cam_cfg_raw.get("lens_position", 0.0)),
+        stream_width=int(_cam_cfg_raw.get("stream_width", 0)),
+        stream_height=int(_cam_cfg_raw.get("stream_height", 0)),
     )
 
     def _tracking_frame_width(cam_w: int, cam_h: int, rot_deg: int) -> int:
@@ -132,6 +134,7 @@ def main() -> int:
         move_max_s=float(_ht_cfg_raw.get("move_max_s", 0.55)),
     )
     _depth_cfg_raw = _cfg.get("depth", {})
+    _face_det_cfg_raw = _cfg.get("face_detection", {})
     _perc_cfg = PerceptionConfig(
         recognition_enabled=_recognition_enabled,
         fov_degrees=float(_ht_cfg_raw.get("fov_degrees", 100.0)),
@@ -139,6 +142,7 @@ def main() -> int:
         known_face_width_m=float(_depth_cfg_raw.get("known_face_width_m", 0.145)),
         min_depth_m=float(_depth_cfg_raw.get("min_depth_m", 0.25)),
         max_depth_m=float(_depth_cfg_raw.get("max_depth_m", 6.0)),
+        max_fps=float(_face_det_cfg_raw.get("max_fps", 10.0)),
     )
 
     _obj_cfg_raw = _cfg.get("object_detection", {})
