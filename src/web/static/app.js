@@ -1070,6 +1070,7 @@ document.addEventListener("DOMContentLoaded", () => {
   connectWS();
   initFpsCounters();
   loadTrackingParams();
+  initCardDragDrop();
   // Refresh face registry every 30s; music status every 2s
   setInterval(loadFaces, 30000);
   setInterval(loadMusicStatus, 2000);
@@ -1617,4 +1618,85 @@ function _drawTrackingChart(cv) {
   plot(s => s.face_smoothed, yFace,  "#4cc", false);
   plot(s => s.target,        yAngle, "#4f4", true);
   plot(s => s.servo_angle,   yAngle, "#fa4", false);
+}
+
+// ── Drag-and-drop card reordering ────────────────────────────────────────────
+// Cards are reordered by dragging the ⠿ handle in each card's header.
+// Order is persisted in localStorage so it survives page refresh.
+
+const _CARD_ORDER_KEY = "da-card-order";
+let _dragSrcCard = null;
+let _dragHandleDown = false;
+
+function initCardDragDrop() {
+  const main = document.querySelector("main");
+
+  // Restore saved order from localStorage
+  const saved = JSON.parse(localStorage.getItem(_CARD_ORDER_KEY) || "null");
+  if (saved && Array.isArray(saved)) {
+    saved.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) main.appendChild(el);
+    });
+  }
+
+  // Attach mousedown on every drag handle to gate which drags are allowed
+  document.querySelectorAll(".drag-handle").forEach(handle => {
+    handle.addEventListener("mousedown", () => { _dragHandleDown = true; });
+    handle.addEventListener("mouseup",   () => { _dragHandleDown = false; });
+  });
+
+  document.querySelectorAll("main > .card").forEach(card => {
+    // Only allow drag when initiated from the handle
+    card.addEventListener("dragstart", e => {
+      if (!_dragHandleDown) { e.preventDefault(); return; }
+      _dragSrcCard = card;
+      card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", card.id);
+    });
+
+    card.addEventListener("dragend", () => {
+      _dragHandleDown = false;
+      if (_dragSrcCard) _dragSrcCard.classList.remove("dragging");
+      _dragSrcCard = null;
+      document.querySelectorAll(".drag-over-top, .drag-over-bottom")
+              .forEach(c => c.classList.remove("drag-over-top", "drag-over-bottom"));
+    });
+
+    card.addEventListener("dragover", e => {
+      if (!_dragSrcCard || _dragSrcCard === card) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const rect = card.getBoundingClientRect();
+      const isTop = e.clientY < rect.top + rect.height / 2;
+      card.classList.toggle("drag-over-top",    isTop);
+      card.classList.toggle("drag-over-bottom", !isTop);
+    });
+
+    card.addEventListener("dragleave", e => {
+      // Only clear if we actually left the card (not just entered a child)
+      if (!card.contains(e.relatedTarget)) {
+        card.classList.remove("drag-over-top", "drag-over-bottom");
+      }
+    });
+
+    card.addEventListener("drop", e => {
+      e.preventDefault();
+      card.classList.remove("drag-over-top", "drag-over-bottom");
+      if (!_dragSrcCard || _dragSrcCard === card) return;
+      const rect = card.getBoundingClientRect();
+      const insertBefore = e.clientY < rect.top + rect.height / 2;
+      main.insertBefore(_dragSrcCard, insertBefore ? card : card.nextSibling);
+      _saveCardOrder();
+    });
+  });
+
+  // Make cards draggable (needed for HTML5 DnD API)
+  document.querySelectorAll("main > .card").forEach(c => c.setAttribute("draggable", "true"));
+}
+
+function _saveCardOrder() {
+  const order = Array.from(document.querySelectorAll("main > .card")).map(c => c.id);
+  localStorage.setItem(_CARD_ORDER_KEY, JSON.stringify(order));
 }

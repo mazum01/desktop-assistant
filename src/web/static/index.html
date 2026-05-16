@@ -21,8 +21,8 @@
 
   <main>
     <!-- ── Camera + Faces ──────────────────────────────────────── -->
-    <section class="card camera-card">
-      <h2>Camera Feeds</h2>
+    <section class="card camera-card" id="card-camera">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Camera Feeds</h2>
       <div class="camera-feeds">
         <div class="camera-feed-wrap">
           <div class="camera-label">Cam 1 — Face Tracking</div>
@@ -44,9 +44,9 @@
     </section>
 
     <!-- ── Head Tracking Tuning ────────────────────────────────── -->
-    <section class="card" id="tracking-tune-section">
+    <section class="card" id="card-tracking">
       <h2>
-        Head Tracking Tuning
+        <span class="drag-handle" title="Drag to reorder">⠿</span>Head Tracking Tuning
         <button class="btn btn-sm btn-secondary" onclick="toggleTuningPanel()"
           id="tuning-toggle-btn" style="float:right">▾ Show</button>
       </h2>
@@ -91,8 +91,8 @@
     </section>
 
     <!-- ── Status Grid ─────────────────────────────────────────── -->
-    <section class="card">
-      <h2>Telemetry</h2>
+    <section class="card" id="card-telemetry">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Telemetry</h2>
       <div class="grid-4">
         <div class="stat-box">
           <div class="stat-label">Temperature</div>
@@ -118,8 +118,8 @@
     </section>
 
     <!-- ── System Resources ────────────────────────────────────── -->
-    <section class="card">
-      <h2>System Resources</h2>
+    <section class="card" id="card-resources">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>System Resources</h2>
       <div class="resource-graphs">
         <div class="resource-graph-wrap">
           <div class="resource-graph-label">
@@ -137,16 +137,16 @@
     </section>
 
     <!-- ── Services ────────────────────────────────────────────── -->
-    <section class="card">
-      <h2>Services &nbsp;<button class="btn btn-warning btn-sm" onclick="restartDaemon()" title="Restart the desktop-assistant-core systemd service">⟳ Restart Daemon</button></h2>
+    <section class="card" id="card-services">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Services &nbsp;<button class="btn btn-warning btn-sm" onclick="restartDaemon()" title="Restart the desktop-assistant-core systemd service">⟳ Restart Daemon</button></h2>
       <div id="services-container" class="pill-row">
         <span class="pill pill-unknown">loading…</span>
       </div>
     </section>
 
     <!-- ── Face Registry ───────────────────────────────────────── -->
-    <section class="card">
-      <h2>Face Registry &nbsp;<button class="btn btn-danger btn-sm" onclick="deleteAllFaces()" title="Delete all known faces permanently">🗑 Delete All</button> &nbsp;<button class="btn btn-warning btn-sm" onclick="deleteGuestFaces()" title="Remove unnamed Guest entries">👤 Remove Guests</button></h2>
+    <section class="card" id="card-faces">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Face Registry &nbsp;<button class="btn btn-danger btn-sm" onclick="deleteAllFaces()" title="Delete all known faces permanently">🗑 Delete All</button> &nbsp;<button class="btn btn-warning btn-sm" onclick="deleteGuestFaces()" title="Remove unnamed Guest entries">👤 Remove Guests</button></h2>
       <div id="face-registry-wrap">
         <table id="face-table">
           <thead>
@@ -172,8 +172,8 @@
     </section>
 
     <!-- ── Controls ────────────────────────────────────────────── -->
-    <section class="card">
-      <h2>Controls</h2>
+    <section class="card" id="card-controls">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Controls</h2>
       <div class="controls-grid">
 
         <div class="control-group">
@@ -293,8 +293,8 @@
     </section>
 
     <!-- ── Music (Pandora) ───────────────────────────────────── -->
-    <section class="card">
-      <h2>🎵 Music (Pandora)</h2>
+    <section class="card" id="card-music">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎵 Music (Pandora)</h2>
       <div id="music-not-configured" style="display:none;color:var(--yellow);margin-bottom:8px;font-size:0.9em">
         ⚠ pianobar not configured. Create <code>~/.config/pianobar/config</code> with your Pandora credentials.
       </div>
@@ -395,8 +395,8 @@
         </div>
       </div>
     </section>
-    <section class="card">
-      <h2>💬 Greeting Settings</h2>
+    <section class="card" id="card-greeting">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>💬 Greeting Settings</h2>
       <div class="qh-form">
         <div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
           <label style="flex:1;min-width:160px">
@@ -428,8 +428,8 @@
     </section>
 
     <!-- ── Quiet Hours ────────────────────────────────────────── -->
-    <section class="card">
-      <h2>🌙 Quiet Hours</h2>
+    <section class="card" id="card-quiet">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>🌙 Quiet Hours</h2>
       <div class="qh-form">
         <label class="qh-toggle">
           <input type="checkbox" id="qh-enabled" />
@@ -452,8 +452,8 @@
     </section>
 
     <!-- ── Skills ──────────────────────────────────────────────────── -->
-    <section class="card">
-      <h2>🎯 Voice Skills <button class="btn btn-secondary btn-sm" onclick="toggleSkills()" id="skills-toggle-btn">Show</button></h2>
+    <section class="card" id="card-skills">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎯 Voice Skills <button class="btn btn-secondary btn-sm" onclick="toggleSkills()" id="skills-toggle-btn">Show</button></h2>
       <div id="skills-panel" style="display:none">
         <p style="font-size:13px;color:var(--text-dim);margin:4px 0 8px 0">
           Speak these phrases (or type them below) to trigger a skill.
@@ -471,22 +471,22 @@
     </section>
 
         <!-- ── Event Log ───────────────────────────────────────────── -->
-    <section class="card">
-      <h2>Event Log <span class="subtext">(last 20)</span></h2>
+    <section class="card" id="card-events">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Event Log <span class="subtext">(last 20)</span></h2>
       <div id="event-log" class="event-log"></div>
     </section>
 
     <!-- ── System Power ────────────────────────────────────────── -->
-    <section class="card">
-      <h2>System Power</h2>
+    <section class="card" id="card-power">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>System Power</h2>
       <div class="btn-row">
         <button class="btn btn-warning" onclick="systemReboot()" id="btn-reboot">↺ Reboot</button>
         <button class="btn btn-danger"  onclick="systemShutdown()" id="btn-shutdown">⏻ Shutdown</button>
       </div>
     </section>
     <!-- ── Help ────────────────────────────────────────────────────── -->
-    <section class="card">
-      <h2>❓ Help <button class="btn btn-secondary btn-sm" onclick="toggleHelp()" id="help-toggle-btn">Show</button></h2>
+    <section class="card" id="card-help">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>❓ Help <button class="btn btn-secondary btn-sm" onclick="toggleHelp()" id="help-toggle-btn">Show</button></h2>
       <div id="help-panel" style="display:none">
         <div class="help-grid">
           <div>

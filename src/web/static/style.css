@@ -633,3 +633,27 @@ main {
   color: #aaa;
   margin-left: 8px;
 }
+
+/* ── Drag-and-drop card reordering ───────────────────────────── */
+.drag-handle {
+  cursor: grab;
+  color: var(--text-dim);
+  font-size: 18px;
+  margin-right: 6px;
+  user-select: none;
+  opacity: 0.35;
+  transition: opacity 0.15s;
+  vertical-align: middle;
+  line-height: 1;
+}
+.drag-handle:hover { opacity: 0.85; }
+.card.dragging {
+  opacity: 0.35;
+  outline: 2px dashed var(--border);
+}
+.card.drag-over-top {
+  box-shadow: 0 -3px 0 0 var(--blue), var(--shadow);
+}
+.card.drag-over-bottom {
+  box-shadow: 0 3px 0 0 var(--blue), var(--shadow);
+}

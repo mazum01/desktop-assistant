@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.14.7] - 2026-05-16
+### Added
+- **Drag-and-drop card reordering** in the web dashboard. Grab the `⠿` handle in any card's header to drag it to a new position. Layout is persisted in `localStorage` so the arrangement survives page refresh. Dragging only activates from the handle, leaving all inputs, sliders, and buttons inside cards fully interactive.
+
 ## [1.14.6] - 2026-05-15
 ### Changed
 - Direction overlay labels now use **PIL TrueType** (DejaVu Sans) instead of OpenCV Hershey font, enabling proper rendering of the Unicode degree symbol (`°`). Labels show e.g. `135°`, `215°`, `175°`.
