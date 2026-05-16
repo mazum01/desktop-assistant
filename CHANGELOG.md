@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.15.5] - 2026-05-16
+### Fixed
+- **Stream resolution only applied to cam1**: `RawCameraService` (cam2) had no stream downscale logic. Added `stream_width`/`stream_height` fields to `RawCameraConfig`, AR-preserving resize in `run_tick`, and `_on_set_stream_resolution` handler. Both cameras now subscribe to the same `camera.set_stream_resolution` bus message, so the single "Stream Resolution" GUI selector controls both feeds simultaneously.
+### Added
+- `stream_width`/`stream_height` fields in `RawCameraConfig` (default 640×360).
+- `stream_resolution` property on `RawCameraService`.
+- Cam2 stream dims wired through `core_main.py`.
+
 ## [1.15.4] - 2026-05-16
 ### Fixed
 - **Resolution selector zooms/crops image**: Changing camera resolution via the GUI restarted Picamera2 at a lower resolution, causing the Pi Camera ISP to use a center-cropped sensor mode instead of a full-FOV downscale. Fixed by separating capture resolution from stream/display resolution: the GUI now controls the MJPEG stream output size (`camera.set_stream_resolution` bus message) which only changes the encoder's downscale target. The camera always captures at its configured full-FOV resolution; no restart occurs when the user changes "Stream Resolution".

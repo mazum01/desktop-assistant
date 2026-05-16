@@ -10,8 +10,9 @@ service is intentionally minimal to keep CPU overhead low.  Both cameras run
 independent continuous autofocus.
 
 Topics subscribed:
-    camera2.set_rotation   {"rotation_deg": int}  — live rotation update
-    camera.set_resolution  {"width": int, "height": int}
+    camera2.set_rotation          {"rotation_deg": int}  — live rotation update
+    camera.set_resolution         {"width": int, "height": int}
+    camera.set_stream_resolution  {"width": int, "height": int}
 
 Topics published:
     vision.frame2_ready        {"index": int, "ts": float}
@@ -44,9 +45,12 @@ class RawCameraConfig:
     framerate: int = 30        # matches primary cam; Pi 5 handles dual 30fps
     rotation_deg: int = 0
     jpeg_quality: int = _DEFAULT_JPEG_QUALITY
-    # Autofocus mode: matches CameraConfig values ("continuous" recommended)
     af_mode: str = "continuous"
     lens_position: float = 0.0
+    # MJPEG stream output resolution — camera captures at width×height for full FOV;
+    # encoder downscales to stream_width×stream_height before JPEG encoding.
+    stream_width: int = 0
+    stream_height: int = 0
 
 
 class RawCameraService(Service):
@@ -71,6 +75,8 @@ class RawCameraService(Service):
         self._latest_frame: Optional["np.ndarray"] = None
         self._index = 0
         self._rotation_deg: int = self._cam_cfg.rotation_deg % 360
+        self._stream_width: int = self._cam_cfg.stream_width
+        self._stream_height: int = self._cam_cfg.stream_height
 
         # Focus sync state: tracks when we last received a focused lens position.
         # (Reserved for potential future use.)
@@ -102,6 +108,7 @@ class RawCameraService(Service):
         if self.bus:
             self.bus.subscribe("camera2.set_rotation", self._on_set_rotation)
             self.bus.subscribe("camera.set_resolution", self._on_set_resolution)
+            self.bus.subscribe("camera.set_stream_resolution", self._on_set_stream_resolution)
 
         log.info(
             "RawCameraService started; cam_index=%d hw_ready=%s %dx%d@%dfps",
@@ -137,6 +144,17 @@ class RawCameraService(Service):
         if rot:
             frame = _rotate_frame(frame, rot)
 
+        sw, sh = self._stream_width, self._stream_height
+        fh, fw = frame.shape[:2]
+        if sw > 0 and sh > 0 and (fw > sw or fh > sh):
+            ar = fw / fh
+            tw = sw
+            th = round(sw / ar)
+            if th > sh:
+                th = sh
+                tw = round(sh * ar)
+            frame = cv2.resize(frame, (tw, th), interpolation=cv2.INTER_LINEAR)
+
         quality = self._cam_cfg.jpeg_quality
         ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
         jpeg = bytes(buf) if ok else None
@@ -171,6 +189,10 @@ class RawCameraService(Service):
             return (self._cam_cfg.width, self._cam_cfg.height)
 
     @property
+    def stream_resolution(self) -> tuple:
+        return (self._stream_width, self._stream_height)
+
+    @property
     def hardware_ready(self) -> bool:
         return bool(getattr(self._camera, "hardware_ready", False))
 
@@ -201,11 +223,21 @@ class RawCameraService(Service):
                 framerate=self._cam_cfg.framerate,
                 rotation_deg=self._cam_cfg.rotation_deg,
                 jpeg_quality=self._cam_cfg.jpeg_quality,
+                stream_width=self._stream_width,
+                stream_height=self._stream_height,
             )
             self._camera.set_resolution(w, h)
             log.info("Camera 2 resolution changed to %dx%d", w, h)
         except Exception:
             log.exception("Failed to change camera 2 resolution to %dx%d", w, h)
+
+    def _on_set_stream_resolution(self, _topic, payload) -> None:
+        """Update cam2 MJPEG stream downscale target without restarting the camera."""
+        if not isinstance(payload, dict) or "width" not in payload or "height" not in payload:
+            return
+        self._stream_width = int(payload["width"])
+        self._stream_height = int(payload["height"])
+        log.info("Camera 2 stream resolution changed to %dx%d", self._stream_width, self._stream_height)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────

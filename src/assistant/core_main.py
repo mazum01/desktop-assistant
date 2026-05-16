@@ -291,6 +291,8 @@ def main() -> int:
                 rotation_deg=_camera2_rotation_deg,  # from runtime state
                 af_mode=str(_cam2_cfg_raw.get("af_mode", "continuous")),
                 lens_position=float(_cam2_cfg_raw.get("lens_position", 0.0)),
+                stream_width=int(_cam_cfg_raw.get("stream_width", 640)),
+                stream_height=int(_cam_cfg_raw.get("stream_height", 360)),
             ),
         )
 
