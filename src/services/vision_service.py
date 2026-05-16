@@ -596,6 +596,9 @@ class VisionService(Service):
             self.bus.subscribe("camera.set_resolution", self._on_set_resolution)
         )
         self._unsubs.append(
+            self.bus.subscribe("camera.set_stream_resolution", self._on_set_stream_resolution)
+        )
+        self._unsubs.append(
             self.bus.subscribe("motion.position", self._on_servo_angle)
         )
         self._unsubs.append(
@@ -627,6 +630,10 @@ class VisionService(Service):
             return self._camera.resolution
         cfg = self._camera_config
         return (cfg.width if cfg else 640, cfg.height if cfg else 480)
+
+    @property
+    def stream_resolution(self) -> tuple:
+        return (self._stream_width, self._stream_height)
 
     def run_tick(self) -> None:
         if self._camera is None:
@@ -691,13 +698,14 @@ class VisionService(Service):
         accordingly so overlays still align with the resized stream frame.
         Hailo inference continues to receive full-resolution frames.
         """
-        sw, sh = self._stream_width, self._stream_height
         while self._encoder_running:
             try:
                 item = self._encode_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
             frame, faces, objects, servo_angle, servo_min, servo_max, idx = item
+            # Re-read stream dims each frame so GUI/CLI changes take effect immediately.
+            sw, sh = self._stream_width, self._stream_height
 
             fh, fw = frame.shape[:2]
             if sw > 0 and sh > 0 and (fw > sw or fh > sh):
@@ -818,6 +826,22 @@ class VisionService(Service):
             self.bus.publish("camera.resolution_changed", {"width": w, "height": h})
         except Exception:
             log.exception("Failed to change camera 1 resolution to %dx%d", w, h)
+
+    def _on_set_stream_resolution(self, _topic, payload) -> None:
+        """Update the MJPEG stream downscale target without restarting the camera.
+
+        Unlike camera.set_resolution (which restarts Picamera2 and may crop the
+        sensor FOV), this only changes the encoder's output size.  The camera
+        continues capturing at its current full-FOV mode; the encoder resizes
+        frames to (width, height) before JPEG encoding.
+        """
+        if not isinstance(payload, dict) or "width" not in payload or "height" not in payload:
+            return
+        w = int(payload["width"])
+        h = int(payload["height"])
+        self._stream_width = w
+        self._stream_height = h
+        log.info("Stream resolution changed to %dx%d", w, h)
 
     def _on_servo_angle(self, _topic, payload) -> None:
         if isinstance(payload, dict) and "angle" in payload:

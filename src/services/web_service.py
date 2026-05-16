@@ -1051,6 +1051,23 @@ class WebService:
                 self.bus.publish("camera.set_resolution", {"width": body.width, "height": body.height})
             return {"ok": True, "width": body.width, "height": body.height}
 
+        # ── Stream resolution (MJPEG downscale — no camera restart) ───────
+
+        @app.get("/api/settings/camera/stream_resolution")
+        async def api_get_stream_resolution():
+            if self._vision_svc:
+                w, h = self._vision_svc.stream_resolution
+            else:
+                w, h = 640, 480
+            return {"width": w if w > 0 else 640, "height": h if h > 0 else 480}
+
+        @app.put("/api/settings/camera/stream_resolution")
+        async def api_put_stream_resolution(body: _CameraResolutionBody):
+            if self.bus:
+                self.bus.publish("camera.set_stream_resolution",
+                                 {"width": body.width, "height": body.height})
+            return {"ok": True, "width": body.width, "height": body.height}
+
         # ── Music (Pandora/pianobar) ────────────────────────────────────
 
         @app.get("/api/music/status")

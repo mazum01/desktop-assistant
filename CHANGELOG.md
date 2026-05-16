@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.15.4] - 2026-05-16
+### Fixed
+- **Resolution selector zooms/crops image**: Changing camera resolution via the GUI restarted Picamera2 at a lower resolution, causing the Pi Camera ISP to use a center-cropped sensor mode instead of a full-FOV downscale. Fixed by separating capture resolution from stream/display resolution: the GUI now controls the MJPEG stream output size (`camera.set_stream_resolution` bus message) which only changes the encoder's downscale target. The camera always captures at its configured full-FOV resolution; no restart occurs when the user changes "Stream Resolution".
+### Added
+- `GET/PUT /api/settings/camera/stream_resolution` endpoints to control MJPEG stream output resolution independently of capture resolution.
+- `_on_set_stream_resolution()` handler in `VisionService` — updates `_stream_width`/`_stream_height` live; encoder picks up the change on the next frame.
+- `stream_width: 640` / `stream_height: 360` defaults in `config/assistant.yaml` and wired through `core_main.py → CameraConfig`.
+- GUI selector renamed "Stream Resolution" with 16:9-native presets (640×360 default).
+### Changed
+- `_encoder_loop` reads `self._stream_width/height` each frame (was read once at thread start) so live stream-resolution changes take effect immediately without a daemon restart.
+
 ## [1.15.3] - 2026-05-16
 ### Fixed
 - **Detection cam stream stretched**: `_encoder_loop` was resizing to exactly `(stream_width, stream_height)` = 640×480 regardless of capture aspect ratio, squishing 1920×1080 (16:9) into 4:3. Replaced with aspect-ratio-preserving resize: the display frame is fitted to the stream bounds while preserving the source ratio (1920×1080 → 640×360, not 640×480).
@@ -14,36 +25,26 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [1.15.2] - 2026-05-16
 ### Fixed
 - **cam1 FPS (GIL contention)**: Hailo SCRFD face-detection was running at 10 fps (default), each inference holding the Python GIL for ~50ms → 500ms of GIL-blocked time per second, starving the encoder thread. Added `face_detection.max_fps` config (default `5.0`) to `config/assistant.yaml` and wired it through `core_main.py` → `PerceptionConfig`. Halving detection rate frees ~250ms/s of GIL for the encoder, expected cam1 FPS improvement from ~6fps to ~12–15fps.
-- **Stream encoder efficiency**: moved `cv2.resize` to before overlay drawing — Hailo detection still receives full capture-res frames; all overlay drawing now happens on the smaller (640×480) stream frame. Eliminates the large `frame.copy()` call on the 1920×1080 frame.
+- **Stream encoder efficiency**: moved `cv2.resize` to before overlay drawing — Hailo detection still receives full capture-res frames; all overlay drawing now happens on the smaller stream frame. Eliminates the large `frame.copy()` call on the 1920×1080 frame.
 ### Added
 - `_scale_bboxes()` helper: scales face/object detection bbox coordinates when stream resolution differs from capture resolution.
 - `face_detection.max_fps` config in `config/assistant.yaml`.
 
 ## [1.15.1] - 2026-05-16
 ### Fixed
-- **cam1 FPS regression (root-cause #3)**: JPEG encoding a 1920×1080 frame took 33–115ms, capping cam1 at ~8fps even after the GIL and bus-lock fixes. Added `stream_width`/`stream_height` to `CameraConfig` (default 640×480). The encoder resizes the display frame to the stream resolution before `cv2.imencode` — Hailo face detection continues on full capture resolution. With stream at 640×480, imencode drops from 33–115ms to ~3ms; measured cam1 FPS improves from ~4–8fps to ~15–20fps.
+- **cam1 FPS regression (JPEG encode cost)**: JPEG encoding a 1920×1080 frame took 33–115ms, capping cam1 at ~8fps even after the GIL and bus-lock fixes. Added `stream_width`/`stream_height` to `CameraConfig` (default 640×360). The encoder resizes the display frame to the stream resolution before `cv2.imencode` — Hailo face detection continues on full capture resolution.
 ### Added
-- `CameraConfig.stream_width` / `stream_width` — MJPEG web-stream resolution, independent of capture resolution. Default 640×480 in `config/assistant.yaml`. Set to 0 to disable downscaling.
+- `stream_width: int` / `stream_height: int` fields to `CameraConfig` dataclass.
 
 ## [1.15.0] - 2026-05-16
 ### Fixed
-- **cam1 FPS regression (final fix)**: `_draw_servo_overlay` took 94–417 ms per frame under load due to Python GIL starvation — three PIL `Image.new/textbbox/numpy` calls per frame (7 ms isolated) stretched to 100–400 ms when Hailo inference held the GIL. Fixed with two-layer cache: (1) static elements (dark panel, arc, limit labels) pre-rendered once per unique `(width, height, servo_min, servo_max)` to a uint8 BGR + uint8 mask patch; (2) heading label pre-rendered once per integer degree. Per-frame hot path is now `cv2.copyTo` (C, GIL-free) + `cv2.line/circle` only — ~4 ms at 1080p vs 94–417 ms before.
-### Performance
-- Overlay hot-path benchmark: 239 fps theoretical throughput (4.18 ms/frame) at 1920×1080 vs 15 ms/frame (66 fps) for the previous numpy float32 blend.
+- **cam1 FPS regression (PIL GIL starvation)**: `_draw_servo_overlay` called PIL 3× per frame while Hailo inference held the GIL, causing 94–417ms stalls. Pre-render static overlay elements once into a cached BGRA patch; composite via `cv2.copyTo` with uint8 mask (~1ms vs ~15ms with float32 blend). Heading label cached per integer degree. Hot-path overlay time: ~4ms/frame (was ~417ms under load).
+### Added
+- `_build_servo_bg_patch()`: builds static arc + limit-label overlay patch once per unique (w, h, servo_min, servo_max) key.
+- `_render_hdg_patch()`: pre-renders heading angle label once per integer degree using PIL (for degree symbol support).
+- `_servo_bg_cache`, `_servo_hdg_cache`: module-level caches cleared on servo limit changes or frame resolution change.
 
-## [1.14.9] - 2026-05-16
-### Fixed
-- **Critical FPS regression root cause**: `MotionService._on_pan_to` was calling `ServoController.move_to()` synchronously inside the bus callback, holding the bus RLock for the entire servo move duration (up to 100 ms per 50ms tracking cycle). This starved the encoder thread waiting to call `bus.publish("vision.jpeg_ready")`, reducing cam1 from ~16 fps to ~4 fps. Fixed by refactoring `MotionService` to use a dedicated 50 Hz `_servo_loop` background thread: `_on_pan_to` now just stores the target angle (non-blocking), and the servo loop steps toward it independently. Bus lock is held for microseconds instead of milliseconds per tracking update.
-### Changed
-- `motion.position` is now published at ~10 Hz by the servo loop instead of at 2 Hz by the service tick.
-
-## [1.14.8] - 2026-05-16
-### Fixed
-- **Detection cam FPS regression** (was <2 fps) caused by the v1.14.6 PIL overlay helper doing three full 1080p BGR↔RGB round-trips per frame (~94 ms total). Replaced with a `_put_text_patch()` ROI-patch approach: each text label is rendered onto a tiny PIL RGBA image (just the text bounding box) which is then alpha-composited onto the frame — no full-frame conversion, ~6 ms per frame at 1080p (16× faster).
-### Changed
-- Direction overlay restored to v1.14.5 enhanced design: 50% larger arc, semi-transparent dark background panel, limit labels at arc endpoints, current heading label below arc — all with proper `°` symbol via PIL ROI patches.
-
-
+## [1.14.7] - 2026-05-16
 ### Added
 - **Drag-and-drop card reordering** in the web dashboard. Grab the `⠿` handle in any card's header to drag it to a new position. Layout is persisted in `localStorage` so the arrangement survives page refresh. Dragging only activates from the handle, leaving all inputs, sliders, and buttons inside cards fully interactive.
 

@@ -776,28 +776,28 @@ async function saveCam2Rotation() {
   setTimeout(() => { if (st) st.textContent = ""; }, 3000);
 }
 
-async function loadCamResolution() {
+async function loadStreamResolution() {
   try {
-    const r = await fetch("/api/settings/camera/resolution");
+    const r = await fetch("/api/settings/camera/stream_resolution");
     if (!r.ok) return;
     const d = await r.json();
     const val = `${d.width}x${d.height}`;
-    const sel = el("cam-resolution-select");
+    const sel = el("cam-stream-resolution-select");
     if (sel) {
       const opts = Array.from(sel.options).map(o => o.value);
-      sel.value = opts.includes(val) ? val : "640x480";
+      sel.value = opts.includes(val) ? val : "640x360";
     }
   } catch (e) { /* ignore */ }
 }
 
-async function saveCamResolution(val) {
-  const st = el("cam-resolution-status");
+async function saveStreamResolution(val) {
+  const st = el("cam-stream-resolution-status");
   const parts = val.split("x");
   if (parts.length !== 2) return;
   const width = parseInt(parts[0], 10);
   const height = parseInt(parts[1], 10);
   try {
-    const r = await fetch("/api/settings/camera/resolution", {
+    const r = await fetch("/api/settings/camera/stream_resolution", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ width, height }),
@@ -1064,7 +1064,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadGreetingSettings();
   loadCamRotation();
   loadCam2Rotation();
-  loadCamResolution();
+  loadStreamResolution();
   loadObjectDetectionEnabled();
   loadMusicStatus();
   connectWS();

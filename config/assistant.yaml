@@ -49,18 +49,16 @@ servo:
 
 camera:
   # Capture resolution and frame rate for the primary (face-tracking) camera.
-  # Lower resolution = higher frame rate. 640×480 @ 30 fps is a good balance
-  # for face detection on the Raspberry Pi 5.
+  # The camera always captures at this resolution for full sensor field-of-view.
+  # Use the web GUI "Stream Resolution" to change display size without cropping.
   width: 640
   height: 480
   framerate: 30
-  # MJPEG stream resolution for the web UI (cam1 only).
-  # Hailo face detection runs on the full capture resolution above; only the
-  # web delivery is downscaled. Set to 0 to use the capture resolution.
-  # When the user overrides capture resolution to 1920×1080 via GUI/CLI, the
-  # web stream still delivers at this size (~3ms encode vs ~95ms at 1080p).
+  # MJPEG stream output resolution — encoder downscales to this before JPEG encoding.
+  # Camera captures at full width×height above; stream_width×stream_height is what
+  # the browser receives. Change live via the GUI with no camera restart needed.
   stream_width: 640
-  stream_height: 480
+  stream_height: 360
   # Software rotation applied to every frame before display and detection.
   # Valid range: 0–359. Common values: 0 (none), 90, 180, 270.
   # Multiples of 90 are lossless; other angles keep the same canvas size.
@@ -92,13 +90,6 @@ face_recognition:
   greeting_cooldown_jitter_pct: 25  # ± jitter percentage (e.g. 25 → 30 min ± 7.5 min)
   min_absence_s: 30               # face must have been absent this long before re-greeting
   confidence_threshold: 0.5       # minimum detection confidence to trigger a greeting
-
-face_detection:
-  # SCRFD face detection on the Hailo-8.
-  # Higher max_fps = more responsive tracking but more GIL pressure on the
-  # camera encoder thread. 5 fps is a good balance; the Kalman filter
-  # predicts position between detections so tracking remains smooth.
-  max_fps: 5.0
 
 depth:
   # Depth estimation for face localisation in 3D space.
