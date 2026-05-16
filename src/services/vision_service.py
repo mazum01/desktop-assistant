@@ -339,18 +339,22 @@ def _build_servo_bg_patch(
     radius    = max(20, int(60 * scale))
     lbl_size  = max(12, int(18 * scale))
     off_x     = max(radius + lbl_size * 3, int(90 * scale))
-    off_y     = max(radius + lbl_size * 3, int(90 * scale))
-    cx_full   = w - off_x
-    cy_full   = h - off_y
     arc_thick = max(1, round(2 * scale))
     pad       = max(10, int(14 * scale))
     tick_len  = max(3, int(8 * scale))
     dot_r     = max(2, round(3 * scale))
 
+    # off_y: distance from frame bottom to the arc center (cy_full).
+    # Arc arcs upward (needs radius+pad above cy); heading label is placed
+    # just below the center dot (needs dot_r + lbl_size + pad below cy).
+    off_y     = max(dot_r + lbl_size + pad + 8, int(40 * scale))
+    cx_full   = w - off_x
+    cy_full   = h - off_y
+
     bx1 = max(0, cx_full - radius - pad - lbl_size * 2)
     by1 = max(0, cy_full - radius - pad)
     bx2 = min(w, cx_full + radius + pad + lbl_size * 2)
-    by2 = min(h, cy_full + radius + lbl_size * 2 + pad)
+    by2 = min(h, cy_full + dot_r + lbl_size + pad)
     ph, pw = by2 - by1, bx2 - bx1
     if ph <= 0 or pw <= 0:
         return None
@@ -466,8 +470,8 @@ def _draw_servo_overlay(
     hdg_data = _servo_hdg_cache.get(hdg_key)
     if hdg_data is not None:
         hdg_bgr, hdg_mask, hdg_w, hdg_h = hdg_data
-        tx = cx - lbl_size
-        ty = cy + radius + max(4, int(lbl_size * 0.33))
+        tx = cx - hdg_w // 2          # horizontally centred on arc centre
+        ty = cy + dot_r + 4            # just below the centre dot
         x1_h = max(0, tx);          y1_h = max(0, ty)
         x2_h = min(w, tx + hdg_w);  y2_h = min(h, ty + hdg_h)
         pw_h = x2_h - x1_h;        ph_h = y2_h - y1_h
@@ -697,10 +701,18 @@ class VisionService(Service):
 
             fh, fw = frame.shape[:2]
             if sw > 0 and sh > 0 and (fw > sw or fh > sh):
+                # Maintain source aspect ratio — fit within (sw, sh) without distortion.
+                # e.g. 1920×1080 (16:9) → 640×360, not 640×480 (which would stretch).
+                ar = fw / fh
+                tw = sw
+                th = round(sw / ar)
+                if th > sh:
+                    th = sh
+                    tw = round(sh * ar)
                 # Resize first: creates a new array, no copy() needed.
                 # Scale detection coordinates to match the display resolution.
-                display = cv2.resize(frame, (sw, sh), interpolation=cv2.INTER_LINEAR)
-                sx, sy = sw / fw, sh / fh
+                display = cv2.resize(frame, (tw, th), interpolation=cv2.INTER_LINEAR)
+                sx, sy = tw / fw, th / fh
                 scaled_faces = _scale_bboxes(faces, sx, sy)
                 scaled_objects = _scale_bboxes(objects, sx, sy)
             else:

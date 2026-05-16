@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.15.3] - 2026-05-16
+### Fixed
+- **Detection cam stream stretched**: `_encoder_loop` was resizing to exactly `(stream_width, stream_height)` = 640×480 regardless of capture aspect ratio, squishing 1920×1080 (16:9) into 4:3. Replaced with aspect-ratio-preserving resize: the display frame is fitted to the stream bounds while preserving the source ratio (1920×1080 → 640×360, not 640×480).
+- **Servo direction overlay double height**: Arc in cv2 angle convention spans 210°→330° which renders *above* the center point (cy). The heading label was placed at `cy + radius` — far below the center dot — creating a large empty gap and inflating the block height. Moved heading label to `cy + dot_r + 4` (just below the center dot) and tightened `by2` accordingly. Block height roughly halved at all scale factors.
+
 ## [1.15.2] - 2026-05-16
 ### Fixed
 - **cam1 FPS (GIL contention)**: Hailo SCRFD face-detection was running at 10 fps (default), each inference holding the Python GIL for ~50ms → 500ms of GIL-blocked time per second, starving the encoder thread. Added `face_detection.max_fps` config (default `5.0`) to `config/assistant.yaml` and wired it through `core_main.py` → `PerceptionConfig`. Halving detection rate frees ~250ms/s of GIL for the encoder, expected cam1 FPS improvement from ~6fps to ~12–15fps.
