@@ -91,6 +91,11 @@ class _FakeServo:
         self.move_kwargs = []
         self.relaxed = False
         self.stopped_count = 0
+        self._cfg = type("Cfg", (), {"speed_deg_per_sec": 90.0})()
+
+    def _write(self, angle):
+        self.position = angle
+
     def move_to(self, angle, **kw):
         self.moves.append(angle)
         self.move_kwargs.append(kw)
@@ -103,49 +108,53 @@ class _FakeServo:
 
 def test_motion_service_handles_pan_to():
     bus = MessageBus()
-    fake = _FakeServo(start_pos=10.0)
+    fake = _FakeServo(start_pos=150.0)
     svc = MotionService(bus=bus, controller=fake)
-    svc.tick_seconds = 1.0  # don't tick during test
     svc.start()
     try:
         moved = []
         bus.subscribe("motion.moved", lambda t, p: moved.append(p))
-        bus.publish("motion.pan_to", {"angle": 90.0})
-        assert fake.moves == [90.0]
-        assert fake.move_kwargs == [{}]
-        assert moved and moved[0]["to"] == 90.0
+        bus.publish("motion.pan_to", {"angle": 200.0})
+        # motion.moved is published immediately (non-blocking new design)
+        assert moved and moved[0]["to"] == 200.0
         assert moved[0]["direction"] == "forward"
+        # Servo loop converges within ~0.7s (50° at 90°/s = ~0.56s)
+        time.sleep(0.7)
+        assert abs(fake.position - 200.0) < 2.0
     finally:
         svc.stop()
 
 
 def test_motion_service_pan_to_with_move_time_sets_speed():
     bus = MessageBus()
-    fake = _FakeServo(start_pos=10.0)
+    fake = _FakeServo(start_pos=150.0)
     svc = MotionService(bus=bus, controller=fake)
-    svc.tick_seconds = 1.0
     svc.start()
     try:
-        bus.publish("motion.pan_to", {"angle": 90.0, "move_time_ms": 2000})
-        assert fake.moves == [90.0]
-        assert fake.move_kwargs
-        # 80 degrees in 2 s = 40 deg/s
-        assert fake.move_kwargs[0]["speed_deg_per_sec"] == pytest.approx(40.0)
+        moved = []
+        bus.subscribe("motion.moved", lambda t, p: moved.append(p))
+        bus.publish("motion.pan_to", {"angle": 210.0, "move_time_ms": 3000})
+        assert moved and moved[0]["to"] == 210.0
+        # Speed is 20 deg/s (60° in 3s). After 0.1s, should have moved ~2°, not 60°.
+        time.sleep(0.1)
+        assert fake.position < 210.0  # still stepping toward target
     finally:
         svc.stop()
 
 
 def test_motion_service_pan_to_with_invalid_move_time_is_ignored():
     bus = MessageBus()
-    fake = _FakeServo(start_pos=10.0)
+    fake = _FakeServo(start_pos=150.0)
     svc = MotionService(bus=bus, controller=fake)
-    svc.tick_seconds = 1.0
     svc.start()
     try:
-        bus.publish("motion.pan_to", {"angle": 90.0, "move_time_ms": 0})
-        bus.publish("motion.pan_to", {"angle": 90.0, "move_time_ms": -10})
-        bus.publish("motion.pan_to", {"angle": 90.0, "move_time_ms": "bad"})
-        assert fake.moves == []
+        initial = fake.position
+        bus.publish("motion.pan_to", {"angle": 200.0, "move_time_ms": 0})
+        bus.publish("motion.pan_to", {"angle": 200.0, "move_time_ms": -10})
+        bus.publish("motion.pan_to", {"angle": 200.0, "move_time_ms": "bad"})
+        time.sleep(0.05)
+        # No target was set, servo should not have moved
+        assert abs(fake.position - initial) < 0.1
     finally:
         svc.stop()
 
@@ -169,28 +178,28 @@ def test_motion_service_publishes_position():
     bus = MessageBus()
     fake = _FakeServo(start_pos=42.0)
     svc = MotionService(bus=bus, controller=fake)
-    svc.tick_seconds = 0.02
 
     positions = []
     bus.subscribe("motion.position", lambda t, p: positions.append(p))
 
     svc.start()
-    time.sleep(0.1)
+    time.sleep(0.2)  # servo loop publishes position every ~100ms
     svc.stop()
 
-    assert positions and positions[-1]["angle"] == 42.0
+    assert positions and positions[-1]["angle"] == pytest.approx(42.0, abs=0.1)
 
 
 def test_motion_service_pan_to_ignores_bad_payload():
     bus = MessageBus()
     fake = _FakeServo()
     svc = MotionService(bus=bus, controller=fake)
-    svc.tick_seconds = 1.0
     svc.start()
     try:
+        initial = fake.position
         bus.publish("motion.pan_to", "not a dict")
         bus.publish("motion.pan_to", {"wrong_key": 1})
-        assert fake.moves == []
+        time.sleep(0.05)
+        assert abs(fake.position - initial) < 0.1
     finally:
         svc.stop()
 

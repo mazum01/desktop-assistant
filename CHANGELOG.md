@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.14.9] - 2026-05-16
+### Fixed
+- **Critical FPS regression root cause**: `MotionService._on_pan_to` was calling `ServoController.move_to()` synchronously inside the bus callback, holding the bus RLock for the entire servo move duration (up to 100 ms per 50ms tracking cycle). This starved the encoder thread waiting to call `bus.publish("vision.jpeg_ready")`, reducing cam1 from ~16 fps to ~4 fps. Fixed by refactoring `MotionService` to use a dedicated 50 Hz `_servo_loop` background thread: `_on_pan_to` now just stores the target angle (non-blocking), and the servo loop steps toward it independently. Bus lock is held for microseconds instead of milliseconds per tracking update.
+### Changed
+- `motion.position` is now published at ~10 Hz by the servo loop instead of at 2 Hz by the service tick.
+
 ## [1.14.8] - 2026-05-16
 ### Fixed
 - **Detection cam FPS regression** (was <2 fps) caused by the v1.14.6 PIL overlay helper doing three full 1080p BGR↔RGB round-trips per frame (~94 ms total). Replaced with a `_put_text_patch()` ROI-patch approach: each text label is rendered onto a tiny PIL RGBA image (just the text bounding box) which is then alpha-composited onto the frame — no full-frame conversion, ~6 ms per frame at 1080p (16× faster).
