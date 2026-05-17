@@ -23,6 +23,7 @@ temperature-controlled cooling.
 config/      runtime configuration
 docs/        printable design docs
 hardware/    per-device drivers and notes
+openclaw/    OpenClaw AI gateway skills (Telegram/Claude integration)
 scripts/     bring-up and utility scripts
 services/    long-running daemons / systemd units
 src/         application code
@@ -35,6 +36,14 @@ src/         application code
   assistant/   dialog & skills
 tests/       unit and integration tests
 ```
+
+## OpenClaw Integration
+Natural-language control via Telegram using the [OpenClaw](https://openclaw.dev)
+AI gateway. See [`openclaw/README.md`](openclaw/README.md) for installation.
+
+Available skills:
+- **pan-camera** — "look left", "pan to 90°", "face me"
+- **grab-frame** — "take a photo", "snapshot from camera 2"
 
 ## Status
 Phase 0 — project scaffold.

@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.15.7] - 2026-05-17
+### Added
+- **OpenClaw skills added to repo** (`openclaw/skills/`): `pan-camera` and `grab-frame` skills are now version-controlled alongside the rest of the project. Includes `openclaw/README.md` with installation instructions.
+- Updated `README.md` repo layout and added OpenClaw integration section.
+
+## [1.15.7] - 2026-05-17
+### Added
+- **OpenClaw skills checked into repo** under `.github/skills/`: `pan-camera` (servo pan via Telegram) and `grab-frame` (full-res camera still). Includes a `README.md` with deployment and cache-clearing instructions.
+
 ## [1.15.6] - 2026-05-17
 ### Fixed
 - **Servo pan silently blocked during quiet hours**: All `motion.pan_to` commands (CLI, web GUI, OpenClaw/Telegram) were suppressed when quiet hours were active (21:00–05:00). Added `"override_quiet": true` payload flag so explicit user commands bypass quiet hours while autonomous tracking/random-motion stays silent. Updated `scripts/desktop-assistant`, `web_service.py`, and `pan-camera` OpenClaw skill.
