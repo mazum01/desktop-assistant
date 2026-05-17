@@ -20,7 +20,9 @@ DEL  /api/faces/{id}      Delete a face and all its embeddings
 POST /api/faces/{id}/train  Capture current frame and add embedding/thumbnail to face
 POST /api/say             Speak text   body: {"text": "hello"}
 POST /api/pan             Pan servo    body: {"angle": 180.0}
-POST /api/version         Speak version number
+GET  /api/snapshot            Full-resolution JPEG snapshot from camera 1
+GET  /api/snapshot2           Full-resolution JPEG snapshot from camera 2
+POST /api/version             Speak version number
 GET  /api/settings/servo  Get servo enabled state
 PUT  /api/settings/servo  Set servo enabled state  body: {"enabled": bool}
 GET  /api/settings/servo/limits  Get servo travel limits
@@ -945,8 +947,40 @@ class WebService:
         async def api_pan(body: _PanBody):
             if not self.bus:
                 raise HTTPException(503, "bus unavailable")
-            self.bus.publish("motion.pan_to", {"angle": body.angle})
+            self.bus.publish("motion.pan_to", {"angle": body.angle, "override_quiet": True})
             return {"ok": True}
+
+        @app.get("/api/snapshot")
+        async def api_snapshot():
+            """Return the current camera 1 frame as a full-resolution JPEG."""
+            import cv2
+            svc = self._vision_svc
+            if svc is None:
+                raise HTTPException(503, "vision service unavailable")
+            frame = svc.latest_frame()
+            if frame is None:
+                raise HTTPException(503, "no frame available")
+            ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            if not ok:
+                raise HTTPException(500, "JPEG encode failed")
+            from fastapi.responses import Response
+            return Response(content=bytes(buf), media_type="image/jpeg")
+
+        @app.get("/api/snapshot2")
+        async def api_snapshot2():
+            """Return the current camera 2 frame as a full-resolution JPEG."""
+            import cv2
+            svc = self._camera2_svc
+            if svc is None:
+                raise HTTPException(503, "camera 2 not enabled")
+            frame = svc.latest_frame()
+            if frame is None:
+                raise HTTPException(503, "no frame available")
+            ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            if not ok:
+                raise HTTPException(500, "JPEG encode failed")
+            from fastapi.responses import Response
+            return Response(content=bytes(buf), media_type="image/jpeg")
 
         @app.post("/api/version")
         async def api_version():

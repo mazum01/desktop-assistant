@@ -242,8 +242,12 @@ class MotionService(Service):
             log.debug("MotionService: pan_to suppressed -- servo disabled")
             return
         if self._quiet_hours and self._quiet_hours.is_quiet():
-            log.debug("MotionService: pan_to suppressed -- quiet hours active")
-            return
+            # Explicit user commands (CLI, web GUI, OpenClaw) carry
+            # "override_quiet": true to bypass quiet hours. Autonomous
+            # tracking/random-motion commands don't, so they stay silent.
+            if not (isinstance(payload, dict) and payload.get("override_quiet")):
+                log.debug("MotionService: pan_to suppressed -- quiet hours active")
+                return
         if not isinstance(payload, dict) or "angle" not in payload:
             log.warning("motion.pan_to ignored: bad payload %r", payload)
             return

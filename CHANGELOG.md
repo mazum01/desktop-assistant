@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.15.6] - 2026-05-17
+### Fixed
+- **Servo pan silently blocked during quiet hours**: All `motion.pan_to` commands (CLI, web GUI, OpenClaw/Telegram) were suppressed when quiet hours were active (21:00–05:00). Added `"override_quiet": true` payload flag so explicit user commands bypass quiet hours while autonomous tracking/random-motion stays silent. Updated `scripts/desktop-assistant`, `web_service.py`, and `pan-camera` OpenClaw skill.
+### Added
+- **`/api/snapshot` and `/api/snapshot2` endpoints**: Return the current full-resolution JPEG from camera 1 or camera 2 respectively (quality 95, encoded from raw frame without stream downscaling).
+- **`grab-frame` OpenClaw skill**: Telegram/Claude can now take a full-res still photo from either camera via `grab_frame.py [1|2]`. Files saved to `~/Pictures/desktop-assistant/cam<N>_<timestamp>.jpg`.
+
 ## [1.15.5] - 2026-05-16
 ### Fixed
 - **Stream resolution only applied to cam1**: `RawCameraService` (cam2) had no stream downscale logic. Added `stream_width`/`stream_height` fields to `RawCameraConfig`, AR-preserving resize in `run_tick`, and `_on_set_stream_resolution` handler. Both cameras now subscribe to the same `camera.set_stream_resolution` bus message, so the single "Stream Resolution" GUI selector controls both feeds simultaneously.
