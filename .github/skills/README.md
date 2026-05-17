@@ -1,23 +1,55 @@
-# OpenClaw / Copilot Skills
+# Desktop Assistant Skills
 
-This directory contains skills for the Desktop Assistant.
+This directory contains skills for two systems:
 
-| Skill | Description | Runtime location |
-|-------|-------------|-----------------|
-| `restart-daemon` | Restart the systemd service and verify it's live | Copilot CLI only |
-| `pan-camera` | Pan the camera servo to a given angle via Telegram/OpenClaw | `~/.openclaw/workspace/skills/pan-camera/` |
-| `grab-frame` | Capture a full-resolution JPEG still from cam1 or cam2 | `~/.openclaw/workspace/skills/grab-frame/` |
+- **GitHub Copilot CLI** (`.github/skills/`) — invoked by the VS Code Copilot agent
+- **OpenClaw** (`~/.openclaw/workspace/skills/`) — natural-language Telegram/Claude skills
 
-## Deploying OpenClaw skills
+---
 
-After editing a skill here, sync it to the OpenClaw workspace:
+## OpenClaw Skills
+
+### Installation
+
+Copy skill directories into the OpenClaw workspace:
 
 ```bash
-cp .github/skills/pan-camera/{SKILL.md,pan_camera.py} ~/.openclaw/workspace/skills/pan-camera/
-cp .github/skills/grab-frame/{SKILL.md,grab_frame.py} ~/.openclaw/workspace/skills/grab-frame/
+for skill in say describe-scene music face-tracking system-status quiet-hours object-detection pan-camera grab-frame; do
+    cp -r .github/skills/$skill ~/.openclaw/workspace/skills/
+done
 ```
 
-OpenClaw's skill snapshot cache may need clearing after adding a **new** skill:
-1. Stop gateway: `systemctl --user stop openclaw-gateway`
-2. Edit `~/.openclaw/agents/main/sessions/sessions.json` — delete `skillsSnapshot` keys
-3. Restart: `systemctl --user start openclaw-gateway`
+Then restart the OpenClaw gateway:
+
+```bash
+systemctl --user restart openclaw-gateway.service
+```
+
+> **Tip:** If a new skill doesn't appear after restart, clear `skillsSnapshot`
+> from `~/.openclaw/agents/main/sessions/sessions.json` while the gateway is
+> stopped, then start it again.
+
+---
+
+### Skill Reference
+
+| Skill               | Description                                               | Example phrases                                      |
+|---------------------|-----------------------------------------------------------|------------------------------------------------------|
+| `say`               | Speak any text via TTS                                    | "Say good morning", "Announce dinner is ready"       |
+| `describe-scene`    | Describe what the camera sees, spoken aloud               | "What do you see?", "Describe the room"              |
+| `music`             | Pandora: play/stop/skip/pause/thumbs/volume/stations      | "Play jazz", "Skip this song", "Volume 70"           |
+| `face-tracking`     | Enable/disable auto face-following servo                  | "Follow me", "Hold still", "Is tracking on?"        |
+| `system-status`     | Health: CPU, memory, temp, FPS, services                  | "How are you?", "What's your temperature?"           |
+| `quiet-hours`       | Enable/disable/configure TTS silence window               | "Enable quiet mode", "Set quiet hours 10pm–7am"     |
+| `object-detection`  | Enable/disable Hailo-8 COCO object classifier             | "Enable object detection", "What objects do you see?"|
+| `pan-camera`        | Pan servo to angle or named direction                     | "Look left", "Face me", "Pan to 135°"                |
+| `grab-frame`        | Capture full-res JPEG from camera 1 or 2                 | "Take a photo", "Snapshot from camera 2"             |
+
+---
+
+## Copilot CLI Skills
+
+| Skill            | Description                                       |
+|------------------|---------------------------------------------------|
+| `restart-daemon` | Restart `desktop-assistant-core.service` + verify |
+

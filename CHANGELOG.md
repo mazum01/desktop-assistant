@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.15.9] - 2026-05-17
+### Added
+- **7 new OpenClaw skills** for natural-language Telegram/Claude control:
+  - `say` — speak any text via TTS
+  - `describe-scene` — trigger spoken scene description from camera
+  - `music` — full Pandora playback control (play/stop/next/pause/thumbs-up/thumbs-down/volume/stations/station)
+  - `face-tracking` — enable/disable/status face-following servo behavior
+  - `system-status` — health telemetry: CPU, memory, temp, FPS, services, faces
+  - `quiet-hours` — enable/disable/configure TTS silence window
+  - `object-detection` — enable/disable Hailo-8 COCO object classifier
+- Updated `.github/skills/README.md` with full skill reference table and bulk install command.
+
 ## [1.15.8] - 2026-05-17
 ### Changed
 - Removed duplicate `openclaw/skills/` top-level directory; canonical location for OpenClaw skills is `.github/skills/` (shared with Copilot CLI skills).
