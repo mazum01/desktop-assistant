@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.15.8] - 2026-05-17
+### Changed
+- Removed duplicate `openclaw/skills/` top-level directory; canonical location for OpenClaw skills is `.github/skills/` (shared with Copilot CLI skills).
+- Updated `README.md` repo layout to include `.github/skills/` and link to its README for OpenClaw setup.
+
 ## [1.15.7] - 2026-05-17
 ### Added
 - **OpenClaw skills added to repo** (`openclaw/skills/`): `pan-camera` and `grab-frame` skills are now version-controlled alongside the rest of the project. Includes `openclaw/README.md` with installation instructions.

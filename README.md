@@ -20,26 +20,26 @@ temperature-controlled cooling.
 
 ## Repo Layout
 ```
-config/      runtime configuration
-docs/        printable design docs
-hardware/    per-device drivers and notes
-openclaw/    OpenClaw AI gateway skills (Telegram/Claude integration)
-scripts/     bring-up and utility scripts
-services/    long-running daemons / systemd units
-src/         application code
-  core/        shared utilities
-  perception/  vision + audio understanding
-  motion/      pan servo controller
-  thermal/     temperature + fan control
-  audio/       capture & playback
-  vision/      camera pipeline
-  assistant/   dialog & skills
-tests/       unit and integration tests
+config/          runtime configuration
+docs/            printable design docs
+hardware/        per-device drivers and notes
+.github/skills/  OpenClaw AI gateway skills (Telegram/Claude integration)
+scripts/         bring-up and utility scripts
+services/        long-running daemons / systemd units
+src/             application code
+  core/            shared utilities
+  perception/      vision + audio understanding
+  motion/          pan servo controller
+  thermal/         temperature + fan control
+  audio/           capture & playback
+  vision/          camera pipeline
+  assistant/       dialog & skills
+tests/           unit and integration tests
 ```
 
 ## OpenClaw Integration
 Natural-language control via Telegram using the [OpenClaw](https://openclaw.dev)
-AI gateway. See [`openclaw/README.md`](openclaw/README.md) for installation.
+AI gateway. See [`.github/skills/README.md`](.github/skills/README.md) for installation.
 
 Available skills:
 - **pan-camera** — "look left", "pan to 90°", "face me"
