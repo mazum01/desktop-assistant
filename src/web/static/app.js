@@ -349,35 +349,101 @@ function updateMergeBtn() {
     : `${checked.length} selected (need exactly 2)`;
 }
 
-async function mergeFaces() {
+// ── Merge modal state ──────────────────────────────────────────
+let _mergeIds   = [null, null];  // [idA, idB]
+let _mergeNames = ["", ""];
+
+function mergeFaces() {
   const rows = [...document.querySelectorAll("#face-tbody tr[data-face-id]")];
   const checked = rows.filter(r => r.querySelector(".face-merge-cb")?.checked);
   if (checked.length !== 2) return;
-  const ids = checked.map(r => r.dataset.faceId);
-  const names = ids.map(id => {
+  _mergeIds   = checked.map(r => r.dataset.faceId);
+  _mergeNames = _mergeIds.map(id => {
     const inp = document.getElementById(`name-${id}`);
-    return inp ? inp.value : id.slice(0, 8);
+    return inp ? (inp.value.trim() || id.slice(0, 8)) : id.slice(0, 8);
   });
-  const choice = confirm(
-    `Merge two faces into one.\n\n` +
-    `Keep: "${names[0]}" (${ids[0].slice(0,8)}…)\n` +
-    `Absorb: "${names[1]}" (${ids[1].slice(0,8)}…)\n\n` +
-    `The second entry will be deleted. OK?`
-  );
-  if (!choice) return;
+
+  // Populate face A
+  el("merge-name-a").textContent = _mergeNames[0];
+  el("merge-fid-a").textContent  = _mergeIds[0].slice(0, 12) + "…";
+  const imgA = el("merge-img-a");
+  imgA.src = `/api/faces/${encodeURIComponent(_mergeIds[0])}/thumb`;
+  imgA.onerror = () => { imgA.style.display = "none"; };
+
+  // Populate face B
+  el("merge-name-b").textContent = _mergeNames[1];
+  el("merge-fid-b").textContent  = _mergeIds[1].slice(0, 12) + "…";
+  const imgB = el("merge-img-b");
+  imgB.src = `/api/faces/${encodeURIComponent(_mergeIds[1])}/thumb`;
+  imgB.onerror = () => { imgB.style.display = "none"; };
+
+  // Default: A = keep, B = absorb
+  el("merge-keep-a").checked = true;
+  updateMergeRoles();
+
+  el("merge-modal").classList.add("active");
+}
+
+function updateMergeRoles() {
+  // Determine which radio is checked: value "a" means face A is keep
+  const keepVal = document.querySelector("input[name='merge-keep']:checked")?.value;
+  const aIsKeep = keepVal === "a";
+  const cardA = el("merge-card-a");
+  const cardB = el("merge-card-b");
+  cardA.classList.toggle("is-keep",   aIsKeep);
+  cardA.classList.toggle("is-absorb", !aIsKeep);
+  cardB.classList.toggle("is-keep",   !aIsKeep);
+  cardB.classList.toggle("is-absorb", aIsKeep);
+
+  const keepName   = aIsKeep ? _mergeNames[0] : _mergeNames[1];
+  const absorbName = aIsKeep ? _mergeNames[1] : _mergeNames[0];
+  el("merge-summary").innerHTML =
+    `✅ <strong>${esc(keepName)}</strong> will be kept as the parent identity.<br>` +
+    `🗑 <strong>${esc(absorbName)}</strong>'s embeddings will be merged in, then deleted.`;
+}
+
+function swapMergeRoles() {
+  const keepVal = document.querySelector("input[name='merge-keep']:checked")?.value;
+  // Toggle to the other face
+  if (keepVal === "a") {
+    el("merge-keep-b").checked = true;
+  } else {
+    el("merge-keep-a").checked = true;
+  }
+  updateMergeRoles();
+}
+
+function closeMergeModal() {
+  el("merge-modal").classList.remove("active");
+}
+
+async function confirmMerge() {
+  const keepVal = document.querySelector("input[name='merge-keep']:checked")?.value;
+  const aIsKeep = keepVal === "a";
+  const keepId   = aIsKeep ? _mergeIds[0] : _mergeIds[1];
+  const absorbId = aIsKeep ? _mergeIds[1] : _mergeIds[0];
+  const confirmBtn = el("merge-confirm-btn");
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = "Merging…";
   try {
     const r = await fetch("/api/faces/merge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ keep_id: ids[0], absorb_id: ids[1] }),
+      body: JSON.stringify({ keep_id: keepId, absorb_id: absorbId }),
     });
     if (r.ok) {
+      closeMergeModal();
       loadFaces();
     } else {
       const d = await r.json().catch(() => ({}));
       alert("Merge failed: " + (d.detail || r.status));
     }
-  } catch (e) { alert("Merge error: " + e); }
+  } catch (e) {
+    alert("Merge error: " + e);
+  } finally {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = "⛓ Merge";
+  }
 }
 
 async function saveName(faceId) {

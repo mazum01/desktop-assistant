@@ -568,5 +568,66 @@
       <p id="lightbox-label" class="lightbox-label"></p>
     </div>
   </div>
+
+  <!-- ── Merge modal ───────────────────────────────────────────── -->
+  <div id="merge-modal" class="lightbox" onclick="closeMergeModal()">
+    <div class="merge-modal-inner" onclick="event.stopPropagation()">
+      <button class="lightbox-close" onclick="closeMergeModal()" aria-label="Close">✕</button>
+      <h3 class="merge-modal-title">⛓ Merge Faces</h3>
+      <p class="merge-modal-desc">
+        Choose which face to <strong>keep</strong> (parent) and which to
+        <strong>absorb</strong> (child, will be deleted).<br>
+        Embeddings, seen count, and first-seen date from the child are merged into the parent.
+      </p>
+      <div class="merge-modal-faces">
+        <!-- Face A -->
+        <div class="merge-face-card" id="merge-card-a">
+          <div class="merge-thumb-wrap">
+            <img id="merge-img-a" src="" alt="" class="merge-thumb" />
+          </div>
+          <div class="merge-face-name" id="merge-name-a"></div>
+          <div class="merge-face-id" id="merge-fid-a"></div>
+          <div class="merge-role-btns">
+            <label class="merge-role-label merge-keep-label">
+              <input type="radio" name="merge-keep" value="a" id="merge-keep-a" onchange="updateMergeRoles()" checked />
+              ✅ Keep (parent)
+            </label>
+            <label class="merge-role-label merge-absorb-label">
+              <input type="radio" name="merge-keep" value="b" id="merge-absorb-a-btn" onchange="updateMergeRoles()" />
+              🗑 Absorb (delete)
+            </label>
+          </div>
+        </div>
+
+        <div class="merge-swap-btn" onclick="swapMergeRoles()" title="Swap parent/child">⇄</div>
+
+        <!-- Face B -->
+        <div class="merge-face-card" id="merge-card-b">
+          <div class="merge-thumb-wrap">
+            <img id="merge-img-b" src="" alt="" class="merge-thumb" />
+          </div>
+          <div class="merge-face-name" id="merge-name-b"></div>
+          <div class="merge-face-id" id="merge-fid-b"></div>
+          <div class="merge-role-btns">
+            <label class="merge-role-label merge-keep-label">
+              <input type="radio" name="merge-keep" value="b" id="merge-keep-b" onchange="updateMergeRoles()" />
+              ✅ Keep (parent)
+            </label>
+            <label class="merge-role-label merge-absorb-label">
+              <input type="radio" name="merge-keep" value="a" id="merge-absorb-b-btn" onchange="updateMergeRoles()" />
+              🗑 Absorb (delete)
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div id="merge-summary" class="merge-summary"></div>
+
+      <div class="merge-modal-actions">
+        <button class="btn btn-secondary" onclick="closeMergeModal()">Cancel</button>
+        <button class="btn btn-danger" id="merge-confirm-btn" onclick="confirmMerge()">⛓ Merge</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

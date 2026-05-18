@@ -293,6 +293,131 @@ main {
   opacity: 0.75;
 }
 .lightbox-close:hover { opacity: 1; }
+
+/* ── Merge Modal ─────────────────────────────────────────────── */
+.merge-modal-inner {
+  position: relative;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 680px;
+  width: 95vw;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.7);
+}
+.merge-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+.merge-modal-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+.merge-modal-faces {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.merge-face-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg3);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  flex: 1;
+  min-width: 180px;
+  max-width: 240px;
+  transition: border-color 0.2s;
+}
+.merge-face-card.is-keep {
+  border-color: var(--green);
+}
+.merge-face-card.is-absorb {
+  border-color: var(--red);
+  opacity: 0.75;
+}
+.merge-thumb-wrap {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.merge-thumb {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+}
+.merge-face-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+  text-align: center;
+}
+.merge-face-id {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: monospace;
+}
+.merge-role-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.merge-role-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: background 0.15s;
+}
+.merge-role-label:hover { background: var(--bg); }
+.merge-role-label input[type="radio"] { cursor: pointer; }
+.merge-swap-btn {
+  font-size: 26px;
+  cursor: pointer;
+  color: var(--text-dim);
+  padding: 4px 8px;
+  border-radius: 50%;
+  transition: color 0.15s, transform 0.2s;
+  user-select: none;
+  flex-shrink: 0;
+}
+.merge-swap-btn:hover { color: var(--blue); transform: scale(1.2); }
+.merge-summary {
+  font-size: 13px;
+  color: var(--text-dim);
+  background: var(--bg3);
+  border-radius: 4px;
+  padding: 10px 14px;
+  line-height: 1.7;
+  min-height: 44px;
+}
+.merge-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .name-input {
   background: var(--bg3);
   border: 1px solid var(--border);

@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.16.0] - 2026-05-18
+### Added
+- **Face merge parent/child modal**: Replaced the plain `confirm()` dialog with a full modal that shows both faces side-by-side with thumbnails, names, and radio buttons to choose which is the parent (kept) and which is the child (absorbed/deleted). Includes a ⇄ swap button and a live summary line before confirming. Green border on the kept face, red/dimmed on the absorbed face.
+
 ## [1.15.9] - 2026-05-17
 ### Added
 - **7 new OpenClaw skills** for natural-language Telegram/Claude control:
