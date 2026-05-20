@@ -65,7 +65,12 @@ class ClockService(Service):
             self.bus.publish("av.say", {"text": text})
 
         _is_quiet_fn = self._quiet_hours.is_quiet if self._quiet_hours else None
-        self._announcer = ClockAnnouncer(say_fn=_say, enabled=self._enabled, is_quiet_fn=_is_quiet_fn)
+        self._announcer = ClockAnnouncer(
+            say_fn=_say,
+            enabled=self._enabled,
+            is_quiet_fn=_is_quiet_fn,
+            pause_fn=lambda: self.bus.publish("av.silence", {"duration": 1.5}),
+        )
         self._announcer.start()
 
         self.bus.subscribe("av.tell_joke",      self._on_tell_joke)

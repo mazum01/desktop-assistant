@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.16.1] - 2026-05-18
+### Fixed
+- **Top-of-hour pause**: The time announcement and the dad joke no longer run together without a break. Added `av.silence` topic to `av_service.py` that enqueues a timed `time.sleep()` in the audio worker queue. `ClockAnnouncer` now accepts an optional `pause_fn` parameter; at the top of the hour it calls `say_fn(time_str)` → `pause_fn()` → `say_fn(joke)` instead of concatenating both into one utterance. `ClockService` wires a 1.5-second pause via `bus.publish("av.silence", {"duration": 1.5})`.
+
 ## [1.16.0] - 2026-05-18
 ### Added
 - **Face merge parent/child modal**: Replaced the plain `confirm()` dialog with a full modal that shows both faces side-by-side with thumbnails, names, and radio buttons to choose which is the parent (kept) and which is the child (absorbed/deleted). Includes a ⇄ swap button and a live summary line before confirming. Green border on the kept face, red/dimmed on the absorbed face.

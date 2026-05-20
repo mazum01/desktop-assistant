@@ -103,20 +103,24 @@ class TestPickJoke:
 # ---------------------------------------------------------------------------
 
 class TestClockAnnouncerAnnounce:
-    def _make_announcer(self, enabled=True):
+    def _make_announcer(self, enabled=True, pause_fn=None):
         say = MagicMock()
-        ann = ClockAnnouncer(say_fn=say, enabled=enabled)
+        ann = ClockAnnouncer(say_fn=say, enabled=enabled, pause_fn=pause_fn)
         return ann, say
 
     def test_top_of_hour_includes_joke(self):
-        ann, say = self._make_announcer()
+        pause = MagicMock()
+        ann, say = self._make_announcer(pause_fn=pause)
         dt = datetime(2024, 1, 1, 10, 0, 0)
         ann._announce(dt)
-        say.assert_called_once()
-        text = say.call_args[0][0]
-        assert "o'clock" in text
-        # There should be more text after the time announcement (the joke)
-        assert len(text) > len(_spoken_time(dt))
+        # say_fn called twice: once for time, once for the joke
+        assert say.call_count == 2
+        time_text = say.call_args_list[0][0][0]
+        joke_text = say.call_args_list[1][0][0]
+        assert "o'clock" in time_text
+        assert len(joke_text) > 10
+        # pause was called once between them
+        pause.assert_called_once()
 
     def test_half_hour_no_joke(self):
         ann, say = self._make_announcer()
@@ -159,10 +163,10 @@ class TestClockAnnouncerLifecycle:
         """_run eventually calls _announce; verify indirectly via direct call."""
         say = MagicMock()
         ann = ClockAnnouncer(say_fn=say, enabled=True)
-        # Directly invoke the internal announce path at :00
         ann._announce(datetime(2024, 6, 15, 14, 0, 0))
-        say.assert_called_once()
-        assert "o'clock" in say.call_args[0][0]
+        # say called twice: time string + joke
+        assert say.call_count == 2
+        assert "o'clock" in say.call_args_list[0][0][0]
 
 
 # ---------------------------------------------------------------------------
