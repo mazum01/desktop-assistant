@@ -35,6 +35,7 @@ from src.core.quiet_hours import QuietHours
 from src.services.web_service import WebService
 from src.core.runtime_state import load as _load_runtime, save as _save_runtime
 from src.services.notification_service import NotificationService
+from src.services.telegram_service import TelegramService
 
 # The thermal service runs in a separate process. Its IPCBridge PUBs on
 # this endpoint; we SUBscribe to it from the core IPCBridge and re-emit
@@ -154,6 +155,7 @@ def main() -> int:
     _notif_cfg = _cfg.get("notifications", {})
     _notif_thermal_cfg = _notif_cfg.get("thermal_alerts", {})
     _notif_absence_cfg = _notif_cfg.get("absence_alerts", {})
+    _tg_cfg = _cfg.get("telegram", {})
 
     _web_cfg = _cfg.get("web_dashboard", {})
     _web_enabled = _web_cfg.get("enabled", True)
@@ -361,6 +363,19 @@ def main() -> int:
         absence_rate_limit_min=float(_notif_absence_cfg.get("min_interval_min", 60.0)),
     )
     services.append(notif_svc)
+
+    tg_svc = TelegramService(
+        bus=bus,
+        enabled=bool(_tg_cfg.get("enabled", False)),
+        bot_token=str(_tg_cfg.get("bot_token", "")),
+        chat_id=str(_tg_cfg.get("chat_id", "")),
+        emoji_map={
+            "new_face":  _tg_cfg.get("emoji_new_face", "👋"),
+            "returning": _tg_cfg.get("emoji_returning", "👤"),
+            "named":     _tg_cfg.get("emoji_named", "🏷️"),
+        },
+    )
+    services.append(tg_svc)
     services.append(ipc)
     ipc._all_services = services  # seed service registry at startup
     if _web_enabled:

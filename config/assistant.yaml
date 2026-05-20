@@ -152,3 +152,15 @@ notifications:
     enabled: true
     absence_min: 30             # minutes with no face seen before speaking
     min_interval_min: 60        # minimum minutes between repeated absence alerts
+
+telegram:
+  # Forward face-greeting audio outputs to a Telegram chat.
+  # bot_token and chat_id are read from here; they match the OpenClaw Telegram
+  # plugin configured in ~/.openclaw/openclaw.json.
+  enabled: true
+  bot_token: "8848705130:AAGWB3_gOmmLkv0_G6E8aSFiWb7oKc3WrtE"
+  chat_id: "REDACTED_CHAT_ID"
+  # Emoji prefix per event type (optional)
+  emoji_new_face: "👋"
+  emoji_returning: "👤"
+  emoji_named: "🏷️"

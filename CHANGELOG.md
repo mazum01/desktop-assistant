@@ -6,7 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.16.1] - 2026-05-18
+## [1.16.2] - 2026-05-20
+### Added
+- **Telegram face notifications**: Every face-activity audio output (new-face greeting, returning-face greeting, name assignment) is now also sent as a Telegram message to the configured chat. `FaceService` publishes a new `face.greeted` bus event whenever it speaks a greeting (new_face / returning / named). A new `TelegramService` subscribes to `face.greeted` (and a generic `telegram.send` topic) and forwards the text via the Telegram Bot API on a background thread. Config lives under `telegram:` in `config/assistant.yaml`. Emojis: 👋 new face, 👤 returning, 🏷️ named.
+
+
 ### Fixed
 - **Top-of-hour pause**: The time announcement and the dad joke no longer run together without a break. Added `av.silence` topic to `av_service.py` that enqueues a timed `time.sleep()` in the audio worker queue. `ClockAnnouncer` now accepts an optional `pause_fn` parameter; at the top of the hour it calls `say_fn(time_str)` → `pause_fn()` → `say_fn(joke)` instead of concatenating both into one utterance. `ClockService` wires a 1.5-second pause via `bus.publish("av.silence", {"duration": 1.5})`.
 
