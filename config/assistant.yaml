@@ -122,7 +122,9 @@ depth:
   # Produces normalised depth map (not absolute metres without stereo fusion).
   # Requires Hailo-8 accelerator.
   mono_enabled: false
-  mono_rate_hz: 5.0             # max inference rate
+  mono_rate_hz: 3.0             # max inference rate (SGBM + scdepthv3 share Hailo; keep ≤3)
+  mono_hef_path: /usr/local/hailo/resources/models/hailo8/scdepthv3.hef
+  # mono_scale_factor: null     # set a float to get approximate metric depth (inverse-depth units)
 
 object_detection:
   # YOLOv8s object classification on the Hailo-8.

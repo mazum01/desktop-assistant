@@ -46,6 +46,7 @@ PUT  /api/settings/camera/resolution  Set capture resolution  body: {"width": in
 GET  /api/settings/depth     Get depth estimation settings (dense_enabled, mono_enabled, calibrated)
 PUT  /api/settings/depth     Toggle depth at runtime  body: {"dense_enabled": bool, "mono_enabled": bool}
 GET  /api/depth/map          Colorized depth map JPEG (TURBO colormap) — requires dense_enabled
+GET  /api/depth/mono         Colorized mono depth map JPEG (TURBO colormap) — requires mono_enabled
 GET  /api/depth/query        Depth statistics: nearest/farthest/mean + per-face depths
 GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
@@ -177,6 +178,7 @@ class WebService:
         skills_service=None,
         perception_service=None,
         dense_stereo_service=None,
+        mono_depth_service=None,
     ) -> None:
         self.bus = bus
         self._host = host
@@ -192,6 +194,7 @@ class WebService:
         self._skills_svc = skills_service
         self._perception_svc = perception_service
         self._dense_stereo_svc = dense_stereo_service
+        self._mono_depth_svc = mono_depth_service
         self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
         self._thread: Optional[threading.Thread] = None
@@ -1118,11 +1121,16 @@ class WebService:
         @app.get("/api/settings/depth")
         async def api_get_depth_settings():
             last = self.bus.last("vision.depth_map") if self.bus else None
+            mono_last = self.bus.last("vision.mono_depth_map") if self.bus else None
             return JSONResponse({
                 "ok": True,
                 "dense_enabled": self._dense_stereo_svc is not None,
-                "mono_enabled": False,  # Phase 2 — placeholder
+                "mono_enabled": self._mono_depth_svc is not None,
                 "calibrated": last.get("calibrated", False) if last else False,
+                "mono_hardware_ready": mono_last.get("hardware_ready", False) if mono_last else (
+                    getattr(self._mono_depth_svc, "hardware_ready", False)
+                    if self._mono_depth_svc else False
+                ),
             })
 
         @app.put("/api/settings/depth")
@@ -1213,9 +1221,27 @@ class WebService:
                 })
             return JSONResponse(result)
 
+        @app.get("/api/depth/mono")
+        async def api_depth_mono():
+            import cv2 as _cv2
+            import numpy as _np
+            payload = None
+            if self._mono_depth_svc is not None:
+                payload = self._mono_depth_svc.latest_payload()
+            if payload is None and self.bus:
+                payload = self.bus.last("vision.mono_depth_map")
+            if payload is None:
+                raise HTTPException(503, "No mono depth map available — enable mono_depth in config")
+            depth_list = payload.get("depth_rel", [])
+            if not depth_list:
+                raise HTTPException(503, "Mono depth map empty")
+            arr = _np.array([[float(v) for v in row] for row in depth_list], dtype=_np.float32)
+            normed = (arr * 255).astype(_np.uint8)
+            colored = _cv2.applyColorMap(normed, _cv2.COLORMAP_TURBO)
+            _, jpg_buf = _cv2.imencode(".jpg", colored, [_cv2.IMWRITE_JPEG_QUALITY, 85])
+            return Response(content=jpg_buf.tobytes(), media_type="image/jpeg")
 
 
-        @app.get("/api/music/status")
         async def api_music_status():
             if not self._music_svc:
                 return {

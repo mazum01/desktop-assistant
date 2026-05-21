@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.19.0] - 2026-05-21
+### Added
+- **Hailo-8 monocular depth (Phase 2)**: `MonoDepthService` runs `scdepthv3.hef` on the Hailo-8 at up to 3 Hz on a single camera frame. Outputs a normalised relative depth map `[0,1]` published on `vision.mono_depth_map`. Optional `mono_scale_factor` config converts to approximate metres.
+- **Web API `GET /api/depth/mono`**: Colorized TURBO JPEG of the monocular depth map.
+- **`GET /api/settings/depth`**: Now reports `mono_enabled` and `mono_hardware_ready` accurately (was placeholder `false`).
+- **Config**: `mono_hef_path` and `mono_scale_factor` fields added to `config/assistant.yaml`.
+- **12 new tests** in `tests/test_mono_depth_service.py` (all passing).
+
 ## [1.18.1] - 2026-05-21
 ### Fixed
 - **Watchdog OpenClaw restart loop (again)**: `SuccessExitStatus=78` makes systemd treat the "already running" exit as clean, but the unit still shows `inactive (dead)` — causing `systemctl is-active` to return non-zero. The watchdog's systemd-active check short-circuited before the HTTP check, so it always saw OpenClaw as unhealthy and restarted every 5 minutes. Fixed by adding `require_systemd_active: bool = True` to `ManagedService` and setting it `False` for `openclaw-gateway.service`, so OpenClaw health is determined solely by its HTTP `/health` endpoint.

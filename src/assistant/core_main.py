@@ -28,6 +28,7 @@ from src.services.perception_service import PerceptionService, PerceptionConfig
 from src.services.raw_camera_service import RawCameraService, RawCameraConfig
 from src.services.stereo_service import StereoService, StereoConfig
 from src.services.dense_stereo_service import DenseStereoService, DenseStereoConfig
+from src.services.mono_depth_service import MonoDepthService
 from src.services.telemetry_service import TelemetryService
 from src.services.skills_service import SkillsService
 from src.services.tracking_service import TrackingService
@@ -362,6 +363,16 @@ def main() -> int:
         services.append(dense_stereo_svc)
     else:
         dense_stereo_svc = None
+    # Monocular depth service — Hailo-8 scdepthv3 single-camera depth
+    if _depth_cfg_raw.get("mono_enabled", False):
+        mono_depth_svc = MonoDepthService(
+            bus=bus,
+            vision_service=vis,
+            config={"depth": _depth_cfg_raw},
+        )
+        services.append(mono_depth_svc)
+    else:
+        mono_depth_svc = None
     tracking_svc = TrackingService(
         bus=bus, config=_tracker_cfg, enabled=_tracking_enabled,
         face_tracking_enabled=_face_tracking_enabled,
@@ -406,7 +417,8 @@ def main() -> int:
                              tracking_service=tracking_svc, music_service=music_svc,
                              camera2_service=cam2_svc, object_service=obj_svc,
                              skills_service=skills_svc, perception_service=perc_svc,
-                             dense_stereo_service=dense_stereo_svc)
+                             dense_stereo_service=dense_stereo_svc,
+                             mono_depth_service=mono_depth_svc)
         services.append(web_svc)
         web_svc._all_services = services  # seed service registry at startup
 
