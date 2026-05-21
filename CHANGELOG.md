@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.18.1] - 2026-05-21
+### Fixed
+- **Watchdog OpenClaw restart loop (again)**: `SuccessExitStatus=78` makes systemd treat the "already running" exit as clean, but the unit still shows `inactive (dead)` — causing `systemctl is-active` to return non-zero. The watchdog's systemd-active check short-circuited before the HTTP check, so it always saw OpenClaw as unhealthy and restarted every 5 minutes. Fixed by adding `require_systemd_active: bool = True` to `ManagedService` and setting it `False` for `openclaw-gateway.service`, so OpenClaw health is determined solely by its HTTP `/health` endpoint.
+
 ## [1.18.0] - 2026-05-21
 ### Added
 - **Dense stereo depth estimation (Phase 1)**: Per-pixel depth map for everything in view using OpenCV `StereoSGBM`. New `DenseStereoService` runs in background at up to 3 Hz, publishes `vision.depth_map` on the bus. Includes `StereoRectifier` (loads `config/stereo_cal.npz`) and `DenseStereoMatcher` (SGBM, converts disparity to metric depth). Degrades gracefully without calibration file.

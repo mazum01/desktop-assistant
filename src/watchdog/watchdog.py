@@ -96,6 +96,10 @@ class ManagedService:
     http_timeout_s: float = 5.0
     journal_stuck_pattern: Optional[str] = None  # grep in last-60s journal
     stuck_threshold: int = _DEFAULT_STUCK_THRESHOLD
+    # Set False for services that self-manage single-instance (e.g. openclaw exits
+    # 78 when a healthy instance is already running, so systemd shows "inactive").
+    # In that case only the HTTP check determines health.
+    require_systemd_active: bool = True
 
     # Runtime state — not part of config
     last_restart_ts: float = field(default=0.0, init=False, repr=False)
@@ -142,7 +146,7 @@ class ManagedService:
 
     def is_healthy(self) -> tuple[bool, str]:
         """Return (healthy, reason). reason is '' when healthy."""
-        if not self.is_systemd_active():
+        if self.require_systemd_active and not self.is_systemd_active():
             return False, "systemd unit inactive/failed"
         if not self.is_http_healthy():
             return False, f"HTTP health check failed ({self.http_check})"
@@ -289,6 +293,7 @@ def main() -> int:
             http_check="http://localhost:18789/health",
             journal_stuck_pattern="Bot not initialized",
             stuck_threshold=stuck_threshold,
+            require_systemd_active=False,  # exits 78 when healthy instance already runs
         ),
     ]
 
