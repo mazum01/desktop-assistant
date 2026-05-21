@@ -8,6 +8,7 @@ Endpoints
 GET  /                    Main dashboard HTML
 GET  /stream              MJPEG camera stream (from bus vision.jpeg_ready frames)
 WS   /ws                  Live JSON status + event tail (pushes every ~1 s)
+GET  /health                 Liveness check {"ok":true}
 GET  /api/status          One-shot status snapshot
 GET  /api/faces           List all known faces
 GET  /api/faces/{id}/thumb  Face thumbnail JPEG (64×64)
@@ -551,6 +552,10 @@ class WebService:
                     self._ws_clients.remove(ws)
 
         # ── REST: status ──────────────────────────────────────────────
+
+        @app.get("/health")
+        async def health():
+            return JSONResponse({"ok": True, "status": "live"})
 
         @app.get("/api/status")
         async def api_status():

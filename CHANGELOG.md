@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.17.2] - 2026-05-21
+### Fixed
+- **OpenClaw watchdog restart loop**: A stale `nohup`-launched OpenClaw process (PID from prior session) was holding port 18789, causing every systemd-managed instance to exit with code 78 (`EADDRINUSE`). Systemd treated exit 78 as a failure and restarted, which the watchdog then also saw as "failed" — creating a perpetual restart storm. Added `SuccessExitStatus=78` to `openclaw-gateway.service` so systemd treats exit 78 as a clean "already running" signal (as OpenClaw intends). Killed the stale rogue process; OpenClaw now runs as a single systemd-owned instance.
+
+---
+
+
+### Fixed
+- **Watchdog HTTP health check false failures**: The watchdog was checking `http://localhost:8080/api/status` for `{"ok": true}` but the status endpoint returns a full telemetry payload with no `ok` field — causing every check to fail and the core service to be restarted every 5 minutes. Added a dedicated `GET /health` endpoint to the web service that returns `{"ok": true, "status": "live"}` and updated the watchdog to check that URL instead.
+
+---
+
 ## [1.17.0] - 2026-05-21
 ### Added
 - **System health watchdog** (`src/watchdog/watchdog.py`): A new Python daemon that monitors all three critical services every 30 seconds and auto-restarts anything that fails or gets stuck. Checks include: systemctl unit state, HTTP health endpoint, and a journal scan for OpenClaw's "Bot not initialized" stuck-loop pattern. Each service has an independent 5-minute restart cooldown to prevent restart storms. Sends a Telegram notification (🩺) on every auto-fix.

@@ -5,7 +5,7 @@ stuck.  Sends a Telegram notification whenever it intervenes.
 
 Services monitored
 ------------------
-* desktop-assistant-core    — systemctl + HTTP ping (localhost:8080)
+* desktop-assistant-core    — systemctl + HTTP ping (localhost:8080/health)
 * desktop-assistant-thermal — systemctl only (no HTTP interface)
 * openclaw-gateway          — systemctl + HTTP ping (localhost:18789)
                               + journal scan for stuck "Bot not initialized" loop
@@ -282,7 +282,7 @@ def main() -> int:
         ),
         ManagedService(
             unit="desktop-assistant-core.service",
-            http_check="http://localhost:8080/api/status",
+            http_check="http://localhost:8080/health",
         ),
         ManagedService(
             unit="openclaw-gateway.service",

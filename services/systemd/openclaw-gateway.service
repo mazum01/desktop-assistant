@@ -20,6 +20,9 @@ Restart=on-failure
 RestartSec=5
 StartLimitIntervalSec=120
 StartLimitBurst=5
+# Exit 78 means another gateway instance is already running and healthy —
+# OpenClaw deliberately exits this way to prevent restart loops.
+SuccessExitStatus=78
 
 StandardOutput=journal
 StandardError=journal
