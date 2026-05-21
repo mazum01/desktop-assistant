@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.18.0] - 2026-05-21
+### Added
+- **Dense stereo depth estimation (Phase 1)**: Per-pixel depth map for everything in view using OpenCV `StereoSGBM`. New `DenseStereoService` runs in background at up to 3 Hz, publishes `vision.depth_map` on the bus. Includes `StereoRectifier` (loads `config/stereo_cal.npz`) and `DenseStereoMatcher` (SGBM, converts disparity to metric depth). Degrades gracefully without calibration file.
+- **Stereo calibration script**: `scripts/calibrate_stereo.py` — interactive tool to capture checkerboard pairs and compute stereo camera calibration.
+- **Web API depth endpoints**: `GET /api/depth/map` (colorized TURBO JPEG), `GET /api/depth/query` (stats + per-face depths JSON), `GET/PUT /api/settings/depth` (enable/disable at runtime).
+- **OpenClaw skill: `depth-query`**: Query nearest/farthest/mean scene depth and per-face distances. Installed to `~/.openclaw/workspace/skills/depth-query/`.
+- **OpenClaw skill: `depth-toggle`**: Enable or disable dense/mono depth estimation at runtime. Installed to `~/.openclaw/workspace/skills/depth-toggle/`.
+- **Internal skill: `DepthQuerySkill`** (`src/skills/depth_query_skill.py`): Matches spoken depth queries and dispatches to the depth service.
+- **Tests**: `tests/test_dense_stereo.py` — 14 tests covering `DenseStereoMatcher`, `StereoRectifier`, and `DenseStereoService`.
+- **Config**: `depth.dense_enabled`, `dense_rate_hz`, `dense_width`, `dense_height`, `num_disparities`, `block_size`, `mono_enabled`, `mono_rate_hz` added to `config/assistant.yaml`.
+
 ## [1.17.2] - 2026-05-21
 ### Fixed
 - **OpenClaw watchdog restart loop**: A stale `nohup`-launched OpenClaw process (PID from prior session) was holding port 18789, causing every systemd-managed instance to exit with code 78 (`EADDRINUSE`). Systemd treated exit 78 as a failure and restarted, which the watchdog then also saw as "failed" — creating a perpetual restart storm. Added `SuccessExitStatus=78` to `openclaw-gateway.service` so systemd treats exit 78 as a clean "already running" signal (as OpenClaw intends). Killed the stale rogue process; OpenClaw now runs as a single systemd-owned instance.

@@ -43,6 +43,10 @@ GET  /api/settings/camera2/rotation  Get camera 2 rotation angle
 PUT  /api/settings/camera2/rotation  Set camera 2 rotation  body: {"rotation_deg": int 0-359}
 GET  /api/settings/camera/resolution  Get current capture resolution (both cameras)
 PUT  /api/settings/camera/resolution  Set capture resolution  body: {"width": int, "height": int}
+GET  /api/settings/depth     Get depth estimation settings (dense_enabled, mono_enabled, calibrated)
+PUT  /api/settings/depth     Toggle depth at runtime  body: {"dense_enabled": bool, "mono_enabled": bool}
+GET  /api/depth/map          Colorized depth map JPEG (TURBO colormap) — requires dense_enabled
+GET  /api/depth/query        Depth statistics: nearest/farthest/mean + per-face depths
 GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
 """
@@ -172,6 +176,7 @@ class WebService:
         object_service=None,
         skills_service=None,
         perception_service=None,
+        dense_stereo_service=None,
     ) -> None:
         self.bus = bus
         self._host = host
@@ -186,6 +191,7 @@ class WebService:
         self._object_svc = object_service
         self._skills_svc = skills_service
         self._perception_svc = perception_service
+        self._dense_stereo_svc = dense_stereo_service
         self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
         self._thread: Optional[threading.Thread] = None
@@ -1107,7 +1113,107 @@ class WebService:
                                  {"width": body.width, "height": body.height})
             return {"ok": True, "width": body.width, "height": body.height}
 
-        # ── Music (Pandora/pianobar) ────────────────────────────────────
+        # ── Depth settings ──────────────────────────────────────────────
+
+        @app.get("/api/settings/depth")
+        async def api_get_depth_settings():
+            last = self.bus.last("vision.depth_map") if self.bus else None
+            return JSONResponse({
+                "ok": True,
+                "dense_enabled": self._dense_stereo_svc is not None,
+                "mono_enabled": False,  # Phase 2 — placeholder
+                "calibrated": last.get("calibrated", False) if last else False,
+            })
+
+        @app.put("/api/settings/depth")
+        async def api_put_depth_settings(body: dict):
+            if self.bus:
+                if "dense_enabled" in body:
+                    self.bus.publish("depth.set_dense_enabled", {"enabled": bool(body["dense_enabled"])})
+                if "mono_enabled" in body:
+                    self.bus.publish("depth.set_mono_enabled", {"enabled": bool(body["mono_enabled"])})
+            return {"ok": True}
+
+        # ── Depth query ─────────────────────────────────────────────────
+
+        @app.get("/api/depth/map")
+        async def api_depth_map():
+            import cv2 as _cv2
+            import numpy as _np
+            import io
+            payload = None
+            if self._dense_stereo_svc is not None:
+                payload = self._dense_stereo_svc.latest_payload()
+            if payload is None:
+                # Try bus last-value cache
+                payload = self.bus.last("vision.depth_map") if self.bus else None
+            if payload is None:
+                raise HTTPException(503, "No depth map available — enable dense_depth in config")
+            # Build colorized JPEG
+            depth_list = payload.get("depth_m", [])
+            if not depth_list:
+                raise HTTPException(503, "Depth map empty")
+            arr = _np.array(
+                [[0.0 if v is None else float(v) for v in row] for row in depth_list],
+                dtype=_np.float32,
+            )
+            min_d = float(payload.get("nearest_m") or 0.25)
+            max_d = float(payload.get("farthest_m") or 6.0)
+            if max_d <= min_d:
+                max_d = min_d + 1.0
+            normed = _np.clip((arr - min_d) / (max_d - min_d), 0.0, 1.0)
+            normed = (normed * 255).astype(_np.uint8)
+            colored = _cv2.applyColorMap(normed, _cv2.COLORMAP_TURBO)
+            _, jpg_buf = _cv2.imencode(".jpg", colored, [_cv2.IMWRITE_JPEG_QUALITY, 85])
+            return Response(content=jpg_buf.tobytes(), media_type="image/jpeg")
+
+        @app.get("/api/depth/query")
+        async def api_depth_query():
+            payload = None
+            if self._dense_stereo_svc is not None:
+                payload = self._dense_stereo_svc.latest_payload()
+            if payload is None and self.bus:
+                payload = self.bus.last("vision.depth_map")
+
+            # Per-face depths from stereo face service
+            face_depths: list = []
+            if self.bus:
+                fd = self.bus.last("vision.face_depth")
+                if fd:
+                    for f in fd.get("faces", []):
+                        face_depths.append({
+                            "face_id": f.get("face_id"),
+                            "name": f.get("name"),
+                            "depth_m": f.get("depth_m"),
+                            "method": f.get("method"),
+                        })
+
+            if payload is None and not face_depths:
+                return JSONResponse({"ok": False, "error": "No depth data available"}, status_code=503)
+
+            result: dict = {"ok": True, "face_depths": face_depths}
+            if payload:
+                result.update({
+                    "nearest_m": payload.get("nearest_m"),
+                    "farthest_m": payload.get("farthest_m"),
+                    "mean_m": payload.get("mean_m"),
+                    "valid_pct": payload.get("valid_pct"),
+                    "calibrated": payload.get("calibrated", False),
+                    "method": payload.get("method", "unknown"),
+                    "ts": payload.get("ts"),
+                })
+            else:
+                result.update({
+                    "nearest_m": min((f["depth_m"] for f in face_depths if f["depth_m"]), default=None),
+                    "farthest_m": max((f["depth_m"] for f in face_depths if f["depth_m"]), default=None),
+                    "mean_m": None,
+                    "calibrated": False,
+                    "method": "face_size",
+                    "ts": None,
+                })
+            return JSONResponse(result)
+
+
 
         @app.get("/api/music/status")
         async def api_music_status():

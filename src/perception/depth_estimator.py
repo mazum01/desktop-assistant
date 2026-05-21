@@ -1,6 +1,6 @@
 """Depth estimation utilities for the Desktop Assistant.
 
-Two methods are provided:
+Three methods are provided:
 
 1. **Face-size depth** — uses the known average frontal face width (~14.5 cm)
    combined with the camera focal length (derived from FOV + frame width) to
@@ -9,12 +9,18 @@ Two methods are provided:
 
    Z = (focal_px × face_width_m) / bbox_width_px
 
-2. **Stereo disparity depth** — uses the horizontal displacement of a matched
-   feature (face centroid or template) between two horizontally-offset cameras.
+2. **Sparse stereo disparity depth** — uses the horizontal displacement of a
+   matched feature (face centroid or template) between two horizontally-offset
+   cameras.  Implemented by ``StereoFaceMatcher``.
 
    Z = (focal_px × baseline_m) / |disparity_px|
 
-Both methods return depth in metres.  The caller is responsible for combining
+3. **Dense stereo disparity (SGBM)** — runs OpenCV ``StereoSGBM`` on the full
+   frame pair to produce a per-pixel depth map.  Optionally uses a calibration
+   file (``config/stereo_cal.npz``) to produce metric depths in metres via the
+   disparity-to-depth matrix Q.  Implemented by ``DenseStereoMatcher``.
+
+All methods return depth in metres.  The caller is responsible for combining
 or selecting between them.
 
 3D localisation:
@@ -181,3 +187,139 @@ class StereoFaceMatcher:
         if not (self._min_depth_m <= depth <= self._max_depth_m):
             return None
         return depth
+
+
+# ---------------------------------------------------------------------------
+# Dense stereo (SGBM)
+# ---------------------------------------------------------------------------
+
+class DenseStereoMatcher:
+    """Per-pixel depth map from a rectified stereo frame pair using SGBM.
+
+    When a calibration Q matrix is available (passed in or loaded from
+    ``config/stereo_cal.npz``), depths are in absolute metres.  Without
+    calibration, the output is a normalised inverse-depth map scaled so that
+    the minimum meaningful disparity maps to approximately ``max_depth_m``.
+
+    Parameters
+    ----------
+    Q:
+        4×4 disparity-to-depth matrix from ``cv2.stereoRectify``.  Pass *None*
+        to use the uncalibrated fallback (results are relative, not metric).
+    focal_px, baseline_m:
+        Used only in uncalibrated mode to compute approximate metric depths.
+    proc_width, proc_height:
+        Resolution to process at.  Frames are resized to this before SGBM.
+        640×480 is a good default for Pi 5 real-time use.
+    num_disparities:
+        Must be divisible by 16.  Larger values find farther objects but cost
+        more CPU.  128 → covers objects from ~0.3 m to ~4 m at 56 mm baseline.
+    block_size:
+        Matched block size (odd number 3–11).  Larger = smoother but less
+        detail.
+    min_depth_m, max_depth_m:
+        Depth values outside this range are set to NaN in the output.
+    """
+
+    def __init__(
+        self,
+        Q: Optional[np.ndarray] = None,
+        focal_px: float = 800.0,
+        baseline_m: float = 0.056,
+        proc_width: int = 640,
+        proc_height: int = 480,
+        num_disparities: int = 128,
+        block_size: int = 5,
+        min_depth_m: float = 0.25,
+        max_depth_m: float = 6.0,
+    ) -> None:
+        self._Q = Q
+        self._focal_px = focal_px
+        self._baseline_m = baseline_m
+        self._proc_w = proc_width
+        self._proc_h = proc_height
+        self._min_d = min_depth_m
+        self._max_d = max_depth_m
+
+        # Ensure num_disparities is a positive multiple of 16
+        num_disparities = max(16, (num_disparities // 16) * 16)
+
+        self._sgbm = cv2.StereoSGBM_create(
+            minDisparity=0,
+            numDisparities=num_disparities,
+            blockSize=block_size,
+            P1=8 * 3 * block_size ** 2,
+            P2=32 * 3 * block_size ** 2,
+            disp12MaxDiff=1,
+            uniquenessRatio=10,
+            speckleWindowSize=100,
+            speckleRange=32,
+            preFilterCap=63,
+            mode=cv2.STEREO_SGBM_MODE_SGBM_3WAY,
+        )
+
+    def compute(
+        self,
+        frame1: np.ndarray,
+        frame2: np.ndarray,
+    ) -> np.ndarray:
+        """Compute a per-pixel depth map from a rectified stereo pair.
+
+        Parameters
+        ----------
+        frame1, frame2:
+            BGR or grayscale frames from cam1 and cam2.  Should be rectified
+            (passed through ``StereoRectifier.rectify``) for best results.
+
+        Returns
+        -------
+        depth_m : np.ndarray, shape (H, W), dtype float32
+            Per-pixel depth in metres.  Invalid/occluded pixels are NaN.
+            H × W match ``proc_height`` × ``proc_width``.
+        """
+        def _prep(frame: np.ndarray) -> np.ndarray:
+            if frame.ndim == 3:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            if (frame.shape[1], frame.shape[0]) != (self._proc_w, self._proc_h):
+                frame = cv2.resize(frame, (self._proc_w, self._proc_h),
+                                   interpolation=cv2.INTER_AREA)
+            return frame
+
+        g1 = _prep(frame1)
+        g2 = _prep(frame2)
+
+        # SGBM disparity (fixed-point ×16)
+        disp16 = self._sgbm.compute(g1, g2).astype(np.float32)
+        disp = disp16 / 16.0
+
+        # Mask invalid disparities (SGBM fills with minDisparity - 1 = -1)
+        valid = disp > 0.5
+
+        if self._Q is not None:
+            # Metric depth via calibration Q matrix
+            disp_full = np.zeros_like(disp)
+            disp_full[valid] = disp[valid]
+            points = cv2.reprojectImageTo3D(disp_full, self._Q)
+            depth_m = points[:, :, 2].copy()
+            depth_m[~valid] = np.nan
+        else:
+            # Uncalibrated fallback: Z = focal × baseline / disparity
+            depth_m = np.full_like(disp, np.nan)
+            depth_m[valid] = (self._focal_px * self._baseline_m) / disp[valid]
+
+        # Clamp to configured range
+        depth_m[(depth_m < self._min_d) | (depth_m > self._max_d)] = np.nan
+        return depth_m
+
+    def summary(self, depth_m: np.ndarray) -> dict:
+        """Return scalar statistics from a depth map for bus publishing or logging."""
+        valid = depth_m[~np.isnan(depth_m)]
+        if valid.size == 0:
+            return {"nearest_m": None, "farthest_m": None, "mean_m": None, "valid_pct": 0.0}
+        return {
+            "nearest_m": round(float(np.nanmin(depth_m)), 3),
+            "farthest_m": round(float(np.nanmax(depth_m)), 3),
+            "mean_m": round(float(np.nanmean(depth_m)), 3),
+            "valid_pct": round(float(valid.size / depth_m.size * 100), 1),
+        }
+

@@ -27,6 +27,7 @@ from src.services.object_service import ObjectService, ObjectConfig
 from src.services.perception_service import PerceptionService, PerceptionConfig
 from src.services.raw_camera_service import RawCameraService, RawCameraConfig
 from src.services.stereo_service import StereoService, StereoConfig
+from src.services.dense_stereo_service import DenseStereoService, DenseStereoConfig
 from src.services.telemetry_service import TelemetryService
 from src.services.skills_service import SkillsService
 from src.services.tracking_service import TrackingService
@@ -340,6 +341,27 @@ def main() -> int:
             ),
         )
         services.append(stereo_svc)
+    # Dense stereo depth service — StereoSGBM per-pixel depth map
+    if cam2_svc is not None and _depth_cfg_raw.get("dense_enabled", False):
+        dense_stereo_svc = DenseStereoService(
+            bus=bus,
+            vision_service=vis,
+            cam2_service=cam2_svc,
+            config=DenseStereoConfig(
+                rate_hz=float(_depth_cfg_raw.get("dense_rate_hz", 3.0)),
+                proc_width=int(_depth_cfg_raw.get("dense_width", 640)),
+                proc_height=int(_depth_cfg_raw.get("dense_height", 480)),
+                num_disparities=int(_depth_cfg_raw.get("num_disparities", 128)),
+                block_size=int(_depth_cfg_raw.get("block_size", 5)),
+                min_depth_m=float(_depth_cfg_raw.get("min_depth_m", 0.25)),
+                max_depth_m=float(_depth_cfg_raw.get("max_depth_m", 6.0)),
+                baseline_mm=float(_depth_cfg_raw.get("baseline_mm", 56.0)),
+                fov_degrees=float(_ht_cfg_raw.get("fov_degrees", 100.0)),
+            ),
+        )
+        services.append(dense_stereo_svc)
+    else:
+        dense_stereo_svc = None
     tracking_svc = TrackingService(
         bus=bus, config=_tracker_cfg, enabled=_tracking_enabled,
         face_tracking_enabled=_face_tracking_enabled,
@@ -383,7 +405,8 @@ def main() -> int:
                              quiet_hours=_qh, motion_service=motion_svc,
                              tracking_service=tracking_svc, music_service=music_svc,
                              camera2_service=cam2_svc, object_service=obj_svc,
-                             skills_service=skills_svc, perception_service=perc_svc)
+                             skills_service=skills_svc, perception_service=perc_svc,
+                             dense_stereo_service=dense_stereo_svc)
         services.append(web_svc)
         web_svc._all_services = services  # seed service registry at startup
 

@@ -108,6 +108,22 @@ depth:
   min_depth_m: 0.25             # reject depth estimates below this threshold
   max_depth_m: 6.0              # reject depth estimates above this threshold
 
+  # Dense stereo (StereoSGBM) — per-pixel depth map for everything in view.
+  # Enable after running: python3 scripts/calibrate_stereo.py
+  # Without calibration, depths are approximate (no epipolar rectification).
+  dense_enabled: false
+  dense_rate_hz: 3.0            # max processing rate (Pi 5 can sustain ~3 Hz at 640×480)
+  dense_width: 640              # processing resolution (downsampled from capture res)
+  dense_height: 480
+  num_disparities: 128          # must be multiple of 16; larger = farther range but slower
+  block_size: 5                 # SGBM block size (odd, 3–11); larger = smoother
+
+  # Monocular neural depth (Hailo-8 scdepthv3) — single-camera relative depth.
+  # Produces normalised depth map (not absolute metres without stereo fusion).
+  # Requires Hailo-8 accelerator.
+  mono_enabled: false
+  mono_rate_hz: 5.0             # max inference rate
+
 object_detection:
   # YOLOv8s object classification on the Hailo-8.
   # Detects 80 COCO classes (person, laptop, cup, etc.) at ~2 fps.
