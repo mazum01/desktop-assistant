@@ -1,0 +1,31 @@
+[Unit]
+Description=Desktop Assistant — system health watchdog
+Documentation=https://github.com/mazum01/desktop-assistant
+After=network.target desktop-assistant-core.service openclaw-gateway.service
+Wants=desktop-assistant-core.service openclaw-gateway.service
+
+[Service]
+Type=simple
+User=starter
+Group=starter
+WorkingDirectory=/home/starter/Code/Desktop Assistant
+Environment=PYTHONUNBUFFERED=1
+Environment="PYTHONPATH=/home/starter/Code/Desktop Assistant"
+
+ExecStart=/usr/bin/python3 -m src.watchdog.watchdog
+
+# Watchdog must always be running — restart immediately on any exit
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=false
+ProtectSystem=strict
+ProtectHome=false
+PrivateTmp=false
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=multi-user.target

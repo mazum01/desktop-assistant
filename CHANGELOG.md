@@ -6,7 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.16.2] - 2026-05-20
+## [1.17.0] - 2026-05-21
+### Added
+- **System health watchdog** (`src/watchdog/watchdog.py`): A new Python daemon that monitors all three critical services every 30 seconds and auto-restarts anything that fails or gets stuck. Checks include: systemctl unit state, HTTP health endpoint, and a journal scan for OpenClaw's "Bot not initialized" stuck-loop pattern. Each service has an independent 5-minute restart cooldown to prevent restart storms. Sends a Telegram notification (🩺) on every auto-fix.
+- **`openclaw-gateway.service`** systemd unit: OpenClaw is now a proper supervised systemd service (`Restart=on-failure`) instead of a bare `nohup` background process. Auto-starts on boot, auto-restarts on crash.
+- **`desktop-assistant-watchdog.service`** systemd unit: Watchdog runs as a supervised service (`Restart=always`) so the watchdog itself is also self-healing.
+- Both new units are enabled and running. Config under `watchdog:` in `config/assistant.yaml`.
+
+
 ### Added
 - **Telegram face notifications**: Every face-activity audio output (new-face greeting, returning-face greeting, name assignment) is now also sent as a Telegram message to the configured chat. `FaceService` publishes a new `face.greeted` bus event whenever it speaks a greeting (new_face / returning / named). A new `TelegramService` subscribes to `face.greeted` (and a generic `telegram.send` topic) and forwards the text via the Telegram Bot API on a background thread. Config lives under `telegram:` in `config/assistant.yaml`. Emojis: 👋 new face, 👤 returning, 🏷️ named.
 
