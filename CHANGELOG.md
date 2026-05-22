@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.20.2] - 2026-05-22
+### Fixed
+- **telegram-chime: 409 Conflict / OpenClaw ingress crash** — rewrote `telegram-chime` to watch the OpenClaw update-offset file (`~/.openclaw/telegram/update-offset-default.json`) via `pyinotify` instead of calling `getUpdates` directly. Two simultaneous `getUpdates` pollers on the same bot token caused Telegram 409 Conflict errors every ~5 minutes, which killed OpenClaw's isolated polling ingress (exit code 1) and stopped all Telegram→Claude replies. The new implementation has zero Telegram API calls and plays the chime the moment OpenClaw advances its offset file.
+
 ## [1.20.1] - 2026-05-22
 ### Fixed
 - **Watchdog: Telegram polling-stall guard** — added `max_uptime_min` field to `ManagedService`; the watchdog now force-restarts `openclaw-gateway.service` after it has been running for ≥ 90 minutes (configurable via `watchdog.openclaw_max_uptime_min` in `config/assistant.yaml`). This resolves a recurring OpenClaw bug where the Telegram polling ingress silently dies after a long agentic session (multi-minute Claude tool calls), leaving the bot unable to receive new messages until manually restarted.
