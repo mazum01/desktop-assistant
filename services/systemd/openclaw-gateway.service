@@ -13,6 +13,8 @@ User=starter
 Group=starter
 WorkingDirectory=/home/starter
 Environment=HOME=/home/starter
+# API keys are stored outside the repo so they are never committed.
+EnvironmentFile=/home/starter/.openclaw/api-keys.env
 
 # Use the nvm-managed node that OpenClaw was installed into
 ExecStart=/home/starter/.nvm/versions/node/v24.15.0/bin/node \

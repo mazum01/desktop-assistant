@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.20.6] - 2026-05-22
+### Fixed
+- **OpenClaw → Telegram "No API key found for provider anthropic"** — the systemd service had no access to `ANTHROPIC_API_KEY`. The key was only set in interactive shell sessions during initial setup and was never persisted to any file the service could read. Added `EnvironmentFile=/home/starter/.openclaw/api-keys.env` to `openclaw-gateway.service`; that file (mode 600, outside the repo) holds the Anthropic API key so it is injected into every systemd-managed gateway process on startup.
+
 ## [1.20.5] - 2026-05-22
 ### Fixed
 - **OpenClaw → Telegram feed stalls (the real "finally fix it")** — three coupled bugs that together neutralised the 1.20.1 polling-stall guard:
