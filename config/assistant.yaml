@@ -186,7 +186,7 @@ telegram:
 watchdog:
   # System health watchdog — monitors all critical services and auto-restarts
   # anything that goes down or gets stuck. Notifies via Telegram.
-  enabled: true
+  enabled: false
   check_interval_s: 30          # how often to poll each service
   restart_cooldown_min: 5       # minimum minutes between restarts of same service
   telegram_notify: true         # send Telegram message on every auto-fix

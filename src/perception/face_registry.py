@@ -157,6 +157,10 @@ class FaceRegistry:
         self._emb_names = []
         self._emb_row_ids = []
 
+    def reload(self) -> None:
+        """Invalidate the in-memory embedding cache so it is rebuilt from the DB on the next match."""
+        self._invalidate_emb_cache()
+
     def _append_to_cache(
         self, row_id: str, face_id: str, name: str, embedding: np.ndarray
     ) -> None:

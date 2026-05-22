@@ -220,12 +220,9 @@ class ClockAnnouncer:
     Fires spoken time announcements at :00 and :30 of every hour.
 
     Args:
-        say_fn:    Callable that accepts a text string and speaks it.
-        pause_fn:  Optional callable invoked between the time announcement and
-                   the joke at the top of the hour. If None a simple
-                   time.sleep(1.5) is used as a fallback.
-        enabled:   Set False to start in silent mode; toggle at runtime via
-                   `announcer.enabled = True/False`.
+        say_fn:   Callable that accepts a text string and speaks it.
+        enabled:  Set False to start in silent mode; toggle at runtime via
+                  `announcer.enabled = True/False`.
     """
 
     def __init__(
@@ -233,10 +230,8 @@ class ClockAnnouncer:
         say_fn: Callable[[str], None],
         enabled: bool = True,
         is_quiet_fn: Optional[Callable[[], bool]] = None,
-        pause_fn: Optional[Callable[[], None]] = None,
     ) -> None:
         self._say = say_fn
-        self._pause = pause_fn or (lambda: time.sleep(1.5))
         self.enabled = enabled
         self._is_quiet = is_quiet_fn or (lambda: False)
         self._thread: Optional[threading.Thread] = None
@@ -311,17 +306,14 @@ class ClockAnnouncer:
 
         if dt.minute == 0:
             joke = _pick_joke()
-            try:
-                self._say(time_str)
-                self._pause()
-                self._say(joke)
-            except Exception:
-                log.exception("ClockAnnouncer: say_fn raised")
+            text = f"{time_str} {joke}"
         else:
-            try:
-                self._say(time_str)
-            except Exception:
-                log.exception("ClockAnnouncer: say_fn raised")
+            text = time_str
+
+        try:
+            self._say(text)
+        except Exception:
+            log.exception("ClockAnnouncer: say_fn raised")
 
     def announce_time_now(self) -> None:
         """Speak the current time immediately (no joke), using 'The time is …'."""

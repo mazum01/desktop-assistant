@@ -17,6 +17,7 @@ PUT  /api/faces/{id}      Rename a face  body: {"name": "Alice"}
 DEL  /api/faces           Delete ALL faces
 DEL  /api/faces/guests    Delete only Guest-named faces
 POST /api/faces/merge     Merge two faces  body: {"keep_id": "...", "absorb_id": "..."}
+POST /api/faces/refresh   Reload embedding cache + reset tracking state (re-identify all faces)
 DEL  /api/faces/{id}      Delete a face and all its embeddings
 POST /api/faces/{id}/train  Capture current frame and add embedding/thumbnail to face
 POST /api/say             Speak text   body: {"text": "hello"}
@@ -633,6 +634,13 @@ class WebService:
             if self.bus:
                 self.bus.publish("face.merged", {"keep_id": body.keep_id, "absorb_id": body.absorb_id})
             return {"ok": True}
+
+        @app.post("/api/faces/refresh")
+        async def api_refresh_faces():
+            if self.bus:
+                self.bus.publish("face.refresh", {})
+            faces = self._registry.list_faces() if self._registry else []
+            return {"ok": True, "count": len(faces)}
 
         # ── Quiet-hours settings ───────────────────────────────────────
 

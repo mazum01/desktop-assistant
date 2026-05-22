@@ -499,6 +499,21 @@ def cmd_forget_guests(_args) -> int:
     return 0
 
 
+def cmd_refresh_faces(_args) -> int:
+    """Reload face embedding cache and reset tracking state so faces are re-identified."""
+    r = _request({"cmd": "publish", "topic": "face.refresh", "payload": {}})
+    if r.get("ok"):
+        print("Face embedding cache reloaded — faces will be re-identified on next frame.")
+    else:
+        print(f"Warning: daemon publish failed ({r.get('error', '?')}); reloading cache locally.")
+        from src.perception.face_registry import FaceRegistry
+        reg = FaceRegistry()
+        reg.reload()
+        reg.close()
+        print("Cache reloaded locally.")
+    return 0
+
+
 def cmd_list_faces(_args) -> int:
     from src.perception.face_registry import FaceRegistry
     reg = FaceRegistry()
@@ -940,6 +955,7 @@ def cmd_help(args) -> int:
         "face":             "Face registry and greeting management. Sub-commands:\n"
                             "                  face meet \"<Name>\"      Name the most recently seen face.\n"
                             "                  face list               List faces with IDs and last-seen times.\n"
+                            "                  face refresh            Reload embedding cache; re-identify all faces.\n"
                             "                  face forget-all         Delete ALL faces permanently.\n"
                             "                  face forget-guests      Remove unnamed Guest entries.\n"
                             "                  face merge <keep> <absorb>  Merge two face identities.\n"
@@ -1546,6 +1562,7 @@ def main() -> int:
     ssp.set_defaults(func=cmd_meet)
 
     face_sub.add_parser("list", help="List all faces with IDs, names, and last-seen times").set_defaults(func=cmd_list_faces)
+    face_sub.add_parser("refresh", help="Reload embedding cache and re-identify all faces").set_defaults(func=cmd_refresh_faces)
     face_sub.add_parser("forget-all", help="Delete ALL known faces from the registry permanently").set_defaults(func=cmd_forget_faces)
     face_sub.add_parser("forget-guests", help="Delete only Guest-named faces, keeping named identities").set_defaults(func=cmd_forget_guests)
 

@@ -295,6 +295,13 @@ async function loadFaces() {
   }
 }
 
+async function refreshFaces() {
+  try {
+    await fetch("/api/faces/refresh", { method: "POST" });
+  } catch (_) {}
+  await loadFaces();
+}
+
 function makeFaceRow(face) {
   const tr = document.createElement("tr");
   tr.dataset.faceId = face.id;

@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.20.4] - 2026-05-22
+### Added
+- **Face refresh** across all interaction channels — `POST /api/faces/refresh` web API endpoint; "↺ Re-identify" button in web GUI; `da face refresh` CLI subcommand; OpenClaw `faces` skill (`list`, `status`, `refresh` commands). Reloads the `FaceRegistry` embedding cache and resets `FaceService` tracking state so all faces are re-identified on the next camera frame.
+
 ## [1.20.3] - 2026-05-22
 ### Fixed
 - **Web GUI: Pandora `/api/music/status` returning 404** — the route handler function existed but was missing its `@app.get("/api/music/status")` decorator, so FastAPI never registered the endpoint. Music card in the web UI now loads correctly.

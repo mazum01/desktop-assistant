@@ -170,6 +170,7 @@ class FaceService(Service):
         self._unsubs.append(self.bus.subscribe("face.deleted", self._on_face_deleted))
         self._unsubs.append(self.bus.subscribe("face.guests_cleared", self._on_faces_cleared))
         self._unsubs.append(self.bus.subscribe("face.registry_cleared", self._on_faces_cleared))
+        self._unsubs.append(self.bus.subscribe("face.refresh", self._on_face_refresh))
         log.info(
             "FaceService started (cooldown=%.0f min ±%.0f%%, min_absence=%.0f s)",
             self._cooldown_min, self._jitter_pct, self._min_absence_s,
@@ -234,6 +235,15 @@ class FaceService(Service):
             self._prev_face_ids.clear()
             self._absent_counter.clear()
         log.debug("FaceService: in-memory state purged on bulk face delete")
+
+    def _on_face_refresh(self, _topic, _payload) -> None:
+        """Reload the embedding cache from DB and reset tracking state so faces are re-identified."""
+        if self._registry is not None:
+            self._registry.reload()
+        self._greeted_new_ids.clear()
+        self._prev_face_ids.clear()
+        self._absent_counter.clear()
+        log.info("FaceService: embedding cache reloaded and tracking state reset")
 
     def _on_faces(self, _topic, payload) -> None:
         if not isinstance(payload, dict):
@@ -314,9 +324,6 @@ class FaceService(Service):
         text = f"Nice to meet you, {given_name}! I'll remember you."
         log.info("Named face %s: %r → %r", face_id[:8], old_name, given_name)
         self.bus.publish("av.say", {"text": text})
-        self.bus.publish("face.greeted", {
-            "face_id": face_id, "name": given_name, "text": text, "event_type": "named",
-        })
 
     # ── Greeting helpers ─────────────────────────────────────────────────
 
@@ -331,9 +338,6 @@ class FaceService(Service):
         phrase = random.choice(_NEW_FACE_PHRASES)
         log.info("Greeting new face %s (%s)", face_id[:8], name)
         self.bus.publish("av.say", {"text": phrase})
-        self.bus.publish("face.greeted", {
-            "face_id": face_id, "name": name, "text": phrase, "event_type": "new_face",
-        })
 
     def _greet_returning(self, face_id: str, name: str) -> None:
         if self._quiet_hours and self._quiet_hours.is_quiet():
@@ -343,9 +347,6 @@ class FaceService(Service):
         phrase = self._pick_phrase(name)
         log.info("Re-greeting %s (%s): %r", face_id[:8], name, phrase)
         self.bus.publish("av.say", {"text": phrase})
-        self.bus.publish("face.greeted", {
-            "face_id": face_id, "name": name, "text": phrase, "event_type": "returning",
-        })
 
     def _pick_phrase(self, name: str) -> str:
         """Pick a time-aware varied greeting, avoiding immediate repeats."""

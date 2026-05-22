@@ -1,9 +1,10 @@
 ---
 name: power
 description: >
-  Reboot or shut down the desktop assistant's Raspberry Pi. Requires a
-  confirmation step before executing. Use for "reboot", "restart the Pi",
-  "shut down", "power off", "turn off the assistant".
+  Reboot or shut down the desktop assistant's Raspberry Pi. IMPORTANT: always
+  ask the user for explicit confirmation in the conversation before invoking
+  this skill. Use for "reboot", "restart the Pi", "shut down", "power off",
+  "turn off the assistant".
 metadata:
   openclaw:
     os: ["linux"]
@@ -15,43 +16,38 @@ metadata:
 
 Reboot or shut down the Raspberry Pi that runs the desktop assistant.
 
-**A confirmation prompt is always required before any power action is taken.**
+## ⚠️ Mandatory confirmation
 
-## When to use
-
-- "Reboot the Pi" / "Restart the system"
-- "Shut down" / "Power off" / "Turn off"
+**Always ask the user to confirm before running this skill.**
+Say something like: "Are you sure you want to reboot/shut down the assistant?
+This will interrupt all activity." Only invoke the script after the user says
+yes.
 
 ## Commands
 
-| Command    | Description                                 |
-|------------|---------------------------------------------|
-| `reboot`   | Reboot the Raspberry Pi (prompts to confirm)|
-| `shutdown` | Shut down the Raspberry Pi (prompts to confirm)|
+| Command    | Description                      |
+|------------|----------------------------------|
+| `reboot`   | Reboot the Raspberry Pi          |
+| `shutdown` | Shut down the Raspberry Pi       |
 
 ## How to invoke
 
-```bash
-python3 ~/.openclaw/workspace/skills/power/power.py <command> --confirm
-```
+After the user confirms, use the `exec` tool to run:
 
-The `--confirm` flag is required. Without it the skill prints instructions and
-exits without doing anything, giving the AI agent a chance to confirm with the
-user first.
+```bash
+python3 ~/.openclaw/workspace/skills/power/power.py <command>
+```
 
 Examples:
 ```bash
-python3 ~/.openclaw/workspace/skills/power/power.py reboot --confirm
-python3 ~/.openclaw/workspace/skills/power/power.py shutdown --confirm
+python3 ~/.openclaw/workspace/skills/power/power.py reboot
+python3 ~/.openclaw/workspace/skills/power/power.py shutdown
 ```
-
-**AI agent workflow:**
-1. User asks to reboot/shutdown.
-2. Agent calls the skill **without** `--confirm` first — skill returns `{"ok": false, "needs_confirm": true, "message": "..."}`.
-3. Agent asks the user: "Are you sure you want to reboot/shutdown the assistant?"
-4. Only if user confirms, agent calls skill again **with** `--confirm`.
 
 On success prints JSON:
 ```json
 {"ok": true, "action": "reboot", "message": "Rebooting system…"}
 ```
+
+After running, inform the user that the Pi is rebooting/shutting down and the
+assistant will be offline for about 30–60 seconds.

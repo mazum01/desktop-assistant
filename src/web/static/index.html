@@ -164,7 +164,7 @@
           </tbody>
         </table>
         <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-          <button class="btn btn-secondary" onclick="loadFaces()">↺ Refresh</button>
+          <button class="btn btn-secondary" onclick="refreshFaces()" title="Reload embedding cache and re-identify all faces">↺ Re-identify</button>
           <button class="btn btn-primary btn-sm" id="merge-btn" onclick="mergeFaces()" disabled title="Select exactly two faces to merge">⛓ Merge Selected</button>
           <span id="merge-hint" style="font-size:12px;color:var(--muted)">Select 2 faces to merge</span>
         </div>

@@ -84,7 +84,6 @@ class AVService(Service):
         self._unsubs.append(self.bus.subscribe("av.beep", self._on_beep))
         self._unsubs.append(self.bus.subscribe("av.chime", self._on_chime))
         self._unsubs.append(self.bus.subscribe("av.utterance", self._on_utterance))
-        self._unsubs.append(self.bus.subscribe("av.silence", self._on_silence))
         self._unsubs.append(
             self.bus.subscribe("av.announce_version", self._on_announce_version)
         )
@@ -225,12 +224,6 @@ class AVService(Service):
                 if k in payload:
                     kwargs[k] = float(payload[k])
         self._enqueue(lambda kw=kwargs: self._do_chime(kw), label="chime")
-
-    def _on_silence(self, _topic, payload) -> None:
-        """Insert a timed silence into the audio queue."""
-        duration = float((payload or {}).get("duration", 1.0)) if isinstance(payload, dict) else 1.0
-        duration = max(0.0, min(duration, 30.0))
-        self._enqueue(lambda d=duration: time.sleep(d), label=f"silence:{duration:.1f}s")
 
     def _on_utterance(self, _topic, payload) -> None:
         text = (payload or {}).get("text", "") if isinstance(payload, dict) else ""

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reboot or shut down the Raspberry Pi with a mandatory confirmation flag."""
+"""Reboot or shut down the Raspberry Pi."""
 
 import json
 import sys
@@ -21,28 +21,13 @@ def _post(path: str) -> dict:
 
 
 def main():
-    args = sys.argv[1:]
-    confirmed = "--confirm" in args
-    action = next((a for a in args if a in COMMANDS), None)
-
-    if action is None:
+    action = sys.argv[1] if len(sys.argv) > 1 else None
+    if action not in COMMANDS:
         print(json.dumps({
             "ok": False,
-            "error": f"Usage: power.py <action> [--confirm]\nActions: {', '.join(COMMANDS)}"
+            "error": f"Usage: power.py <action>\nActions: {', '.join(COMMANDS)}"
         }))
         sys.exit(1)
-
-    if not confirmed:
-        verb = "reboot" if action == "reboot" else "shut down"
-        print(json.dumps({
-            "ok": False,
-            "needs_confirm": True,
-            "message": (
-                f"This will {verb} the Raspberry Pi. "
-                f"Please confirm by calling: power.py {action} --confirm"
-            ),
-        }))
-        sys.exit(0)
 
     api_path = "/api/system/reboot" if action == "reboot" else "/api/system/shutdown"
     try:
@@ -59,3 +44,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
