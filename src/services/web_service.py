@@ -1258,6 +1258,7 @@ class WebService:
             return Response(content=jpg_buf.tobytes(), media_type="image/jpeg")
 
 
+        @app.get("/api/music/status")
         async def api_music_status():
             if not self._music_svc:
                 return {

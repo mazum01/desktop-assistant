@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.20.3] - 2026-05-22
+### Fixed
+- **Web GUI: Pandora `/api/music/status` returning 404** — the route handler function existed but was missing its `@app.get("/api/music/status")` decorator, so FastAPI never registered the endpoint. Music card in the web UI now loads correctly.
+
 ## [1.20.2] - 2026-05-22
 ### Fixed
 - **telegram-chime: 409 Conflict / OpenClaw ingress crash** — rewrote `telegram-chime` to watch the OpenClaw update-offset file (`~/.openclaw/telegram/update-offset-default.json`) via `pyinotify` instead of calling `getUpdates` directly. Two simultaneous `getUpdates` pollers on the same bot token caused Telegram 409 Conflict errors every ~5 minutes, which killed OpenClaw's isolated polling ingress (exit code 1) and stopped all Telegram→Claude replies. The new implementation has zero Telegram API calls and plays the chime the moment OpenClaw advances its offset file.
