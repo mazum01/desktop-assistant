@@ -391,6 +391,96 @@ def cmd_time(_args) -> int:
     return 0 if r.get("ok") else 1
 
 
+# ── Depth estimation subcommands ──────────────────────────────────────────────
+
+def cmd_depth(args) -> int:
+    """Status, toggle, or query depth estimation."""
+    action = getattr(args, "depth_action", "status")
+
+    if action == "status":
+        try:
+            d = _http_get("/api/settings/depth")
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        dense_en  = d.get("dense_enabled", False)
+        mono_en   = d.get("mono_enabled", False)
+        cal       = d.get("calibrated", False)
+        mono_hw   = d.get("mono_hardware_ready", False)
+        on  = "\033[32menabled\033[0m"
+        off = "\033[33mdisabled\033[0m"
+        ok  = "\033[32m✓\033[0m"
+        no  = "\033[31m✗\033[0m"
+        print()
+        print("  Depth Estimation")
+        print(f"    Dense stereo : {on if dense_en else off}  (calibrated: {ok if cal else no})")
+        print(f"    Mono (Hailo) : {on if mono_en else off}  (hardware ready: {ok if mono_hw else no})")
+        print()
+        return 0
+
+    if action == "query":
+        try:
+            d = _http_get("/api/depth/query")
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        src = d.get("source", "unknown")
+        print()
+        print(f"  Depth Query  [{src}]")
+        print(f"    Nearest   : {d.get('nearest_m', '?')} m")
+        print(f"    Farthest  : {d.get('farthest_m', '?')} m")
+        print(f"    Mean      : {d.get('mean_m', '?')} m")
+        faces = d.get("faces", [])
+        if faces:
+            print(f"    Faces     :")
+            for f in faces:
+                print(f"      {f.get('name', '?')} — {f.get('depth_m', '?')} m")
+        print()
+        return 0
+
+    # enable/disable dense or mono
+    if action in ("dense-enable", "dense-disable", "mono-enable", "mono-disable"):
+        kind   = "dense" if action.startswith("dense") else "mono"
+        enable = action.endswith("enable")
+        key    = "dense_enabled" if kind == "dense" else "mono_enabled"
+        try:
+            current = _http_get("/api/settings/depth")
+            current[key] = enable
+            d = _http_put("/api/settings/depth", {
+                "dense_enabled": current.get("dense_enabled", False),
+                "mono_enabled":  current.get("mono_enabled", False),
+            })
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        label = "enabled" if enable else "disabled"
+        print(f"{kind.capitalize()} depth {label}.")
+        return 0
+
+    return 1
+
+
+# ── Snapshot ──────────────────────────────────────────────────────────────────
+
+def cmd_snapshot(args) -> int:
+    """Download a full-resolution JPEG snapshot from camera 1."""
+    output = getattr(args, "output", None)
+    camera = getattr(args, "camera", 1)
+    path_str = output or f"snapshot_cam{camera}.jpg"
+    api_path = "/api/snapshot" if camera == 1 else "/api/snapshot2"
+    url = _http_base() + api_path
+    try:
+        with _urllib_request.urlopen(url, timeout=10) as resp:
+            data = resp.read()
+        output_path = Path(path_str)
+        output_path.write_bytes(data)
+        print(f"Saved {len(data):,} bytes → {output_path.resolve()}")
+        return 0
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
 def cmd_forget_faces(_args) -> int:
     from src.perception.face_registry import FaceRegistry
     reg = FaceRegistry()
@@ -896,6 +986,16 @@ def cmd_help(args) -> int:
                             "                  skills disable <name>          Disable a skill.\n"
                             "                  skills config  <name>          Show current config for a skill.\n"
                             "                  skills config  <name> k=v …    Set one or more config values.",
+        "depth":            "Depth estimation (stereo SGBM + Hailo mono). Sub-commands:\n"
+                            "                  depth status                  Show dense/mono enabled state and hardware readiness.\n"
+                            "                  depth dense-enable            Enable dense stereo depth.\n"
+                            "                  depth dense-disable           Disable dense stereo depth.\n"
+                            "                  depth mono-enable             Enable monocular Hailo-8 depth.\n"
+                            "                  depth mono-disable            Disable monocular depth.\n"
+                            "                  depth query                   Show nearest/farthest/mean depth stats.",
+        "snapshot":         "Save a full-resolution JPEG from a camera.\n"
+                            "                  Usage: snapshot [--output FILE] [--camera 1|2]\n"
+                            "                  Default filename: snapshot_cam1.jpg",
         "help":             "Show this command reference, or help for a specific command.\n"
                             "                  Usage: help [command]",
     }
@@ -1644,6 +1744,25 @@ def main() -> int:
     ssp.add_argument("settings", nargs="*", metavar="key=value",
                      help="Config fields to set.  Omit to show current config.")
     ssp.set_defaults(func=cmd_skills)
+
+    # ── Depth estimation subcommand group ────────────────────────────
+    dep_sp = sub.add_parser("depth", help="Depth estimation (stereo SGBM + Hailo mono)")
+    dep_sub = dep_sp.add_subparsers(dest="depth_action", metavar="<subcommand>")
+    dep_sub.required = True
+    dep_sub.add_parser("status",       help="Show depth enabled state and hardware readiness").set_defaults(func=cmd_depth)
+    dep_sub.add_parser("query",        help="Show nearest/farthest/mean depth stats").set_defaults(func=cmd_depth)
+    dep_sub.add_parser("dense-enable", help="Enable dense stereo depth").set_defaults(func=cmd_depth)
+    dep_sub.add_parser("dense-disable",help="Disable dense stereo depth").set_defaults(func=cmd_depth)
+    dep_sub.add_parser("mono-enable",  help="Enable monocular Hailo-8 depth").set_defaults(func=cmd_depth)
+    dep_sub.add_parser("mono-disable", help="Disable monocular depth").set_defaults(func=cmd_depth)
+
+    # ── Snapshot ──────────────────────────────────────────────────────
+    snap_sp = sub.add_parser("snapshot", help="Save a full-resolution JPEG snapshot from a camera")
+    snap_sp.add_argument("--output", "-o", default=None,
+                         help="Output filename (default: snapshot_cam1.jpg)")
+    snap_sp.add_argument("--camera", "-c", type=int, choices=[1, 2], default=1,
+                         help="Camera to snapshot: 1 (default) or 2")
+    snap_sp.set_defaults(func=cmd_snapshot)
 
     args = p.parse_args()
     if args.cmd is None:

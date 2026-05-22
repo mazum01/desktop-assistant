@@ -24,6 +24,8 @@ POST /api/pan             Pan servo    body: {"angle": 180.0}
 GET  /api/snapshot            Full-resolution JPEG snapshot from camera 1
 GET  /api/snapshot2           Full-resolution JPEG snapshot from camera 2
 POST /api/version             Speak version number
+POST /api/joke               Speak a random dad joke
+POST /api/time               Announce the current time
 GET  /api/settings/servo  Get servo enabled state
 PUT  /api/settings/servo  Set servo enabled state  body: {"enabled": bool}
 GET  /api/settings/servo/limits  Get servo travel limits
@@ -1001,6 +1003,20 @@ class WebService:
             if not self.bus:
                 raise HTTPException(503, "bus unavailable")
             self.bus.publish("av.announce_version", None)
+            return {"ok": True}
+
+        @app.post("/api/joke")
+        async def api_joke():
+            if not self.bus:
+                raise HTTPException(503, "bus unavailable")
+            self.bus.publish("av.tell_joke", None)
+            return {"ok": True}
+
+        @app.post("/api/time")
+        async def api_time():
+            if not self.bus:
+                raise HTTPException(503, "bus unavailable")
+            self.bus.publish("av.announce_time", None)
             return {"ok": True}
 
         @app.post("/api/restart")

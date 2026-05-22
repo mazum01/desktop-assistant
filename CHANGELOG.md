@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.20.0] - 2026-05-22
+### Added
+- **CLI `da depth`** command group: `status`, `dense-enable`, `dense-disable`, `mono-enable`, `mono-disable`, `query`
+- **CLI `da snapshot`** command: saves a full-resolution JPEG from camera 1 or 2 to a local file
+- **Web GUI Depth card**: toggle dense/mono depth, hardware-ready badges, refreshable depth map images, nearest/farthest/mean stats panel
+- **Web API `POST /api/joke`**: triggers TTS random dad joke (was CLI-only)
+- **Web API `POST /api/time`**: triggers TTS time announcement (was CLI-only)
+- **OpenClaw skill `random-motion`**: enable/disable/status idle random head movement
+- **OpenClaw skill `version`**: ask assistant to speak its version number
+- **OpenClaw skill `power`**: reboot or shutdown with mandatory `--confirm` flag
+- **OpenClaw skill `joke`**: tell a random dad joke via TTS
+- **OpenClaw skill `time`**: announce the current time via TTS
+- All 5 new skills deployed to `~/.openclaw/workspace/skills/`
+
 ## [1.19.0] - 2026-05-21
 ### Added
 - **Hailo-8 monocular depth (Phase 2)**: `MonoDepthService` runs `scdepthv3.hef` on the Hailo-8 at up to 3 Hz on a single camera frame. Outputs a normalised relative depth map `[0,1]` published on `vision.mono_depth_map`. Optional `mono_scale_factor` config converts to approximate metres.

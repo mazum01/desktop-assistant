@@ -293,6 +293,69 @@
 
     </section>
 
+    <!-- ── Depth Estimation ──────────────────────────────────────── -->
+    <section class="card" id="card-depth">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>📐 Depth Estimation</h2>
+
+      <div class="control-group">
+        <label>Dense Stereo (SGBM)</label>
+        <div class="row-input">
+          <label class="qh-toggle" style="margin:0">
+            <input type="checkbox" id="depth-dense-enabled" onchange="saveDepthSettings()" />
+            <span>Enable dense stereo depth</span>
+          </label>
+          <span id="depth-dense-cal" style="font-size:0.8em;margin-left:8px;color:var(--text-muted)"></span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Monocular Depth (Hailo-8 scdepthv3)</label>
+        <div class="row-input">
+          <label class="qh-toggle" style="margin:0">
+            <input type="checkbox" id="depth-mono-enabled" onchange="saveDepthSettings()" />
+            <span>Enable monocular depth</span>
+          </label>
+          <span id="depth-mono-hw" style="font-size:0.8em;margin-left:8px;color:var(--text-muted)"></span>
+        </div>
+      </div>
+
+      <div class="control-group" id="depth-stats-row" style="display:none">
+        <label>Depth Stats</label>
+        <div style="font-size:0.85em;color:var(--text-muted)">
+          <span>Nearest: <strong id="depth-nearest">—</strong></span> &nbsp;
+          <span>Mean: <strong id="depth-mean">—</strong></span> &nbsp;
+          <span>Farthest: <strong id="depth-farthest">—</strong></span>
+          &nbsp;<button class="btn btn-sm" onclick="refreshDepthStats()">↺</button>
+        </div>
+      </div>
+
+      <div class="control-group" id="depth-maps-row">
+        <label>Depth Maps</label>
+        <div class="row-input" style="gap:8px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:0.8em;color:var(--text-muted);margin-bottom:4px">Dense stereo</div>
+            <img id="depth-map-img" src="" alt="Dense depth map"
+                 style="width:100%;border-radius:4px;cursor:pointer;display:none"
+                 onclick="openLightbox(this.src,'Dense Depth Map')" />
+            <div id="depth-map-placeholder" style="padding:8px;color:var(--text-muted);font-size:0.8em">
+              (disabled or no calibration)
+            </div>
+            <button class="btn btn-sm" onclick="refreshDepthMap()" style="margin-top:4px">↺ Refresh</button>
+          </div>
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:0.8em;color:var(--text-muted);margin-bottom:4px">Monocular (Hailo-8)</div>
+            <img id="depth-mono-img" src="" alt="Mono depth map"
+                 style="width:100%;border-radius:4px;cursor:pointer;display:none"
+                 onclick="openLightbox(this.src,'Monocular Depth Map')" />
+            <div id="depth-mono-placeholder" style="padding:8px;color:var(--text-muted);font-size:0.8em">
+              (disabled or hardware not ready)
+            </div>
+            <button class="btn btn-sm" onclick="refreshMonoMap()" style="margin-top:4px">↺ Refresh</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ── Music (Pandora) ───────────────────────────────────── -->
     <section class="card" id="card-music">
       <h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎵 Music (Pandora)</h2>

@@ -1133,6 +1133,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadStreamResolution();
   loadObjectDetectionEnabled();
   loadMusicStatus();
+  loadDepthSettings();
   connectWS();
   initFpsCounters();
   loadTrackingParams();
@@ -1765,4 +1766,72 @@ function initCardDragDrop() {
 function _saveCardOrder() {
   const order = Array.from(document.querySelectorAll("main > .card")).map(c => c.id);
   localStorage.setItem(_CARD_ORDER_KEY, JSON.stringify(order));
+}
+
+// ── Depth Estimation ──────────────────────────────────────────────
+
+async function loadDepthSettings() {
+  try {
+    const d = await fetch("/api/settings/depth").then(r => r.json());
+    el("depth-dense-enabled").checked = !!d.dense_enabled;
+    el("depth-mono-enabled").checked  = !!d.mono_enabled;
+    const calBadge = el("depth-dense-cal");
+    calBadge.textContent = d.calibrated ? "✓ calibrated" : "⚠ not calibrated";
+    calBadge.style.color = d.calibrated ? "var(--green)" : "var(--yellow)";
+    const hwBadge = el("depth-mono-hw");
+    hwBadge.textContent = d.mono_hardware_ready ? "✓ hardware ready" : "⚠ no hardware";
+    hwBadge.style.color = d.mono_hardware_ready ? "var(--green)" : "var(--yellow)";
+    // Show stats row if either is enabled
+    el("depth-stats-row").style.display = (d.dense_enabled || d.mono_enabled) ? "" : "none";
+  } catch (e) { /* ignore */ }
+}
+
+async function saveDepthSettings() {
+  const dense = el("depth-dense-enabled").checked;
+  const mono  = el("depth-mono-enabled").checked;
+  try {
+    await fetch("/api/settings/depth", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dense_enabled: dense, mono_enabled: mono }),
+    });
+    el("depth-stats-row").style.display = (dense || mono) ? "" : "none";
+    if (!dense) { el("depth-map-img").style.display = "none"; el("depth-map-placeholder").style.display = ""; }
+    if (!mono)  { el("depth-mono-img").style.display = "none"; el("depth-mono-placeholder").style.display = ""; }
+  } catch (e) { /* ignore */ }
+}
+
+async function refreshDepthMap() {
+  const img = el("depth-map-img");
+  const ph  = el("depth-map-placeholder");
+  try {
+    const resp = await fetch("/api/depth/map");
+    if (!resp.ok) { img.style.display = "none"; ph.style.display = ""; ph.textContent = "(not available — enable dense depth first)"; return; }
+    const blob = await resp.blob();
+    img.src = URL.createObjectURL(blob);
+    img.style.display = "";
+    ph.style.display = "none";
+  } catch (e) { ph.textContent = "(error loading map)"; }
+}
+
+async function refreshMonoMap() {
+  const img = el("depth-mono-img");
+  const ph  = el("depth-mono-placeholder");
+  try {
+    const resp = await fetch("/api/depth/mono");
+    if (!resp.ok) { img.style.display = "none"; ph.style.display = ""; ph.textContent = "(not available — enable mono depth first)"; return; }
+    const blob = await resp.blob();
+    img.src = URL.createObjectURL(blob);
+    img.style.display = "";
+    ph.style.display = "none";
+  } catch (e) { ph.textContent = "(error loading map)"; }
+}
+
+async function refreshDepthStats() {
+  try {
+    const d = await fetch("/api/depth/query").then(r => r.json());
+    el("depth-nearest").textContent  = d.nearest_m != null  ? `${d.nearest_m.toFixed(2)} m`  : "—";
+    el("depth-mean").textContent     = d.mean_m    != null  ? `${d.mean_m.toFixed(2)} m`     : "—";
+    el("depth-farthest").textContent = d.farthest_m != null ? `${d.farthest_m.toFixed(2)} m` : "—";
+  } catch (e) { /* ignore */ }
 }
