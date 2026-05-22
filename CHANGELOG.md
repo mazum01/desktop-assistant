@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.20.5] - 2026-05-22
+### Fixed
+- **OpenClaw → Telegram feed stalls (the real "finally fix it")** — three coupled bugs that together neutralised the 1.20.1 polling-stall guard:
+  1. `desktop-assistant-watchdog.service` was installed but **disabled**, and `config/assistant.yaml` had `watchdog.enabled: false`. The guard logic existed but was never running. The unit is now enabled and the config default flipped to `true`.
+  2. `services/systemd/openclaw-gateway.service` had `StartLimitIntervalSec=`/`StartLimitBurst=` under `[Service]`; systemd warns and ignores them there. Moved to `[Unit]`.
+  3. When OpenClaw was started manually (e.g. via the `openclaw gateway` CLI), the systemd unit's `ExecStart` would exit 78 ("another instance is healthy") and `systemctl restart` became a no-op for the actual port holder. The watchdog logged "restarted successfully" while the stalled orphan kept the port. `ManagedService.restart()` now detects when the port is held by a PID systemd doesn't own, SIGTERMs it (5 s grace), escalates to SIGKILL if needed, then starts the systemd unit cleanly.
+
 ## [1.20.4] - 2026-05-22
 ### Added
 - **Face refresh** across all interaction channels — `POST /api/faces/refresh` web API endpoint; "↺ Re-identify" button in web GUI; `da face refresh` CLI subcommand; OpenClaw `faces` skill (`list`, `status`, `refresh` commands). Reloads the `FaceRegistry` embedding cache and resets `FaceService` tracking state so all faces are re-identified on the next camera frame.

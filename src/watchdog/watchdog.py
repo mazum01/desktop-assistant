@@ -232,9 +232,65 @@ class ManagedService:
             return False, f"max uptime {self.max_uptime_min}m exceeded (polling-stall guard)"
         return True, ""
 
+    def _systemd_main_pid(self) -> Optional[int]:
+        """Return the MainPID systemd has recorded for this unit, or None."""
+        try:
+            result = subprocess.run(
+                ["systemctl", "show", self.unit, "-p", "MainPID", "--value"],
+                capture_output=True, text=True, timeout=5,
+            )
+            pid = int(result.stdout.strip() or 0)
+            return pid or None
+        except Exception:
+            return None
+
+    def _kill_orphan_port_holder(self) -> None:
+        """If the port is held by a process systemd doesn't manage, kill it.
+
+        OpenClaw can be started manually (e.g. ``openclaw gateway`` from a shell);
+        when that instance stalls, the systemd unit's ``ExecStart`` keeps exiting
+        78 ("another instance is healthy") and ``systemctl restart`` becomes a
+        no-op for the actual port holder.  Detect that case and terminate the
+        orphan first so the next systemd start can bind the port.
+        """
+        port = self._port_from_http_check()
+        if not port:
+            return
+        port_pid = self._pid_for_port(port)
+        if not port_pid:
+            return
+        main_pid = self._systemd_main_pid()
+        if main_pid and port_pid == main_pid:
+            return  # systemd already owns it; normal restart will handle it
+        log.warning(
+            "%s: port %d is held by orphan pid=%d (systemd MainPID=%s) — terminating",
+            self.unit, port, port_pid, main_pid,
+        )
+        try:
+            subprocess.run(["sudo", "kill", str(port_pid)],
+                           capture_output=True, text=True, timeout=5)
+        except Exception:
+            log.exception("%s: failed to send SIGTERM to orphan pid=%d",
+                          self.unit, port_pid)
+            return
+        for _ in range(20):  # up to ~5 s
+            time.sleep(0.25)
+            if not Path(f"/proc/{port_pid}").exists():
+                log.info("%s: orphan pid=%d exited cleanly", self.unit, port_pid)
+                return
+        log.warning("%s: orphan pid=%d did not exit — escalating to SIGKILL",
+                    self.unit, port_pid)
+        try:
+            subprocess.run(["sudo", "kill", "-9", str(port_pid)],
+                           capture_output=True, text=True, timeout=5)
+        except Exception:
+            log.exception("%s: failed to SIGKILL orphan pid=%d",
+                          self.unit, port_pid)
+
     def restart(self) -> bool:
         """Restart the systemd unit. Returns True on success."""
         log.info("Restarting %s …", self.unit)
+        self._kill_orphan_port_holder()
         try:
             result = subprocess.run(
                 ["sudo", "systemctl", "restart", self.unit],
@@ -249,6 +305,7 @@ class ManagedService:
         except Exception:
             log.exception("Restart of %s raised an exception", self.unit)
         return False
+
 
 
 # ---------------------------------------------------------------------------

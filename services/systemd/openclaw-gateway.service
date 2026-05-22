@@ -3,6 +3,9 @@ Description=OpenClaw AI Gateway — Telegram / Claude interface
 Documentation=https://github.com/mazum01/desktop-assistant
 After=network-online.target
 Wants=network-online.target
+# StartLimit* belong in [Unit] (systemd warns and ignores them under [Service]).
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -18,8 +21,6 @@ ExecStart=/home/starter/.nvm/versions/node/v24.15.0/bin/node \
 
 Restart=on-failure
 RestartSec=5
-StartLimitIntervalSec=120
-StartLimitBurst=5
 # Exit 78 means another gateway instance is already running and healthy —
 # OpenClaw deliberately exits this way to prevent restart loops.
 SuccessExitStatus=78
