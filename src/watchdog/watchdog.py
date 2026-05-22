@@ -9,6 +9,8 @@ Services monitored
 * desktop-assistant-thermal — systemctl only (no HTTP interface)
 * openclaw-gateway          — systemctl + HTTP ping (localhost:18789)
                               + journal scan for stuck "Bot not initialized" loop
+                              + max-uptime restart (Telegram polling-stall guard)
+                              + max-uptime restart (Telegram polling-stall guard)
 
 Restart guard
 -------------
@@ -34,6 +36,7 @@ watchdog:
   telegram_notify: true
   # Per-service overrides (optional):
   openclaw_stuck_threshold: 10   # "Bot not initialized" lines in 60s → restart
+  openclaw_max_uptime_min: 90    # max gateway uptime before forced restart (polling-stall guard)
 """
 
 from __future__ import annotations
@@ -61,6 +64,7 @@ log = logging.getLogger("watchdog")
 _DEFAULT_INTERVAL_S       = 30.0
 _DEFAULT_COOLDOWN_MIN     = 5.0
 _DEFAULT_STUCK_THRESHOLD  = 10   # "Bot not initialized" occurrences / 60 s
+_DEFAULT_MAX_UPTIME_MIN   = 90   # openclaw-gateway forced restart interval (polling-stall guard)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CONFIG_PATH = _REPO_ROOT / "config" / "assistant.yaml"
@@ -100,6 +104,10 @@ class ManagedService:
     # 78 when a healthy instance is already running, so systemd shows "inactive").
     # In that case only the HTTP check determines health.
     require_systemd_active: bool = True
+    # If set, force a restart when the process owning http_check's port has been
+    # running longer than this many minutes.  Guards against silent polling stalls
+    # (e.g. openclaw Telegram ingress dying after a long agentic session).
+    max_uptime_min: Optional[int] = None
 
     # Runtime state — not part of config
     last_restart_ts: float = field(default=0.0, init=False, repr=False)
@@ -144,6 +152,74 @@ class ManagedService:
             pass
         return False
 
+    def _port_from_http_check(self) -> Optional[int]:
+        """Extract port number from the http_check URL."""
+        if not self.http_check:
+            return None
+        try:
+            import re
+            m = re.search(r":(\d+)", self.http_check)
+            return int(m.group(1)) if m else None
+        except Exception:
+            return None
+
+    def _pid_for_port(self, port: int) -> Optional[int]:
+        """Return PID of the process listening on the given TCP port, or None."""
+        try:
+            result = subprocess.run(
+                ["ss", "-tlnp", f"sport = :{port}"],
+                capture_output=True, text=True, timeout=5,
+            )
+            for line in result.stdout.splitlines():
+                # e.g. users:(("node",pid=77384,fd=25))
+                import re
+                m = re.search(r'pid=(\d+)', line)
+                if m:
+                    return int(m.group(1))
+        except Exception:
+            pass
+        return None
+
+    def _process_uptime_s(self, pid: int) -> Optional[float]:
+        """Return how long (seconds) the given PID has been running, or None."""
+        try:
+            stat_path = Path(f"/proc/{pid}/stat")
+            if not stat_path.exists():
+                return None
+            stat = stat_path.read_text().split()
+            starttime_ticks = int(stat[21])
+            clk_tck = os.sysconf(os.sysconf_names["SC_CLK_TCK"])
+            boot_time_s: float = 0.0
+            with open("/proc/stat") as f:
+                for line in f:
+                    if line.startswith("btime "):
+                        boot_time_s = float(line.split()[1])
+                        break
+            start_epoch = boot_time_s + starttime_ticks / clk_tck
+            return time.time() - start_epoch
+        except Exception:
+            return None
+
+    def is_uptime_exceeded(self) -> bool:
+        """Return True if the process owning our port has exceeded max_uptime_min."""
+        if not self.max_uptime_min:
+            return False
+        port = self._port_from_http_check()
+        if not port:
+            return False
+        pid = self._pid_for_port(port)
+        if not pid:
+            return False
+        uptime = self._process_uptime_s(pid)
+        if uptime is None:
+            return False
+        limit_s = self.max_uptime_min * 60
+        if uptime >= limit_s:
+            log.info("%s: process pid=%d uptime=%.0fm ≥ limit=%dm — forcing refresh",
+                     self.unit, pid, uptime / 60, self.max_uptime_min)
+            return True
+        return False
+
     def is_healthy(self) -> tuple[bool, str]:
         """Return (healthy, reason). reason is '' when healthy."""
         if self.require_systemd_active and not self.is_systemd_active():
@@ -152,6 +228,8 @@ class ManagedService:
             return False, f"HTTP health check failed ({self.http_check})"
         if self.is_journal_stuck():
             return False, f"stuck loop detected ({self.journal_stuck_pattern!r})"
+        if self.is_uptime_exceeded():
+            return False, f"max uptime {self.max_uptime_min}m exceeded (polling-stall guard)"
         return True, ""
 
     def restart(self) -> bool:
@@ -271,10 +349,11 @@ def main() -> int:
         log.info("Watchdog disabled in config — exiting")
         return 0
 
-    interval_s      = float(wd_cfg.get("check_interval_s", _DEFAULT_INTERVAL_S))
-    cooldown_min    = float(wd_cfg.get("restart_cooldown_min", _DEFAULT_COOLDOWN_MIN))
-    tg_notify       = bool(wd_cfg.get("telegram_notify", True))
-    stuck_threshold = int(wd_cfg.get("openclaw_stuck_threshold", _DEFAULT_STUCK_THRESHOLD))
+    interval_s        = float(wd_cfg.get("check_interval_s", _DEFAULT_INTERVAL_S))
+    cooldown_min      = float(wd_cfg.get("restart_cooldown_min", _DEFAULT_COOLDOWN_MIN))
+    tg_notify         = bool(wd_cfg.get("telegram_notify", True))
+    stuck_threshold   = int(wd_cfg.get("openclaw_stuck_threshold", _DEFAULT_STUCK_THRESHOLD))
+    max_uptime_min    = int(wd_cfg.get("openclaw_max_uptime_min", _DEFAULT_MAX_UPTIME_MIN))
 
     tg_cfg     = cfg.get("telegram", {})
     tg_token   = str(tg_cfg.get("bot_token", ""))
@@ -294,6 +373,7 @@ def main() -> int:
             journal_stuck_pattern="Bot not initialized",
             stuck_threshold=stuck_threshold,
             require_systemd_active=False,  # exits 78 when healthy instance already runs
+            max_uptime_min=max_uptime_min,
         ),
     ]
 

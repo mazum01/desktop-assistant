@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.20.1] - 2026-05-22
+### Fixed
+- **Watchdog: Telegram polling-stall guard** — added `max_uptime_min` field to `ManagedService`; the watchdog now force-restarts `openclaw-gateway.service` after it has been running for ≥ 90 minutes (configurable via `watchdog.openclaw_max_uptime_min` in `config/assistant.yaml`). This resolves a recurring OpenClaw bug where the Telegram polling ingress silently dies after a long agentic session (multi-minute Claude tool calls), leaving the bot unable to receive new messages until manually restarted.
+- Added `openclaw_max_uptime_min: 90` to `config/assistant.yaml` watchdog section.
+
 ## [1.20.0] - 2026-05-22
 ### Added
 - **CLI `da depth`** command group: `status`, `dense-enable`, `dense-disable`, `mono-enable`, `mono-disable`, `query`

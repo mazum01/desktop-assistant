@@ -191,3 +191,4 @@ watchdog:
   restart_cooldown_min: 5       # minimum minutes between restarts of same service
   telegram_notify: true         # send Telegram message on every auto-fix
   openclaw_stuck_threshold: 10  # "Bot not initialized" lines in 60s → restart openclaw
+  openclaw_max_uptime_min: 90   # force restart after 90 min to guard against Telegram polling stall
