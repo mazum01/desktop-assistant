@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.22.1] - 2026-05-23
+### Fixed
+- Mono depth purple screen: scdepthv3 model outputs float32 log-inverse depth
+  (all negative values), not uint16 as previously assumed. Normalization now
+  uses `(raw - vmin) / (vmax - vmin)` so output is always in [0, 1] regardless
+  of the raw value range.
+- Web service depth JPEG endpoint: added `np.nan_to_num` + `np.clip(0,1)` guard
+  before casting to uint8 to prevent the "invalid value encountered in cast"
+  RuntimeWarning and the resulting zeroed-out (purple) image.
+
 ## [1.22.0] - 2026-05-23
 ### Added
 - **Face depth labels on cam1 overlay** — VisionService now subscribes to `vision.face_depth` and annotates each face ellipse label with the current range reading (e.g. `Mark  1.43m`). Uses the existing stereo/face-size depth estimate already computed by StereoService; no extra CPU cost.

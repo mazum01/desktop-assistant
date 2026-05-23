@@ -183,18 +183,20 @@ class MonoDepthService(Service):
 
         outputs = self._engine.infer({"input_layer1": inp})
 
-        # Output: (256, 320, 1) uint16 — relative inverse depth
         raw_key = next(iter(outputs))
-        raw = outputs[raw_key]  # shape (H, W, 1) or (1, H, W, 1)
+        raw = outputs[raw_key]  # shape (H, W, 1) or (1, H, W, 1) — float32
         raw = raw.squeeze()     # → (H, W)
 
-        # Normalise to [0, 1]  (uint16 max = 65535)
         raw_f = raw.astype(np.float32)
-        dmax = float(raw_f.max())
-        if dmax > 0:
-            depth_rel = raw_f / dmax
+
+        # Normalize output to [0, 1] using actual range.
+        # scdepthv3 outputs float32 log-inverse depth (larger = closer).
+        vmin = float(raw_f.min())
+        vmax = float(raw_f.max())
+        if vmax > vmin:
+            depth_rel = (raw_f - vmin) / (vmax - vmin)
         else:
-            depth_rel = raw_f
+            depth_rel = np.zeros_like(raw_f)
 
         nearest_rel = float(depth_rel.max())
         farthest_rel = float(depth_rel.min())

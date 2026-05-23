@@ -1289,6 +1289,35 @@ class WebService:
                 })
             return JSONResponse(result)
 
+        @app.get("/api/depth/mono/stats")
+        async def api_depth_mono_stats():
+            """Debug endpoint — returns raw payload stats without rendering."""
+            import numpy as _np
+            payload = None
+            if self._mono_depth_svc is not None:
+                payload = self._mono_depth_svc.latest_payload()
+            if payload is None and self.bus:
+                payload = self.bus.last("vision.mono_depth_map")
+            if payload is None:
+                return JSONResponse({"ok": False, "error": "no payload"})
+            depth_list = payload.get("depth_rel", [])
+            if depth_list:
+                arr = _np.array([[float(v) if v is not None else float("nan") for v in row]
+                                  for row in depth_list], dtype=_np.float32)
+                return JSONResponse({
+                    "ok": True,
+                    "shape": list(arr.shape),
+                    "dtype": str(arr.dtype),
+                    "min": float(_np.nanmin(arr)),
+                    "max": float(_np.nanmax(arr)),
+                    "mean": float(_np.nanmean(arr)),
+                    "nan_count": int(_np.isnan(arr).sum()),
+                    "hardware_ready": payload.get("hardware_ready"),
+                    "nearest_rel": payload.get("nearest_rel"),
+                    "farthest_rel": payload.get("farthest_rel"),
+                })
+            return JSONResponse({"ok": False, "error": "depth_rel empty", "keys": list(payload.keys())})
+
         @app.get("/api/depth/mono")
         async def api_depth_mono():
             import cv2 as _cv2
@@ -1305,6 +1334,8 @@ class WebService:
             if not depth_list:
                 raise HTTPException(503, "Mono depth map empty")
             arr = _np.array([[float(v) for v in row] for row in depth_list], dtype=_np.float32)
+            arr = _np.nan_to_num(arr, nan=0.0, posinf=1.0, neginf=0.0)
+            arr = _np.clip(arr, 0.0, 1.0)
             normed = (arr * 255).astype(_np.uint8)
             colored = _cv2.applyColorMap(normed, _cv2.COLORMAP_TURBO)
             _, jpg_buf = _cv2.imencode(".jpg", colored, [_cv2.IMWRITE_JPEG_QUALITY, 85])
