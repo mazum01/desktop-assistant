@@ -1,8 +1,7 @@
 ---
 name: depth-toggle
 description: >
-  Enable, disable, or check the status of depth estimation on the desktop
-  assistant. Handles dense stereo SGBM depth (requires two cameras + calibration)
+  Enable, disable, or check the status of depth estimation on VERA. Handles dense stereo SGBM depth (requires two cameras + calibration)
   and monocular Hailo neural depth. Use for "enable depth estimation",
   "turn on stereo depth", "disable mono depth", "turn off depth map",
   "enable depth scanning", "is depth estimation on?".
@@ -15,7 +14,7 @@ metadata:
 
 # Depth Toggle Skill
 
-Enable, disable, or query depth estimation on the desktop assistant.
+Enable, disable, or query depth estimation on VERA.
 
 ## When to use
 

@@ -92,11 +92,11 @@ _GREET_GENERIC = [
 # ── Personality-filled intro phrases for new faces ────────────────────────────
 
 _NEW_FACE_PHRASES = [
-    "Oh hey, I don't think we've met! I'm Desktop Assistant. What's your name?",
-    "Whoa, a new face! Hi there, I'm the Desktop Assistant. And you are?",
-    "Hello! Don't think I know you yet. I'm Desktop Assistant. Mind introducing yourself?",
-    "Hey! I'm Desktop Assistant. I'd love to know your name. What should I call you?",
-    "Well, hello there! I'm Desktop Assistant. I haven't had the pleasure. What's your name?",
+    "Oh hey, I don't think we've met! I'm VERA. What's your name?",
+    "Whoa, a new face! Hi there, I'm VERA. And you are?",
+    "Hello! Don't think I know you yet. I'm VERA. Mind introducing yourself?",
+    "Hey! I'm VERA. I'd love to know your name. What should I call you?",
+    "Well, hello there! I'm VERA. I haven't had the pleasure. What's your name?",
 ]
 
 # Default cooldown: 30 minutes base, ±25% jitter

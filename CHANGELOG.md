@@ -6,6 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.23.0] - 2026-05-23
+### Changed
+- **Project renamed to VERA (Vision-Enabled Reasoning Agent)** across all
+  user-visible surfaces:
+  - Web GUI: page title and heading now show "VERA"; restart dialog updated.
+  - CLI: `prog="vera"`; help banner reads "vera — VERA control CLI";
+    `/usr/local/bin/vera` symlink added (existing `da` alias preserved).
+  - Face greeting strings: "I'm Desktop Assistant" → "I'm VERA".
+  - Boot TTS announcement: "Desktop assistant starting" → "VERA starting".
+  - FastAPI title: "Desktop Assistant Dashboard" → "VERA Dashboard".
+  - Architecture diagram: title block and `digraph` identifier updated to VERA.
+  - All systemd service `Description=` fields, skill files, source docstrings,
+    and documentation prose updated.
+  - `~/Pictures/vera/` replaces `~/Pictures/desktop-assistant/` as the
+    grab-frame save directory.
+
 ## [1.22.1] - 2026-05-23
 ### Fixed
 - Mono depth purple screen: scdepthv3 model outputs float32 log-inverse depth

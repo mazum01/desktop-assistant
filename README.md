@@ -1,6 +1,6 @@
-# Desktop Assistant
+# VERA — Vision-Enabled Reasoning Agent
 
-A semi-animated desktop assistant built on Raspberry Pi 5 with Hailo-8 AI
+A semi-animated desktop AI assistant built on Raspberry Pi 5 with Hailo-8 AI
 acceleration, stereo vision, dual microphones, a panning servo head, and
 temperature-controlled cooling.
 

@@ -1,7 +1,7 @@
 ---
 name: describe-scene
 description: >
-  Ask the desktop assistant to look at what its camera sees and speak a
+  Ask VERA to look at what its camera sees and speak a
   natural-language description aloud. Use when the user asks "what do you see?",
   "describe your surroundings", "what's in front of you?", or similar.
 metadata:
@@ -13,7 +13,7 @@ metadata:
 
 # Describe Scene Skill
 
-Trigger the desktop assistant to capture its current camera view and speak
+Trigger VERA to capture its current camera view and speak
 a natural-language description of what it sees.
 
 ## When to use

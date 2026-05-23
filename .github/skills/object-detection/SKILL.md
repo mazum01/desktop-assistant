@@ -2,7 +2,7 @@
 name: object-detection
 description: >
   Enable, disable, or check the status of COCO object detection on the
-  desktop assistant (powered by the Hailo-8 AI accelerator). When enabled,
+  VERA (powered by the Hailo-8 AI accelerator). When enabled,
   objects in the camera view are classified and labeled. Use for requests
   about seeing/detecting objects or toggling AI vision.
 metadata:
@@ -14,7 +14,7 @@ metadata:
 
 # Object Detection Skill
 
-Control COCO object detection (Hailo-8 AI accelerator) on the desktop assistant.
+Control COCO object detection (Hailo-8 AI accelerator) on VERA.
 
 ## When to use
 

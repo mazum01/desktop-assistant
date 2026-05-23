@@ -1,7 +1,7 @@
 ---
 name: version
 description: >
-  Ask the desktop assistant to speak its current software version number aloud.
+  Ask VERA to speak its current software version number aloud.
   Use for "what version are you?", "tell me your version", "what software are
   you running?".
 metadata:
@@ -13,7 +13,7 @@ metadata:
 
 # Version Skill
 
-Asks the desktop assistant to speak its current software version number via TTS.
+Asks VERA to speak its current software version number via TTS.
 
 ## When to use
 

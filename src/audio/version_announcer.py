@@ -61,7 +61,7 @@ class VersionAnnouncer:
 
     def announce_startup(self) -> None:
         """Boot-time announcement (FR-VR1)."""
-        self.speak_version(prefix="Desktop assistant starting,")
+        self.speak_version(prefix="VERA starting,")
 
     def announce_on_request(self) -> None:
         """Verbal-query response (FR-VR2)."""

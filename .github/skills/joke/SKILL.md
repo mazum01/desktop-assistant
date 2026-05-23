@@ -1,7 +1,7 @@
 ---
 name: joke
 description: >
-  Tell a random dad joke aloud via the desktop assistant's text-to-speech
+  Tell a random dad joke aloud via VERA's text-to-speech
   system. Use for "tell me a joke", "say something funny", "make me laugh",
   "dad joke".
 metadata:
@@ -13,7 +13,7 @@ metadata:
 
 # Joke Skill
 
-Triggers the desktop assistant to speak a random dad joke aloud.
+Triggers VERA to speak a random dad joke aloud.
 
 ## When to use
 

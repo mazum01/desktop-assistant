@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Speak text aloud via the desktop assistant TTS system."""
+"""Speak text aloud via VERA TTS system."""
 
 import json
 import sys

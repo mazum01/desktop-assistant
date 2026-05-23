@@ -1,4 +1,4 @@
-# Desktop Assistant — Project Phases
+# VERA — Project Phases
 
 > Printable plan. Each phase lists goal, deliverables, exit criteria.
 

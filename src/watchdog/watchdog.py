@@ -1,16 +1,16 @@
-"""Desktop Assistant — System Health Watchdog.
+"""VERA — System Health Watchdog.
 
 Monitors all critical services and auto-restarts any that fail or become
 stuck.  Sends a Telegram notification whenever it intervenes.
 
 Services monitored
 ------------------
-* desktop-assistant-core    — systemctl + HTTP ping (localhost:8080/health)
-* desktop-assistant-thermal — systemctl only (no HTTP interface)
-* openclaw-gateway          — systemctl + HTTP ping (localhost:18789)
-                              + journal scan for stuck "Bot not initialized" loop
-                              + max-uptime restart (Telegram polling-stall guard)
-                              + max-uptime restart (Telegram polling-stall guard)
+* vera-core          — systemctl + HTTP ping (localhost:8080/health)
+* vera-thermal       — systemctl only (no HTTP interface)
+* openclaw-gateway   — systemctl + HTTP ping (localhost:18789)
+                      + journal scan for stuck "Bot not initialized" loop
+                      + max-uptime restart (Telegram polling-stall guard)
+                      + max-uptime restart (Telegram polling-stall guard)
 
 Restart guard
 -------------
@@ -25,7 +25,7 @@ Uses the same bot_token / chat_id from config/assistant.yaml.
 Run as
 ------
     python3 -m src.watchdog.watchdog              # foreground / dev
-    systemctl start desktop-assistant-watchdog    # production
+    systemctl start vera-watchdog                 # production
 
 Config (config/assistant.yaml)
 -------------------------------

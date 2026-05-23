@@ -1,7 +1,7 @@
 ---
 name: power
 description: >
-  Reboot or shut down the desktop assistant's Raspberry Pi. IMPORTANT: always
+  Reboot or shut down VERA's Raspberry Pi. IMPORTANT: always
   ask the user for explicit confirmation in the conversation before invoking
   this skill. Use for "reboot", "restart the Pi", "shut down", "power off",
   "turn off the assistant".
@@ -14,7 +14,7 @@ metadata:
 
 # Power Skill
 
-Reboot or shut down the Raspberry Pi that runs the desktop assistant.
+Reboot or shut down the Raspberry Pi that runs VERA.
 
 ## ⚠️ Mandatory confirmation
 

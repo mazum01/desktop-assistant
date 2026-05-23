@@ -1,7 +1,7 @@
 ---
 name: pan-camera
 description: >
-  Pan the desktop-assistant camera head to a specific angle (0–270°).
+  Pan the VERA camera head to a specific angle (0–270°).
   Use this when the user asks to look left, look right, center, or face
   a specific direction. The physical range is 0° (full left) to 270°
   (full right), with 135° as center.
@@ -14,7 +14,7 @@ metadata:
 
 # Pan Camera Skill
 
-Pan the desktop assistant's camera servo to a requested angle.
+Pan VERA's camera servo to a requested angle.
 
 ## When to use
 

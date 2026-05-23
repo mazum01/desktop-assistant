@@ -30,7 +30,7 @@ def run_services(services: List[Service], unit_name: str) -> int:
         level=logging.INFO,
         format="%(asctime)s %(name)-20s %(levelname)-7s %(message)s",
     )
-    log.info("Desktop Assistant [%s] v%s — starting", unit_name, get_version())
+    log.info("VERA [%s] v%s — starting", unit_name, get_version())
 
     started: List[Service] = []
     for svc in services:

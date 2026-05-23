@@ -1,7 +1,7 @@
 ---
 name: system-status
 description: >
-  Get the health and telemetry status of the desktop assistant: CPU, memory,
+  Get the health and telemetry status of VERA: CPU, memory,
   temperature, fan speed, servo angle, camera FPS, face count, and running
   services. Use for "how are you?", "system status", "what's your temperature?",
   "are you running okay?", and similar health queries.
@@ -14,7 +14,7 @@ metadata:
 
 # System Status Skill
 
-Fetch a health and telemetry summary from the desktop assistant.
+Fetch a health and telemetry summary from VERA.
 
 ## When to use
 

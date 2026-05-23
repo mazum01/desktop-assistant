@@ -482,7 +482,7 @@ class WebService:
         from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
         from fastapi.staticfiles import StaticFiles
 
-        app = FastAPI(title="Desktop Assistant Dashboard", docs_url=None, redoc_url=None)
+        app = FastAPI(title="VERA Dashboard", docs_url=None, redoc_url=None)
 
         # Serve static files (CSS, JS)
         if _STATIC_DIR.exists():

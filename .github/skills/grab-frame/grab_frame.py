@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Grab a full-resolution JPEG still from the desktop-assistant camera."""
+"""Grab a full-resolution JPEG still from the VERA camera."""
 
 import json
 import sys
@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 BASE_URL = "http://localhost:8080"
-SAVE_DIR = Path.home() / "Pictures" / "desktop-assistant"
+SAVE_DIR = Path.home() / "Pictures" / "vera"
 VALID_CAMERAS = {"1", "2"}
 
 STREAM_URLS = {

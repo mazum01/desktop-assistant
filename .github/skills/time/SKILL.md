@@ -1,7 +1,7 @@
 ---
 name: time
 description: >
-  Ask the desktop assistant to announce the current time aloud via TTS.
+  Ask VERA to announce the current time aloud via TTS.
   Use for "what time is it?", "tell me the time", "announce the time".
 metadata:
   openclaw:
@@ -12,7 +12,7 @@ metadata:
 
 # Time Skill
 
-Asks the desktop assistant to speak the current time aloud via TTS.
+Asks VERA to speak the current time aloud via TTS.
 
 ## When to use
 

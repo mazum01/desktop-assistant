@@ -1,5 +1,5 @@
 [Unit]
-Description=Desktop Assistant — core services (motion, AV, perception)
+Description=VERA — core services (motion, AV, perception)
 Documentation=https://github.com/mazum01/desktop-assistant
 After=network.target sound.target desktop-assistant-thermal.service
 # Wants= (not Requires=): core can run without thermal in dev, but

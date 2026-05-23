@@ -1,1 +1,1 @@
-# Skills package — voice-intent handlers for the Desktop Assistant.
+# Skills package — voice-intent handlers for VERA.

@@ -1,7 +1,7 @@
 ---
 name: say
 description: >
-  Speak any text aloud via the desktop assistant's text-to-speech (TTS) system.
+  Speak any text aloud via VERA's text-to-speech (TTS) system.
   Use when the user asks the assistant to "say", "announce", "speak", "read out",
   or "tell everyone" something.
 metadata:
@@ -13,7 +13,7 @@ metadata:
 
 # Say Skill
 
-Make the desktop assistant speak any text through its speakers.
+Make VERA speak any text through its speakers.
 
 ## When to use
 

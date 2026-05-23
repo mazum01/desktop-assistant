@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch and summarize desktop assistant health and telemetry."""
+"""Fetch and summarize VERA health and telemetry."""
 
 import json
 import sys

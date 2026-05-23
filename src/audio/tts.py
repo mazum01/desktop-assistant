@@ -1,5 +1,5 @@
 """
-Text-to-speech for Desktop Assistant.
+Text-to-speech for VERA.
 
 Primary backend : Piper (neural, offline — piper-tts Python package).
 Fallback backend: espeak-ng (robotic but zero-dependency).

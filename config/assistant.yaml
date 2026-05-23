@@ -1,4 +1,4 @@
-# Desktop Assistant — core configuration.
+# VERA — core configuration.
 
 clock_announcements:
   # Spoken time at :00 and :30 of every hour.

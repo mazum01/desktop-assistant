@@ -1,10 +1,10 @@
 ---
 name: grab-frame
 description: >
-  Take a full-resolution still photo from a desktop-assistant camera.
+  Take a full-resolution still photo from a VERA camera.
   Use when the user asks to take a photo, snapshot, picture, or frame grab
   from the camera. Camera 1 is the detection/tracking camera; camera 2 is
-  the secondary view. Saves the JPEG to ~/Pictures/desktop-assistant/.
+  the secondary view. Saves the JPEG to ~/Pictures/vera/.
 metadata:
   openclaw:
     os: ["linux"]
@@ -41,7 +41,7 @@ python3 ~/.openclaw/workspace/skills/grab-frame/grab_frame.py 2
 
 On success prints JSON:
 ```json
-{"ok": true, "camera": 1, "path": "/home/starter/Pictures/desktop-assistant/cam1_20260517_093000.jpg", "size_kb": 210, "message": "Saved 210 KB to ..."}
+{"ok": true, "camera": 1, "path": "/home/starter/Pictures/vera/cam1_20260517_093000.jpg", "size_kb": 210, "message": "Saved 210 KB to ..."}
 ```
 
 After running, tell the user the path where the image was saved.

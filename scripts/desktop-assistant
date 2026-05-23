@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-desktop-assistant CLI — control the running daemon over ZeroMQ.
+vera CLI — control the running VERA daemon over ZeroMQ.
 
 Examples:
-    desktop-assistant ping
-    desktop-assistant status
-    desktop-assistant servo pan --to 90
-    desktop-assistant servo move 90 1500
-    desktop-assistant say "hello world"
-    desktop-assistant system version
-    desktop-assistant topics
-    desktop-assistant last thermal.temp
-    desktop-assistant watch                  # stream all bus events
-    desktop-assistant watch --topic motion   # filter by prefix
-    desktop-assistant quiet-hours status
-    desktop-assistant quiet-hours set --start 22:00 --end 07:00
+    vera ping
+    vera status
+    vera servo pan --to 90
+    vera servo move 90 1500
+    vera say "hello world"
+    vera system version
+    vera topics
+    vera last thermal.temp
+    vera watch                  # stream all bus events
+    vera watch --topic motion   # filter by prefix
+    vera quiet-hours status
+    vera quiet-hours set --start 22:00 --end 07:00
 
 Talks to the IPCBridge service over ZMQ at:
     REP : ipc:///tmp/desktop-assistant.rep
@@ -91,7 +91,7 @@ def _request(req: dict, timeout_ms: int = 2000) -> dict:
         sock.send_string(json.dumps(req))
         return json.loads(sock.recv_string())
     except zmq.error.Again:
-        return {"ok": False, "error": "timeout — is desktop-assistant-core running?"}
+        return {"ok": False, "error": "timeout — is vera-core running?"}
     finally:
         sock.close(linger=0)
 
@@ -664,7 +664,7 @@ def cmd_greeting_settings(_args) -> int:
 
 
 def cmd_restart(_args) -> int:
-    """Restart the desktop-assistant-core systemd service."""
+    """Restart the vera-core systemd service."""
     import subprocess
     print("Restarting desktop-assistant-core.service …")
     result = subprocess.run(
@@ -991,7 +991,7 @@ def cmd_help(args) -> int:
                             "                  random-motion status    Show current state.",
         "system":           "System management. Sub-commands:\n"
                             "                  system ping             Round-trip latency check.\n"
-                            "                  system restart          Restart desktop-assistant-core service.\n"
+                            "                  system restart          Restart vera-core service.\n"
                             "                  system reboot           Reboot the Raspberry Pi.\n"
                             "                  system shutdown         Shut down the Raspberry Pi.\n"
                             "                  system version          Speak the current version number.",
@@ -1067,15 +1067,15 @@ def cmd_help(args) -> int:
             print(f"Unknown command: {name!r}\n")
             print("Available commands: " + ", ".join(commands))
             return 1
-        print(f"\ndesktop-assistant {name}")
-        print("─" * (len(name) + 21))
+        print(f"\nvera {name}")
+        print("─" * (len(name) + 5))
         print(commands[name])
-        print(f"\nFor argument details: desktop-assistant {name} --help\n")
+        print(f"\nFor argument details: vera {name} --help\n")
         return 0
 
     width = max(len(k) for k in commands) + 2
     print()
-    print("desktop-assistant — control the running assistant over ZMQ")
+    print("vera — VERA (Vision-Enabled Reasoning Agent) control CLI")
     print("=" * 60)
     print(f"  Daemon REP : {REP_ENDPOINT}")
     print(f"  Daemon PUB : {PUB_ENDPOINT}")
@@ -1087,7 +1087,7 @@ def cmd_help(args) -> int:
         first_line = desc.split("\n")[0]
         print(f"  {cmd:<{width}}{first_line}")
     print()
-    print("Tip: desktop-assistant <command> --help  for full argument details.")
+    print("Tip: vera <command> --help  for full argument details.")
     print()
     return 0
 
@@ -1108,7 +1108,7 @@ def cmd_status(args) -> int:
 
     # ── Header ─────────────────────────────────────────────────────────
     status_tag = "● OK" if healthy else "✗ DEGRADED"
-    print(f"\ndesktop-assistant  v{s.get('version','?')}   "
+    print(f"\nvera  v{s.get('version','?')}   "
           f"uptime: {_fmt_uptime(s.get('uptime_s', 0))}   {status_tag}")
     print(f"  pub  {s['endpoints']['pub']}")
     print(f"  rep  {s['endpoints']['rep']}")
@@ -1578,8 +1578,8 @@ def cmd_music_eq(args) -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser(
-        prog="desktop-assistant",
-        description="Control the running assistant over ZMQ.",
+        prog="vera",
+        description="Control the running VERA daemon over ZMQ.",
     )
     sub = p.add_subparsers(dest="cmd")
 
@@ -1592,7 +1592,7 @@ def main() -> int:
     sys_sub = sys_sp.add_subparsers(dest="sys_cmd", metavar="<subcommand>")
     sys_sub.required = True
     sys_sub.add_parser("ping",     help="Round-trip check — confirms daemon is reachable").set_defaults(func=cmd_ping)
-    sys_sub.add_parser("restart",  help="Restart desktop-assistant-core systemd service").set_defaults(func=cmd_restart)
+    sys_sub.add_parser("restart",  help="Restart vera-core systemd service").set_defaults(func=cmd_restart)
     sys_sub.add_parser("reboot",   help="Reboot the Raspberry Pi (prompts for confirmation)").set_defaults(func=cmd_reboot)
     sys_sub.add_parser("shutdown", help="Shut down the Raspberry Pi (prompts for confirmation)").set_defaults(func=cmd_shutdown)
     sys_sub.add_parser("version",  help="Speak the current version number via TTS").set_defaults(func=cmd_version)

@@ -7,7 +7,7 @@ do NOT affect the thermal-safety unit.
 Run:
     python3 -m src.assistant.core_main
 
-Or via systemd: services/systemd/desktop-assistant-core.service
+Or via systemd: services/systemd/vera-core.service
 """
 
 from __future__ import annotations

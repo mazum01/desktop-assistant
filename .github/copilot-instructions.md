@@ -1,4 +1,4 @@
-# Desktop Assistant — Agent Imperatives
+# VERA — Agent Imperatives
 
 These rules apply to **every** interaction, code change, and commit in this project.
 The agent must follow them unconditionally.
@@ -84,7 +84,7 @@ The agent must follow them unconditionally.
 
 ## 8. CLI Consistency — Mandatory on Every CLI Change
 
-The CLI entry point is `scripts/desktop-assistant` (symlinked to `/usr/local/bin/da`).
+The CLI entry point is `scripts/desktop-assistant` (symlinked to `/usr/local/bin/vera` and `/usr/local/bin/da`).
 
 **Any time a CLI command is added, removed, renamed, or its arguments change:**
 
@@ -100,11 +100,11 @@ The CLI entry point is `scripts/desktop-assistant` (symlinked to `/usr/local/bin
    the corresponding function definition too. Unreachable code after a `return` statement
    must be removed immediately.
 
-3. **Verify `da help` renders cleanly** — run `python3 scripts/desktop-assistant help`
+3. **Verify `vera help` renders cleanly** — run `python3 scripts/desktop-assistant help`
    and confirm every command appears with an accurate one-line summary before committing.
 
-4. **`da help <command>`** — every entry in the `commands` dict must support the
-   single-command lookup path (`da help servo`, `da help meet`, etc.).
+4. **`vera help <command>`** — every entry in the `commands` dict must support the
+   single-command lookup path (`vera help servo`, `vera help meet`, etc.).
 
 Failure to keep `cmd_help()` in sync with the registered subparsers is a bug, not a
 style issue. Fix it in the same commit as the CLI change.

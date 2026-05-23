@@ -1,7 +1,7 @@
 ---
 name: music
 description: >
-  Control Pandora music playback on the desktop assistant via pianobar.
+  Control Pandora music playback on VERA via pianobar.
   Handles play, stop, skip, pause, volume, station selection, thumbs-up/down,
   and status queries. Use for any music-related request.
 metadata:
@@ -13,7 +13,7 @@ metadata:
 
 # Music Skill
 
-Control Pandora music playback on the desktop assistant.
+Control Pandora music playback on VERA.
 
 ## When to use
 

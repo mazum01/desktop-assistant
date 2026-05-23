@@ -1,5 +1,5 @@
 [Unit]
-Description=Desktop Assistant — thermal safety service (TMP117 + fan)
+Description=VERA — thermal safety service (TMP117 + fan)
 Documentation=https://github.com/mazum01/desktop-assistant
 After=local-fs.target
 StartLimitIntervalSec=0

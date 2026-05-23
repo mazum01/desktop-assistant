@@ -1,5 +1,5 @@
 """
-PipeWire system-level equalizer for Desktop Assistant.
+PipeWire system-level equalizer for VERA.
 
 Creates a PipeWire filter-chain EQ sink that intercepts ALL audio —
 pianobar, TTS, beeps — so the EQ applies universally.
@@ -117,7 +117,7 @@ def _build_config(bands: list) -> str:
     nodes_str = "\n".join(nodes_lines)
     links_str = "\n".join(links_lines)
 
-    return f"""# Desktop Assistant system equalizer — auto-generated, do not edit by hand.
+    return f"""# VERA system equalizer — auto-generated, do not edit by hand.
 context.modules = [
     {{ name = libpipewire-module-filter-chain
         args = {{

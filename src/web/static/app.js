@@ -1,4 +1,4 @@
-/* Desktop Assistant Dashboard — app.js */
+/* VERA Dashboard — app.js */
 
 const WS_URL = `ws://${location.host}/ws`;
 let ws = null;
@@ -1133,7 +1133,7 @@ async function sendUtterance() {
 
 
 async function restartDaemon() {
-  if (!confirm("Restart the desktop-assistant-core service?")) return;
+  if (!confirm("Restart the vera-core service?")) return;
   const btn = document.querySelector('[onclick="restartDaemon()"]');
   if (btn) { btn.disabled = true; btn.textContent = "⟳ Restarting…"; }
   try {

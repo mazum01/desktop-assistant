@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Trigger a spoken scene description from the desktop assistant camera."""
+"""Trigger a spoken scene description from VERA camera."""
 
 import json
 import sys

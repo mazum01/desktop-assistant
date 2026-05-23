@@ -2,7 +2,7 @@
 name: face-tracking
 description: >
   Enable, disable, or check the status of face-following behavior on the
-  desktop assistant's camera servo. When enabled, the head automatically
+  VERA's camera servo. When enabled, the head automatically
   follows detected faces. Use for requests about the head tracking, following,
   or staying still.
 metadata:
@@ -14,7 +14,7 @@ metadata:
 
 # Face Tracking Skill
 
-Control whether the desktop assistant's head servo automatically follows
+Control whether VERA's head servo automatically follows
 detected faces.
 
 ## When to use

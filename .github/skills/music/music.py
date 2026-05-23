@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Control Pandora music playback on the desktop assistant."""
+"""Control Pandora music playback on VERA."""
 
 import json
 import sys

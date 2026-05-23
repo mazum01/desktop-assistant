@@ -1,4 +1,4 @@
-// Desktop Assistant — System Architecture
+// VERA — System Architecture
 //
 // This file is the source of truth for docs/architecture/architecture.pdf.
 // Regenerate with:  bash docs/architecture/build.sh
@@ -6,14 +6,14 @@
 // Per agent imperative #7: this diagram MUST be updated whenever a service,
 // driver, hardware item, or topic is added/removed/renamed.
 
-digraph DesktopAssistant {
+digraph VERA {
     rankdir=TB;
     splines=true;
     nodesep=0.4;
     ranksep=0.6;
     fontname="Helvetica";
     labelloc="t";
-    label=<<b>Desktop Assistant — System Architecture</b><br/><font point-size="10">v1.13.0 — skill config framework · WeatherSkill · ReminderSkill · SmartHomeSkill · NewsSkill</font>>;
+    label=<<b>VERA — Vision-Enabled Reasoning Agent — System Architecture</b><br/><font point-size="10">v1.23.0 — VERA rebrand · mono depth fix · face depth labels · depth service toggles</font>>;
     fontsize=16;
 
     node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin=0.15];

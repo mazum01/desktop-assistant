@@ -47,7 +47,7 @@ sudo systemctl disable desktop-assistant-core desktop-assistant-thermal
 - Both units run as user `starter`, group `starter`, with supplementary
   groups for the hardware they touch (`i2c`, `gpio`, plus `audio`,
   `video` for the core unit). Make sure your user is a member.
-- Path is hard-coded to `/home/starter/Code/Desktop Assistant` — edit
+- Path is hard-coded to `/home/starter/Code/VERA` — edit
   the unit files if your layout differs.
 - `ProtectSystem=strict` + `ReadWritePaths=/tmp` keeps the rest of the
   filesystem read-only. The camera test still writes to `/tmp/`.

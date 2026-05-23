@@ -1,4 +1,4 @@
-"""Depth estimation utilities for the Desktop Assistant.
+"""Depth estimation utilities for VERA.
 
 Three methods are provided:
 

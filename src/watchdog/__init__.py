@@ -1,1 +1,1 @@
-# Desktop Assistant — system health watchdog
+# VERA — system health watchdog

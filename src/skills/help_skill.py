@@ -1,4 +1,4 @@
-"""Skill: describe what Desktop Assistant can do."""
+"""Skill: describe what VERA can do."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Toggle or query depth estimation on the desktop assistant."""
+"""Toggle or query depth estimation on VERA."""
 
 import json
 import sys

@@ -1,4 +1,4 @@
-# Desktop Assistant — Requirements
+# VERA — Requirements
 
 > Printable requirements document.
 

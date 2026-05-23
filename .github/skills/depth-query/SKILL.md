@@ -15,7 +15,7 @@ metadata:
 
 # Depth Query Skill
 
-Ask the desktop assistant how far objects and people are from the camera.
+Ask VERA how far objects and people are from the camera.
 
 ## When to use
 

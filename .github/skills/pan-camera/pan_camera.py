@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pan the desktop-assistant camera to a given angle via ZMQ IPC."""
+"""Pan the VERA camera to a given angle via ZMQ IPC."""
 
 import json
 import sys
@@ -66,7 +66,7 @@ def main():
             print(json.dumps({"ok": False, "error": reply.get("error", "unknown")}))
             sys.exit(1)
     except zmq.Again:
-        print(json.dumps({"ok": False, "error": "Timeout — desktop-assistant daemon not responding"}))
+        print(json.dumps({"ok": False, "error": "Timeout — VERA daemon not responding"}))
         sys.exit(1)
     except Exception as exc:
         print(json.dumps({"ok": False, "error": str(exc)}))

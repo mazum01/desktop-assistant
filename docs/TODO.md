@@ -1,4 +1,4 @@
-# Desktop Assistant — Remaining Work
+# VERA — Remaining Work
 
 > Extracted from `PROJECT_PHASES.md`. Items already completed are omitted.
 > Reference the phase docs for full context, exit criteria, and design notes.

@@ -2,7 +2,7 @@
 name: random-motion
 description: >
   Enable, disable, or check the status of random idle head movement on the
-  desktop assistant. When enabled, the head drifts and gazes around when no
+  VERA. When enabled, the head drifts and gazes around when no
   face is visible. Use for requests about idle head motion, wandering gaze,
   or keeping the head still.
 metadata:
@@ -14,7 +14,7 @@ metadata:
 
 # Random Motion Skill
 
-Control whether the desktop assistant's head drifts and gazes randomly when
+Control whether VERA's head drifts and gazes randomly when
 idle (no face in view).
 
 ## When to use

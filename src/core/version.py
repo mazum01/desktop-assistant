@@ -1,5 +1,5 @@
 """
-Version accessor for Desktop Assistant.
+Version accessor for VERA.
 
 Reads the VERSION file at the repo root so every service and the TTS
 startup/query handler always reports the correct version without

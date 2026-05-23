@@ -1,4 +1,4 @@
-# Desktop Assistant Skills
+# VERA Skills
 
 This directory contains skills for two systems:
 

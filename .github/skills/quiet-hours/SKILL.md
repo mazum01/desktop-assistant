@@ -2,7 +2,7 @@
 name: quiet-hours
 description: >
   Enable, disable, or configure the quiet-hours TTS silence window on the
-  desktop assistant. During quiet hours the assistant suppresses all spoken
+  VERA. During quiet hours the assistant suppresses all spoken
   output and autonomous motion. Use for bedtime, sleep, or scheduled silence
   requests.
 metadata:
@@ -14,7 +14,7 @@ metadata:
 
 # Quiet Hours Skill
 
-Control the desktop assistant's quiet-hours (TTS + motion silence) window.
+Control VERA's quiet-hours (TTS + motion silence) window.
 
 ## When to use
 
