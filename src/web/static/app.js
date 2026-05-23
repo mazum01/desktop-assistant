@@ -886,7 +886,64 @@ async function saveStreamResolution(val) {
   setTimeout(() => { if (st) st.textContent = ""; }, 4000);
 }
 
-async function doDescribe() {
+async function loadCam2Resolutions() {
+  try {
+    const [cr, sr] = await Promise.all([
+      fetch("/api/settings/camera2/resolution").then(r => r.ok ? r.json() : null),
+      fetch("/api/settings/camera2/stream_resolution").then(r => r.ok ? r.json() : null),
+    ]);
+    if (cr) {
+      const val = `${cr.width}x${cr.height}`;
+      const sel = el("cam2-capture-resolution-select");
+      if (sel) {
+        const opts = Array.from(sel.options).map(o => o.value);
+        sel.value = opts.includes(val) ? val : "1920x1080";
+      }
+    }
+    if (sr) {
+      const val = `${sr.width}x${sr.height}`;
+      const sel = el("cam2-stream-resolution-select");
+      if (sel) {
+        const opts = Array.from(sel.options).map(o => o.value);
+        sel.value = opts.includes(val) ? val : "640x360";
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function saveCam2CaptureResolution(val) {
+  const st = el("cam2-capture-resolution-status");
+  const parts = val.split("x");
+  if (parts.length !== 2) return;
+  try {
+    const r = await fetch("/api/settings/camera2/resolution", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ width: parseInt(parts[0], 10), height: parseInt(parts[1], 10) }),
+    });
+    if (st) { st.textContent = r.ok ? "Applied ✓" : "Error " + r.status; st.style.color = r.ok ? "var(--green)" : "var(--red)"; }
+  } catch (e) {
+    if (st) { st.textContent = "Error"; st.style.color = "var(--red)"; }
+  }
+  setTimeout(() => { if (st) st.textContent = ""; }, 4000);
+}
+
+async function saveCam2StreamResolution(val) {
+  const st = el("cam2-stream-resolution-status");
+  const parts = val.split("x");
+  if (parts.length !== 2) return;
+  try {
+    const r = await fetch("/api/settings/camera2/stream_resolution", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ width: parseInt(parts[0], 10), height: parseInt(parts[1], 10) }),
+    });
+    if (st) { st.textContent = r.ok ? "Applied ✓" : "Error " + r.status; st.style.color = r.ok ? "var(--green)" : "var(--red)"; }
+  } catch (e) {
+    if (st) { st.textContent = "Error"; st.style.color = "var(--red)"; }
+  }
+  setTimeout(() => { if (st) st.textContent = ""; }, 4000);
+}
   const btn = document.querySelector('[onclick="doDescribe()"]');
   if (btn) { btn.disabled = true; btn.textContent = "Describing…"; }
   try {
@@ -1138,6 +1195,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadCamRotation();
   loadCam2Rotation();
   loadStreamResolution();
+  loadCam2Resolutions();
   loadObjectDetectionEnabled();
   loadMusicStatus();
   loadDepthSettings();

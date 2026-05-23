@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.21.6] - 2026-05-23
+### Added
+- **Cam2 selectable resolution** — cam2 was hard-locked at 640×480. Raised the default capture resolution to 1920×1080, added dedicated `camera2.set_resolution` and `camera2.set_stream_resolution` bus events (previously cam2 accidentally shared cam1's events), added `/api/settings/camera2/resolution` and `/api/settings/camera2/stream_resolution` REST endpoints, and added Capture Resolution / Stream Resolution selectors for cam2 in the web GUI Settings panel. Fixes `/api/snapshot2` returning a downscaled frame by storing the full-res frame before the MJPEG stream downscale.
+
 ## [1.21.5] - 2026-05-23
 ### Fixed
 - **Face list Refresh button missing** — when the Re-identify button was moved to the card header in v1.21.2, the bottom action row was left with only the Merge button and no way to manually reload the list. Added a `↺ Refresh` button (calls `loadFaces()`) next to the Merge button so users can reload the face table on demand without waiting for the 30-second auto-poll.

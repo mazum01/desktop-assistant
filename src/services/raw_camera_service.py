@@ -11,8 +11,8 @@ independent continuous autofocus.
 
 Topics subscribed:
     camera2.set_rotation          {"rotation_deg": int}  — live rotation update
-    camera.set_resolution         {"width": int, "height": int}
-    camera.set_stream_resolution  {"width": int, "height": int}
+    camera2.set_resolution        {"width": int, "height": int}  — capture resolution
+    camera2.set_stream_resolution {"width": int, "height": int}  — MJPEG downscale
 
 Topics published:
     vision.frame2_ready        {"index": int, "ts": float}
@@ -107,8 +107,8 @@ class RawCameraService(Service):
 
         if self.bus:
             self.bus.subscribe("camera2.set_rotation", self._on_set_rotation)
-            self.bus.subscribe("camera.set_resolution", self._on_set_resolution)
-            self.bus.subscribe("camera.set_stream_resolution", self._on_set_stream_resolution)
+            self.bus.subscribe("camera2.set_resolution", self._on_set_resolution)
+            self.bus.subscribe("camera2.set_stream_resolution", self._on_set_stream_resolution)
 
         log.info(
             "RawCameraService started; cam_index=%d hw_ready=%s %dx%d@%dfps",
@@ -144,8 +144,14 @@ class RawCameraService(Service):
         if rot:
             frame = _rotate_frame(frame, rot)
 
+        # Always store the full capture-resolution frame so /api/snapshot2
+        # returns the highest quality image regardless of stream settings.
+        with self._lock:
+            self._latest_frame = frame
+
         sw, sh = self._stream_width, self._stream_height
         fh, fw = frame.shape[:2]
+        stream_frame = frame
         if sw > 0 and sh > 0 and (fw > sw or fh > sh):
             ar = fw / fh
             tw = sw
@@ -153,15 +159,14 @@ class RawCameraService(Service):
             if th > sh:
                 th = sh
                 tw = round(sh * ar)
-            frame = cv2.resize(frame, (tw, th), interpolation=cv2.INTER_LINEAR)
+            stream_frame = cv2.resize(frame, (tw, th), interpolation=cv2.INTER_LINEAR)
 
         quality = self._cam_cfg.jpeg_quality
-        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        ok, buf = cv2.imencode(".jpg", stream_frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
         jpeg = bytes(buf) if ok else None
 
         with self._lock:
             self._latest_jpeg = jpeg
-            self._latest_frame = frame
             self._index += 1
             idx = self._index
 

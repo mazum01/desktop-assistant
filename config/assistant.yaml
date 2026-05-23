@@ -75,8 +75,8 @@ camera2:
   # Set enabled: false to disable the second stream entirely.
   enabled: true
   index: 1          # CSI slot 1
-  width: 640
-  height: 480
+  width: 1920
+  height: 1080
   framerate: 30     # match primary cam — Pi 5 handles dual 30fps comfortably
   rotation_deg: 0
   # Must match camera.af_mode so both feeds have consistent focus behaviour.

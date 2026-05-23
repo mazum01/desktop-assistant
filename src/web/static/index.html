@@ -260,6 +260,33 @@
         </div>
 
         <div class="control-group">
+          <label>Cam 2 Capture Resolution <small style="color:var(--text-muted)">(sensor resolution — higher = better panorama quality)</small></label>
+          <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
+            <select id="cam2-capture-resolution-select" onchange="saveCam2CaptureResolution(this.value)" style="width:200px">
+              <option value="640x480">640×480</option>
+              <option value="1280x720">1280×720 (HD 720p)</option>
+              <option value="1920x1080" selected>1920×1080 (Full HD)</option>
+            </select>
+            <span id="cam2-capture-resolution-status" class="qh-status"></span>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Cam 2 Stream Resolution <small style="color:var(--text-muted)">(MJPEG output — does not affect snapshot quality)</small></label>
+          <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
+            <select id="cam2-stream-resolution-select" onchange="saveCam2StreamResolution(this.value)" style="width:200px">
+              <option value="320x180">320×180 (low bandwidth)</option>
+              <option value="426x240">426×240</option>
+              <option value="640x360" selected>640×360 (default)</option>
+              <option value="854x480">854×480</option>
+              <option value="1280x720">1280×720 (HD)</option>
+              <option value="1920x1080">1920×1080 (Full HD — slow)</option>
+            </select>
+            <span id="cam2-stream-resolution-status" class="qh-status"></span>
+          </div>
+        </div>
+
+        <div class="control-group">
           <label>Stream Resolution <small style="color:var(--text-muted)">(MJPEG output — camera FOV unchanged)</small></label>
           <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
             <select id="cam-stream-resolution-select" onchange="saveStreamResolution(this.value)" style="width:200px">

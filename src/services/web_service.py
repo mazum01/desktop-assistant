@@ -44,8 +44,14 @@ GET  /api/settings/camera/rotation   Get camera 1 rotation angle
 PUT  /api/settings/camera/rotation   Set camera 1 rotation  body: {"rotation_deg": int 0-359}
 GET  /api/settings/camera2/rotation  Get camera 2 rotation angle
 PUT  /api/settings/camera2/rotation  Set camera 2 rotation  body: {"rotation_deg": int 0-359}
-GET  /api/settings/camera/resolution  Get current capture resolution (both cameras)
-PUT  /api/settings/camera/resolution  Set capture resolution  body: {"width": int, "height": int}
+GET  /api/settings/camera/resolution   Get camera 1 capture resolution
+PUT  /api/settings/camera/resolution   Set camera 1 capture resolution  body: {"width": int, "height": int}
+GET  /api/settings/camera/stream_resolution   Get camera 1 MJPEG stream resolution
+PUT  /api/settings/camera/stream_resolution   Set camera 1 MJPEG stream resolution  body: {"width": int, "height": int}
+GET  /api/settings/camera2/resolution  Get camera 2 capture resolution
+PUT  /api/settings/camera2/resolution  Set camera 2 capture resolution  body: {"width": int, "height": int}
+GET  /api/settings/camera2/stream_resolution  Get camera 2 MJPEG stream resolution
+PUT  /api/settings/camera2/stream_resolution  Set camera 2 MJPEG stream resolution  body: {"width": int, "height": int}
 GET  /api/settings/depth     Get depth estimation settings (dense_enabled, mono_enabled, calibrated)
 PUT  /api/settings/depth     Toggle depth at runtime  body: {"dense_enabled": bool, "mono_enabled": bool}
 GET  /api/depth/map          Colorized depth map JPEG (TURBO colormap) — requires dense_enabled
@@ -1140,6 +1146,40 @@ class WebService:
         async def api_put_stream_resolution(body: _CameraResolutionBody):
             if self.bus:
                 self.bus.publish("camera.set_stream_resolution",
+                                 {"width": body.width, "height": body.height})
+            return {"ok": True, "width": body.width, "height": body.height}
+
+        # ── Camera 2 capture + stream resolution ────────────────────────
+
+        @app.get("/api/settings/camera2/resolution")
+        async def api_get_camera2_resolution():
+            if self._camera2_svc:
+                w, h = self._camera2_svc.resolution
+            else:
+                w, h = 640, 480
+            return {"width": w, "height": h}
+
+        @app.put("/api/settings/camera2/resolution")
+        async def api_put_camera2_resolution(body: _CameraResolutionBody):
+            if self.bus:
+                self.bus.publish("camera2.set_resolution",
+                                 {"width": body.width, "height": body.height})
+            return {"ok": True, "width": body.width, "height": body.height}
+
+        @app.get("/api/settings/camera2/stream_resolution")
+        async def api_get_camera2_stream_resolution():
+            if self._camera2_svc:
+                w, h = self._camera2_svc.stream_resolution
+                if w == 0:
+                    w, h = self._camera2_svc.resolution  # 0 means use full capture res
+            else:
+                w, h = 640, 480
+            return {"width": w, "height": h}
+
+        @app.put("/api/settings/camera2/stream_resolution")
+        async def api_put_camera2_stream_resolution(body: _CameraResolutionBody):
+            if self.bus:
+                self.bus.publish("camera2.set_stream_resolution",
                                  {"width": body.width, "height": body.height})
             return {"ok": True, "width": body.width, "height": body.height}
 
