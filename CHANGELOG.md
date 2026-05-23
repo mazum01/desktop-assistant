@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.21.5] - 2026-05-23
+### Fixed
+- **Face list Refresh button missing** — when the Re-identify button was moved to the card header in v1.21.2, the bottom action row was left with only the Merge button and no way to manually reload the list. Added a `↺ Refresh` button (calls `loadFaces()`) next to the Merge button so users can reload the face table on demand without waiting for the 30-second auto-poll.
+
 ## [1.21.4] - 2026-05-23
 ### Fixed
 - **Watchdog blind to stuck openclaw orphan** — `is_journal_stuck()` queried `journalctl -u openclaw-gateway.service`, but once the systemd service invocation completes (exit 78 "already running"), the orphaned gateway process loses its unit journal tag. The stuck "Bot not initialized" spam was invisible to the unit query (0 hits) while the direct `_PID=` query showed 119 hits in 60s. Refactored `is_journal_stuck()` into a `_journal_pattern_count()` helper; when the unit query returns 0 and `require_systemd_active=False`, it automatically falls back to scanning by the port-holder PID so the stuck loop is detected and triggers a watchdog restart.
