@@ -637,10 +637,13 @@ class WebService:
 
         @app.post("/api/faces/refresh")
         async def api_refresh_faces():
+            pruned = 0
+            if self._registry:
+                pruned = self._registry.prune_gallery()
             if self.bus:
                 self.bus.publish("face.refresh", {})
             faces = self._registry.list_faces() if self._registry else []
-            return {"ok": True, "count": len(faces)}
+            return {"ok": True, "count": len(faces), "pruned": pruned}
 
         # ── Quiet-hours settings ───────────────────────────────────────
 

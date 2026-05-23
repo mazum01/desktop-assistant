@@ -146,7 +146,7 @@
 
     <!-- ── Face Registry ───────────────────────────────────────── -->
     <section class="card" id="card-faces">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Face Registry &nbsp;<button class="btn btn-danger btn-sm" onclick="deleteAllFaces()" title="Delete all known faces permanently">🗑 Delete All</button> &nbsp;<button class="btn btn-warning btn-sm" onclick="deleteGuestFaces()" title="Remove unnamed Guest entries">👤 Remove Guests</button></h2>
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Face Registry &nbsp;<button class="btn btn-danger btn-sm" onclick="deleteAllFaces()" title="Delete all known faces permanently">🗑 Delete All</button> &nbsp;<button class="btn btn-warning btn-sm" onclick="deleteGuestFaces()" title="Remove unnamed Guest entries">👤 Remove Guests</button> &nbsp;<button class="btn btn-secondary btn-sm" onclick="refreshFaces()" title="Prune outlier embeddings and re-identify all faces">↺ Re-identify</button></h2>
       <div id="face-registry-wrap">
         <table id="face-table">
           <thead>
@@ -164,7 +164,6 @@
           </tbody>
         </table>
         <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-          <button class="btn btn-secondary" onclick="refreshFaces()" title="Reload embedding cache and re-identify all faces">↺ Re-identify</button>
           <button class="btn btn-primary btn-sm" id="merge-btn" onclick="mergeFaces()" disabled title="Select exactly two faces to merge">⛓ Merge Selected</button>
           <span id="merge-hint" style="font-size:12px;color:var(--muted)">Select 2 faces to merge</span>
         </div>

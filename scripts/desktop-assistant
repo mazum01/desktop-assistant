@@ -514,6 +514,49 @@ def cmd_refresh_faces(_args) -> int:
     return 0
 
 
+def cmd_clean_gallery(_args) -> int:
+    """Prune stale/outlier embeddings from the face gallery to fix mis-identification."""
+    from src.perception.face_registry import FaceRegistry
+    reg = FaceRegistry()
+    removed = reg.prune_gallery()
+    reg.close()
+    if removed:
+        print(f"Pruned {removed} outlier embedding(s) from the gallery.")
+        print("Run 'da face refresh' to reload the daemon's embedding cache.")
+    else:
+        print("Gallery is already clean — no outlier embeddings found.")
+    return 0
+
+
+def cmd_clear_embeddings(args) -> int:
+    """Clear all embeddings for a face identity (by name or ID prefix) to force re-enrollment."""
+    from src.perception.face_registry import FaceRegistry
+    reg = FaceRegistry()
+    faces = reg.list_faces()
+    target = args.name_or_id
+    # Match by full ID, 8-char ID prefix, or case-insensitive name
+    match = next(
+        (f for f in faces if f["id"] == target
+         or f["id"].startswith(target)
+         or f["name"].lower() == target.lower()),
+        None,
+    )
+    if not match:
+        print(f"Error: no face found matching {target!r}. Use 'da face list' to see IDs and names.")
+        reg.close()
+        return 1
+    removed = reg.clear_embeddings(match["id"])
+    reg.close()
+    if removed >= 0:
+        print(f"Cleared {removed} embedding(s) for {match['name']!r} ({match['id'][:8]}…).")
+        print("The gallery for this identity will rebuild from scratch on next sighting.")
+        print("Run 'da face refresh' to reload the daemon's embedding cache.")
+    else:
+        print("Error: face not found (ID mismatch).")
+        return 1
+    return 0
+
+
 def cmd_list_faces(_args) -> int:
     from src.perception.face_registry import FaceRegistry
     reg = FaceRegistry()
@@ -956,6 +999,8 @@ def cmd_help(args) -> int:
                             "                  face meet \"<Name>\"      Name the most recently seen face.\n"
                             "                  face list               List faces with IDs and last-seen times.\n"
                             "                  face refresh            Reload embedding cache; re-identify all faces.\n"
+                            "                  face clean-gallery      Prune outlier embeddings to fix mis-identification.\n"
+                            "                  face clear-embeddings <name|id>  Clear gallery for one identity (forces re-enrollment).\n"
                             "                  face forget-all         Delete ALL faces permanently.\n"
                             "                  face forget-guests      Remove unnamed Guest entries.\n"
                             "                  face merge <keep> <absorb>  Merge two face identities.\n"
@@ -1563,6 +1608,10 @@ def main() -> int:
 
     face_sub.add_parser("list", help="List all faces with IDs, names, and last-seen times").set_defaults(func=cmd_list_faces)
     face_sub.add_parser("refresh", help="Reload embedding cache and re-identify all faces").set_defaults(func=cmd_refresh_faces)
+    face_sub.add_parser("clean-gallery", help="Prune outlier embeddings to fix mis-identification").set_defaults(func=cmd_clean_gallery)
+    ssp = face_sub.add_parser("clear-embeddings", help="Clear all embeddings for one identity (forces re-enrollment)")
+    ssp.add_argument("name_or_id", help="Name or ID prefix (e.g. 'Carson' or 'c523744e')")
+    ssp.set_defaults(func=cmd_clear_embeddings)
     face_sub.add_parser("forget-all", help="Delete ALL known faces from the registry permanently").set_defaults(func=cmd_forget_faces)
     face_sub.add_parser("forget-guests", help="Delete only Guest-named faces, keeping named identities").set_defaults(func=cmd_forget_guests)
 

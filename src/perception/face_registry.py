@@ -558,6 +558,69 @@ class FaceRegistry:
         self.delete_thumbnail(face_id)
         return cur2.rowcount > 0
 
+    def prune_gallery(self, min_sim: float = _QUALITY_GATE_MIN_SIM) -> int:
+        """Retroactively apply the quality gate to all stored embeddings.
+
+        For each identity, computes the centroid of all its embeddings and
+        removes any embedding whose cosine similarity to that centroid falls
+        below *min_sim*.  At least ``_QUALITY_GATE_MIN_FRAMES`` embeddings are
+        always preserved per identity (the best-scoring ones), so no identity
+        is ever reduced below the minimum needed for reliable matching.
+
+        This is useful after upgrading from a version that lacked the quality
+        gate — stale / contaminated captures (occluded faces, wrong person in
+        frame during training) would otherwise persist and cause
+        mis-identification.  Returns the total number of embeddings removed.
+        """
+        removed = 0
+        face_ids = [r["id"] for r in self._conn.execute("SELECT id FROM faces").fetchall()]
+        for face_id in face_ids:
+            rows = self._conn.execute(
+                "SELECT id, embedding FROM face_embeddings WHERE face_id = ? "
+                "ORDER BY created_at ASC",
+                (face_id,),
+            ).fetchall()
+            if len(rows) < _QUALITY_GATE_MIN_FRAMES:
+                continue  # too few embeddings to prune safely
+            embs = np.stack([np.frombuffer(r["embedding"], dtype=np.float32) for r in rows])
+            centroid = embs.mean(axis=0).astype(np.float32)
+            norm = np.linalg.norm(centroid)
+            if norm < 1e-10:
+                continue
+            centroid /= norm
+            sims = embs @ centroid  # cosine similarity of each row to the centroid
+            keep_mask = sims >= min_sim
+            if keep_mask.sum() < _QUALITY_GATE_MIN_FRAMES:
+                # Never nuke an identity — always preserve the best MIN_FRAMES embeddings
+                top_idx = np.argpartition(sims, -_QUALITY_GATE_MIN_FRAMES)[-_QUALITY_GATE_MIN_FRAMES:]
+                keep_mask = np.zeros(len(rows), dtype=bool)
+                keep_mask[top_idx] = True
+            for i, row in enumerate(rows):
+                if not keep_mask[i]:
+                    self._conn.execute("DELETE FROM face_embeddings WHERE id = ?", (row["id"],))
+                    removed += 1
+        if removed:
+            self._conn.commit()
+            self._invalidate_emb_cache()
+            log.info("prune_gallery: removed %d outlier embedding(s)", removed)
+        return removed
+
+    def clear_embeddings(self, face_id: str) -> int:
+        """Remove all stored embeddings for *face_id* without deleting the face entry.
+
+        The face's name, timestamps, and seen_count are preserved.  On next
+        detection the identity will be re-enrolled from scratch under the new
+        quality gate, producing a clean gallery.  Returns the number of
+        embeddings removed, or -1 if the face_id does not exist.
+        """
+        if not self._conn.execute("SELECT 1 FROM faces WHERE id = ?", (face_id,)).fetchone():
+            return -1
+        cur = self._conn.execute("DELETE FROM face_embeddings WHERE face_id = ?", (face_id,))
+        self._conn.commit()
+        self._invalidate_emb_cache()
+        log.info("clear_embeddings: removed %d embedding(s) for face %s", cur.rowcount, face_id[:8])
+        return cur.rowcount
+
     def get_current_face_id(self) -> Optional[str]:
         """Return the most recently seen face_id (useful for CLI name assignment)."""
         row = self._conn.execute(

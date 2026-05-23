@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.21.2] - 2026-05-23
+### Added
+- **`FaceRegistry.prune_gallery()`** — retroactively applies the quality gate to all stored embeddings. For each identity, computes the centroid and removes any embedding with cosine similarity below `_QUALITY_GATE_MIN_SIM`. Preserves at least `_QUALITY_GATE_MIN_FRAMES` embeddings per identity. Exposed via `POST /api/faces/refresh` (now also prunes on every Re-identify click) and `da face clean-gallery`.
+- **`FaceRegistry.clear_embeddings(face_id)`** — removes all stored embeddings for a single identity without deleting the face entry (name, timestamps, seen_count preserved). Forces a clean re-enrollment under the new quality gate. Exposed via `da face clear-embeddings <name|id>`.
+- **`da face clean-gallery`** CLI command — runs `prune_gallery()` on the live database to remove outlier embeddings.
+- **`da face clear-embeddings <name|id>`** CLI command — clears all embeddings for one identity by name or ID prefix, forcing re-enrollment from scratch.
+### Fixed
+- **Web GUI: Re-identify button restored to card header** — moved from the bottom of the face table (scrolled out of view for larger galleries) into the `Face Registry` card `h2` header, where it is always visible alongside Delete All / Remove Guests.
+- **Carson mis-identification** — cleared Carson's 24 pre-quality-gate embeddings from the live database. The Carson vs Alaina centroid similarity was 0.734, indicating severe cross-contamination from training sessions where multiple faces were visible simultaneously. Carson's gallery will rebuild cleanly under the new quality gate on next sighting.
+
 ## [1.21.1] - 2026-05-23
 ### Changed
 - **Face recognition: per-identity top-K aggregation** — `FaceRegistry.find_match()` now scores a query against every individual stored embedding and takes the mean of the top-K scores (default K=3) per identity, instead of a single mean-prototype vector. This eliminates prototype drift: if a gallery accumulates a few bad embeddings (occluded, blurry, side-profile), the mean prototype drifts away from the person's true appearance and causes missed matches. Top-K aggregation ignores the low-scoring junk and locks onto the best matching gallery frames.
