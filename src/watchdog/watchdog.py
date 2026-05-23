@@ -133,23 +133,42 @@ class ManagedService:
         except Exception:
             return False
 
-    def is_journal_stuck(self) -> bool:
-        """Return True if the stuck pattern appears ≥ stuck_threshold times in the last 60 s."""
-        if not self.journal_stuck_pattern:
-            return False
+    def _journal_pattern_count(self, *extra_args: str) -> int:
+        """Count journal_stuck_pattern occurrences in the last 60 s for the given journal filter args."""
         try:
             result = subprocess.run(
-                ["journalctl", "-u", self.unit, "--since", "60 seconds ago",
+                ["journalctl", *extra_args, "--since", "60 seconds ago",
                  "--no-pager", "-q"],
                 capture_output=True, text=True, timeout=8,
             )
-            count = result.stdout.count(self.journal_stuck_pattern)
-            if count >= self.stuck_threshold:
-                log.warning("%s: stuck pattern %r seen %d times in last 60s",
-                            self.unit, self.journal_stuck_pattern, count)
-                return True
+            return result.stdout.count(self.journal_stuck_pattern)
         except Exception:
-            pass
+            return 0
+
+    def is_journal_stuck(self) -> bool:
+        """Return True if the stuck pattern appears ≥ stuck_threshold times in the last 60 s.
+
+        Scans the systemd unit journal first.  For services that may run as
+        orphans (``require_systemd_active=False``), the actual process can
+        outlive its service invocation and lose the unit journal tag — in that
+        case, also scan directly by the port-holder's PID so the stuck-loop
+        detector still fires.
+        """
+        if not self.journal_stuck_pattern:
+            return False
+        count = self._journal_pattern_count("-u", self.unit)
+        if count == 0 and not self.require_systemd_active:
+            # Process may be an orphan whose logs are no longer tagged with the
+            # unit name.  Look up the PID holding our port and scan by _PID=.
+            port = self._port_from_http_check()
+            if port:
+                pid = self._pid_for_port(port)
+                if pid:
+                    count = self._journal_pattern_count(f"_PID={pid}")
+        if count >= self.stuck_threshold:
+            log.warning("%s: stuck pattern %r seen %d times in last 60s",
+                        self.unit, self.journal_stuck_pattern, count)
+            return True
         return False
 
     def _port_from_http_check(self) -> Optional[int]:

@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.21.4] - 2026-05-23
+### Fixed
+- **Watchdog blind to stuck openclaw orphan** — `is_journal_stuck()` queried `journalctl -u openclaw-gateway.service`, but once the systemd service invocation completes (exit 78 "already running"), the orphaned gateway process loses its unit journal tag. The stuck "Bot not initialized" spam was invisible to the unit query (0 hits) while the direct `_PID=` query showed 119 hits in 60s. Refactored `is_journal_stuck()` into a `_journal_pattern_count()` helper; when the unit query returns 0 and `require_systemd_active=False`, it automatically falls back to scanning by the port-holder PID so the stuck loop is detected and triggers a watchdog restart.
+
 ## [1.21.3] - 2026-05-23
 ### Fixed
 - **Re-identify button had no effect** — `PerceptionService` never subscribed to `face.refresh`, so clicking Re-identify published the event but the in-memory position cache was never cleared. The position cache kept serving the stale (wrong) identity assignment on every subsequent frame, making Re-identify completely ineffective. Added `_on_face_refresh` handler that clears the pos_cache and calls `registry.reload()`.
