@@ -57,6 +57,7 @@ class MonoDepthConfig:
     scale_factor: Optional[float] = None
     min_depth_m: float = 0.25
     max_depth_m: float = 6.0
+    enabled: bool = False
 
 
 class MonoDepthService(Service):
@@ -82,15 +83,18 @@ class MonoDepthService(Service):
                 scale_factor=d.get("mono_scale_factor", None),
                 min_depth_m=d.get("min_depth_m", 0.25),
                 max_depth_m=d.get("max_depth_m", 6.0),
+                enabled=bool(d.get("mono_enabled", False)),
             )
         else:
             self._cfg = config or MonoDepthConfig()
 
+        self._enabled: bool = self._cfg.enabled
         self._engine = None
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._latest_payload: Optional[dict] = None
         self._latest_lock = threading.Lock()
+        self._unsubs: list = []
 
     # ── Lifecycle ────────────────────────────────────────────────────────
 
@@ -98,16 +102,26 @@ class MonoDepthService(Service):
         from src.perception.hailo_inference import HailoInference
         self._engine = HailoInference(self._cfg.hef_path)
         self._stop_event.clear()
+        if self.bus:
+            self._unsubs.append(
+                self.bus.subscribe("depth.set_mono_enabled", self._on_set_enabled)
+            )
         self._thread = threading.Thread(
             target=self._run_loop, name="mono-depth", daemon=True
         )
         self._thread.start()
         log.info(
-            "MonoDepthService started — %.1f Hz, hardware=%s",
-            self._cfg.rate_hz, self._engine.hardware_ready,
+            "MonoDepthService started — %.1f Hz, hardware=%s, enabled=%s",
+            self._cfg.rate_hz, self._engine.hardware_ready, self._enabled,
         )
 
     def on_stop(self) -> None:
+        for unsub in self._unsubs:
+            try:
+                unsub()
+            except Exception:
+                pass
+        self._unsubs.clear()
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=5)
@@ -117,6 +131,10 @@ class MonoDepthService(Service):
                 self._engine.__exit__(None, None, None)
             except Exception:
                 pass
+
+    def _on_set_enabled(self, _topic, payload: dict) -> None:
+        self._enabled = bool(payload.get("enabled", True))
+        log.info("MonoDepthService: enabled=%s", self._enabled)
 
     @property
     def hardware_ready(self) -> bool:
@@ -131,6 +149,9 @@ class MonoDepthService(Service):
     def _run_loop(self) -> None:
         interval = max(_MIN_INTERVAL_S, 1.0 / max(0.1, self._cfg.rate_hz))
         while not self._stop_event.is_set():
+            if not self._enabled:
+                self._stop_event.wait(timeout=0.5)
+                continue
             t0 = time.monotonic()
             try:
                 self._process_one()

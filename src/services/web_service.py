@@ -1191,8 +1191,8 @@ class WebService:
             mono_last = self.bus.last("vision.mono_depth_map") if self.bus else None
             return JSONResponse({
                 "ok": True,
-                "dense_enabled": self._dense_stereo_svc is not None,
-                "mono_enabled": self._mono_depth_svc is not None,
+                "dense_enabled": getattr(self._dense_stereo_svc, "_enabled", False),
+                "mono_enabled": getattr(self._mono_depth_svc, "_enabled", False),
                 "calibrated": last.get("calibrated", False) if last else False,
                 "mono_hardware_ready": mono_last.get("hardware_ready", False) if mono_last else (
                     getattr(self._mono_depth_svc, "hardware_ready", False)
@@ -1216,6 +1216,7 @@ class WebService:
             import cv2 as _cv2
             import numpy as _np
             import io
+            from fastapi.responses import Response as _Response
             payload = None
             if self._dense_stereo_svc is not None:
                 payload = self._dense_stereo_svc.latest_payload()
@@ -1240,7 +1241,7 @@ class WebService:
             normed = (normed * 255).astype(_np.uint8)
             colored = _cv2.applyColorMap(normed, _cv2.COLORMAP_TURBO)
             _, jpg_buf = _cv2.imencode(".jpg", colored, [_cv2.IMWRITE_JPEG_QUALITY, 85])
-            return Response(content=jpg_buf.tobytes(), media_type="image/jpeg")
+            return _Response(content=jpg_buf.tobytes(), media_type="image/jpeg")
 
         @app.get("/api/depth/query")
         async def api_depth_query():
@@ -1292,6 +1293,7 @@ class WebService:
         async def api_depth_mono():
             import cv2 as _cv2
             import numpy as _np
+            from fastapi.responses import Response as _Response
             payload = None
             if self._mono_depth_svc is not None:
                 payload = self._mono_depth_svc.latest_payload()
@@ -1306,7 +1308,7 @@ class WebService:
             normed = (arr * 255).astype(_np.uint8)
             colored = _cv2.applyColorMap(normed, _cv2.COLORMAP_TURBO)
             _, jpg_buf = _cv2.imencode(".jpg", colored, [_cv2.IMWRITE_JPEG_QUALITY, 85])
-            return Response(content=jpg_buf.tobytes(), media_type="image/jpeg")
+            return _Response(content=jpg_buf.tobytes(), media_type="image/jpeg")
 
 
         @app.get("/api/music/status")
