@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.22.0] - 2026-05-23
+### Added
+- **Face depth labels on cam1 overlay** — VisionService now subscribes to `vision.face_depth` and annotates each face ellipse label with the current range reading (e.g. `Mark  1.43m`). Uses the existing stereo/face-size depth estimate already computed by StereoService; no extra CPU cost.
+### Fixed
+- **Depth imagery now auto-refreshes in the web GUI** — `refreshDepthMap()` and `refreshMonoMap()` were defined but never called automatically. Added a 3-second `setInterval` that polls while enabled, and `saveDepthSettings()` now fires an immediate refresh when a method is toggled on. `loadDepthSettings()` also refreshes images at page load if already enabled.
+
 ## [1.21.8] - 2026-05-23
 ### Fixed
 - **Depth service toggles now work** — `DenseStereoService` and `MonoDepthService` were only instantiated when their respective `dense_enabled`/`mono_enabled` flags were `true` in config, meaning the web GUI toggles (which publish `depth.set_dense_enabled` / `depth.set_mono_enabled` bus events) fired into a void with nobody listening. Both services are now always started at boot; they read their initial enabled state from config and respond to the bus events at runtime to enable/disable processing. When disabled they sleep instead of processing (no CPU waste). `GET /api/settings/depth` now reports the live `_enabled` flag instead of merely checking if the service object exists.

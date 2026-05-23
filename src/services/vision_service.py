@@ -278,14 +278,18 @@ def _scale_bboxes(detections: list, sx: float, sy: float) -> list:
     return out
 
 
-def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
+def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
+                   face_depths: dict | None = None) -> None:
     """Draw face ovals and object rectangles in-place on a BGR frame.
 
     All pixel dimensions scale with the frame resolution relative to a 640×480
     baseline so overlays look the same physical size regardless of capture res.
+    face_depths maps face_id → depth_m for annotating faces with range.
     """
     h, w = frame_bgr.shape[:2]
     scale = min(w / 640.0, h / 480.0)
+    if face_depths is None:
+        face_depths = {}
 
     for idx, face in enumerate(faces):
         bbox = face.get("bbox")
@@ -302,6 +306,9 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list) -> None:
         ellipse_thickness = max(1, round(2 * scale))
         cv2.ellipse(frame_bgr, (cx, cy), (rx, ry), 0, 0, 360, color, ellipse_thickness, cv2.LINE_AA)
         label = face.get("name") or (face.get("face_id") and "unknown")
+        depth_m = face_depths.get(face.get("face_id"))
+        if depth_m is not None:
+            label = f"{label}  {depth_m:.2f}m" if label else f"{depth_m:.2f}m"
         if label:
             font_scale = max(0.8, 1.1 * scale)
             font_thick = max(1, round(scale))   # 1 at 640×480, 2 at 1280×960
@@ -537,6 +544,7 @@ class VisionService(Service):
         self._det_lock = threading.Lock()
         self._latest_faces: List[dict] = []
         self._latest_objects: List[dict] = []
+        self._face_depths: dict = {}   # face_id → depth_m from vision.face_depth
         self._unsubs = []
         # Rotation — initialised from camera config, updated live via bus
         self._rotation_lock = threading.Lock()
@@ -585,6 +593,9 @@ class VisionService(Service):
         )
         self._unsubs.append(
             self.bus.subscribe("perception.objects", self._on_objects)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("vision.face_depth", self._on_face_depth)
         )
         self._unsubs.append(
             self.bus.subscribe("object.enabled_changed", self._on_object_enabled_changed)
@@ -673,13 +684,14 @@ class VisionService(Service):
         with self._det_lock:
             faces = self._latest_faces
             objects = self._latest_objects
+            face_depths = dict(self._face_depths)
         with self._servo_lock:
             servo_angle = self._servo_angle
             servo_min = self._servo_min_deg
             servo_max = self._servo_max_deg
         try:
             self._encode_queue.put_nowait(
-                (frame, faces, objects, servo_angle, servo_min, servo_max, idx)
+                (frame, faces, objects, face_depths, servo_angle, servo_min, servo_max, idx)
             )
         except queue.Full:
             pass  # encoder is behind — drop this frame silently
@@ -703,7 +715,7 @@ class VisionService(Service):
                 item = self._encode_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
-            frame, faces, objects, servo_angle, servo_min, servo_max, idx = item
+            frame, faces, objects, face_depths, servo_angle, servo_min, servo_max, idx = item
             # Re-read stream dims each frame so GUI/CLI changes take effect immediately.
             sw, sh = self._stream_width, self._stream_height
 
@@ -727,7 +739,7 @@ class VisionService(Service):
                 display = frame.copy()
                 scaled_faces, scaled_objects = faces, objects
 
-            _draw_overlays(display, scaled_faces, scaled_objects)
+            _draw_overlays(display, scaled_faces, scaled_objects, face_depths)
             if servo_angle is not None:
                 _draw_servo_overlay(display, servo_angle, servo_min, servo_max)
 
@@ -778,6 +790,16 @@ class VisionService(Service):
             return
         with self._det_lock:
             self._latest_faces = list(payload.get("faces", []))
+
+    def _on_face_depth(self, _topic, payload) -> None:
+        if not isinstance(payload, dict):
+            return
+        with self._det_lock:
+            self._face_depths = {
+                f["face_id"]: f["depth_m"]
+                for f in payload.get("faces", [])
+                if f.get("face_id") and f.get("depth_m") is not None
+            }
 
     def _on_objects(self, _topic, payload) -> None:
         if not isinstance(payload, dict):

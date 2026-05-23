@@ -1205,9 +1205,16 @@ document.addEventListener("DOMContentLoaded", () => {
   initFpsCounters();
   loadTrackingParams();
   initCardDragDrop();
-  // Refresh face registry every 30s; music status every 2s
+  // Refresh face registry every 30s; music status every 2s; depth maps every 3s
   setInterval(loadFaces, 30000);
   setInterval(loadMusicStatus, 2000);
+  setInterval(() => {
+    const dense = el("depth-dense-enabled") && el("depth-dense-enabled").checked;
+    const mono  = el("depth-mono-enabled")  && el("depth-mono-enabled").checked;
+    if (dense) refreshDepthMap();
+    if (mono)  refreshMonoMap();
+    if (dense || mono) refreshDepthStats();
+  }, 3000);
 });
 
 // ── Music (Pandora/pianobar) ──────────────────────────────────────
@@ -1850,6 +1857,10 @@ async function loadDepthSettings() {
     hwBadge.style.color = d.mono_hardware_ready ? "var(--green)" : "var(--yellow)";
     // Show stats row if either is enabled
     el("depth-stats-row").style.display = (d.dense_enabled || d.mono_enabled) ? "" : "none";
+    // Refresh images if already enabled at page load
+    if (d.dense_enabled) refreshDepthMap();
+    if (d.mono_enabled)  refreshMonoMap();
+    if (d.dense_enabled || d.mono_enabled) refreshDepthStats();
   } catch (e) { /* ignore */ }
 }
 
@@ -1865,6 +1876,10 @@ async function saveDepthSettings() {
     el("depth-stats-row").style.display = (dense || mono) ? "" : "none";
     if (!dense) { el("depth-map-img").style.display = "none"; el("depth-map-placeholder").style.display = ""; }
     if (!mono)  { el("depth-mono-img").style.display = "none"; el("depth-mono-placeholder").style.display = ""; }
+    // Kick off immediate refresh on enable
+    if (dense) refreshDepthMap();
+    if (mono)  refreshMonoMap();
+    refreshDepthStats();
   } catch (e) { /* ignore */ }
 }
 
