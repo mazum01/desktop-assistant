@@ -29,6 +29,8 @@ Topics published
 ----------------
 av.say              greeting text
 face.identified     ``{face_id, name, is_new, score}``  — telemetry / debug
+face.greeted        ``{face_id, name, text, event_type}``  — Telegram / audit
+                    event_type: "new" | "returning" | "returning_corrected"
 """
 
 from __future__ import annotations
@@ -105,6 +107,17 @@ _DEFAULT_CONFIDENCE    = 0.5
 
 # Absence debounce: face must be missing this many consecutive frames
 _ABSENCE_DEBOUNCE_FRAMES = 3
+
+# ── Contrite correction phrases ───────────────────────────────────────────────
+# Spoken when stabilisation reveals the initial identity guess was wrong.
+# {name} = the correct (committed) identity.
+
+_CONTRITE_PHRASES = [
+    "Oh wait, I got that wrong — {name}! Sorry about the mix-up, great to see you!",
+    "Hold on, I need to apologise. That's {name}! Welcome, and sorry for the confusion.",
+    "I'm sorry, I think I had that wrong. {name}! My apologies, glad you're here.",
+    "Oops — I mixed you up with someone else. {name}! Sorry about that, good to see you!",
+]
 
 
 def _time_bucket() -> str:
@@ -266,6 +279,14 @@ class FaceService(Service):
             if confidence < self._confidence_threshold:
                 continue
 
+            # Skip faces that are still in the stabilisation window —
+            # we don't know the confirmed identity yet, so no greeting.
+            if face.get("is_stabilizing", False):
+                continue
+
+            stabilization_changed = face.get("stabilization_changed", False)
+            initial_name = face.get("initial_name")
+
             current_face_ids.add(face_id)
             # Reset absent counter for faces that are back
             self._absent_counter.pop(face_id, None)
@@ -281,7 +302,9 @@ class FaceService(Service):
             if is_new:
                 self._greet_new(face_id, name)
             elif self._registry.needs_greeting(face_id, cooldown_s, self._min_absence_s):
-                self._greet_returning(face_id, name)
+                self._greet_returning(face_id, name,
+                                      stabilization_changed=stabilization_changed,
+                                      initial_name=initial_name)
 
         # ── Absence detection ─────────────────────────────────────────────
         # Track faces that newly disappeared this frame
@@ -338,15 +361,36 @@ class FaceService(Service):
         phrase = random.choice(_NEW_FACE_PHRASES)
         log.info("Greeting new face %s (%s)", face_id[:8], name)
         self.bus.publish("av.say", {"text": phrase})
+        self.bus.publish("face.greeted", {
+            "face_id": face_id, "name": name, "text": phrase, "event_type": "new",
+        })
 
-    def _greet_returning(self, face_id: str, name: str) -> None:
+    def _greet_returning(
+        self,
+        face_id: str,
+        name: str,
+        stabilization_changed: bool = False,
+        initial_name: str | None = None,
+    ) -> None:
         if self._quiet_hours and self._quiet_hours.is_quiet():
             log.debug("FaceService: returning-face greeting suppressed — quiet hours")
             return
         self._registry.mark_greeted(face_id)
-        phrase = self._pick_phrase(name)
-        log.info("Re-greeting %s (%s): %r", face_id[:8], name, phrase)
+        if stabilization_changed and initial_name:
+            phrase = random.choice(_CONTRITE_PHRASES).format(name=name)
+            event_type = "returning_corrected"
+            log.info(
+                "Contrite re-greeting %s (%s, was %r): %r",
+                face_id[:8], name, initial_name, phrase,
+            )
+        else:
+            phrase = self._pick_phrase(name)
+            event_type = "returning"
+            log.info("Re-greeting %s (%s): %r", face_id[:8], name, phrase)
         self.bus.publish("av.say", {"text": phrase})
+        self.bus.publish("face.greeted", {
+            "face_id": face_id, "name": name, "text": phrase, "event_type": event_type,
+        })
 
     def _pick_phrase(self, name: str) -> str:
         """Pick a time-aware varied greeting, avoiding immediate repeats."""

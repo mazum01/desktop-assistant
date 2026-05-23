@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.21.7] - 2026-05-23
+### Added
+- **Identity stabilisation before greeting** — instead of committing to an identity on the very first ArcFace match (which can be wrong on the first frame), the system now accumulates 8 independent embedding matches before making a final determination. During this window the pos-cache fast path is bypassed so every frame gets a fresh ArcFace lookup. After the window, the majority-vote winner is the committed identity.
+- **Contrite correction greeting** — if the majority-vote winner differs from the initial first-frame guess (stabilization_changed=True), FaceService speaks a contrite apology greeting ("Oh wait, I got that wrong — Mark! Sorry about the mix-up…") instead of the normal returning greeting.
+- **`face.greeted` bus event** — FaceService now publishes `face.greeted` with `{face_id, name, text, event_type}` on every greeting (new / returning / returning_corrected), enabling TelegramService to relay greetings as designed.
+- Perception service now adds `is_stabilizing`, `stabilization_changed`, `initial_name` fields to each `perception.faces` face entry.
+
 ## [1.21.6] - 2026-05-23
 ### Added
 - **Cam2 selectable resolution** — cam2 was hard-locked at 640×480. Raised the default capture resolution to 1920×1080, added dedicated `camera2.set_resolution` and `camera2.set_stream_resolution` bus events (previously cam2 accidentally shared cam1's events), added `/api/settings/camera2/resolution` and `/api/settings/camera2/stream_resolution` REST endpoints, and added Capture Resolution / Stream Resolution selectors for cam2 in the web GUI Settings panel. Fixes `/api/snapshot2` returning a downscaled frame by storing the full-res frame before the MJPEG stream downscale.

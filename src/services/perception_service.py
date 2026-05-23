@@ -12,9 +12,24 @@ perception.faces
      "faces": [{"bbox": [x1,y1,x2,y2], "centroid": [cx,cy],
                 "confidence": float, "landmarks": [[x,y],…] | null,
                 "face_id": str | null, "name": str | null,
-                "is_new": bool, "match_score": float}],
+                "is_new": bool, "match_score": float,
+                "is_stabilizing": bool,
+                "stabilization_changed": bool,
+                "initial_name": str | null}],
      "backend": "hailo"|"cpu"|"sim",
      "ts": float}
+
+Identity stabilisation
+----------------------
+When a face appears at a new position the service accumulates
+``_STAB_WINDOW_FRAMES`` independent embedding matches before committing
+to an identity.  During this window the pos-cache fast path is bypassed
+so each frame gets a fresh ArcFace match.  Once committed:
+
+* ``is_stabilizing`` is False.
+* If the final majority identity differs from the first-frame guess,
+  ``stabilization_changed=True`` and ``initial_name`` carries the
+  original (wrong) label so callers can issue a contrite correction.
 
 perception.error
     {"reason": str}
@@ -35,6 +50,7 @@ import logging
 import queue
 import threading
 import time
+from collections import Counter
 from dataclasses import dataclass
 from typing import Optional
 
@@ -46,6 +62,14 @@ log = logging.getLogger(__name__)
 
 import numpy as _np
 _ZERO_EMB = _np.zeros(512, dtype=_np.float32)  # placeholder when embedder is unavailable
+
+# ── Identity-stabilisation constants ─────────────────────────────────────────
+# Before committing to an identity, accumulate this many independent ArcFace
+# matches.  The pos-cache fast path is bypassed during this window so every
+# frame gets a fresh embedding + registry look-up.
+_STAB_WINDOW_FRAMES: int   = 8     # frames to accumulate before committing
+_STAB_GRID_PX:       int   = 60    # spatial cell size for position keying (px)
+_STAB_TTL_S:         float = 12.0  # abandon stab entry if no update for this long
 
 
 @dataclass
@@ -91,6 +115,8 @@ class PerceptionService(Service):
         self._cache_ttl: float = 10.0
         self._cache_dist: float = 160.0
         self._reuse_ttl: float = 1.0
+        # Stabilisation buffer: pos_key → {name_votes, id_map, frames, done, initial_name, last_seen}
+        self._stab_buffer: dict = {}
         # Compute focal length once (lazy — resolved at first detection)
         self._focal_px: Optional[float] = self._cfg.focal_px if self._cfg.focal_px > 0 else None
         # Detection runs in its own thread so it never blocks the VisionService tick.
@@ -216,6 +242,7 @@ class PerceptionService(Service):
         else:
             with self._pos_cache_lock:
                 self._pos_cache.clear()
+            self._stab_buffer.clear()
         log.debug("PerceptionService: pos_cache purged on bulk face delete")
 
     def _on_face_refresh(self, _topic, _payload) -> None:
@@ -227,9 +254,10 @@ class PerceptionService(Service):
         """
         with self._pos_cache_lock:
             self._pos_cache.clear()
+        self._stab_buffer.clear()
         if self._registry is not None:
             self._registry.reload()
-        log.info("PerceptionService: pos_cache cleared and embedding cache reloaded on face.refresh")
+        log.info("PerceptionService: pos_cache + stab_buffer cleared and embedding cache reloaded on face.refresh")
 
     # ── Detection worker (runs in its own thread) ──────────────────────
 
@@ -268,6 +296,9 @@ class PerceptionService(Service):
                     "name": None,
                     "is_new": False,
                     "match_score": 0.0,
+                    "is_stabilizing": False,
+                    "stabilization_changed": False,
+                    "initial_name": None,
                 }
 
                 # Identity recognition — only when landmarks are available for alignment
@@ -278,76 +309,114 @@ class PerceptionService(Service):
                     if (x2 - x1) < self._cfg.min_face_px or (y2 - y1) < self._cfg.min_face_px:
                         face_list.append(entry)
                         continue
-                    # Fast path: same face at same position within reuse_ttl —
-                    # skip embedding + registry match entirely.
-                    fresh = self._find_cached_face(
-                        f.centroid[0], f.centroid[1], max_age=self._reuse_ttl,
-                    )
-                    if fresh:
-                        face_id, name = fresh
-                        self._registry.update_seen(face_id)
-                        self._update_pos_cache(face_id, name, f.centroid[0], f.centroid[1])
-                        entry["face_id"] = face_id
-                        entry["name"] = name
-                        entry["is_new"] = False
-                        entry["match_score"] = 0.0
-                        face_list.append(entry)
-                        continue
+
+                    cx, cy = f.centroid[0], f.centroid[1]
+                    pos_key = self._pos_key(cx, cy)
+                    now_stab = time.monotonic()
+
+                    # Retrieve (and TTL-expire) the stabilisation entry for this position.
+                    stab = self._stab_buffer.get(pos_key)
+                    if stab and (now_stab - stab["last_seen"]) > _STAB_TTL_S:
+                        del self._stab_buffer[pos_key]
+                        stab = None
+                    elif stab:
+                        stab["last_seen"] = now_stab  # keep entry alive while face is present
+
+                    # ── Pos-cache fast path (only when NOT actively stabilising) ──
+                    # During the stabilisation window every frame must produce a
+                    # fresh ArcFace embedding so votes are independent.
+                    if stab is None or stab["done"]:
+                        fresh = self._find_cached_face(cx, cy, max_age=self._reuse_ttl)
+                        if fresh:
+                            face_id, name = fresh
+                            self._registry.update_seen(face_id)
+                            self._update_pos_cache(face_id, name, cx, cy)
+                            entry["face_id"] = face_id
+                            entry["name"] = name
+                            entry["is_new"] = False
+                            entry["match_score"] = 0.0
+                            face_list.append(entry)
+                            continue
+
+                    # ── Full embed + match (always during stabilisation) ───────
                     try:
                         emb = self._embedder.embed(frame, f.landmarks)
                         embedder_ok = self._embedder.hardware_ready and emb.any()
+                        score = 0.0
 
                         if embedder_ok:
-                            # ── Hardware ArcFace path ──────────────────────────
                             match = self._registry.find_match(emb)
                             if match:
                                 face_id, name, score = match
                                 self._registry.update_seen(face_id)
-                                self._registry.add_embedding_if_needed(face_id, emb)
-                                entry["face_id"] = face_id
-                                entry["name"] = name
-                                entry["is_new"] = False
-                                entry["match_score"] = round(score, 3)
-                                self._update_pos_cache(face_id, name, f.centroid[0], f.centroid[1])
+                                # Defer add_embedding_if_needed until identity is confirmed
+                                if stab is None or stab["done"]:
+                                    self._registry.add_embedding_if_needed(face_id, emb)
                             else:
-                                cached = self._find_cached_face(f.centroid[0], f.centroid[1])
+                                cached = self._find_cached_face(cx, cy)
                                 if cached:
                                     face_id, name = cached
                                     self._registry.update_seen(face_id)
-                                    # Do NOT add_embedding_if_needed here — identity was not
-                                    # confirmed by find_match, only inferred from position cache.
-                                    # Adding embeddings to an unverified identity contaminates
-                                    # the gallery (e.g. a stale cache entry for the wrong person).
-                                    entry["face_id"] = face_id
-                                    entry["name"] = name
-                                    entry["is_new"] = False
-                                    entry["match_score"] = 0.0
                                 else:
-                                    face_id, name = self._identify_or_register(
-                                        frame, f, emb
-                                    )
-                                    entry["face_id"] = face_id
-                                    entry["name"] = name
-                                    entry["is_new"] = (name.startswith("Guest "))
-                                    entry["match_score"] = 0.0
+                                    face_id, name = self._identify_or_register(frame, f, emb)
                         else:
-                            # ── Sim mode (ArcFace unavailable) — position-cache + crop match ──
-                            cached = self._find_cached_face(f.centroid[0], f.centroid[1])
+                            # ── Sim mode — position-cache + crop match ─────────
+                            cached = self._find_cached_face(cx, cy)
                             if cached:
                                 face_id, name = cached
                                 self._registry.update_seen(face_id)
-                                entry["face_id"] = face_id
-                                entry["name"] = name
-                                entry["is_new"] = False
-                                entry["match_score"] = 0.0
                             else:
-                                face_id, name = self._identify_or_register(
-                                    frame, f, emb
+                                face_id, name = self._identify_or_register(frame, f, emb)
+
+                        # ── Stabilisation buffer update ────────────────────────
+                        is_stabilizing = False
+                        stabilization_changed = False
+                        initial_name_out = None
+
+                        if stab is None:
+                            # Brand-new position — start stabilisation window
+                            self._stab_buffer[pos_key] = {
+                                "name_votes": Counter({name: 1}),
+                                "id_map":     {name: face_id},
+                                "frames":     1,
+                                "done":       False,
+                                "initial_name": name,
+                                "last_seen":  now_stab,
+                            }
+                            is_stabilizing = True
+                        elif not stab["done"]:
+                            stab["name_votes"][name] += 1
+                            stab["id_map"][name] = face_id  # keep latest face_id per name
+                            stab["frames"] += 1
+
+                            if stab["frames"] >= _STAB_WINDOW_FRAMES:
+                                # Commit to the majority-vote winner
+                                committed_name, _ = stab["name_votes"].most_common(1)[0]
+                                face_id = stab["id_map"][committed_name]
+                                name    = committed_name
+                                initial_name_out    = stab["initial_name"]
+                                stabilization_changed = committed_name != initial_name_out
+                                stab["done"] = True
+                                # Now safe to reinforce the confirmed identity
+                                if embedder_ok and emb.any():
+                                    self._registry.add_embedding_if_needed(face_id, emb)
+                                log.info(
+                                    "Identity stabilised at %s → %r (initial=%r, votes=%s)",
+                                    pos_key, name, initial_name_out,
+                                    dict(stab["name_votes"]),
                                 )
-                                entry["face_id"] = face_id
-                                entry["name"] = name
-                                entry["is_new"] = (name.startswith("Guest "))
-                                entry["match_score"] = 0.0
+                            else:
+                                is_stabilizing = True
+
+                        self._update_pos_cache(face_id, name, cx, cy)
+                        entry["face_id"]              = face_id
+                        entry["name"]                 = name
+                        entry["is_new"]               = name.startswith("Guest ") and not is_stabilizing
+                        entry["match_score"]          = round(score, 3)
+                        entry["is_stabilizing"]       = is_stabilizing
+                        entry["stabilization_changed"] = stabilization_changed
+                        entry["initial_name"]         = initial_name_out
+
                     except Exception:
                         log.exception("face recognition failed for one face")
 
@@ -399,6 +468,10 @@ class PerceptionService(Service):
             except Exception:
                 return None
         return self._focal_px
+
+    def _pos_key(self, cx: float, cy: float) -> str:
+        """Coarse grid key for the stabilisation buffer (``_STAB_GRID_PX``-pixel cells)."""
+        return f"{int(cx / _STAB_GRID_PX)},{int(cy / _STAB_GRID_PX)}"
 
     def _find_cached_face(self, cx: float, cy: float, max_age: Optional[float] = None):
         """Return (face_id, name) from position cache if a nearby face was seen recently.
