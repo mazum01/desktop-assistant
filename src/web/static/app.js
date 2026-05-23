@@ -944,6 +944,8 @@ async function saveCam2StreamResolution(val) {
   }
   setTimeout(() => { if (st) st.textContent = ""; }, 4000);
 }
+
+async function doDescribe() {
   const btn = document.querySelector('[onclick="doDescribe()"]');
   if (btn) { btn.disabled = true; btn.textContent = "Describing…"; }
   try {
