@@ -139,6 +139,8 @@ def main() -> int:
     _depth_cfg_raw = _cfg.get("depth", {})
     _perc_cfg = PerceptionConfig(
         recognition_enabled=_recognition_enabled,
+        match_threshold=float(_fr_cfg.get("match_threshold", 0.50)),
+        min_face_px=int(_fr_cfg.get("min_face_px", 80)),
         fov_degrees=float(_ht_cfg_raw.get("fov_degrees", 100.0)),
         frame_width=_tracking_frame_width(_cam_width, _cam_height, _camera_rotation_deg),
         known_face_width_m=float(_depth_cfg_raw.get("known_face_width_m", 0.145)),

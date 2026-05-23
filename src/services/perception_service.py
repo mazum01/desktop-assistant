@@ -54,6 +54,8 @@ class PerceptionConfig:
     conf_threshold: float = 0.65   # raised from 0.45 to cut false positives on real frames
     nms_threshold: float = 0.4     # NMS IoU threshold
     recognition_enabled: bool = True  # enable ArcFace identity recognition
+    match_threshold: float = 0.50  # cosine similarity threshold for identity matching
+    min_face_px: int = 80          # skip embedding for faces narrower or shorter than this (pixels)
     # Depth estimation (face-size method — always-on when focal_px > 0)
     focal_px: float = 0.0          # 0 = derive from fov_degrees + frame_width at runtime
     fov_degrees: float = 100.0     # horizontal FOV of the primary camera
@@ -116,7 +118,9 @@ class PerceptionService(Service):
             if self._registry is None:
                 try:
                     from src.perception.face_registry import FaceRegistry
-                    self._registry = FaceRegistry()
+                    self._registry = FaceRegistry(
+                        match_threshold=self._cfg.match_threshold,
+                    )
                 except Exception as exc:
                     log.warning("FaceRegistry init failed (%s) — recognition disabled", exc)
 
@@ -252,6 +256,12 @@ class PerceptionService(Service):
 
                 # Identity recognition — only when landmarks are available for alignment
                 if self._embedder and self._registry and f.landmarks and len(f.landmarks) >= 5:
+                    # Skip embedding for faces that are too small — tiny/distant faces
+                    # produce noisy embeddings that hurt matching quality.
+                    x1, y1, x2, y2 = f.bbox
+                    if (x2 - x1) < self._cfg.min_face_px or (y2 - y1) < self._cfg.min_face_px:
+                        face_list.append(entry)
+                        continue
                     # Fast path: same face at same position within reuse_ttl —
                     # skip embedding + registry match entirely.
                     fresh = self._find_cached_face(
@@ -490,7 +500,9 @@ class PerceptionService(Service):
 
         # Generate and store embedding when ArcFace is available
         added = 0
-        if self._embedder and best.landmarks and len(best.landmarks) >= 5:
+        bx1, by1, bx2, by2 = best.bbox
+        face_large_enough = (bx2 - bx1) >= self._cfg.min_face_px and (by2 - by1) >= self._cfg.min_face_px
+        if self._embedder and best.landmarks and len(best.landmarks) >= 5 and face_large_enough:
             try:
                 emb = self._embedder.embed(frame, best.landmarks)
                 if emb is not None and emb.any():

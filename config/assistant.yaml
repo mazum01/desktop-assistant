@@ -90,6 +90,17 @@ face_recognition:
   greeting_cooldown_jitter_pct: 25  # ± jitter percentage (e.g. 25 → 30 min ± 7.5 min)
   min_absence_s: 30               # face must have been absent this long before re-greeting
   confidence_threshold: 0.5       # minimum detection confidence to trigger a greeting
+  # Matching quality controls.
+  # match_threshold: cosine similarity required to accept a recognition hit.
+  #   0.50 is the recommended value for ArcFace MobileFaceNet; lower values
+  #   increase false-positive rate (wrong person recognised), higher values
+  #   increase false-negative rate (known person not recognised).
+  match_threshold: 0.50
+  # min_face_px: faces narrower or shorter than this many pixels are skipped
+  #   for embedding. Tiny/distant faces produce noisy embeddings that degrade
+  #   the identity gallery. 80px (≈ 0.5 m at normal desk-camera FOV) is a
+  #   good default; lower if you need recognition at longer range.
+  min_face_px: 80
 
 depth:
   # Depth estimation for face localisation in 3D space.

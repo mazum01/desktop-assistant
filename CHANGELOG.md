@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.21.0] - 2026-05-23
+### Changed
+- **Face recognition: per-identity prototype matching** — `FaceRegistry.find_match()` now matches against a per-identity *mean prototype vector* (the L2-normalised mean of all stored embeddings for each person) instead of all individual stored embeddings. Prototype matching is significantly more robust because pose/lighting noise in individual captured frames averages out into a stable representative vector. The prototype matrix is maintained incrementally: updated in O(k) time on every embedding add/replace, so there is no performance regression.
+- **Face recognition: raised match threshold 0.40 → 0.50** — the previous threshold was too permissive for ArcFace MobileFaceNet, causing false-positive matches (wrong person recognised). 0.50 is the recommended operating point for this model. Configurable via `face_recognition.match_threshold` in `config/assistant.yaml`.
+- **Face recognition: minimum face size filter** — faces narrower or shorter than `min_face_px` (default 80 px) are skipped during embedding and training capture. Tiny/distant faces produce noisy embeddings that pollute the identity gallery and degrade matching. Configurable via `face_recognition.min_face_px` in `config/assistant.yaml`.
+
 ## [1.20.6] - 2026-05-22
 ### Fixed
 - **OpenClaw → Telegram "No API key found for provider anthropic"** — the systemd service had no access to `ANTHROPIC_API_KEY`. The key was only set in interactive shell sessions during initial setup and was never persisted to any file the service could read. Added `EnvironmentFile=/home/starter/.openclaw/api-keys.env` to `openclaw-gateway.service`; that file (mode 600, outside the repo) holds the Anthropic API key so it is injected into every systemd-managed gateway process on startup.
