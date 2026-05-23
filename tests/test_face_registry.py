@@ -12,6 +12,20 @@ def _rng_emb(seed: int = 0) -> np.ndarray:
     return v / np.linalg.norm(v)
 
 
+def _sphere_emb(base: np.ndarray, cos_sim: float, rng: np.random.Generator) -> np.ndarray:
+    """Return a 512-dim unit vector with the exact given cosine similarity to *base*.
+
+    Uses Gram-Schmidt to build an orthogonal component, then mixes with *base*
+    at the right ratio.  This avoids the high-dim Gaussian noise trap where
+    large σ in R^512 yields very low cosine similarity after normalisation.
+    """
+    perp = rng.standard_normal(512).astype(np.float32)
+    perp -= float(perp @ base) * base
+    perp /= np.linalg.norm(perp)
+    sin_sim = float(np.sqrt(max(0.0, 1.0 - cos_sim ** 2)))
+    return (cos_sim * base + sin_sim * perp).astype(np.float32)
+
+
 @pytest.fixture
 def reg():
     """Fresh in-memory registry for each test."""
@@ -152,3 +166,138 @@ def test_get_current_face_id_returns_most_recent(reg):
     face_id2, _ = reg.register(_rng_emb(2))
     reg.update_seen(face_id2)
     assert reg.get_current_face_id() == face_id2
+
+
+# ── Aggregated per-identity matching ────────────────────────────────────────
+
+def test_find_match_aggregated_beats_single_outlier(reg):
+    """Per-identity aggregation (mean-of-top-K) resists a single-outlier false match.
+
+    Face B has ONE embedding accidentally close to face A's query, plus FOUR
+    embeddings far from it.  Argmax-across-all-rows would give B the win because
+    B's outlier scores highest of any individual embedding.  Mean-of-top-3 per
+    identity correctly awards the match to face A (consistent high scores).
+
+    Score arithmetic (cos_sim notation, exact by construction):
+      A's 5 embeddings vs query ≈ 0.90 × 0.95 = 0.855 each
+        → top-3 mean ≈ 0.855
+      B's outlier vs query ≈ 0.92 × 0.95 = 0.874  (beats A's best individually)
+      B's 4 others vs query ≈ 0.0 (orthogonal)
+        → top-3 mean ≈ (0.874 + 0 + 0) / 3 ≈ 0.29
+    """
+    rng = np.random.default_rng(42)
+    base_a = rng.standard_normal(512).astype(np.float32)
+    base_a /= np.linalg.norm(base_a)
+    base_b = rng.standard_normal(512).astype(np.float32)
+    base_b /= np.linalg.norm(base_b)
+
+    face_a, _ = reg.register(_sphere_emb(base_a, 0.90, rng))
+    for _ in range(4):
+        reg.add_embedding(face_a, _sphere_emb(base_a, 0.90, rng))
+
+    # Face B: 1 outlier near base_a (beats A individually) + 4 near base_b
+    face_b, _ = reg.register(_sphere_emb(base_a, 0.92, rng))
+    for _ in range(4):
+        reg.add_embedding(face_b, _sphere_emb(base_b, 0.90, rng))
+
+    query = _sphere_emb(base_a, 0.95, rng)
+    match = reg.find_match(query)
+    assert match is not None, "Expected a match for face A query"
+    assert match[0] == face_a, (
+        f"Expected face A ({face_a[:8]}) but aggregation picked face B ({face_b[:8]}), "
+        f"score={match[2]:.3f}"
+    )
+
+
+def test_find_match_two_identities_correct_assignment(reg):
+    """With two registered identities, queries from each person match correctly."""
+    rng = np.random.default_rng(7)
+    base_alice = rng.standard_normal(512).astype(np.float32)
+    base_alice /= np.linalg.norm(base_alice)
+    base_bob = rng.standard_normal(512).astype(np.float32)
+    base_bob /= np.linalg.norm(base_bob)
+
+    alice_id, _ = reg.register(_sphere_emb(base_alice, 0.90, rng))
+    for _ in range(4):
+        reg.add_embedding(alice_id, _sphere_emb(base_alice, 0.90, rng))
+
+    bob_id, _ = reg.register(_sphere_emb(base_bob, 0.90, rng))
+    for _ in range(4):
+        reg.add_embedding(bob_id, _sphere_emb(base_bob, 0.90, rng))
+
+    m_alice = reg.find_match(_sphere_emb(base_alice, 0.95, rng))
+    m_bob = reg.find_match(_sphere_emb(base_bob, 0.95, rng))
+
+    assert m_alice is not None and m_alice[0] == alice_id
+    assert m_bob is not None and m_bob[0] == bob_id
+
+
+# ── Quality gate ─────────────────────────────────────────────────────────────
+
+def test_quality_gate_rejects_dissimilar_embedding(reg):
+    """add_embedding_if_needed must reject a vector far from the identity centroid."""
+    rng = np.random.default_rng(20)
+    base = rng.standard_normal(512).astype(np.float32)
+    base /= np.linalg.norm(base)
+
+    # Build a stable identity with enough embeddings to activate the gate (≥ 5)
+    face_id, _ = reg.register(_sphere_emb(base, 0.90, rng))
+    for _ in range(4):
+        reg.add_embedding_if_needed(face_id, _sphere_emb(base, 0.90, rng))
+
+    # Force cache build so the gate has data to check against
+    reg.find_match(_sphere_emb(base, 0.90, rng))
+
+    # Manufacture a near-orthogonal embedding (cosine sim ≈ 0.0 with the centroid)
+    garbage_base = rng.standard_normal(512).astype(np.float32)
+    garbage_base -= float(garbage_base @ base) * base  # project out base component
+    garbage_base /= np.linalg.norm(garbage_base)
+    garbage = _sphere_emb(garbage_base, 0.99, rng)  # unit vector, ⊥ to base
+
+    accepted = reg.add_embedding_if_needed(face_id, garbage)
+    assert not accepted, "Quality gate should have rejected the garbage embedding"
+
+
+def test_quality_gate_accepts_reasonable_variation(reg):
+    """add_embedding_if_needed must still accept mildly perturbed embeddings."""
+    rng = np.random.default_rng(30)
+    base = rng.standard_normal(512).astype(np.float32)
+    base /= np.linalg.norm(base)
+
+    face_id, _ = reg.register(_sphere_emb(base, 0.90, rng))
+    for _ in range(4):
+        reg.add_embedding_if_needed(face_id, _sphere_emb(base, 0.90, rng))
+
+    # Force cache build before gate check
+    reg.find_match(_sphere_emb(base, 0.90, rng))
+
+    # A mild perturbation (cos_sim=0.85) — clearly the same person
+    mild = _sphere_emb(base, 0.85, rng)
+    accepted = reg.add_embedding_if_needed(face_id, mild)
+    assert accepted, "Quality gate incorrectly rejected a mildly perturbed embedding"
+
+
+def test_quality_gate_inactive_below_min_frames(reg):
+    """Quality gate must not activate until _QUALITY_GATE_MIN_FRAMES embeddings exist."""
+    from src.perception.face_registry import _QUALITY_GATE_MIN_FRAMES
+
+    rng = np.random.default_rng(40)
+    base = rng.standard_normal(512).astype(np.float32)
+    base /= np.linalg.norm(base)
+
+    face_id, _ = reg.register(_sphere_emb(base, 0.90, rng))
+    # Add only (MIN_FRAMES - 2) additional embeddings so gate is not yet active
+    for _ in range(_QUALITY_GATE_MIN_FRAMES - 2):
+        reg.add_embedding_if_needed(face_id, _sphere_emb(base, 0.90, rng))
+
+    # Force cache build
+    reg.find_match(_sphere_emb(base, 0.90, rng))
+
+    # Even a near-orthogonal embedding should be accepted (gate not yet active)
+    garbage_base = rng.standard_normal(512).astype(np.float32)
+    garbage_base -= float(garbage_base @ base) * base
+    garbage_base /= np.linalg.norm(garbage_base)
+    garbage = _sphere_emb(garbage_base, 0.99, rng)
+
+    accepted = reg.add_embedding_if_needed(face_id, garbage)
+    assert accepted, "Quality gate must not reject before minimum frame count is reached"

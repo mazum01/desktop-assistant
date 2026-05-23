@@ -42,6 +42,9 @@ _DEFAULT_THUMBS = Path.home() / ".local" / "share" / "desktop-assistant" / "thum
 _MATCH_THRESHOLD = 0.50      # cosine similarity ≥ this → same person
 _EMBED_DIM = 512
 _EMBED_CAP = 20              # max embeddings stored per identity (sliding window)
+_AGG_TOP_K = 3               # mean of top-K individual scores per identity during matching
+_QUALITY_GATE_MIN_FRAMES = 5 # minimum stored embeddings before quality-gating new arrivals
+_QUALITY_GATE_MIN_SIM = 0.20 # reject new embedding if < this similar to identity centroid
 
 
 class FaceRegistry:
@@ -66,20 +69,19 @@ class FaceRegistry:
         self._ensure_schema()
         self._thumbs_dir = Path(thumbs_dir) if thumbs_dir else _DEFAULT_THUMBS
         self._thumbs_dir.mkdir(parents=True, exist_ok=True)
-        # In-memory embedding matrix cache: one BLAS matmul instead of N scalar np.dot calls.
-        # Shape: (N, 512) float32.  Invalidated only on structural changes (face add/delete).
-        # Embedding additions are applied incrementally to avoid full SQLite rebuilds.
+        # In-memory embedding cache: per-row individual vectors (N, 512) plus an identity
+        # index that groups row indices by face_id for fast per-identity scoring.
+        # Matching uses mean-of-top-K individual scores per identity; more robust than a
+        # single prototype vector because outlier embeddings cannot win on their own.
         self._emb_matrix: Optional[np.ndarray] = None   # (N, 512) — all individual embeddings
         self._emb_face_ids: list = []                    # parallel list of face_id strings
         self._emb_names: list = []                       # parallel list of name strings
         self._emb_row_ids: list = []                     # parallel list of embedding row UUIDs
-        # Per-identity prototype matrix: one row per unique identity, computed as the
-        # L2-normalised mean of all stored embeddings for that identity.  Matching against
-        # the prototype is more robust than matching against individual frames because
-        # pose/lighting variations in individual captures average out.
-        self._proto_matrix: Optional[np.ndarray] = None  # (K, 512) — one row per identity
-        self._proto_face_ids: list = []                   # parallel list of face_id strings
-        self._proto_names: list = []                      # parallel list of name strings
+        # Per-identity index — maintained incrementally; rebuilt on full cache build.
+        self._identity_ids: list = []                    # ordered unique face_id strings
+        self._identity_names: list = []                  # name per identity slot
+        self._identity_slices: list = []                 # list[list[int]] — row indices into _emb_matrix
+        self._id_to_slot: dict = {}                      # face_id → slot index in _identity_* lists
         log.info("FaceRegistry opened: %s", path)
 
     # ── Schema ───────────────────────────────────────────────────────────
@@ -118,111 +120,94 @@ class FaceRegistry:
     ) -> Optional[Tuple[str, str, float]]:
         """Find the closest known face above the similarity threshold.
 
-        Matches against the per-identity *prototype* matrix (one L2-normalised
-        mean vector per identity) rather than all individual stored embeddings.
-        Prototype matching is more robust than individual-embedding matching
-        because pose/lighting noise in individual frames averages out.
+        Scores every stored embedding individually (one BLAS matmul), then
+        aggregates per identity as the mean of the top-``_AGG_TOP_K`` scores.
+        This is more robust than comparing against a single prototype vector:
+        an outlier embedding in the gallery cannot win on its own — the identity
+        must score consistently across multiple stored samples.
 
         Returns ``(face_id, name, score)`` or ``None`` if no match.
         """
-        if self._proto_matrix is None:
+        if self._emb_matrix is None:
             self._build_emb_cache()
 
-        mat = self._proto_matrix
+        mat = self._emb_matrix
         if mat is None or mat.shape[0] == 0:
             return None
 
-        scores = mat @ embedding          # (K,) — one BLAS call over prototypes
-        idx = int(np.argmax(scores))
-        best_score = float(scores[idx])
+        scores = mat @ embedding          # (N,) — one BLAS call over all individual rows
 
-        if best_score >= self._threshold:
-            return self._proto_face_ids[idx], self._proto_names[idx], best_score
+        # Per-identity mean-of-top-K aggregation.
+        best_id: Optional[str] = None
+        best_name: Optional[str] = None
+        best_score = -1.0
+        for fid, name, idxs in zip(
+            self._identity_ids, self._identity_names, self._identity_slices
+        ):
+            if not idxs:
+                continue
+            face_scores = scores[idxs]
+            k = min(_AGG_TOP_K, len(face_scores))
+            agg = float(np.mean(np.partition(face_scores, -k)[-k:]))
+            if agg > best_score:
+                best_score = agg
+                best_id = fid
+                best_name = name
+
+        if best_score >= self._threshold and best_id is not None:
+            return best_id, best_name, best_score
         return None
 
     def _build_emb_cache(self) -> None:
-        """Load all embeddings from DB and build both the individual and prototype caches."""
+        """Load all embeddings from DB and build the in-memory cache and identity index."""
         rows = self._conn.execute(
             "SELECT fe.id, fe.face_id, fe.embedding, f.name "
-            "FROM face_embeddings fe JOIN faces f ON fe.face_id = f.id"
+            "FROM face_embeddings fe JOIN faces f ON fe.face_id = f.id "
+            "ORDER BY fe.created_at ASC"
         ).fetchall()
-        vecs, ids, names, row_ids = [], [], [], []
+        vecs: list = []
+        ids: list = []
+        names: list = []
+        row_ids: list = []
+        identity_ids: list = []
+        identity_names: list = []
+        identity_slices: list = []
+        id_to_slot: dict = {}
         for row in rows:
             stored = np.frombuffer(row["embedding"], dtype=np.float32)
             if stored.shape[0] != _EMBED_DIM:
                 continue
+            mat_idx = len(vecs)
             vecs.append(stored)
-            ids.append(row["face_id"])
+            fid = row["face_id"]
+            ids.append(fid)
             names.append(row["name"])
             row_ids.append(row["id"])
+            if fid not in id_to_slot:
+                id_to_slot[fid] = len(identity_ids)
+                identity_ids.append(fid)
+                identity_names.append(row["name"])
+                identity_slices.append([])
+            identity_slices[id_to_slot[fid]].append(mat_idx)
         self._emb_matrix = np.stack(vecs, axis=0) if vecs else np.empty((0, _EMBED_DIM), dtype=np.float32)
         self._emb_face_ids = ids
         self._emb_names = names
         self._emb_row_ids = row_ids
-        self._rebuild_proto_from_emb_cache()
+        self._identity_ids = identity_ids
+        self._identity_names = identity_names
+        self._identity_slices = identity_slices
+        self._id_to_slot = id_to_slot
 
-    def _rebuild_proto_from_emb_cache(self) -> None:
-        """Recompute the per-identity prototype matrix from the current individual cache."""
-        if self._emb_matrix is None or self._emb_matrix.shape[0] == 0:
-            self._proto_matrix = np.empty((0, _EMBED_DIM), dtype=np.float32)
-            self._proto_face_ids = []
-            self._proto_names = []
-            return
-        # Group individual embeddings by identity
-        face_to_rows: dict = {}
-        face_to_name: dict = {}
-        for i, fid in enumerate(self._emb_face_ids):
-            face_to_rows.setdefault(fid, []).append(i)
-            face_to_name[fid] = self._emb_names[i]
-        proto_vecs, proto_ids, proto_names = [], [], []
-        for fid, indices in face_to_rows.items():
-            mean_vec = self._emb_matrix[indices].mean(axis=0)
-            norm = np.linalg.norm(mean_vec)
-            if norm > 1e-10:
-                mean_vec = mean_vec / norm
-            proto_vecs.append(mean_vec)
-            proto_ids.append(fid)
-            proto_names.append(face_to_name[fid])
-        self._proto_matrix = np.stack(proto_vecs, axis=0)
-        self._proto_face_ids = proto_ids
-        self._proto_names = proto_names
-
-    def _update_proto_for_face(self, face_id: str, name: str) -> None:
-        """Recompute the prototype vector for a single identity after an embedding change."""
-        if self._emb_matrix is None:
-            return
-        indices = [i for i, fid in enumerate(self._emb_face_ids) if fid == face_id]
-        if not indices:
-            # Remove from proto matrix if present
-            if face_id in self._proto_face_ids:
-                idx = self._proto_face_ids.index(face_id)
-                mask = list(range(self._proto_matrix.shape[0]))
-                mask.pop(idx)
-                self._proto_matrix = self._proto_matrix[mask] if mask else np.empty((0, _EMBED_DIM), dtype=np.float32)
-                self._proto_face_ids.pop(idx)
-                self._proto_names.pop(idx)
-            return
-        mean_vec = self._emb_matrix[indices].mean(axis=0)
-        norm = np.linalg.norm(mean_vec)
-        if norm > 1e-10:
-            mean_vec = mean_vec / norm
-        if face_id in self._proto_face_ids:
-            idx = self._proto_face_ids.index(face_id)
-            self._proto_matrix[idx] = mean_vec
-            self._proto_names[idx] = name
-        else:
-            self._proto_matrix = np.vstack([self._proto_matrix, mean_vec[np.newaxis, :]])
-            self._proto_face_ids.append(face_id)
-            self._proto_names.append(name)
 
     def _invalidate_emb_cache(self) -> None:
         self._emb_matrix = None
         self._emb_face_ids = []
         self._emb_names = []
         self._emb_row_ids = []
-        self._proto_matrix = None
-        self._proto_face_ids = []
-        self._proto_names = []
+        self._identity_ids = []
+        self._identity_names = []
+        self._identity_slices = []
+        self._id_to_slot = {}
 
     def reload(self) -> None:
         """Invalidate the in-memory embedding cache so it is rebuilt from the DB on the next match."""
@@ -241,11 +226,19 @@ class FaceRegistry:
         vec = embedding.astype(np.float32)
         if vec.shape[0] != _EMBED_DIM:
             return
+        mat_idx = self._emb_matrix.shape[0]
         self._emb_matrix = np.vstack([self._emb_matrix, vec[np.newaxis, :]])
         self._emb_face_ids.append(face_id)
         self._emb_names.append(name)
         self._emb_row_ids.append(row_id)
-        self._update_proto_for_face(face_id, name)
+        if face_id in self._id_to_slot:
+            self._identity_slices[self._id_to_slot[face_id]].append(mat_idx)
+        else:
+            slot = len(self._identity_ids)
+            self._id_to_slot[face_id] = slot
+            self._identity_ids.append(face_id)
+            self._identity_names.append(name)
+            self._identity_slices.append([mat_idx])
 
     def _replace_in_cache(
         self, old_row_id: str, new_row_id: str, face_id: str, name: str, embedding: np.ndarray
@@ -253,7 +246,9 @@ class FaceRegistry:
         """Replace one embedding row in-place (prune-and-replace path).
 
         Finds *old_row_id* by index and overwrites it with the new vector — no
-        array reallocation needed since the matrix shape stays the same.
+        array reallocation needed since the matrix shape stays the same.  The
+        identity index is unchanged because the same slot (matrix row index) is
+        reused; no slice update is needed.
         No-op if the cache isn't built or the old row isn't found.
         """
         if self._emb_matrix is None:
@@ -269,8 +264,7 @@ class FaceRegistry:
             return
         self._emb_matrix[idx] = vec
         self._emb_row_ids[idx] = new_row_id
-        # face_id and name are unchanged for a prune-replace on the same identity
-        self._update_proto_for_face(face_id, name)
+        # face_id and name unchanged; identity_slices already points at idx
 
     def register(self, embedding: np.ndarray) -> Tuple[str, str]:
         """Create a new identity and store its first embedding.
@@ -304,13 +298,12 @@ class FaceRegistry:
         )
         self._conn.commit()
         if cur.rowcount:
-            # Update names in-place in both caches — no full rebuild needed.
+            # Update names in-place in both flat and identity caches.
             for i, fid in enumerate(self._emb_face_ids):
                 if fid == face_id:
                     self._emb_names[i] = name
-            for i, fid in enumerate(self._proto_face_ids):
-                if fid == face_id:
-                    self._proto_names[i] = name
+            if face_id in self._id_to_slot:
+                self._identity_names[self._id_to_slot[face_id]] = name
             log.info("Named face %s → %r", face_id[:8], name)
             return True
         log.warning("set_name: face_id %r not found", face_id)
@@ -599,6 +592,30 @@ class FaceRegistry:
         """
         if np.all(embedding == 0):
             return False
+
+        # Build cache lazily so the quality gate below can inspect existing embeddings.
+        if self._emb_matrix is None:
+            self._build_emb_cache()
+
+        # Quality gate: if we have enough stored embeddings for this identity, reject
+        # new ones that are too dissimilar from the current cluster centroid.
+        # This prevents garbage captures (side profile, occlusion, blur) from
+        # polluting the gallery and degrading match scores.
+        if self._emb_matrix is not None and face_id in self._id_to_slot:
+            idxs = self._identity_slices[self._id_to_slot[face_id]]
+            if len(idxs) >= _QUALITY_GATE_MIN_FRAMES:
+                recent = idxs[-10:]
+                centroid = self._emb_matrix[recent].mean(axis=0).astype(np.float32)
+                norm = np.linalg.norm(centroid)
+                if norm > 1e-10:
+                    centroid /= norm
+                    sim = float(centroid @ embedding)
+                    if sim < _QUALITY_GATE_MIN_SIM:
+                        log.debug(
+                            "add_embedding_if_needed(%s): rejected (sim=%.3f < %.2f)",
+                            face_id[:8], sim, _QUALITY_GATE_MIN_SIM,
+                        )
+                        return False
         rows = self._conn.execute(
             "SELECT id, created_at FROM face_embeddings WHERE face_id = ? "
             "ORDER BY created_at ASC",

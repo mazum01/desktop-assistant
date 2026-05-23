@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.21.1] - 2026-05-23
+### Changed
+- **Face recognition: per-identity top-K aggregation** — `FaceRegistry.find_match()` now scores a query against every individual stored embedding and takes the mean of the top-K scores (default K=3) per identity, instead of a single mean-prototype vector. This eliminates prototype drift: if a gallery accumulates a few bad embeddings (occluded, blurry, side-profile), the mean prototype drifts away from the person's true appearance and causes missed matches. Top-K aggregation ignores the low-scoring junk and locks onto the best matching gallery frames.
+- **Face recognition: embedding quality gate** — `add_embedding_if_needed()` now rejects any new embedding whose cosine similarity to the current gallery centroid is below `_QUALITY_GATE_MIN_SIM` (default 0.20), once at least `_QUALITY_GATE_MIN_FRAMES` (default 5) embeddings are already stored. Side-profile, occluded, and severely blurred faces are silently discarded rather than contaminating the gallery.
+
 ## [1.21.0] - 2026-05-23
 ### Changed
 - **Face recognition: per-identity prototype matching** — `FaceRegistry.find_match()` now matches against a per-identity *mean prototype vector* (the L2-normalised mean of all stored embeddings for each person) instead of all individual stored embeddings. Prototype matching is significantly more robust because pose/lighting noise in individual captured frames averages out into a stable representative vector. The prototype matrix is maintained incrementally: updated in O(k) time on every embedding add/replace, so there is no performance regression.
