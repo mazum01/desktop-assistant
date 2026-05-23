@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.21.3] - 2026-05-23
+### Fixed
+- **Re-identify button had no effect** — `PerceptionService` never subscribed to `face.refresh`, so clicking Re-identify published the event but the in-memory position cache was never cleared. The position cache kept serving the stale (wrong) identity assignment on every subsequent frame, making Re-identify completely ineffective. Added `_on_face_refresh` handler that clears the pos_cache and calls `registry.reload()`.
+- **Position-cache fallback was contaminating galleries** — when `find_match()` returned no match but the position cache had a stale identity at the same position, the code was calling `add_embedding_if_needed()` on that unverified identity. This caused Carson's gallery to re-accumulate Mark's embeddings whenever the re-identification failed. Removed `add_embedding_if_needed()` from the unverified pos-cache fallback path — embeddings are only added after a confirmed `find_match()`.
+- **Carson contamination** — cleared Carson's re-accumulated 5 embeddings (added by the above bug after the previous fix cleared the original 24).
+
 ## [1.21.2] - 2026-05-23
 ### Added
 - **`FaceRegistry.prune_gallery()`** — retroactively applies the quality gate to all stored embeddings. For each identity, computes the centroid and removes any embedding with cosine similarity below `_QUALITY_GATE_MIN_SIM`. Preserves at least `_QUALITY_GATE_MIN_FRAMES` embeddings per identity. Exposed via `POST /api/faces/refresh` (now also prunes on every Re-identify click) and `da face clean-gallery`.

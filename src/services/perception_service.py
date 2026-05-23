@@ -142,6 +142,9 @@ class PerceptionService(Service):
         self._unsubs.append(
             self.bus.subscribe("face.registry_cleared", self._on_faces_cleared)
         )
+        self._unsubs.append(
+            self.bus.subscribe("face.refresh", self._on_face_refresh)
+        )
         log.info(
             "PerceptionService started — backend=%s  max_fps=%.1f  recognition=%s",
             self._detector.backend,
@@ -214,6 +217,19 @@ class PerceptionService(Service):
             with self._pos_cache_lock:
                 self._pos_cache.clear()
         log.debug("PerceptionService: pos_cache purged on bulk face delete")
+
+    def _on_face_refresh(self, _topic, _payload) -> None:
+        """Clear the position cache and reload embedding DB so Re-identify takes effect immediately.
+
+        Without this handler, the Re-identify button publishes face.refresh but
+        the position cache keeps serving stale (potentially wrong) identity
+        assignments on every subsequent frame, making Re-identify ineffective.
+        """
+        with self._pos_cache_lock:
+            self._pos_cache.clear()
+        if self._registry is not None:
+            self._registry.reload()
+        log.info("PerceptionService: pos_cache cleared and embedding cache reloaded on face.refresh")
 
     # ── Detection worker (runs in its own thread) ──────────────────────
 
@@ -298,7 +314,10 @@ class PerceptionService(Service):
                                 if cached:
                                     face_id, name = cached
                                     self._registry.update_seen(face_id)
-                                    self._registry.add_embedding_if_needed(face_id, emb)
+                                    # Do NOT add_embedding_if_needed here — identity was not
+                                    # confirmed by find_match, only inferred from position cache.
+                                    # Adding embeddings to an unverified identity contaminates
+                                    # the gallery (e.g. a stale cache entry for the wrong person).
                                     entry["face_id"] = face_id
                                     entry["name"] = name
                                     entry["is_new"] = False
