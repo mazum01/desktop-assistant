@@ -6,7 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.23.1] - 2026-05-24
+## [1.23.2] - 2026-05-24
+### Fixed
+- **Fan still not spinning — Pi 5 / RP1 GPIO mux** — `dtoverlay=pwm` is BCM-only
+  and cannot mux RP1 GPIO pins on Pi 5. Two-part fix:
+  1. Added `ExecStartPre=/usr/bin/pinctrl set 13 a0` to the thermal systemd unit
+     so GPIO13 is muxed to `PWM0_CHAN1` (Alt0) before the fan controller starts.
+     Without this, lgpio would claim GPIO13 as a software-PWM output and the
+     kernel pinctrl would refuse to re-mux it.
+  2. Fixed sysfs init race in `fan.py`: writing `period` immediately after
+     `export` returns `EBUSY`/`EACCES` on the RP1 PWM driver — added a
+     50 ms poll loop (up to 500 ms) after export, and an explicit `enable=0`
+     disable step before reconfiguring period.
+- Removed ineffective `dtoverlay=pwm,pin=13,func=4` from `/boot/firmware/config.txt`
+  (overlay is BCM2711/Pi 4 only; silent no-op on Pi 5 leaves GPIO unmuxed).
+
+
 ### Fixed
 - **Fan not spinning after PWM/tach wiring** — root cause was GPIO13 not muxed to
   hardware PWM output. Added `dtoverlay=pwm,pin=13,func=4` to

@@ -137,8 +137,26 @@ class FanController:
 
         pwm_path = chip_path / f"pwm{self._channel}"
         try:
+            just_exported = False
             if not pwm_path.is_dir():
                 (chip_path / "export").write_text(f"{self._channel}\n")
+                just_exported = True
+
+            # After export the RP1 PWM driver needs a brief moment before
+            # the sysfs files accept writes (returns EBUSY/EACCES otherwise).
+            if just_exported:
+                import time as _time
+                for _attempt in range(10):
+                    if pwm_path.is_dir() and (pwm_path / "period").exists():
+                        break
+                    _time.sleep(0.05)
+
+            # Disable before reconfiguring period (required by some PWM drivers).
+            try:
+                (pwm_path / "enable").write_text("0\n")
+            except OSError:
+                pass
+
             (pwm_path / "period").write_text(f"{self._period_ns}\n")
             (pwm_path / "duty_cycle").write_text(f"{self._period_ns}\n")  # 100% start
             (pwm_path / "enable").write_text("1\n")

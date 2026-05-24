@@ -14,6 +14,9 @@ SupplementaryGroups=i2c gpio
 WorkingDirectory=/home/starter/Code/Desktop Assistant
 Environment=PYTHONUNBUFFERED=1
 Environment="PYTHONPATH=/home/starter/Code/Desktop Assistant"
+# On Pi 5 / RP1, the standard dtoverlay cannot mux GPIO pins at boot.
+# Mux GPIO13 → PWM0_CHAN1 (Alt0) before the fan controller starts.
+ExecStartPre=/usr/bin/pinctrl set 13 a0
 ExecStart=/usr/bin/python3 -m src.assistant.thermal_main
 
 # Aggressive restart policy — losing this unit means the device
