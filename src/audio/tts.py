@@ -21,6 +21,7 @@ import logging
 import shutil
 import subprocess
 import tempfile
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -59,6 +60,7 @@ class TextToSpeech:
     def __init__(self, config: Optional[TTSConfig] = None) -> None:
         self._cfg = config or TTSConfig()
         self._voice = None          # loaded PiperVoice (lazy)
+        self._voice_lock = threading.Lock()
         self._piper_model_path: Optional[Path] = None
         self._espeak_binary: Optional[str] = None
         self._backend = self._detect_backend()
@@ -99,14 +101,21 @@ class TextToSpeech:
         return None
 
     def _load_voice(self):
-        if self._voice is None:
-            from piper.voice import PiperVoice
-            self._voice = PiperVoice.load(
-                str(self._piper_model_path),
-                config_path=str(self._piper_model_path.with_suffix(".onnx.json")),
-                use_cuda=False,
-            )
+        with self._voice_lock:
+            if self._voice is None:
+                from piper.voice import PiperVoice
+                self._voice = PiperVoice.load(
+                    str(self._piper_model_path),
+                    config_path=str(self._piper_model_path.with_suffix(".onnx.json")),
+                    use_cuda=False,
+                )
         return self._voice
+
+    def prewarm(self) -> None:
+        """Load the TTS model now (blocks). Call from a background thread to
+        avoid blocking the audio worker on first speech."""
+        if self._backend == "piper":
+            self._load_voice()
 
     # ── Properties ───────────────────────────────────────────────────────
 
@@ -119,6 +128,17 @@ class TextToSpeech:
         return self._espeak_binary
 
     # ── Public API ───────────────────────────────────────────────────────
+
+    def render(self, text: str) -> "tuple[np.ndarray, int]":
+        """Synthesize *text* to (samples, sample_rate) without playing.
+
+        Thread-safe. Use this to pre-synthesize in a background thread so the
+        audio worker only needs to call output.play() — avoiding 17+ second
+        synthesis blocks on the single-threaded audio worker.
+        """
+        if self._backend == "sim":
+            return np.zeros(1, dtype=np.float32), 22050
+        return self._render_to_array(text)
 
     def say(self, text: str, output=None) -> None:
         """

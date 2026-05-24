@@ -744,6 +744,92 @@ async function doSay() {
   el("say-input").value = "";
 }
 
+async function doRecordClip() {
+  const status = el("record-status");
+  const secEl = el("record-seconds");
+  const progress = el("record-progress");
+  const remaining = el("record-remaining");
+  const seconds = Math.max(1, Math.min(120, parseInt(secEl.value || "5", 10)));
+  let timer = null;
+  const start = Date.now();
+  if (progress) {
+    progress.max = seconds;
+    progress.value = 0;
+    progress.style.display = "";
+  }
+  if (remaining) {
+    remaining.textContent = `${seconds.toFixed(1)}s left`;
+  }
+  timer = setInterval(() => {
+    const elapsed = (Date.now() - start) / 1000;
+    const left = Math.max(0, seconds - elapsed);
+    if (progress) progress.value = Math.min(seconds, elapsed);
+    if (remaining) remaining.textContent = `${left.toFixed(1)}s left`;
+  }, 100);
+  if (status) {
+    status.textContent = "Recording...";
+    status.style.color = "var(--yellow,#f5c542)";
+  }
+  try {
+    const r = await fetch("/api/audio/record", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ seconds }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.ok === false) {
+      throw new Error(d.detail || d.error || `HTTP ${r.status}`);
+    }
+    if (status) {
+      status.textContent = `Saved: ${d.path || "recording"}` +
+        (d.rms != null ? ` (rms ${Number(d.rms).toFixed(4)})` : "");
+      status.style.color = "var(--green)";
+    }
+  } catch (e) {
+    if (status) {
+      status.textContent = `Record failed: ${e.message || e}`;
+      status.style.color = "var(--red)";
+    }
+  } finally {
+    if (timer) clearInterval(timer);
+    if (progress) {
+      progress.value = seconds;
+      setTimeout(() => { progress.style.display = "none"; }, 1200);
+    }
+    if (remaining) {
+      remaining.textContent = "";
+    }
+  }
+}
+
+async function doPlaybackClip() {
+  const status = el("record-status");
+  if (status) {
+    status.textContent = "Playing...";
+    status.style.color = "var(--yellow,#f5c542)";
+  }
+  try {
+    const r = await fetch("/api/audio/playback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.ok === false) {
+      throw new Error(d.detail || d.error || `HTTP ${r.status}`);
+    }
+    if (status) {
+      status.textContent = `Played: ${d.path || "latest recording"}`;
+      status.style.color = "var(--green)";
+    }
+  } catch (e) {
+    if (status) {
+      status.textContent = `Playback failed: ${e.message || e}`;
+      status.style.color = "var(--red)";
+    }
+  }
+}
+
 async function doPan() {
   const angle = parseFloat(el("pan-slider").value);
   await fetch("/api/pan", {

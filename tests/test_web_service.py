@@ -194,6 +194,47 @@ def test_version_publishes_to_bus(app_client):
     assert events
 
 
+def test_audio_record_endpoint_calls_av_service(app_client):
+    client, bus, svc = app_client
+
+    class _FakeAV:
+        name = "av"
+
+        def record_clip(self, seconds=5.0, path=None):
+            return {"ok": True, "seconds": float(seconds), "path": path or "/tmp/test.wav"}
+
+        def play_recording(self, path=None):
+            return {"ok": True, "seconds": 1.0, "path": path or "/tmp/test.wav"}
+
+    svc._all_services = [_FakeAV()]
+    r = client.post("/api/audio/record", json={"seconds": 2.5, "path": "/tmp/in.wav"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["seconds"] == pytest.approx(2.5)
+    assert data["path"] == "/tmp/in.wav"
+
+
+def test_audio_playback_endpoint_calls_av_service(app_client):
+    client, bus, svc = app_client
+
+    class _FakeAV:
+        name = "av"
+
+        def record_clip(self, seconds=5.0, path=None):
+            return {"ok": True, "seconds": float(seconds), "path": path or "/tmp/test.wav"}
+
+        def play_recording(self, path=None):
+            return {"ok": True, "seconds": 1.25, "path": path or "/tmp/latest.wav"}
+
+    svc._all_services = [_FakeAV()]
+    r = client.post("/api/audio/playback", json={})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["seconds"] == pytest.approx(1.25)
+
+
 # ── Status API ────────────────────────────────────────────────────────────────
 
 def test_status_returns_version(app_client):
@@ -211,7 +252,7 @@ def test_index_returns_html(app_client):
     client, _, _ = app_client
     r = client.get("/")
     assert r.status_code == 200
-    assert "Desktop Assistant" in r.text
+    assert "VERA" in r.text
     assert "<html" in r.text.lower()
 
 

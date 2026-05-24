@@ -304,10 +304,12 @@ def main() -> int:
 
     obj_svc = ObjectService(bus=bus, vision_service=vis, config=_obj_cfg)
     perc_svc = PerceptionService(bus=bus, vision_service=vis, config=_perc_cfg)
+    audio_capture_svc = AudioCaptureService(bus=bus)
+    av.set_capture_service(audio_capture_svc)  # avoid competing PortAudio streams
     services = [
         motion_svc,
         vis,
-        AudioCaptureService(bus=bus),
+        audio_capture_svc,
         av,
         perc_svc,
         obj_svc,

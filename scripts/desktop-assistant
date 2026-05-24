@@ -28,6 +28,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -389,6 +390,72 @@ def cmd_time(_args) -> int:
     r = _request({"cmd": "publish", "topic": "av.announce_time", "payload": None})
     print(json.dumps(r, indent=2))
     return 0 if r.get("ok") else 1
+
+
+def cmd_record(args) -> int:
+    """Record a microphone clip to WAV."""
+    payload = {"seconds": float(args.seconds)}
+    if getattr(args, "output", None):
+        payload["path"] = args.output
+    result: dict = {}
+    error: list[Exception] = []
+
+    def _call_record() -> None:
+        try:
+            result.update(
+                _http_post(
+                    "/api/audio/record",
+                    payload,
+                    timeout=max(30, int(args.seconds) + 30),
+                )
+            )
+        except Exception as exc:
+            error.append(exc)
+
+    t = threading.Thread(target=_call_record, daemon=True)
+    t.start()
+    started = time.time()
+    total = max(1.0, float(args.seconds))
+    while t.is_alive():
+        elapsed = time.time() - started
+        left = max(0.0, total - elapsed)
+        sys.stdout.write(f"\rRecording... {left:4.1f}s left")
+        sys.stdout.flush()
+        time.sleep(0.1)
+    t.join()
+    sys.stdout.write("\r" + (" " * 36) + "\r")
+    sys.stdout.flush()
+
+    if error:
+        print(f"Error: {error[0]}", file=sys.stderr)
+        return 1
+    try:
+        d = result
+    except Exception:
+        print("Error: record request failed", file=sys.stderr)
+        return 1
+    if not d.get("ok"):
+        print(json.dumps(d, indent=2))
+        return 1
+    print(f"Recorded {d.get('seconds', 0):.2f}s to {d.get('path', '(unknown)')}")
+    return 0
+
+
+def cmd_playback(args) -> int:
+    """Play a recorded WAV clip."""
+    payload = {}
+    if getattr(args, "input", None):
+        payload["path"] = args.input
+    try:
+        d = _http_post("/api/audio/playback", payload, timeout=90)
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    if not d.get("ok"):
+        print(json.dumps(d, indent=2))
+        return 1
+    print(f"Played {d.get('seconds', 0):.2f}s from {d.get('path', '(unknown)')}")
+    return 0
 
 
 # ── Depth estimation subcommands ──────────────────────────────────────────────
@@ -1016,6 +1083,12 @@ def cmd_help(args) -> int:
         "camera2":          "Camera 2 (raw feed) settings. Sub-commands:\n"
                             "                  camera2 rotation <deg>      Set camera 2 rotation (0–359°).\n"
                             "                  camera2 rotation-status     Show current camera 2 rotation angle.",
+        "record":           "Record microphone audio to WAV.\n"
+                    "                  Usage: record [--seconds N] [--output FILE]\n"
+                    "                  Default duration is 5 seconds; max is 120 seconds.",
+        "playback":         "Play a recorded WAV clip.\n"
+                    "                  Usage: playback [--input FILE]\n"
+                    "                  If --input is omitted, plays the most recent recording.",
         "eq":               "Voice / TTS audio equalizer. Sub-commands:\n"
                             "                  eq set <preset>             Apply a named preset\n"
                             "                    (flat | bass_boost | treble_boost | vocal | loudness | warm).\n"
@@ -1727,6 +1800,18 @@ def main() -> int:
 
     sub.add_parser("joke", help="Tell a random dad joke").set_defaults(func=cmd_joke)
     sub.add_parser("time", help="Announce the current time").set_defaults(func=cmd_time)
+
+    sp = sub.add_parser("record", help="Record microphone audio to a WAV file")
+    sp.add_argument("--seconds", "-s", type=float, default=5.0,
+                    help="Duration to record (1-120 seconds, default: 5)")
+    sp.add_argument("--output", "-o", default=None,
+                    help="Output WAV path (default: auto filename under ~/Pictures/vera/recordings)")
+    sp.set_defaults(func=cmd_record)
+
+    sp = sub.add_parser("playback", help="Play the latest or specified recorded WAV file")
+    sp.add_argument("--input", "-i", default=None,
+                    help="Input WAV path (default: latest recording)")
+    sp.set_defaults(func=cmd_playback)
 
     # ── Consolidated servo subcommands ───────────────────────────────
     servo_sp = sub.add_parser("servo", help="Servo control (enable/disable/status/pan/move)")

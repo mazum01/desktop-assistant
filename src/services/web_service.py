@@ -21,6 +21,8 @@ POST /api/faces/refresh   Reload embedding cache + reset tracking state (re-iden
 DEL  /api/faces/{id}      Delete a face and all its embeddings
 POST /api/faces/{id}/train  Capture current frame and add embedding/thumbnail to face
 POST /api/say             Speak text   body: {"text": "hello"}
+POST /api/audio/record    Record microphone to WAV  body: {"seconds": float, "path": str?}
+POST /api/audio/playback  Play latest/specified WAV body: {"path": str?}
 POST /api/pan             Pan servo    body: {"angle": 180.0}
 GET  /api/snapshot            Full-resolution JPEG snapshot from camera 1
 GET  /api/snapshot2           Full-resolution JPEG snapshot from camera 2
@@ -98,6 +100,15 @@ class _SayBody(BaseModel):
 
 class _PanBody(BaseModel):
     angle: float
+
+
+class _RecordBody(BaseModel):
+    seconds: float = 5.0
+    path: Optional[str] = None
+
+
+class _PlaybackBody(BaseModel):
+    path: Optional[str] = None
 
 
 class _MergeFacesBody(BaseModel):
@@ -398,6 +409,12 @@ class WebService:
         )
         self._server = uvicorn.Server(config)
         self._loop.run_until_complete(self._server.serve())
+
+    def _get_service_by_name(self, name: str):
+        for svc in self._all_services:
+            if getattr(svc, "name", None) == name:
+                return svc
+        return None
 
     def _build_status_snapshot(self) -> dict:
         """Pull latest status from the bus (same topics as IPC bridge)."""
@@ -900,6 +917,32 @@ class WebService:
                 raise HTTPException(503, "bus unavailable")
             self.bus.publish("av.say", {"text": body.text})
             return {"ok": True}
+
+        @app.post("/api/audio/record")
+        async def api_audio_record(body: _RecordBody):
+            av_svc = self._get_service_by_name("av")
+            if av_svc is None or not hasattr(av_svc, "record_clip"):
+                raise HTTPException(503, "av service unavailable")
+            try:
+                # record_clip blocks on queue.Queue.get() — run off the event loop
+                return await asyncio.to_thread(
+                    av_svc.record_clip, seconds=body.seconds, path=body.path
+                )
+            except Exception as exc:
+                raise HTTPException(500, f"record failed: {exc}")
+
+        @app.post("/api/audio/playback")
+        async def api_audio_playback(body: _PlaybackBody):
+            av_svc = self._get_service_by_name("av")
+            if av_svc is None or not hasattr(av_svc, "play_recording"):
+                raise HTTPException(503, "av service unavailable")
+            try:
+                # play_recording also blocks — run off the event loop
+                return await asyncio.to_thread(av_svc.play_recording, path=body.path)
+            except FileNotFoundError as exc:
+                raise HTTPException(404, str(exc))
+            except Exception as exc:
+                raise HTTPException(500, f"playback failed: {exc}")
 
         # ── Skills ────────────────────────────────────────────────────
 

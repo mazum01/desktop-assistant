@@ -169,30 +169,32 @@ class AudioOutput:
         self,
         samples: np.ndarray,
         sample_rate: Optional[int],
+        apply_processing: bool = True,
     ) -> bytes:
         """Resample, apply loudness boost, apply EQ, convert to stereo S16_LE bytes."""
         sr = sample_rate or self._cfg.sample_rate
         if sr != self._cfg.sample_rate:
             samples = _resample_linear(samples, sr, self._cfg.sample_rate)
-        drive = self._cfg.loudness_boost
-        if drive and drive > 1.0:
-            samples = _soft_clip(samples, drive)
-        # Apply EQ biquad filter if scipy is available and preset is not flat.
-        preset = self._cfg.eq_preset
-        if preset and preset != "flat":
-            try:
-                from scipy.signal import sosfilt  # type: ignore
-                sos = self._get_sos(preset, self._cfg.sample_rate)
-                if sos is not None:
-                    if samples.ndim == 2:
-                        samples = np.column_stack(
-                            [sosfilt(sos, samples[:, ch]) for ch in range(samples.shape[1])]
-                        )
-                    else:
-                        samples = sosfilt(sos, samples)
-                    samples = np.clip(samples, -1.0, 1.0)
-            except ImportError:
-                pass
+        if apply_processing:
+            drive = self._cfg.loudness_boost
+            if drive and drive > 1.0:
+                samples = _soft_clip(samples, drive)
+            # Apply EQ biquad filter if scipy is available and preset is not flat.
+            preset = self._cfg.eq_preset
+            if preset and preset != "flat":
+                try:
+                    from scipy.signal import sosfilt  # type: ignore
+                    sos = self._get_sos(preset, self._cfg.sample_rate)
+                    if sos is not None:
+                        if samples.ndim == 2:
+                            samples = np.column_stack(
+                                [sosfilt(sos, samples[:, ch]) for ch in range(samples.shape[1])]
+                            )
+                        else:
+                            samples = sosfilt(sos, samples)
+                        samples = np.clip(samples, -1.0, 1.0)
+                except ImportError:
+                    pass
         if self._cfg.channels == 2 and samples.ndim == 1:
             samples = np.column_stack([samples, samples])
         return (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
@@ -203,6 +205,7 @@ class AudioOutput:
         self,
         samples: np.ndarray,
         sample_rate: Optional[int] = None,
+        apply_processing: bool = True,
     ) -> None:
         """Write a chunk of audio to the streaming aplay process.
 
@@ -211,7 +214,7 @@ class AudioOutput:
         """
         if self._sim:
             return
-        raw = self._samples_to_s16(samples, sample_rate)
+        raw = self._samples_to_s16(samples, sample_rate, apply_processing=apply_processing)
         try:
             proc = self._ensure_proc()
             proc.stdin.write(raw)
@@ -251,6 +254,7 @@ class AudioOutput:
         samples: np.ndarray,
         sample_rate: Optional[int] = None,
         blocking: bool = True,
+        apply_processing: bool = True,
     ) -> None:
         """Play a numpy waveform.
 
@@ -261,7 +265,11 @@ class AudioOutput:
             sr = sample_rate or self._cfg.sample_rate
             log.debug("[sim] play() %d samples @ %d Hz", len(samples), sr)
             return
-        self.write_chunk(samples, sample_rate=sample_rate)
+        self.write_chunk(
+            samples,
+            sample_rate=sample_rate,
+            apply_processing=apply_processing,
+        )
         if blocking:
             self.flush()
 

@@ -6,7 +6,98 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.23.2] - 2026-05-24
+## [1.23.7] - 2026-05-24
+### Fixed
+- **Web GUI audio recording — persistent 32 s timeout** — Piper TTS synthesis
+  takes ~17–18 s per utterance on Pi 5 (ONNX CPU inference). The audio worker
+  was blocking on synthesis every time any speech was requested (startup
+  announcement, face greetings, all `av.say` events), starving recording
+  requests of their 32 s timeout window. Fixed by separating synthesis from
+  playback: synthesis now runs in a single-threaded `ThreadPoolExecutor`
+  (`tts-synth`), and only the rendered audio is enqueued to the audio worker
+  for playback (~3–5 s). The audio worker stays free for recordings at all
+  times. Startup phrase is pre-synthesized during prewarm so playback is
+  instant (~4 s total) after the 21 s prewarm+synthesis window.
+- **`wait_idle()` correctness** — now waits for both the synth executor and
+  the audio worker queue to drain, so test assertions are reliable.
+
+## [1.23.6] - 2026-05-24
+### Fixed
+- **Web GUI audio recording — 30 s startup delay** — the Piper ONNX TTS model
+  was loaded lazily on first speech, blocking the audio worker thread for ~22 s
+  during the startup announcement. Any recording request queued in that window
+  hit the timeout and returned an error. Fixed by pre-warming the TTS model on
+  a background thread (`tts-prewarm`) immediately when `AVService` starts, so
+  the model is ready before the audio worker processes the announcement.
+- **Thread safety**: `TextToSpeech._load_voice()` now acquires a `threading.Lock`
+  to prevent two threads from loading the ONNX model simultaneously.
+
+## [1.23.5] - 2026-05-24
+### Fixed
+- Recording no longer silently "succeeds" with empty audio: AV recording now
+  fails fast when microphone input is unavailable or the captured clip is near
+  silence, returning an explicit error instead of writing unusable WAV files.
+
+### Added
+- Web GUI recording countdown UX:
+  - Progress bar + live seconds-left countdown while recording in the
+    Controls -> Audio Clip panel.
+- CLI recording countdown UX:
+  - `vera record` now shows a live seconds-left countdown in the terminal
+    while capture is in progress.
+
+### Changed
+- Recording API responses now include input signal metrics (`rms`, `peak`) to
+  make low-signal troubleshooting easier.
+
+## [1.23.4] - 2026-05-24
+### Fixed
+- Recording playback quality: user-recorded WAV clips now bypass TTS loudness
+  boost and EQ coloration during playback, preventing heavy distortion and
+  over-processed sound on recorded audio.
+- AV beep runtime bug: corrected `AudioOutput.beep()` call site to use the
+  correct `frequency=` keyword, removing repeated runtime TypeErrors in logs.
+
+### Changed
+- `AudioOutput.play()` / `write_chunk()` now accept an `apply_processing`
+  flag so callers can choose clean, unprocessed playback when needed.
+
+## [1.23.3] - 2026-05-24
+### Added
+- Audio clip record/playback support in the core AV pipeline:
+  - `AVService` now supports recording microphone input to WAV (`av.record`) and
+    playback of latest/specified WAV clips (`av.play_recording`).
+  - New bus events: `av.recorded` and `av.recording_played`.
+- Web API + GUI controls for audio clip capture/replay:
+  - Added `POST /api/audio/record` and `POST /api/audio/playback`.
+  - Added dashboard controls for clip duration, recording, and playback with
+    status feedback.
+- CLI support for the new workflow:
+  - Added `vera record [--seconds N] [--output FILE]`.
+  - Added `vera playback [--input FILE]`.
+  - Updated `vera help` command map to include both commands.
+- OpenClaw interface skills for the same flow:
+  - Added `.github/skills/record` (`record.py`) and
+    `.github/skills/playback` (`playback.py`) with SKILL metadata/docs.
+
+### Changed
+- Web service can now locate and call named runtime services through a small
+  helper, used by the new audio endpoints to invoke AV operations synchronously.
+
+### Fixed
+- Added regression coverage for AV record/playback and web audio endpoints.
+
+## [1.23.3] - 2026-05-24
+### Fixed
+- **Web GUI audio recording hangs** — `POST /api/audio/record` and
+  `POST /api/audio/playback` were calling `av_svc.record_clip()` /
+  `av_svc.play_recording()` directly inside `async def` route handlers,
+  which blocked the entire uvicorn event loop for the recording duration
+  (causing a timeout with no response). Fixed by wrapping both calls with
+  `asyncio.to_thread()` so the blocking `queue.Queue.get()` runs off the
+  event loop in a thread pool.
+
+
 ### Fixed
 - **Fan still not spinning — Pi 5 / RP1 GPIO mux** — `dtoverlay=pwm` is BCM-only
   and cannot mux RP1 GPIO pins on Pi 5. Two-part fix:
