@@ -4,7 +4,7 @@
 
 fan:
   # Hardware PWM via /sys/class/pwm. After enabling the
-  # `pwm-2chan` dtoverlay (see scripts/setup_pi.sh), GPIO13 is routed
+  # `pwm` dtoverlay (see scripts/setup_pi.sh), GPIO13 is routed
   # to channel 1 of pwmchip0.
   pwm_chip:      0
   pwm_channel:   1
@@ -25,6 +25,6 @@ thresholds:
   safe_max_c:      50.0
   warn_max_c:      65.0
   critical_c:      75.0
-  fan_min_duty:    30.0
+  fan_min_duty:   100.0
   fan_max_duty:   100.0
   poll_interval_s: 1.0

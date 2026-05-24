@@ -40,10 +40,10 @@ Configure in `config/fan.yaml`.
 ### Wiring
 ```
 Fan connector  →  Pi / supply
-Pin 1 GND      →  GND (shared)
-Pin 2 +5V      →  5 V supply rail (NOT Pi 5V pin — use external)
-Pin 3 Tach     →  GPIO (optional, e.g. GPIO6)
-Pin 4 PWM      →  GPIO13 (hardware PWM1)
+Pin 1 GND      →  GND (shared with Pi)
+Pin 2 +5V      →  USB 5 V power supply (same supply as Pi, NOT a Pi GPIO 5V pin)
+Pin 3 Tach     →  GPIO6 (Pin 31) + 10 kΩ pull-up to 3.3 V
+Pin 4 PWM      →  GPIO13 (Pin 33, hardware PWM1)
 ```
 
 ### Duty Cycle → Behavior

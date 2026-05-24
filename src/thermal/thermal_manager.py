@@ -11,9 +11,11 @@ Thresholds (configurable via config/thermal.yaml):
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Optional
 
 from .tmp117 import TMP117, TMP117Error
@@ -21,6 +23,10 @@ from .fan import FanController
 from .fan_tach import FanTach
 
 log = logging.getLogger(__name__)
+
+# Resolve config path relative to the project root (two levels up from this file)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_THERMAL_CONFIG = _PROJECT_ROOT / "config" / "thermal.yaml"
 
 
 @dataclass
@@ -31,6 +37,26 @@ class ThermalThresholds:
     fan_min_duty: float  = 30.0   # % at or below safe_max
     fan_max_duty: float  = 100.0
     poll_interval_s: float = 1.0
+
+    @classmethod
+    def from_yaml(cls, path: Path = _THERMAL_CONFIG) -> "ThermalThresholds":
+        """Load thresholds from thermal.yaml, falling back to defaults on error."""
+        try:
+            import yaml  # type: ignore
+            with open(path) as f:
+                cfg = yaml.safe_load(f) or {}
+            t = cfg.get("thresholds", {})
+            return cls(
+                safe_max_c=float(t.get("safe_max_c", 50.0)),
+                warn_max_c=float(t.get("warn_max_c", 65.0)),
+                critical_c=float(t.get("critical_c", 75.0)),
+                fan_min_duty=float(t.get("fan_min_duty", 30.0)),
+                fan_max_duty=float(t.get("fan_max_duty", 100.0)),
+                poll_interval_s=float(t.get("poll_interval_s", 1.0)),
+            )
+        except Exception as exc:
+            log.warning("Could not load %s (%s) — using defaults", path, exc)
+            return cls()
 
 
 class ThermalManager:
@@ -53,7 +79,7 @@ class ThermalManager:
         tach_gpio: int = 6,
         tach_pulses_per_rev: int = 2,
     ) -> None:
-        self._thresh = thresholds or ThermalThresholds()
+        self._thresh = thresholds or ThermalThresholds.from_yaml()
         self._on_critical = on_critical
         self._sensor = TMP117(bus=i2c_bus)
         self._fan = FanController(gpio_pin=gpio_pin)

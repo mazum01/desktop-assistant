@@ -55,14 +55,15 @@ else
     echo "  ✓ I²C already enabled"
 fi
 
-# ── 3b. Enable hardware PWM on GPIO12 + GPIO13 ──────────────────────
-PWM_OVERLAY="dtoverlay=pwm-2chan,pin=12,func=4,pin2=13,func2=4"
+# ── 3b. Enable hardware PWM on GPIO13 for the NF-A6x25 fan ─────────
+PWM_OVERLAY="dtoverlay=pwm,pin=13,func=4"
 if ! grep -qF "$PWM_OVERLAY" /boot/firmware/config.txt 2>/dev/null; then
-    echo "  Enabling hardware PWM (pwm-2chan) for fan on GPIO13..."
+    echo "  Enabling hardware PWM (pwm, pin=13) for fan on GPIO13..."
+    echo "# Route GPIO13 to hardware PWM1 (channel 1) for the NF-A6x25 fan" | sudo tee -a /boot/firmware/config.txt > /dev/null
     echo "$PWM_OVERLAY" | sudo tee -a /boot/firmware/config.txt > /dev/null
     echo "  ⚠ Reboot required for hardware PWM to activate."
 else
-    echo "  ✓ pwm-2chan overlay already present"
+    echo "  ✓ pwm overlay (pin=13) already present"
 fi
 
 # ── 3c. Symlink CLI onto PATH ────────────────────────────────────────

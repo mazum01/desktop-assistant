@@ -3,10 +3,10 @@ NF-A6x25 PWM fan controller.
 
 Primary backend: kernel hardware PWM via `/sys/class/pwm/pwmchipN/pwmM`.
 This delivers a clean 25 kHz signal — Noctua spec — and is silent.
-Requires the `pwm-2chan` dtoverlay to route GPIO13 to PWM channel 1
-of pwmchip0:
+Requires the `pwm` dtoverlay to route GPIO13 to PWM channel 1
+of pwmchip0.  Add to /boot/firmware/config.txt under [all]:
 
-    dtoverlay=pwm-2chan,pin=12,func=4,pin2=13,func2=4
+    dtoverlay=pwm,pin=13,func=4
 
 Fallback backend: lgpio software PWM on GPIO13 at 10 kHz. Used until
 the device tree overlay is in place (i.e. before the next reboot).
@@ -145,7 +145,7 @@ class FanController:
         except (OSError, PermissionError) as e:
             log.warning(
                 "sysfs PWM init failed (%s) — falling back to lgpio. "
-                "Did you reboot after enabling the pwm-2chan overlay?",
+                "Did you reboot after adding 'dtoverlay=pwm,pin=13,func=4' to /boot/firmware/config.txt?",
                 e,
             )
             return False

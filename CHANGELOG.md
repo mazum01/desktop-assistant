@@ -6,6 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.23.1] - 2026-05-24
+### Fixed
+- **Fan not spinning after PWM/tach wiring** — root cause was GPIO13 not muxed to
+  hardware PWM output. Added `dtoverlay=pwm,pin=13,func=4` to
+  `/boot/firmware/config.txt` (requires reboot to take effect). The overlay
+  `pwm-2chan` referenced in setup_pi.sh and fan.py was incorrect for this use
+  case; corrected to `dtoverlay=pwm,pin=13,func=4` (single-channel, Alt0).
+- Corrected overlay reference in `scripts/setup_pi.sh`, `src/thermal/fan.py`
+  docstring/warning, and `config/thermal.yaml` comment.
+### Added
+- `ThermalThresholds.from_yaml()` — thresholds can now be loaded live from
+  `config/thermal.yaml` without code changes; `ThermalManager` uses this by
+  default.
+- Updated `hardware/thermal/TMP117_fan_notes.md` with precise wiring details
+  (GPIO pin numbers, pull-up resistor note, power supply guidance).
+
 ## [1.23.0] - 2026-05-23
 ### Changed
 - **Project renamed to VERA (Vision-Enabled Reasoning Agent)** across all
