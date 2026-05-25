@@ -29,6 +29,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
   password, eliminating the direct root-escalation path from unauthenticated API
   endpoints.
 
+## [1.24.3] - 2026-05-25
+### Added
+- `mic_harness.md` — full ASCII schematic of the complete harness (power
+  filter, MAX4466, LPF, shielded cable, TRS plug, CM108).
+- Build form-factor section: inline vs. tiny perfboard vs. hybrid build
+  (recommends perfboard for the power filter + inline for the LPF).
+- Ferrite ring-choke alternative: differential-mode (5–8 turns of +V only)
+  and common-mode (5–8 turns of +V AND GND through same toroid) options
+  using FT37-43 or FT50-43 Type-43 toroids.
+
 ## [1.24.2] - 2026-05-25
 ### Changed
 - `mic_harness.dot/pdf/png/svg` — page reformatted to US Letter portrait

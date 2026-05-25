@@ -79,6 +79,230 @@ Total cost: ~$3–5 in parts (most of this you may already have).
 
 ---
 
+## Schematic
+
+ASCII schematic of the entire harness, drawn for readability:
+
+```
+                            POWER FILTER (at MAX4466 VDD)
+                            ─────────────────────────────
+
+  Pi 5 I²C header                                                MAX4466
+     3.3 V  ●──╮                                                  module
+              │                                                  ┌──────┐
+              ◓  Ferrite (BLM18AG601SN1 bead, or 5-turn          │      │
+              ◓  ring choke on FT37-43 toroid)                   │      │
+              │                                                  │      │
+              ●────[ 10 Ω ]──────┬────────┬────────┬─────● VDD──►│ VDD  │
+                                 │        │        │             │      │
+                              ═══╪═══  ═══╪═══  ═══╪═══          │      │
+                              ┬ 10 µF  ┬ 100 nF  ┬ 10 nF         │      │
+                              │ (C1)   │ (C2)    │ (C3)          │      │
+                              │ tant.  │ X7R     │ C0G           │      │
+                              ●        ●        ●                │      │
+                              │        │        │                │      │
+   I²C header  GND  ●─────────●────────●────────●────────────────● GND  │
+                              (LOCAL STAR — amp side)            │      │
+                                                  ┌──── mic+ ────│ MIC+ │
+                                  electret ───────┤              │      │
+                                  capsule         └──── mic− ────│ MIC− │
+                                                                 │ GAIN │ (pot, set ~50×)
+                                                                 │      │
+                                                                 │ OUT  ●──┐
+                                                                 └──────┘  │
+                                                                           │
+                                                                          [1 kΩ]
+                                                                           │
+                                            (LPF — at MAX4466 OUT) ────────┤
+                                                                           │
+                                                                          ═╪═
+                                                                          ┬ 4.7 nF
+                                                                          │  C0G  (C_lp)
+                                                                          │
+                                                              GND ────────┘
+                                                              (same LOCAL STAR
+                                                               as amp side)
+
+                                                                           │
+                                                              ┌────────────● (signal)
+                                                              │
+                            SHIELDED TWISTED PAIR  ≤ 30 cm    │
+                            ─────────────────────────────    │
+                                                              │
+                              ╔═══════════════════════════════╪═════════════════╗
+                              ║   ┏━━━━━━━━━━━━━━━━━━━━━━━━━━ ● ━ signal ━━━━━━┓║
+                              ║   ┃  copper foil shield wraps              ┃   ║
+                              ║   ┃  both conductors helically             ┃   ║
+                              ║   ┃                                        ┃   ║
+                              ║   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━●━━ return ━━━┛   ║
+                              ║   ╲                                            ║
+                              ║    ╲ foil FLOATS at amp end                    ║
+                              ║                                                ║
+                              ║                drain wire ──┐                  ║
+                              ║                             │                  ║
+                              ╚═════════════════════════════╪══════════════════╝
+                                                            │
+                                                            ▼
+                                                   ┌────────────────────┐
+                                                   │  3.5 mm TRS plug   │
+                                                   │                    │
+                                          signal──►│ Tip                │
+                                          return──►│ Sleeve  ◄── drain  │
+                                          n/c   ──►│ Ring               │
+                                                   └────────────────────┘
+                                                            │
+                                                            ▼
+                                                   ┌────────────────────┐
+                                                   │  CM108 USB Audio   │
+                                                   │       MIC IN       │
+                                                   └────────────────────┘
+
+  ═══ = capacitor      ◓ = ferrite bead / ring      [ ] = resistor       ● = junction
+  ━━━ = conductor      ╔ ╗ ║ ╚ ╝ = shielded boundary
+```
+
+A node-graph version of the same wiring is in `mic_harness.dot/pdf/png/svg`
+(letter-size, printable).
+
+---
+
+## Build form factor — inline or board?
+
+Both work. Choose based on your skill level and available space:
+
+### Option A — Inline (dead-bug, heat-shrink construction)
+
+**Best for:** quick build, no PCB on hand, ≤ 30 cm cable runs.
+
+Solder components leg-to-leg in mid-air, slip 3–5 mm heat-shrink over each
+joint, then 12 mm shrink over the whole assembly for strain relief.
+
+```
+Pi-3.3V wire ──[ferrite bead in-line]──[10 Ω]──┬── to MAX4466 VDD
+                                                │
+                                          C1 ──●── GND wire
+                                          C2 ──●── GND wire
+                                          C3 ──●── GND wire
+```
+
+Pros: no board, very low cost, fits anywhere.
+Cons: physically fragile; lead lengths get longer, which hurts HF filtering;
+ugly to inspect.
+
+### Option B — Tiny perfboard (RECOMMENDED for the power filter only)
+
+**Best for:** the power-decoupling cluster at the MAX4466 VDD pin.
+
+A 15 × 20 mm scrap of perfboard with 3 caps and a resistor takes < 10 min
+to build and lets you mount the caps with **< 2 mm** lead length to VDD —
+which is the difference between mediocre and excellent HF filtering.
+
+```
+   +───[10 Ω]───+────────● to VDD (jumper to MAX module pin)
+   │            │
+   │           ═╪═ C1 (10 µF tantalum, "+" pad here)
+   │            │
+   │           ═╪═ C2 (100 nF X7R 0805 or thru-hole)
+   │            │
+   │           ═╪═ C3 (10 nF C0G/X7R)
+   │            │
+   +────────────●─── GND bus  ── to MAX module GND (jumper)
+                              ── to I²C header GND wire
+```
+
+Mount the ferrite (or ring choke) ON the perfboard at the +V input, or as
+the very first thing on the wire entering the board.
+
+Pros: short, controlled lead lengths; mechanically robust; easy to inspect
+and rework; supports the ring-choke option below.
+Cons: requires a perfboard scrap + 15 min of soldering.
+
+### Option C — Both
+
+Put the **power filter** (ferrite/choke + 3 caps + R) on a tiny perfboard
+*at the MAX4466 module*, and run the **LPF** (1 kΩ + 4.7 nF) as inline
+heat-shrink on the MAX4466 OUT wire. This is what I'd build.
+
+---
+
+## Ferrite ring choke vs. inline ferrite bead
+
+**Short answer: yes, a ring choke is fine — and usually better.** The
+BLM18 bead has ~600 Ω impedance only above ~100 MHz. A small ring choke
+(toroid) wound with 5–8 turns has higher impedance starting at much lower
+frequencies, which is exactly where the Pi 5 switching noise lives
+(1–10 MHz).
+
+### Two ways to use a ring
+
+#### 1. Differential-mode choke (simplest, equivalent replacement for the bead)
+
+Pass **only the +3.3 V wire** through the ring. Each pass = one turn.
+5–8 turns gives you ~10–50 µH of inductance — far more than a bead.
+
+```
+Pi 3.3 V wire ──╮
+                │
+              ╭─┴─╮              5–8 turns through the same ring;
+              │   │   ring       you can usually fit 6–8 turns of
+              ◯   ◯   ferrite    28 AWG wire through a 10 mm OD
+              │   │   toroid     toroid before it fills up.
+              ╰─┬─╯
+                │
+                └──→ [10 Ω] → caps → MAX4466 VDD
+```
+
+This drops differential noise (the ripple on +3.3 V referenced to GND)
+straight into the impedance of the choke + cap network.
+
+#### 2. Common-mode choke (better — kills BOTH differential and common-mode noise)
+
+Pass **both** the +3.3 V wire AND the GND return wire through the same
+ring, in the same direction, same number of turns:
+
+```
+Pi 3.3 V ──╮
+           │
+         ╭─┴─╮             Same direction = phase additive for
+         │   │             common-mode currents (noise that appears
+   ┌──→  ◯   ◯  ─→─┐       on both wires at the same time → choke
+   │     │   │     │       blocks it).
+   │     ╰─┬─╯     │
+   │       │       │       Opposite direction would be wrong — that
+Pi GND ────╯       └→ MAX  cancels common-mode rejection.
+                      GND
+```
+
+Both wires must wind through the toroid the **same number of times** in
+the **same rotational direction**. This is a true common-mode choke and
+will dramatically reduce both the 60 Hz ground-loop hum AND the MHz-range
+switching noise on the same component. Highly recommended.
+
+### Toroid material suggestions
+
+| Material  | Best frequency | Notes                                                                |
+|-----------|----------------|----------------------------------------------------------------------|
+| Type 43   | 1–50 MHz       | **Best for Pi switching noise.** Cheap, easy to find (FT37-43, FT50-43). |
+| Type 31   | 1–500 MHz      | Slightly better at high end; fine for our use.                       |
+| Type 73   | 100 kHz–10 MHz | Good lower-frequency reach if you also see 60 Hz issues.             |
+| Type 77   | 50 kHz–1 MHz   | Use ONLY if you confirm hum is in this band; otherwise pick 43.      |
+
+Cheap source: Amazon "FT37-43 ferrite toroid", ~$8 for a pack of 20.
+Fair Rite Type 43 toroids are also stocked at Digikey.
+
+### Drop-in BOM update
+
+Replace the BLM18AG601SN1 bead row with **either**:
+
+| Qty | Part                              | Value / Part #             | Notes                                  |
+|-----|-----------------------------------|----------------------------|----------------------------------------|
+| 1   | Ferrite bead, inline              | BLM18AG601SN1 (600 Ω/100 MHz) | Original spec, ≥200 mA                 |
+| —   | OR —                              | —                          | —                                      |
+| 1   | Ferrite toroid (ring), Type 43    | FT37-43 (or FT50-43)       | Wind 5–8 turns of supply wire through |
+| —   | Use as common-mode choke (best)   | —                          | Wind 5–8 turns of BOTH +V and GND     |
+
+---
+
 ## Build steps
 
 ### Step 1 — Decouple the MAX4466 VDD
