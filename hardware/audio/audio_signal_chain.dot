@@ -1,0 +1,209 @@
+// VERA Audio System — Full Signal Chain Design
+// Run: dot -Tpng -Gdpi=144 audio_signal_chain.dot -o audio_signal_chain.png
+//      dot -Tpdf audio_signal_chain.dot -o audio_signal_chain.pdf
+//
+// Red nodes / edges = current path (problematic)
+// Green nodes / edges = proposed path (clean)
+// Grey = shared/unchanged
+
+digraph VERA_Audio {
+    graph [
+        label="VERA Audio System — Signal Chain Design\nCurrent (red) vs Proposed (green)",
+        labelloc=t,
+        fontname="Helvetica",
+        fontsize=16,
+        rankdir=LR,
+        splines=ortho,
+        nodesep=0.7,
+        ranksep=1.2,
+        bgcolor="#fafafa",
+        pad=0.5
+    ]
+    node [fontname="Helvetica", fontsize=11, style="filled,rounded", shape=box]
+    edge [fontname="Helvetica", fontsize=9]
+
+    // ────────────────────────────────────────────────
+    //  SHARED: Pi 5 + ALSA Software Stack
+    // ────────────────────────────────────────────────
+    subgraph cluster_pi {
+        label="Raspberry Pi 5"
+        fontname="Helvetica Bold"
+        fontsize=13
+        style="filled"
+        fillcolor="#e8f0fe"
+        color="#3c6bc4"
+        margin=16
+
+        ALSA [label="ALSA / PipeWire\n(kernel audio layer)", fillcolor="#b3c8f5", color="#3c6bc4"]
+        VERA_SW [label="VERA Software\nAVService + TTS\nPiper ONNX (Lessac High)", fillcolor="#b3c8f5", color="#3c6bc4"]
+
+        ALSA -> VERA_SW [label="capture\n(44.1 kHz, mono)", dir=both, color="#3c6bc4"]
+        VERA_SW -> ALSA [label="playback\n(44.1 kHz, stereo)", dir=both, color="#3c6bc4", style=invis]
+    }
+
+    // ────────────────────────────────────────────────
+    //  SHARED: USB Audio Adapter (CM108)
+    // ────────────────────────────────────────────────
+    subgraph cluster_cm108 {
+        label="USB Audio Adapter\nUnitek Y-247A / C-Media CM108\n(card 2, 0d8c:0014)"
+        fontname="Helvetica Bold"
+        fontsize=11
+        style="filled"
+        fillcolor="#fff8e1"
+        color="#f9a825"
+        margin=12
+
+        CM_DAC [label="CM108 DAC\n44.1kHz → analog", fillcolor="#ffe082", color="#f9a825"]
+        CM_ADC [label="CM108 ADC\nanalog → 44.1kHz\nSNR ~60 dB (poor)", fillcolor="#ffe082", color="#f9a825"]
+        CM_USB [label="USB 2.0\nUAC1", fillcolor="#ffe082", color="#f9a825"]
+
+        CM_USB -> CM_DAC [color="#f9a825"]
+        CM_ADC -> CM_USB [color="#f9a825"]
+    }
+
+    // ────────────────────────────────────────────────
+    //  CURRENT OUTPUT PATH (works, but quiet + hum)
+    // ────────────────────────────────────────────────
+    subgraph cluster_out_current {
+        label="OUTPUT — Current (fix in place)"
+        fontname="Helvetica Bold"
+        fontsize=11
+        style="filled"
+        fillcolor="#fce4ec"
+        color="#c62828"
+        margin=12
+
+        OUT_JACK [label="3.5mm TRS Jack\n(stereo out)", fillcolor="#ef9a9a", color="#c62828"]
+        PAM8403 [label="PAM8403\nClass-D Amplifier\n2× 3W @ 5V", fillcolor="#ef9a9a", color="#c62828"]
+        SPEAKERS [label="2× 8Ω Speakers\n(L + R)", shape=ellipse, fillcolor="#ef9a9a", color="#c62828"]
+
+        OUT_JACK -> PAM8403 [label="line level\n~1 Vpp", color="#c62828"]
+        PAM8403 -> SPEAKERS [label="amplified\n~1–2 W", color="#c62828"]
+    }
+
+    // ────────────────────────────────────────────────
+    //  PROPOSED OUTPUT FIX (hum elimination)
+    // ────────────────────────────────────────────────
+    subgraph cluster_out_proposed {
+        label="OUTPUT — Proposed Improvement"
+        fontname="Helvetica Bold"
+        fontsize=11
+        style="filled"
+        fillcolor="#e8f5e9"
+        color="#2e7d32"
+        margin=12
+
+        GLI [label="Ground Loop Isolator\n(e.g. Mpow/Aukey)\n1:1 audio transformer\n← eliminates AC hum", fillcolor="#a5d6a7", color="#2e7d32"]
+        PAM8403B [label="PAM8403 (same)\nClass-D Amp\n2× 3W @ 5V\n← add 470µF + 0.1µF\n    decoupling on VCC", fillcolor="#a5d6a7", color="#2e7d32"]
+        CAP_OUT [label="Output Filter\n10µF cap in series\nper channel\n(blocks DC offset)", fillcolor="#a5d6a7", color="#2e7d32"]
+        SPEAKERS2 [label="2× 8Ω Speakers\n(L + R)", shape=ellipse, fillcolor="#a5d6a7", color="#2e7d32"]
+
+        GLI -> PAM8403B [label="isolated\nline level", color="#2e7d32"]
+        PAM8403B -> CAP_OUT [color="#2e7d32"]
+        CAP_OUT -> SPEAKERS2 [label="clean\namplified", color="#2e7d32"]
+    }
+
+    // ────────────────────────────────────────────────
+    //  CURRENT MIC INPUT PATH (terrible — replace)
+    // ────────────────────────────────────────────────
+    subgraph cluster_mic_current {
+        label="MIC INPUT — Current (replace entirely)"
+        fontname="Helvetica Bold"
+        fontsize=11
+        style="filled"
+        fillcolor="#fce4ec"
+        color="#c62828"
+        margin=12
+
+        CAPSULE [label="Electret Capsule", shape=ellipse, fillcolor="#ef9a9a", color="#c62828"]
+        MAX4466 [label="MAX4466 Preamp\n+10–50 dB analog gain\nVCC from Pi 3.3V\n← noisy PSU rail", fillcolor="#ef9a9a", color="#c62828"]
+        MIC_JACK [label="3.5mm TRRS\nMic Jack\n(CM108 mic in)", fillcolor="#ef9a9a", color="#c62828"]
+
+        CAPSULE -> MAX4466 [label="~1 mV", color="#c62828"]
+        MAX4466 -> MIC_JACK [label="analog\n~0.5 Vpp\n← AC hum\n  ground loop", color="#c62828", style=dashed]
+        MIC_JACK -> CM_ADC [style=invis]
+    }
+
+    // ────────────────────────────────────────────────
+    //  PROPOSED MIC INPUT — Option A: USB MEMS
+    // ────────────────────────────────────────────────
+    subgraph cluster_mic_optA {
+        label="MIC INPUT — Option A (Recommended)\nReSpeaker USB Mic Array v2.0"
+        fontname="Helvetica Bold"
+        fontsize=11
+        style="filled"
+        fillcolor="#e8f5e9"
+        color="#2e7d32"
+        margin=12
+
+        RESPEAKER [label="ReSpeaker USB\nMic Array v2.0\n4× MEMS mics\nBeamforming DSP\nEchoCancellation\nNoise Suppression\n← zero analog path\n   zero code changes", fillcolor="#a5d6a7", color="#2e7d32", shape=box]
+        USB_MIC [label="USB 2.0\n(separate port\nfrom speaker adapter)", fillcolor="#a5d6a7", color="#2e7d32"]
+
+        RESPEAKER -> USB_MIC [color="#2e7d32"]
+    }
+
+    // ────────────────────────────────────────────────
+    //  PROPOSED MIC INPUT — Option B: I2S MEMS
+    // ────────────────────────────────────────────────
+    subgraph cluster_mic_optB {
+        label="MIC INPUT — Option B (DIY)\nI2S MEMS via Pi GPIO"
+        fontname="Helvetica Bold"
+        fontsize=11
+        style="filled"
+        fillcolor="#e3f2fd"
+        color="#1565c0"
+        margin=12
+
+        INMP441 [label="INMP441 or ICS43434\nMEMS I2S Mic\nSNR 61 dB (INMP441)\n     65 dB (ICS43434)\nFlat 60–15kHz\n3.3V, no PSU noise", fillcolor="#90caf9", color="#1565c0"]
+        I2S_PIN [label="Pi 5 GPIO\nI2S BCK/WS/DIN\n(needs dtoverlay\n= googlevoicehat-soundcard\n  or i2s-mmap)", fillcolor="#90caf9", color="#1565c0"]
+
+        INMP441 -> I2S_PIN [label="digital I2S\n32-bit frames", color="#1565c0"]
+    }
+
+    // ────────────────────────────────────────────────
+    //  SOFTWARE FIXES (immediate, no hardware)
+    // ────────────────────────────────────────────────
+    subgraph cluster_sw_fixes {
+        label="Software Fixes (immediate)"
+        fontname="Helvetica Bold"
+        fontsize=11
+        style="filled"
+        fillcolor="#f3e5f5"
+        color="#6a1b9a"
+        margin=12
+
+        SW1 [label="Speaker Volume\namixer sset Speaker 85%\ncurrent: 30% (-26dB)\n→ target: 85% (-4dB)", fillcolor="#ce93d8", color="#6a1b9a"]
+        SW2 [label="Disable AGC\namixer sset 'Auto Gain Control' off\n(already off — keep it off)", fillcolor="#ce93d8", color="#6a1b9a"]
+        SW3 [label="Mic Gain\namixer sset Mic 80% cap\ncurrent: 100% (+23dB)\n→ reduce to avoid clipping", fillcolor="#ce93d8", color="#6a1b9a"]
+        SW4 [label="Persist via ALSA state\nsudo alsactl store\n→ survives reboot", fillcolor="#ce93d8", color="#6a1b9a"]
+
+        SW1 -> SW4 [style=invis]
+        SW2 -> SW4 [style=invis]
+        SW3 -> SW4 [style=invis]
+    }
+
+    // ────────────────────────────────────────────────
+    //  CONNECTIONS between clusters
+    // ────────────────────────────────────────────────
+
+    // Current output path
+    VERA_SW -> CM_USB [label="USB audio\n(playback)", color="#f9a825"]
+    CM_DAC -> OUT_JACK [label="3.5mm\nTRS", color="#c62828"]
+
+    // Proposed output path (GLI inserted)
+    CM_DAC -> GLI [label="3.5mm TRS\n→ insert GLI\nbetween jack\nand amp", color="#2e7d32", style=dashed]
+
+    // Current mic path
+    MIC_JACK -> CM_ADC [label="3.5mm TRRS\nmic input", color="#c62828"]
+    CM_ADC -> CM_USB [color="#f9a825"]
+    CM_USB -> VERA_SW [label="USB audio\n(capture)", color="#f9a825"]
+
+    // Proposed mic Option A
+    USB_MIC -> ALSA [label="USB audio\nnew ALSA card\n(card 3)", color="#2e7d32", style=dashed]
+
+    // Proposed mic Option B
+    I2S_PIN -> ALSA [label="I2S → snd-soc\nALSA card", color="#1565c0", style=dashed]
+
+    // Software fixes feed into ALSA
+    SW4 -> ALSA [label="alsa state\npersist", color="#6a1b9a", style=dotted]
+}
