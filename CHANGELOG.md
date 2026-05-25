@@ -29,6 +29,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
   password, eliminating the direct root-escalation path from unauthenticated API
   endpoints.
 
+## [1.24.5] - 2026-05-25
+### Added
+- VERA favicon: `src/web/static/favicon.ico` (16×16 + 32×32 multi-size),
+  `favicon-32.png`, `favicon-16.png`, `favicon-192.png` (Apple touch icon).
+  Icon is a stylised blue eye on a dark background — consistent with VERA's
+  visual aesthetic.
+- `index.html` `<head>` updated with all four `<link rel="icon">` tags.
+
 ## [1.24.4] - 2026-05-25
 ### Added
 - `mic_harness.md` — three concrete choke options with vendor part numbers,
