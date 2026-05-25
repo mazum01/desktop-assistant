@@ -303,6 +303,74 @@ Replace the BLM18AG601SN1 bead row with **either**:
 
 ---
 
+## Concrete choke options for this build
+
+The MAX4466 + electret draws ~5–10 mA peak. Any of the following are
+overkill on current and ideal on impedance. Pick the one that matches
+your build style and parts-source preference.
+
+### Option 1 — Pre-wound SMD common-mode choke (TDK ACM2520-102-2P-T)
+
+- **Part:** TDK ACM2520-102-2P-T (also `ACM2520-102-2P-T000` reel cut)
+- **Spec:** 1 kΩ @ 10 MHz, 800 mA rating, 2 separate windings in one
+  shielded SMD package (2.5 × 2.0 × 1.0 mm).
+- **Price:** ~$0.30 each.
+- **Sources:**
+  - Digikey: search `ACM2520-102-2P-T`
+  - Mouser: search `TDK ACM2520-102-2P-T`
+- **How to use:** solder the part across two pads on your perfboard
+  (4-pin SMD), wire +3.3 V through winding A, GND return through winding
+  B. Dots on the package indicate matched polarity — keep both dots on
+  the same side (source side) for common-mode operation.
+- **Pros:** small, no winding required, factory-matched windings.
+- **Cons:** SMD soldering (manageable with a fine tip — pads are 0.6 mm
+  wide); not as hobbyist-friendly as a toroid.
+
+### Option 2 — Through-hole common-mode choke (Würth 744226-3)
+
+- **Part:** Würth 7-44226-3 (also listed as `744226003`).
+- **Spec:** 3.3 mH common-mode inductance, 700 mA, 80 Ω DC, 9.5 × 7 mm
+  4-pin radial package.
+- **Price:** ~$2.50 each.
+- **Sources:**
+  - Digikey: search `744226003`
+  - Mouser: search `Wurth 744226-3`
+- **How to use:** drops straight into a 4-hole pattern on perfboard;
+  pin 1↔pin 4 = winding A, pin 2↔pin 3 = winding B. Mark "dot side"
+  before soldering so you get common-mode (both dots same side).
+- **Pros:** through-hole, easy to solder, robust mechanical fit.
+- **Cons:** larger footprint than SMD.
+
+### Option 3 — DIY toroid (recommended if you want full control)
+
+- **Part:** Fair-Rite **FT50-43** (12.7 mm OD Type-43 ferrite toroid),
+  or smaller **FT37-43** (9.5 mm OD).
+- **Spec:** Type 43 material, AL ≈ 440 nH/turn² for FT50-43, so 6 turns
+  bifilar = ~16 µH per winding + tight common-mode coupling.
+- **Price:** ~$0.70 each at Mouser/Digikey; $8 for a bag of 20 on Amazon
+  ("ferrite toroid Type 43 pack").
+- **How to use:** wind 5–8 turns of TWO insulated wires (+V and GND
+  return, kept parallel — "bifilar") through the ring in the same
+  direction. Strip both ends; that gives you a 4-terminal common-mode
+  choke. See ARRL Handbook fig. or any toroid winding tutorial.
+- **Pros:** essentially free; large impedance starting below 1 MHz;
+  intuitive to inspect; can re-wind if you want to tune frequency.
+- **Cons:** requires 5 min of patient winding; not as compact as SMD.
+
+### Recommendation
+
+If you're not already comfortable with SMD soldering, **go with Option 3
+(FT50-43 toroid wound bifilar 6 turns)**. It is the cheapest, easiest,
+and has the best low-frequency reach for the 1–10 MHz Pi switching band.
+You also already mentioned you have copper-tape shielding experience —
+hand-winding a toroid is a similar skill tier.
+
+If you want a clean, professional-looking board, **Option 2 (Würth
+744226-3)** through-hole is a no-fuss drop-in.
+
+---
+
+
 ## Build steps
 
 ### Step 1 — Decouple the MAX4466 VDD

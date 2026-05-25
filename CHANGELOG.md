@@ -29,6 +29,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
   password, eliminating the direct root-escalation path from unauthenticated API
   endpoints.
 
+## [1.24.4] - 2026-05-25
+### Added
+- `mic_harness.md` — three concrete choke options with vendor part numbers,
+  prices, and pros/cons: TDK ACM2520-102-2P-T (SMD), Würth 744226-3
+  (through-hole), Fair-Rite FT50-43 toroid (DIY). Recommendation:
+  FT50-43 bifilar-wound 6 turns for hobbyist build.
+
 ## [1.24.3] - 2026-05-25
 ### Added
 - `mic_harness.md` — full ASCII schematic of the complete harness (power
