@@ -6,6 +6,29 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.25.0] - 2026-05-25
+### Added
+- **Web dashboard API key authentication** — all `/api/*`, `/stream`, `/stream2`,
+  and WebSocket endpoints now require an `X-API-Key` header (or `?key=` query
+  param). The key is read from the `VERA_API_KEY` environment variable, stored in
+  `/etc/desktop-assistant/secrets.env` (mode 600, not committed).
+- **Login overlay** in the dashboard (`app.js`) — if no API key is stored in
+  `localStorage`, a styled prompt is shown on first visit; key is saved and reused.
+- **`/etc/desktop-assistant/secrets.env`** — new restricted-permissions env file
+  loaded by both systemd units via `EnvironmentFile=`; holds `VERA_API_KEY` and
+  `VERA_TELEGRAM_BOT_TOKEN`.
+### Fixed
+- **Hardcoded Telegram bot token removed** from `config/assistant.yaml`; token is
+  now read from the `VERA_TELEGRAM_BOT_TOKEN` environment variable. The committed
+  token `8848705130:AAGWB3_…` is revoked — regenerate in BotFather and set the new
+  value in `/etc/desktop-assistant/secrets.env`.
+- **Sudoers restricted** — replaced `starter ALL=(ALL) NOPASSWD: ALL` in
+  `/etc/sudoers.d/010_pi-nopasswd` with specific-command NOPASSWD rules:
+  `systemctl restart` (for the three managed units), `reboot`, `shutdown -h now`,
+  and `kill` (for watchdog orphan cleanup). All other sudo operations now require a
+  password, eliminating the direct root-escalation path from unauthenticated API
+  endpoints.
+
 ## [1.24.2] - 2026-05-25
 ### Changed
 - `mic_harness.dot/pdf/png/svg` — page reformatted to US Letter portrait

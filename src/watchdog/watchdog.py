@@ -432,7 +432,10 @@ def main() -> int:
     max_uptime_min    = int(wd_cfg.get("openclaw_max_uptime_min", _DEFAULT_MAX_UPTIME_MIN))
 
     tg_cfg     = cfg.get("telegram", {})
-    tg_token   = str(tg_cfg.get("bot_token", ""))
+    tg_token   = (
+        os.environ.get("VERA_TELEGRAM_BOT_TOKEN")
+        or str(tg_cfg.get("bot_token", ""))
+    )
     tg_chat_id = str(tg_cfg.get("chat_id", ""))
 
     services = [

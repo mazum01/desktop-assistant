@@ -18,6 +18,7 @@ Environment=PYTHONUNBUFFERED=1
 Environment="PYTHONPATH=/home/starter/Code/Desktop Assistant"
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+EnvironmentFile=/etc/desktop-assistant/secrets.env
 ExecStart=/usr/bin/python3 -m src.assistant.core_main
 
 Restart=on-failure

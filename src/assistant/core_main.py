@@ -46,6 +46,7 @@ _THERMAL_PUB = "ipc:///tmp/desktop-assistant-thermal.pub"
 
 
 def main() -> int:
+    import os
     import yaml
     from pathlib import Path
     _cfg_path = Path(__file__).parents[2] / "config" / "assistant.yaml"
@@ -160,6 +161,11 @@ def main() -> int:
     _notif_thermal_cfg = _notif_cfg.get("thermal_alerts", {})
     _notif_absence_cfg = _notif_cfg.get("absence_alerts", {})
     _tg_cfg = _cfg.get("telegram", {})
+    _tg_token = (
+        os.environ.get("VERA_TELEGRAM_BOT_TOKEN")
+        or _tg_cfg.get("bot_token", "")
+    )
+    _api_key = os.environ.get("VERA_API_KEY", "")
 
     _web_cfg = _cfg.get("web_dashboard", {})
     _web_enabled = _web_cfg.get("enabled", True)
@@ -404,7 +410,7 @@ def main() -> int:
     tg_svc = TelegramService(
         bus=bus,
         enabled=bool(_tg_cfg.get("enabled", False)),
-        bot_token=str(_tg_cfg.get("bot_token", "")),
+        bot_token=str(_tg_token),
         chat_id=str(_tg_cfg.get("chat_id", "")),
         emoji_map={
             "new_face":  _tg_cfg.get("emoji_new_face", "👋"),
@@ -422,7 +428,8 @@ def main() -> int:
                              camera2_service=cam2_svc, object_service=obj_svc,
                              skills_service=skills_svc, perception_service=perc_svc,
                              dense_stereo_service=dense_stereo_svc,
-                             mono_depth_service=mono_depth_svc)
+                             mono_depth_service=mono_depth_svc,
+                             api_key=_api_key)
         services.append(web_svc)
         web_svc._all_services = services  # seed service registry at startup
 

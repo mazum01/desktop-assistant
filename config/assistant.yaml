@@ -184,10 +184,11 @@ notifications:
 
 telegram:
   # Forward face-greeting audio outputs to a Telegram chat.
-  # bot_token and chat_id are read from here; they match the OpenClaw Telegram
-  # plugin configured in ~/.openclaw/openclaw.json.
+  # bot_token is read from the VERA_TELEGRAM_BOT_TOKEN environment variable
+  # (set in /etc/desktop-assistant/secrets.env).  The value here is ignored
+  # when the env var is present — leave it blank.
   enabled: true
-  bot_token: "8848705130:AAGWB3_gOmmLkv0_G6E8aSFiWb7oKc3WrtE"
+  bot_token: ""
   chat_id: "REDACTED_CHAT_ID"
   # Emoji prefix per event type (optional)
   emoji_new_face: "👋"

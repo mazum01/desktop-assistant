@@ -11,6 +11,7 @@ Group=starter
 WorkingDirectory=/home/starter/Code/Desktop Assistant
 Environment=PYTHONUNBUFFERED=1
 Environment="PYTHONPATH=/home/starter/Code/Desktop Assistant"
+EnvironmentFile=/etc/desktop-assistant/secrets.env
 
 ExecStart=/usr/bin/python3 -m src.watchdog.watchdog
 

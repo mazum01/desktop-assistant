@@ -199,10 +199,12 @@ class WebService:
         perception_service=None,
         dense_stereo_service=None,
         mono_depth_service=None,
+        api_key: str = "",
     ) -> None:
         self.bus = bus
         self._host = host
         self._port = port
+        self._api_key = api_key.strip() if api_key else ""
         self._registry = registry
         self._vision_svc = vision_service
         self._quiet_hours = quiet_hours
@@ -498,8 +500,34 @@ class WebService:
         from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
         from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
         from fastapi.staticfiles import StaticFiles
+        from starlette.middleware.base import BaseHTTPMiddleware
 
         app = FastAPI(title="VERA Dashboard", docs_url=None, redoc_url=None)
+
+        # ── API key authentication ────────────────────────────────────
+        # All routes except /, /health, and /static/* require the key
+        # either as an X-API-Key header or a ?key= query parameter.
+        _api_key = self._api_key
+
+        if _api_key:
+            class _AuthMiddleware(BaseHTTPMiddleware):
+                async def dispatch(self, request, call_next):
+                    path = request.url.path
+                    if path in ("/", "/health") or path.startswith("/static"):
+                        return await call_next(request)
+                    key = (
+                        request.headers.get("x-api-key")
+                        or request.query_params.get("key", "")
+                    )
+                    if key != _api_key:
+                        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+                    return await call_next(request)
+            app.add_middleware(_AuthMiddleware)
+        else:
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "VERA_API_KEY is not set — web dashboard is UNAUTHENTICATED"
+            )
 
         # Serve static files (CSS, JS)
         if _STATIC_DIR.exists():
@@ -573,6 +601,9 @@ class WebService:
         @app.websocket("/ws")
         async def websocket_endpoint(ws: WebSocket):
             await ws.accept()
+            if _api_key and ws.query_params.get("key") != _api_key:
+                await ws.close(code=1008)
+                return
             self._ws_clients.append(ws)
             try:
                 while True:
@@ -832,6 +863,9 @@ class WebService:
         async def ws_tracking_debug(ws: WebSocket):
             """Live stream of tracking.debug + autotune events at ~10 Hz."""
             await ws.accept()
+            if _api_key and ws.query_params.get("key") != _api_key:
+                await ws.close(code=1008)
+                return
             queue: asyncio.Queue = asyncio.Queue(maxsize=128)
             loop = asyncio.get_event_loop()
 

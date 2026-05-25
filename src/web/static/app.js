@@ -1,6 +1,61 @@
 /* VERA Dashboard — app.js */
 
-const WS_URL = `ws://${location.host}/ws`;
+// ── API key management ────────────────────────────────────────────────────
+// The dashboard requires an API key (set via VERA_API_KEY in secrets.env).
+// On first visit the login overlay is shown; the key is stored in
+// localStorage so subsequent loads connect automatically.
+
+const VERA_API_KEY = localStorage.getItem('vera_api_key') || '';
+
+// Patch fetch() globally to inject the X-API-Key header on every request.
+(function () {
+  const _orig = window.fetch;
+  window.fetch = function (url, opts) {
+    opts = Object.assign({}, opts);
+    opts.headers = Object.assign({ 'X-API-Key': VERA_API_KEY }, opts.headers || {});
+    return _orig.call(this, url, opts).then(resp => {
+      if (resp.status === 401) { _showKeyOverlay(); }
+      return resp;
+    });
+  };
+})();
+
+function _showKeyOverlay() {
+  if (document.getElementById('vera-key-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'vera-key-overlay';
+  overlay.style.cssText =
+    'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.85);' +
+    'display:flex;align-items:center;justify-content:center;z-index:9999;';
+  overlay.innerHTML = `
+    <div style="background:#1e1e2e;padding:2rem;border-radius:12px;min-width:320px;text-align:center;border:1px solid #444;">
+      <h2 style="color:#cdd6f4;margin-top:0">VERA Dashboard</h2>
+      <p style="color:#a6adc8">Enter the API key from <code>/etc/desktop-assistant/secrets.env</code></p>
+      <input id="vera-key-input" type="password" placeholder="API key"
+        style="width:100%;padding:.6rem;font-size:1rem;border-radius:6px;border:1px solid #555;background:#313244;color:#cdd6f4;box-sizing:border-box;margin-bottom:.8rem;" />
+      <button onclick="_saveApiKey()"
+        style="width:100%;padding:.6rem 1.2rem;font-size:1rem;border-radius:6px;border:none;background:#89b4fa;color:#1e1e2e;cursor:pointer;font-weight:600;">
+        Connect
+      </button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#vera-key-input').focus();
+  overlay.querySelector('#vera-key-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') _saveApiKey();
+  });
+}
+
+function _saveApiKey() {
+  const key = (document.getElementById('vera-key-input') || {}).value || '';
+  if (key.trim()) {
+    localStorage.setItem('vera_api_key', key.trim());
+    location.reload();
+  }
+}
+
+if (!VERA_API_KEY) _showKeyOverlay();
+
+const WS_URL = `ws://${location.host}/ws?key=${encodeURIComponent(VERA_API_KEY)}`;
 let ws = null;
 let wsRetryMs = 1000;
 
@@ -1266,6 +1321,13 @@ function closeLightbox() {
 // ── Say on enter key ──────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Set camera stream src with API key so MJPEG streams authenticate.
+  const _streamKey = encodeURIComponent(VERA_API_KEY);
+  const _cam1 = document.getElementById('camera-stream');
+  const _cam2 = document.getElementById('camera-stream2');
+  if (_cam1) _cam1.src = `/stream?key=${_streamKey}`;
+  if (_cam2) _cam2.src = `/stream2?key=${_streamKey}`;
+
   el("say-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") doSay();
   });
