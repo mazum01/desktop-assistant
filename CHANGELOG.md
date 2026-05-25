@@ -29,6 +29,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
   password, eliminating the direct root-escalation path from unauthenticated API
   endpoints.
 
+## [1.24.6] - 2026-05-25
+### Changed
+- `mic_harness.md` — updated choke options with two smaller alternatives to
+  the FT50-43 (12.7 mm): FT23-43 toroid (5.8 mm OD, recommended) and
+  Fair-Rite 2643164231 snap-on clamp (6.9 mm, zero-solder option). Added
+  comparison table with OD size, build complexity, and notes.
+
 ## [1.24.5] - 2026-05-25
 ### Added
 - VERA favicon: `src/web/static/favicon.ico` (16×16 + 32×32 multi-size),

@@ -343,33 +343,65 @@ your build style and parts-source preference.
 
 ### Option 3 — DIY toroid (recommended if you want full control)
 
-- **Part:** Fair-Rite **FT50-43** (12.7 mm OD Type-43 ferrite toroid),
-  or smaller **FT37-43** (9.5 mm OD).
-- **Spec:** Type 43 material, AL ≈ 440 nH/turn² for FT50-43, so 6 turns
-  bifilar = ~16 µH per winding + tight common-mode coupling.
-- **Price:** ~$0.70 each at Mouser/Digikey; $8 for a bag of 20 on Amazon
-  ("ferrite toroid Type 43 pack").
-- **How to use:** wind 5–8 turns of TWO insulated wires (+V and GND
-  return, kept parallel — "bifilar") through the ring in the same
-  direction. Strip both ends; that gives you a 4-terminal common-mode
-  choke. See ARRL Handbook fig. or any toroid winding tutorial.
-- **Pros:** essentially free; large impedance starting below 1 MHz;
-  intuitive to inspect; can re-wind if you want to tune frequency.
-- **Cons:** requires 5 min of patient winding; not as compact as SMD.
+Three sizes available in Type-43 material — pick the smallest that fits your
+wire gauge and turn count:
 
-### Recommendation
+| Part      | OD      | ID     | Height | AL (nH/T²) | 5T bifilar → L | Practical? |
+|-----------|---------|--------|--------|-------------|----------------|------------|
+| FT50-43   | 12.7 mm | 7.7 mm | 4.8 mm | ~440        | ~11 µH         | ✓ large    |
+| **FT37-43**   | **9.5 mm**  | **4.8 mm** | **3.2 mm** | **~420**        | **~10 µH**         | **✓ medium** |
+| **FT23-43**   | **5.8 mm**  | **2.9 mm** | **3.2 mm** | **~140**        | **~3.5 µH**        | **✓ small** |
 
-If you're not already comfortable with SMD soldering, **go with Option 3
-(FT50-43 toroid wound bifilar 6 turns)**. It is the cheapest, easiest,
-and has the best low-frequency reach for the 1–10 MHz Pi switching band.
-You also already mentioned you have copper-tape shielding experience —
-hand-winding a toroid is a similar skill tier.
+**Smallest practical toroid: FT23-43 (5.8 mm OD × 3.2 mm height)** —
+about the diameter of a pencil eraser. Fits comfortably inside a 15 × 20 mm
+perfboard cluster or heat-shrink harness. You can fit ~5 turns of 28 AWG
+bifilar through the 2.9 mm ID before it fills up. 3.5 µH is still 3× more
+inductance than the BLM18 bead and is effective from ~1 MHz up.
 
-If you want a clean, professional-looking board, **Option 2 (Würth
-744226-3)** through-hole is a no-fuss drop-in.
+- **Price:** ~$0.50 at Mouser/Digikey (Fair-Rite P/N `5943001101`), or
+  ~$8/bag-20 on Amazon (search "FT23-43 ferrite toroid").
+- **How to use:** same bifilar winding as FT50-43 above — 5 turns of +V and
+  GND through the same ring in parallel, same rotational direction.
+
+If 5.8 mm is still too large, use the next option (snap-on or pre-wound SMD)
+instead — you cannot practically bifilar-wind a toroid smaller than FT23-43
+by hand.
+
+### Option 3b — Snap-on ferrite clamp (EASIEST, ~7 mm OD, no soldering)
+
+A split snap-on ferrite "clamp core" is even simpler: slide it over the
+wire, close the snap, wind the wire through the hole a few times. No
+perfboard, no solder, reversible.
+
+- **Part:** Fair-Rite `2643164231` (split core, 6.86 × 4.95 × 6.35 mm,
+  Type 43 material) — fits 28–24 AWG wire.  
+  Mouser P/N: `623-2643164231`.  
+  Price: ~$1.20 each.
+- **How to use:** open the snap, lay your twisted-pair cable through the
+  centre hole, close the snap, then thread the cable through the hole 3–4
+  more times (each pass = one turn). This gives 3–4 turns of common-mode
+  inductance with zero modification to the harness wiring.
+- **Pros:** no solder, no winding, removable, reusable. Perfect for
+  prototyping — snap it on, test, move it if needed.
+- **Cons:** slightly bulkier than a wound toroid; relies on the cable
+  being thin enough to fit through the centre hole multiple times (28 AWG
+  twisted pair is fine; 3–4 passes of paired wires will fit the 4.95 mm ID).
+
+### Recommendation for VERA case
+
+| Build style          | Best pick                         | OD size  | Notes |
+|----------------------|-----------------------------------|----------|-------|
+| Easiest, no solder   | Fair-Rite snap-on `2643164231`    | 6.9 mm   | Loop wire through 3–4× and snap closed |
+| **Small, hand-wind** | **FT23-43 toroid, 5T bifilar**    | **5.8 mm**   | **Recommended for tight spaces** |
+| Clean through-hole   | Würth 744226-3, 4-pin perfboard   | 9.5 mm   | No winding, drop-in |
+| Smallest footprint   | TDK ACM2520-102-2P-T, SMD         | 2.5 mm   | SMD soldering required |
+
+**FT23-43 wound 5 turns bifilar** is the sweet spot for the VERA harness:
+5.8 mm diameter, 3.5 µH, fits inline or on a postage-stamp perfboard.
+If even that is tight, the **snap-on clamp** is zero-modification — just
+loop the harness through it 3–4 times and close the snap.
 
 ---
-
 
 ## Build steps
 
