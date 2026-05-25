@@ -112,7 +112,7 @@ def test_skills_service_dispatches_on_utterance():
     svc = SkillsService(bus)
 
     # Call _on_utterance directly (bypass bus subscription for simplicity)
-    svc._on_utterance({"text": "what time is it"})
+    svc._on_utterance("av.utterance", {"text": "what time is it"})
     # TellTimeSkill returns a string → av.say published on the bus argument
     published_topics = [c[0][0] for c in bus.publish.call_args_list]
     assert "av.say" in published_topics
@@ -123,6 +123,6 @@ def test_skills_service_ignores_empty_utterance():
 
     bus = MagicMock()
     svc = SkillsService(bus)
-    svc._on_utterance({"text": ""})
-    svc._on_utterance({})
+    svc._on_utterance("av.utterance", {"text": ""})
+    svc._on_utterance("av.utterance", {})
     bus.publish.assert_not_called()

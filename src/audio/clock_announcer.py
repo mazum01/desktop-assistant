@@ -230,10 +230,12 @@ class ClockAnnouncer:
         say_fn: Callable[[str], None],
         enabled: bool = True,
         is_quiet_fn: Optional[Callable[[], bool]] = None,
+        pause_fn: Optional[Callable[[], None]] = None,
     ) -> None:
         self._say = say_fn
         self.enabled = enabled
         self._is_quiet = is_quiet_fn or (lambda: False)
+        self._pause = pause_fn  # optional pre-announcement pause (e.g. duck music)
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
@@ -304,16 +306,22 @@ class ClockAnnouncer:
         time_str = _spoken_time(dt)
         log.info("ClockAnnouncer: %s", time_str)
 
-        if dt.minute == 0:
-            joke = _pick_joke()
-            text = f"{time_str} {joke}"
-        else:
-            text = time_str
-
         try:
-            self._say(text)
+            self._say(time_str)
         except Exception:
             log.exception("ClockAnnouncer: say_fn raised")
+
+        if dt.minute == 0:
+            if self._pause:
+                try:
+                    self._pause()
+                except Exception:
+                    log.exception("ClockAnnouncer: pause_fn raised")
+            joke = _pick_joke()
+            try:
+                self._say(joke)
+            except Exception:
+                log.exception("ClockAnnouncer: say_fn raised (joke)")
 
     def announce_time_now(self) -> None:
         """Speak the current time immediately (no joke), using 'The time is …'."""

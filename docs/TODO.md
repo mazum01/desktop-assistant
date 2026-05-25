@@ -1,4 +1,6 @@
-# VERA — Remaining Work
+sudo systemctl stop desktop-assistant-core.service
+python3 scripts/test_microphone.py
+sudo systemctl start desktop-assistant-core.service# VERA — Remaining Work
 
 > Extracted from `PROJECT_PHASES.md`. Items already completed are omitted.
 > Reference the phase docs for full context, exit criteria, and design notes.

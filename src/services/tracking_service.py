@@ -324,3 +324,79 @@ class TrackingService(Service):
             elapsed = time.monotonic() - now
             sleep_t = max(0.001, _UPDATE_INTERVAL - elapsed)
             time.sleep(sleep_t)
+
+
+# ── Auto-tune helpers (module-level, testable) ────────────────────────────────
+
+def _analyse_response(
+    samples: list[tuple[float, float, float]],
+) -> tuple[float, float]:
+    """Estimate servo lag and overshoot from a list of (face_cx, servo_angle, t) samples.
+
+    Uses cross-correlation on normalised signals to find the time offset where
+    the servo best matches the face trajectory.
+
+    Returns
+    -------
+    lag_s : float
+        Estimated lag in seconds (positive = servo lags face).
+    overshoot : float
+        Ratio of servo peak excursion to face peak excursion (>1 = overshoot).
+    """
+    if not samples:
+        return 0.0, 0.0
+
+    import numpy as np
+
+    face_vals = np.array([s[0] for s in samples], dtype=np.float64)
+    servo_vals = np.array([s[1] for s in samples], dtype=np.float64)
+    times = np.array([s[2] for s in samples], dtype=np.float64)
+
+    dt = float(np.mean(np.diff(times))) if len(times) > 1 else 0.05
+
+    # Normalise to zero-mean unit variance
+    def _norm(x: "np.ndarray") -> "np.ndarray":
+        std = x.std()
+        return (x - x.mean()) / std if std > 1e-9 else np.zeros_like(x)
+
+    face_n = _norm(face_vals)
+    servo_n = _norm(servo_vals)
+
+    # Full cross-correlation; centre index = zero lag
+    corr = np.correlate(servo_n, face_n, mode="full")
+    centre = len(face_n) - 1
+    lag_samples = int(np.argmax(corr)) - centre
+    lag_s = float(lag_samples * dt)
+
+    # Overshoot: peak servo excursion vs peak face excursion
+    face_range = float(np.ptp(face_vals))
+    servo_range = float(np.ptp(servo_vals))
+    overshoot = servo_range / face_range if face_range > 1e-6 else 1.0
+
+    return lag_s, overshoot
+
+
+def _persist_head_tracking_params(path: "Path | str", params: dict) -> bool:
+    """Update *only* the ``head_tracking`` keys listed in *params* in a YAML config file.
+
+    Preserves all other sections and comments (uses ruamel.yaml round-trip loader).
+
+    Returns True on success, False on any error.
+    """
+    from pathlib import Path as _Path
+    try:
+        from ruamel.yaml import YAML
+        yaml = YAML()
+        yaml.preserve_quotes = True
+        p = _Path(path)
+        data = yaml.load(p)
+        if data is None:
+            data = {}
+        if "head_tracking" not in data:
+            data["head_tracking"] = {}
+        for k, v in params.items():
+            data["head_tracking"][k] = v
+        yaml.dump(data, p)
+        return True
+    except Exception:
+        return False

@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.23.8] - 2026-05-25
+### Fixed
+- CI tests now pass on Python 3.11/3.12/3.13 (was failing on every push).
+- `ClockAnnouncer._announce` now calls `say_fn` twice at top of hour (time then joke) with an optional `pause_fn` between them, instead of concatenating into one utterance.
+- `ClockAnnouncer.__init__` accepts optional `pause_fn` kwarg (used by `clock_service`).
+- `test_face_service`: phrase assertions updated to include "VERA" following robot rename.
+- `test_skills_service`: `_on_utterance` calls corrected to pass both `_topic` and `payload` args.
+- Added `httpx>=0.27.0` to `requirements.txt` (required by FastAPI `TestClient`).
+- CI workflow now installs from `requirements.txt` to ensure `psutil` and `httpx` are present.
+
 ## [1.23.7] - 2026-05-24
 ### Fixed
 - **Web GUI audio recording — persistent 32 s timeout** — Piper TTS synthesis

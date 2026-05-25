@@ -106,7 +106,7 @@ def test_new_face_triggers_av_say(bus, svc):
     _wait()
 
     assert any(spoken), "expected av.say but got nothing"
-    assert any(phrase in spoken[0] for phrase in ["Desktop Assistant", "new face", "hello", "Hello"])
+    assert any(phrase in spoken[0] for phrase in ["Desktop Assistant", "VERA", "new face", "hello", "Hello"])
 
 
 def test_new_face_only_greeted_once_per_session(bus, svc):
@@ -119,7 +119,7 @@ def test_new_face_only_greeted_once_per_session(bus, svc):
         _wait()
 
     # Only one greeting for new face
-    assert len([s for s in spoken if any(p in s for p in ["Desktop Assistant", "new face"])]) == 1
+    assert len([s for s in spoken if any(p in s for p in ["Desktop Assistant", "VERA", "new face"])]) == 1
 
 
 # ── Known face re-greet ──────────────────────────────────────────────────────

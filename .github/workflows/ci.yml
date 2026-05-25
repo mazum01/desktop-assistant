@@ -30,14 +30,15 @@ jobs:
           sudo apt-get install -y --no-install-recommends libzmq3-dev libportaudio2
 
       - name: Install Python deps
-        # Pi-only packages (lgpio, picamera2, adafruit-blinka, etc.) won't all
-        # install cleanly on a generic Ubuntu runner, but the codebase gracefully
-        # falls back to simulation for missing hardware imports.
+        # Pi-only packages (lgpio, picamera2, adafruit-blinka, gpiozero, etc.)
+        # won't install on Ubuntu runners — install best-effort then fall through.
+        # The codebase gracefully degrades to simulation for missing hardware imports.
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pyzmq numpy soundfile sounddevice || true
-          pip install opencv-python-headless pyyaml fastapi || true
-          pip install smbus2 || true
+          # Install everything from requirements.txt, ignoring Pi-specific failures
+          pip install -r requirements.txt || true
+          # Force-install the packages that CI absolutely needs (may have been skipped above)
+          pip install pytest numpy soundfile sounddevice fastapi httpx psutil ruamel.yaml pyzmq opencv-python-headless pyyaml
 
       - name: Pytest
         env:
