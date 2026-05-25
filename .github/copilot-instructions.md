@@ -109,3 +109,24 @@ The CLI entry point is `scripts/desktop-assistant` (symlinked to `/usr/local/bin
 Failure to keep `cmd_help()` in sync with the registered subparsers is a bug, not a
 style issue. Fix it in the same commit as the CLI change.
 
+## 9. Security & Privacy Audit — On Demand and After New Services
+
+Run the **security-scan** skill (via sub-agent) whenever:
+
+1. The user explicitly requests a security or privacy review.
+2. A new service, API endpoint, hardware driver, or external integration is
+   added or significantly modified.
+3. Any file under `config/`, `.github/workflows/`, or `services/systemd/` is
+   changed.
+
+**Rules:**
+- The skill runs as a `general-purpose` sub-agent — delegate fully; do not
+  perform the scan yourself inline.
+- The sub-agent appends findings to `docs/TODO.md` under `## Security & Privacy`.
+- The sub-agent MUST NOT modify source code, tests, or config files.
+- After the sub-agent finishes, relay its full report to the user (do not
+  summarise away individual findings).
+- Treat each finding as a TODO item for the user to review and action
+  separately — never silently fix security issues without explicit user
+  instruction.
+

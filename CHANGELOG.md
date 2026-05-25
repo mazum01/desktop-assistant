@@ -6,7 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.23.8] - 2026-05-25
+## [1.24.0] - 2026-05-25
+### Added
+- `security-scan` skill: sub-agent that audits the codebase for privacy and
+  security concerns and appends new findings to `docs/TODO.md` without
+  modifying any source code.
+- Imperative #9 in `copilot-instructions.md`: agent must run security-scan
+  after any new service, endpoint, or integration is added/modified.
+- Initial scan: 13 security/privacy findings logged to `docs/TODO.md`
+  (hardcoded Telegram token, unauthenticated API/camera/reboot endpoints,
+  ZMQ no-auth, biometric data retention, path traversal in audio API, etc.).
+
+
 ### Fixed
 - CI tests now pass on Python 3.11/3.12/3.13 (was failing on every push).
 - `ClockAnnouncer._announce` now calls `say_fn` twice at top of hour (time then joke) with an optional `pause_fn` between them, instead of concatenating into one utterance.

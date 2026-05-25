@@ -73,3 +73,21 @@ Smoke-test scripts for each component (`scripts/test_<device>.py` exits 0).
   XL430-W250 (half-duplex TTL UART, near-silent, position feedback built in).
   Requires `src/hardware/servo.py` rewrite + Pi hardware UART freed up.
   See `PROJECT_PHASES.md § Future Upgrades` for wiring and library details.
+
+---
+
+## Security & Privacy
+
+- [ ] **[SECRETS]** `config/assistant.yaml:190` — Live Telegram bot token `8848705130:AAGWB3_…` hardcoded and committed to the repository; anyone with repo read access can hijack the bot or harvest chat messages.
+- [ ] **[AUTH]** `config/assistant.yaml:154` / `src/services/web_service.py` — Web dashboard bound to `0.0.0.0:8080` with no authentication on any route; every API endpoint (TTS, servo, face management, settings) is open to any host on the LAN.
+- [ ] **[AUTH]** `src/services/web_service.py:1097,1113` — `POST /api/system/reboot` and `POST /api/system/shutdown` execute `sudo reboot` / `sudo shutdown` with zero auth check; unauthenticated callers on the LAN can power-cycle the device.
+- [ ] **[AUTH]** `src/services/web_service.py:517,544` — MJPEG camera streams (`GET /stream`, `GET /stream2`) served without authentication; anyone on the local network can watch the live camera feed.
+- [ ] **[NETWORK]** `src/services/ipc_bridge.py:183-186` — ZMQ PUB and REP sockets bound without CURVE authentication or encryption; any local process can subscribe to all bus events (including face-identity data) or inject arbitrary bus commands via the unauthenticated REP socket.
+- [ ] **[FILESYSTEM]** `src/services/ipc_bridge.py:61-62` — ZMQ IPC socket files placed at predictable `/tmp` paths (`/tmp/desktop-assistant.pub`, `/tmp/desktop-assistant.rep`) with `PrivateTmp=false` by design; local users can attach to these sockets without authentication.
+- [ ] **[INJECTION]** `src/services/av_service.py:603,666` — `POST /api/audio/record` and `POST /api/audio/playback` accept a caller-supplied `path` field and call `Path(path).expanduser()` with no directory restriction; an attacker on the LAN can write WAV files to arbitrary filesystem paths accessible to the service user.
+- [ ] **[PRIVACY]** `src/perception/face_registry.py:712-748` + `config/assistant.yaml:83` — Biometric ArcFace embeddings and face photo crops stored indefinitely in `~/.local/share/desktop-assistant/` with no automatic purge policy and no user consent mechanism before collection begins.
+- [ ] **[PRIVACY]** `src/services/telegram_service.py:122` + `config/assistant.yaml:186-191` — Face identity data (names, greeting phrases) transmitted to Telegram remote servers with no user opt-in/consent flow; feature activates automatically when `enabled: true` and a token is present.
+- [ ] **[FILESYSTEM]** `~/.local/share/desktop-assistant/` (mode 775) and `thumbs/` (mode 775) — Both directories are group-writable; any process running as the `starter` group can tamper with or delete the biometric face database and thumbnail images.
+- [ ] **[FILESYSTEM]** `services/systemd/desktop-assistant-watchdog.service:24` — `NoNewPrivileges=false` allows the watchdog process (which invokes `sudo systemctl restart` and `sudo kill`) to gain new privileges via setuid binaries, weakening systemd sandboxing.
+- [ ] **[NETWORK]** `src/skills/smart_home_skill.py:6,169` — SmartHomeSkill documents and accepts a plain `http://` Home Assistant base URL; the Bearer long-lived access token would be transmitted in cleartext over HTTP if the user follows the documented example.
+- [ ] **[DEPS]** `requirements.txt` — All 16 package constraints use `>=` lower-bound-only version specifiers with no hash pinning and no `--require-hashes` enforcement in CI; vulnerable to dependency-confusion attacks and silent malicious package updates.
