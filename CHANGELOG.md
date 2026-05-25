@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.24.1] - 2026-05-25
+### Added
+- `hardware/audio/mic_harness.dot/.png/.svg/.pdf` — filtered & shielded mic
+  wiring harness schematic: ferrite + 3-cap power filter on MAX4466 VDD,
+  1 kΩ + 4.7 nF RF low-pass on OUT, twisted-pair with single-end-grounded
+  copper foil shield.
+- `hardware/audio/mic_harness.md` — full build guide with BOM, step-by-step
+  assembly, common mistakes, and verification procedure.
+
 ## [1.24.0] - 2026-05-25
 ### Added
 - `security-scan` skill: sub-agent that audits the codebase for privacy and
