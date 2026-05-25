@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.24.2] - 2026-05-25
+### Changed
+- `mic_harness.dot/pdf/png/svg` — page reformatted to US Letter portrait
+  (612 x 792 pts) and grounding redesigned for actual accessible ground
+  points: I²C-header GND (amp side) + TRS sleeve (receiver side), with
+  copper-foil shield floating at the amp end and drained only at the TRS
+  sleeve. No reliance on Pi GPIO pin 6.
+- `mic_harness.md` — build guide updated to match the two-star grounding
+  scheme and clarified the "no extra GND wire between the two stars" rule.
+
 ## [1.24.1] - 2026-05-25
 ### Added
 - `hardware/audio/mic_harness.dot/.png/.svg/.pdf` — filtered & shielded mic

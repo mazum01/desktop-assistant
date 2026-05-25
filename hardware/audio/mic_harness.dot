@@ -1,76 +1,94 @@
 // VERA — MAX4466 + Electret Microphone Filtered Wiring Harness
 // Goal: eliminate AC hum, Pi 5 switching-rail noise, and RF pickup.
-// Render: dot -Tpng -Tsvg -Tpdf mic_harness.dot
+// Page: US Letter portrait (8.5 x 11 in)
+// Render: dot -Tpdf mic_harness.dot -o mic_harness.pdf
 digraph mic_harness {
-  rankdir=LR;
-  graph [fontname="Helvetica", fontsize=11, labelloc="t",
-         label="VERA Mic Harness — Filtered Power, Shielded Signal\nv1.24.0"];
-  node  [fontname="Helvetica", fontsize=10, shape=box, style="filled,rounded"];
-  edge  [fontname="Helvetica", fontsize=9];
+  rankdir=TB;
+  size="7.5,10!";
+  ratio=compress;
+  margin=0.25;
+  graph [fontname="Helvetica", fontsize=10, labelloc="t",
+         label="VERA Mic Harness — Filtered Power, Shielded Signal\nv1.24.2  •  US Letter"];
+  node  [fontname="Helvetica", fontsize=9, shape=box, style="filled,rounded"];
+  edge  [fontname="Helvetica", fontsize=8];
 
-  // ---------- POWER PATH (Pi 5 → MAX4466 VCC) ----------
+  // ---------- POWER PATH (Pi 5 I2C header → MAX4466 VCC) ----------
   subgraph cluster_pwr {
-    label="Power Filter Network (mounted at MAX4466 end)";
-    style=dashed; color="#888";
-    pi33  [label="Pi 5 GPIO Header\nPin 1 (3.3 V)\n[noisy switching rail]", fillcolor="#fde2e2"];
-    fb    [label="Ferrite Bead\nBLM18AG601SN1\n(600 Ω @ 100 MHz)", fillcolor="#fff4cc"];
-    rser  [label="R_ser 10 Ω 1/8 W\n(forms RC with C1)", fillcolor="#fff4cc"];
-    c1    [label="C1 10 µF\ntantalum/elec\n(bulk)", fillcolor="#cce5ff"];
-    c2    [label="C2 100 nF\nceramic X7R\n(mid)", fillcolor="#cce5ff"];
-    c3    [label="C3 10 nF\nceramic X7R\n(HF)", fillcolor="#cce5ff"];
+    label="Power Filter Network (at MAX4466)";
+    style=dashed; color=gray50; fontsize=10;
+    pi33  [label="Pi 5 I²C header\n3.3 V pin\n[noisy rail]", fillcolor="#fde2e2"];
+    fb    [label="Ferrite Bead\nBLM18AG601SN1\n600 Ω @ 100 MHz", fillcolor="#fff4cc"];
+    rser  [label="R_ser 10 Ω", fillcolor="#fff4cc"];
+    c1    [label="C1 10 µF\n(bulk)", fillcolor="#cce5ff"];
+    c2    [label="C2 100 nF\n(mid)", fillcolor="#cce5ff"];
+    c3    [label="C3 10 nF\n(HF)", fillcolor="#cce5ff"];
     vcc   [label="MAX4466 VDD\n(clean 3.3 V)", fillcolor="#d9f5d9"];
 
     pi33 -> fb -> rser -> vcc;
-    rser -> c1 [style=dotted, arrowhead=none, label="to GND"];
-    rser -> c2 [style=dotted, arrowhead=none, label="to GND"];
-    rser -> c3 [style=dotted, arrowhead=none, label="to GND"];
   }
+
+  // ---------- LOCAL GROUND (I²C return) ----------
+  gnd_local [label="I²C header GND pin\n(LOCAL star-ground for amp side)\nAll amp-side returns tie here ONLY", fillcolor="#cccccc", shape=octagon];
+  c1 -> gnd_local [label="GND"];
+  c2 -> gnd_local [label="GND"];
+  c3 -> gnd_local [label="GND"];
 
   // ---------- MIC + AMP ----------
-  mic   [label="Electret Capsule\n(2-pin, 2.2 kΩ bias)", fillcolor="#e2d5f5"];
-  max   [label="MAX4466 Module\n(gain pot → set ~50×)\nVDD / GND / OUT", fillcolor="#e2d5f5"];
-  mic -> max [label="bias + audio"];
-
+  mic   [label="Electret Capsule\n(2-pin)", fillcolor="#e2d5f5"];
+  max   [label="MAX4466 Module\ngain pot ~50×\nVDD / GND / OUT", fillcolor="#e2d5f5"];
+  mic -> max [label="audio"];
   vcc -> max [label="VDD"];
+  max -> gnd_local [label="MAX GND pin"];
 
-  // ---------- SIGNAL PATH (MAX4466 OUT → CM108 MIC IN) ----------
+  // ---------- SIGNAL PATH ----------
   subgraph cluster_sig {
     label="Signal Conditioning + Shielded Cable";
-    style=dashed; color="#888";
-    rseries [label="R_lp 1 kΩ 1/8 W\n(in series on OUT)", fillcolor="#fff4cc"];
-    clp     [label="C_lp 4.7 nF C0G\n(to GND)\nLPF fc ≈ 34 kHz\nkills RF >100 kHz", fillcolor="#cce5ff"];
-    twist   [label="Twisted pair cable\n(signal + GND, twisted)\nLENGTH ≤ 30 cm", fillcolor="#fde6c4"];
-    foil    [label="Copper Tape Shield\n(wrap around twist)\nGROUNDED AT CM108 END ONLY\n(other end floats)", fillcolor="#f0e6d2"];
-    cm108   [label="CM108 USB Audio\n3.5 mm TRS MIC IN\n(tip = signal, sleeve = GND)", fillcolor="#d9f5d9"];
+    style=dashed; color=gray50; fontsize=10;
+    rseries [label="R_lp 1 kΩ\n(series on OUT)", fillcolor="#fff4cc"];
+    clp     [label="C_lp 4.7 nF C0G\n(to local GND)\nfc ≈ 34 kHz", fillcolor="#cce5ff"];
+    twist   [label="Twisted pair cable\nsignal + return\n≤ 30 cm, ≥6 turns/in", fillcolor="#fde6c4"];
+    foil    [label="Copper Tape Shield\nwrap entire cable\nFLOATS at amp end\nDRAIN to TRS sleeve", fillcolor="#f0e6d2"];
+    cm108   [label="CM108 USB Audio\n3.5 mm TRS MIC IN\ntip=signal • sleeve=GND", fillcolor="#d9f5d9"];
 
-    max     -> rseries [label="OUT (AC-coupled inside chip)"];
-    rseries -> clp     [label="audio"];
-    clp     -> twist   [label="filtered audio"];
-    twist   -> cm108   [label="≤ 30 cm twisted"];
-    foil    -> twist   [style=dotted, arrowhead=none, label="wraps around"];
-    foil    -> cm108   [label="drain wire → GND\n(SINGLE-POINT)", color="red"];
+    max     -> rseries [label="OUT"];
+    rseries -> clp;
+    clp     -> twist   [label="filtered audio +\nreturn wire"];
+    twist   -> cm108   [label="≤ 30 cm"];
+    foil    -> twist   [style=dotted, arrowhead=none, label="wraps"];
+    foil    -> cm108   [label="drain → TRS sleeve\n(SINGLE point)", color=red, fontcolor=red];
   }
 
-  // ---------- GROUND ----------
-  gnd_star [label="Star Ground Node\n(Pi 5 GPIO Pin 6 = 0 V)\nALL grounds tie here", fillcolor="#cccccc", shape=octagon];
-  c1   -> gnd_star;
-  c2   -> gnd_star;
-  c3   -> gnd_star;
-  clp  -> gnd_star;
-  max  -> gnd_star [label="MAX GND pin"];
-  cm108-> gnd_star [label="USB GND (already)"];
+  clp -> gnd_local [label="LPF GND"];
+
+  // ---------- TRS / receiver side ----------
+  trs_sleeve [label="TRS Sleeve GND\n(receiver-side ground)\nConnects to:\n  • twisted-pair return\n  • copper-foil drain", fillcolor="#cccccc", shape=octagon];
+  twist -> trs_sleeve [label="return wire"];
 
   // ---------- LEGEND ----------
   subgraph cluster_legend {
-    label="Notes"; fontsize=10;
+    label="Build Notes"; fontsize=10;
     rules [shape=note, fillcolor="#ffffe0", label=
-      "1. Mount C1/C2/C3 within 5 mm of MAX4466 VDD pin (short leads = effective filter).\l\
-2. Ferrite bead blocks RF from Pi switching regulator (1–2 MHz harmonics).\l\
-3. R_ser + C1 = 100 µs RC time constant → low-pass to remove >1 kHz ripple.\l\
-4. Twisted pair rejects common-mode magnetic pickup (50/60 Hz hum).\l\
-5. Copper foil shield grounded at ONE end only — Faraday cage, no ground loop.\l\
-6. Keep harness away from: servo PWM wires, fan PWM, USB cables, AC adapters.\l\
-7. After install: measure noise floor with `arecord -d 5 -f cd silence.wav`,\l\
-   then `sox silence.wav -n stat` — RMS amplitude should be < 0.001.\l"];
+      "GROUNDING (no Pi pin 6 available):\l\
+  • Amp-side ground: I²C-header GND pin only. ALL caps + MAX GND tie here.\l\
+  • Receiver-side ground: 3.5 mm TRS sleeve only. Twisted-pair return + foil drain go here.\l\
+  • Copper foil shield FLOATS at the amp end. Soldered only to the TRS sleeve via drain wire.\l\
+  • The two ground points are connected through the Pi's internal GND plane (via USB ground of\l\
+    CM108 ↔ Pi USB shell ↔ I²C-header GND). This forms ONE long ground path, not a loop.\l\
+\l\
+COMPONENT PLACEMENT:\l\
+  • Mount C1/C2/C3 within 5 mm of MAX4466 VDD pin. Lead length kills HF filtering.\l\
+  • Ferrite + 10 Ω + caps form a π-filter to remove Pi-rail switching ripple.\l\
+  • R_lp + C_lp (1 kΩ + 4.7 nF C0G) cut everything above 34 kHz → blocks RF.\l\
+\l\
+CABLE ROUTING:\l\
+  • Twist signal and return ≥6 turns/inch for common-mode rejection.\l\
+  • Helical-wrap copper foil; ≥ 50 % overlap per turn.\l\
+  • Keep harness ≥ 25 mm away from servo PWM, fan PWM, USB and AC wires.\l\
+  • If crossing any of those wires is unavoidable, cross at 90°.\l\
+\l\
+VERIFY:\l\
+  arecord -D plughw:2,0 -d 5 -f cd /tmp/silence.wav\l\
+  sox /tmp/silence.wav -n stat   →  RMS < 0.001, Max amp < 0.01\l"];
   }
 }
+

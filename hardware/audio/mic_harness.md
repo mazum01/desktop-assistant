@@ -30,11 +30,32 @@ Three independent fixes in one harness:
 2. **Output low-pass** on the MAX4466 OUT pin — 1 kΩ series + 4.7 nF shunt.
    Cuts everything above 34 kHz so RF can't ride on the analog audio line.
 3. **Shielded twisted-pair cable** — signal + GND twisted together, wrapped
-   in copper foil tape grounded **at the CM108 end only**. Faraday cage with
-   no ground loop.
+   in copper foil tape grounded **at the CM108 (TRS sleeve) end only**.
+   Faraday cage with no ground loop.
 
-All grounds tie at a single **star ground** point at the Pi 5 GPIO Pin 6
-(0 V). Avoid daisy-chaining grounds.
+### Grounding (two-point, no Pi-pin-6 access)
+
+The Pi 5 GPIO header pin 6 isn't physically reachable for this harness,
+so we use the **two** ground points that ARE available:
+
+| End                | Local ground reference                        |
+|--------------------|-----------------------------------------------|
+| Amp side           | I²C-header GND pin (came with the 3.3 V tap)  |
+| Receiver side      | 3.5 mm TRS sleeve (CM108 mic-in)              |
+
+Rules:
+
+- **Amp-side ground:** ALL decoupling cap negatives (C1/C2/C3), the LPF
+  shunt cap (C_lp), and the MAX4466 GND pin tie ONLY to the I²C-header
+  GND pin. Treat it as a local star.
+- **Receiver-side ground:** the twisted-pair return wire AND the copper-foil
+  drain wire both tie ONLY to the TRS sleeve. Treat it as a second local star.
+- **Copper foil shield FLOATS at the amp end.** Trim foil flush, do not
+  connect anything to it on that side.
+- The two ground stars are joined internally by the Pi 5 PCB ground plane
+  (CM108 USB shield ↔ Pi USB shell ↔ I²C-header GND). This is ONE long
+  conductive path, not a loop, because the harness itself only contributes
+  one return path between the two stars (the twisted-pair return wire).
 
 ---
 
@@ -113,19 +134,24 @@ Plug Sleeve ←── GND  +  copper foil drain wire
 Plug Ring   ←── (not used on mono mic; tie to sleeve or leave open)
 ```
 
-### Step 5 — Star-ground everything
+### Step 5 — Ground both stars locally
 
-All these grounds must converge at **one** physical point on the Pi 5
-header (recommend Pin 6, GND, near the 3.3 V pin you tapped):
+There is no central Pi pin 6 access. Instead, you have **two** ground
+points, and that's fine — as long as each cap/component only connects to
+ONE of them:
 
+**Amp side (tie ONLY to I²C-header GND pin):**
 - MAX4466 GND pin
-- All decoupling cap negatives (C1, C2, C3)
-- The LPF shunt cap (C_lp) negative
-- Copper foil drain wire (via the CM108 sleeve → USB shield → Pi USB GND)
+- C1, C2, C3 negative terminals (power decoupling)
+- C_lp negative terminal (LPF shunt)
 
-Do **not** route the MAX4466 GND through a different path back to the Pi
-than the CM108 ground takes. Two separate return paths = a loop area =
-hum antenna.
+**Receiver side (tie ONLY to TRS sleeve):**
+- Twisted-pair return wire (the "GND conductor" of the cable)
+- Copper foil drain wire
+
+The Pi's internal ground plane joins the two stars via the CM108 USB
+shield. Do NOT add any extra wire between the two stars — that would
+create a parallel return path and turn the system into a loop antenna.
 
 ### Step 6 — Mechanical routing
 
