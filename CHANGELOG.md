@@ -6,6 +6,26 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.27.1] - 2026-05-26
+### Added
+- **Room detection — configurable tunables**: all timing and sensitivity
+  parameters (`sample_interval_s`, `consec_diverged`, `similarity_thresh`,
+  `prompt_cooldown_s`, `low_light_thresh`, `skip_when_faces`) are now read
+  from the `room_detection:` section of `config/assistant.yaml`.  Module-level
+  `_DEFAULT_*` constants serve as fallback values.
+- **Room detection — face-skip logic**: when `skip_when_faces: true` (default),
+  any sample taken while ≥ 1 face is visible in the camera frame is silently
+  discarded without touching the divergence counter.  Prevents person edges
+  from polluting the gradient embedding and triggering false room-change prompts.
+- `RoomService` subscribes to `perception.faces` on start and caches the
+  current face count via `_on_faces()` handler.
+
+### Changed
+- Default scene-check interval bumped from 5 min to **10 min**
+  (`sample_interval_s: 600`) to reduce unnecessary API load.
+- `RoomService.__init__` now accepts an optional `cfg: dict` parameter.
+- `on_start` log line now reports configured interval and `skip_when_faces` flag.
+
 ## [1.27.0] - 2026-05-26
 ### Changed
 - **Room detection — gradient orientation embedding (AI approach)**:

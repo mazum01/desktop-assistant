@@ -204,3 +204,22 @@ watchdog:
   telegram_notify: true         # send Telegram message on every auto-fix
   openclaw_stuck_threshold: 10  # "Bot not initialized" lines in 60s → restart openclaw
   openclaw_max_uptime_min: 90   # force restart after 90 min to guard against Telegram polling stall
+
+room_detection:
+  # How often VERA samples the scene to detect whether it has been moved.
+  sample_interval_s: 600        # seconds between scene comparisons (default 10 min)
+  # Number of *consecutive* diverged samples before VERA prompts for confirmation.
+  # With sample_interval_s=600, consec_diverged=3 means 30 minutes of sustained
+  # visual difference before asking.
+  consec_diverged: 3
+  # Cosine similarity threshold (0–1). Below this = "looks like a different room".
+  # Lower → more sensitive (more false alarms); higher → less sensitive (misses moves).
+  similarity_thresh: 0.85
+  # Minimum seconds between room-change prompts (prevents repeated nagging).
+  prompt_cooldown_s: 1800       # 30 minutes
+  # Mean brightness threshold (0–255). Samples taken in near-darkness are skipped.
+  # Prevents turning off the lights from triggering a false room-change alarm.
+  low_light_thresh: 15.0
+  # Skip the sample entirely when faces are visible in the frame.
+  # Prevents person edges from polluting the room embedding.
+  skip_when_faces: true

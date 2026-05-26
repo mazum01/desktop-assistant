@@ -54,16 +54,26 @@ The ``embedding`` key is new; old state files without it fall back to the
 brightness-histogram comparison method automatically.
 
 Topics subscribed:
-    room.set          {"name": str}     — explicitly set the current room
-    motion.position   {"angle": float}  — track current servo angle
-    vision.depth_map  {…}               — cache latest stereo depth map
-    vision.mono_depth_map {…}           — cache latest mono depth map
+    room.set              {"name": str}     — explicitly set the current room
+    motion.position       {"angle": float}  — track current servo angle
+    vision.depth_map      {…}               — cache latest stereo depth map
+    vision.mono_depth_map {…}               — cache latest mono depth map
+    perception.faces      {"faces": […]}    — cache latest face count; samples
+                                             are skipped while faces are present
 
 Topics published:
     room.updated   {"name": str}   — fired whenever the room name changes
     av.say         {"text": str}   — spoken prompts (unknown room, divergence)
     motion.pan_to  {"angle", …}    — servo pan during signature sweep
     tracking.set_face_tracking {"enabled": bool}  — paused during sweep
+
+Configuration (config/assistant.yaml — room_detection section):
+    sample_interval_s   float  interval between scene comparisons (default 600 s)
+    consec_diverged     int    consecutive diverged samples before prompt (default 3)
+    similarity_thresh   float  cosine similarity below this = "looks different" (default 0.85)
+    prompt_cooldown_s   float  minimum seconds between prompts (default 1800 s)
+    low_light_thresh    float  mean brightness below this skips the sample (default 15.0)
+    skip_when_faces     bool   skip sample when faces are visible (default true)
 """
 
 from __future__ import annotations
@@ -84,17 +94,13 @@ log = logging.getLogger(__name__)
 
 _STATE_PATH = Path(__file__).parents[2] / "config" / "room_state.json"
 
-# Visual change-detection tunables
-_SAMPLE_INTERVAL_S: float = 300.0   # check scene every 5 minutes
-_CONSEC_DIVERGED: int = 3           # 3 consecutive diverged samples ≈ 15 min sustained change
-_SIMILARITY_THRESH: float = 0.85    # combined score below this = "looks different"
-_PROMPT_COOLDOWN_S: float = 1800.0  # at most one room-change prompt every 30 minutes
-
-# Low-light skip: if mean brightness of all sweep frames is below this
-# (scale 0–255), the sample is inconclusive — skip it without incrementing
-# or resetting the divergence counter.  Prevents false alarms when the lights
-# are simply turned off.
-_LOW_LIGHT_THRESH: float = 15.0
+# Default values — overridden by config/assistant.yaml room_detection section
+_DEFAULT_SAMPLE_INTERVAL_S: float = 600.0   # check scene every 10 minutes
+_DEFAULT_CONSEC_DIVERGED: int = 3           # 3 consecutive diverged samples ≈ 30 min sustained change
+_DEFAULT_SIMILARITY_THRESH: float = 0.85    # combined score below this = "looks different"
+_DEFAULT_PROMPT_COOLDOWN_S: float = 1800.0  # at most one room-change prompt every 30 minutes
+_DEFAULT_LOW_LIGHT_THRESH: float = 15.0     # mean brightness below this → skip sample
+_DEFAULT_SKIP_WHEN_FACES: bool = True       # skip sample while faces are visible
 
 # Panoramic sweep tunables
 _SWEEP_ANGLES: tuple[float, ...] = (135.0, 175.0, 215.0)  # L / centre / R (matches default soft limits)
@@ -128,6 +134,9 @@ class RoomService(Service):
     panoramic signature and compares it to the stored baseline; if the
     signature looks consistently different over an extended period, VERA
     prompts the user to confirm whether the room has changed.
+
+    Timing and sensitivity are configurable via the ``room_detection`` section
+    of ``config/assistant.yaml``.
     """
 
     name = "room"
@@ -138,10 +147,32 @@ class RoomService(Service):
         bus: Optional[MessageBus] = None,
         vision_service=None,
         state_path: Path = _STATE_PATH,
+        cfg: Optional[dict] = None,
     ) -> None:
         super().__init__(bus=bus)
         self._vision_svc = vision_service
         self._state_path = state_path
+
+        # Runtime tunables (from config, with defaults)
+        _cfg = cfg or {}
+        self._sample_interval_s: float = float(
+            _cfg.get("sample_interval_s", _DEFAULT_SAMPLE_INTERVAL_S)
+        )
+        self._consec_diverged_threshold: int = int(
+            _cfg.get("consec_diverged", _DEFAULT_CONSEC_DIVERGED)
+        )
+        self._similarity_thresh: float = float(
+            _cfg.get("similarity_thresh", _DEFAULT_SIMILARITY_THRESH)
+        )
+        self._prompt_cooldown_s: float = float(
+            _cfg.get("prompt_cooldown_s", _DEFAULT_PROMPT_COOLDOWN_S)
+        )
+        self._low_light_thresh: float = float(
+            _cfg.get("low_light_thresh", _DEFAULT_LOW_LIGHT_THRESH)
+        )
+        self._skip_when_faces: bool = bool(
+            _cfg.get("skip_when_faces", _DEFAULT_SKIP_WHEN_FACES)
+        )
 
         # Room state
         self._room_name: Optional[str] = None
@@ -155,6 +186,12 @@ class RoomService(Service):
 
         # Current servo angle (updated via motion.position subscription)
         self._current_angle: Optional[float] = None
+
+        # Latest face count cache (updated via perception.faces subscription).
+        # When skip_when_faces=True, samples are skipped while faces are visible
+        # to prevent person edges from polluting the room embedding.
+        self._face_count: int = 0
+        self._face_lock = threading.Lock()
 
         # Latest depth map cache (updated via vision.depth_map / vision.mono_depth_map)
         self._depth_lock = threading.Lock()
@@ -180,6 +217,7 @@ class RoomService(Service):
         self.bus.subscribe("motion.position",        self._on_motion_position)
         self.bus.subscribe("vision.depth_map",       self._on_depth_map)
         self.bus.subscribe("vision.mono_depth_map",  self._on_mono_depth_map)
+        self.bus.subscribe("perception.faces",       self._on_faces)
         self._stop_evt.clear()
         self._timer_thread = threading.Thread(
             target=self._sample_loop, name="room-sampler", daemon=True
@@ -188,7 +226,12 @@ class RoomService(Service):
         threading.Thread(
             target=self._announce_on_start, name="room-announce", daemon=True
         ).start()
-        log.info("RoomService started (room=%s)", self._room_name or "unknown")
+        log.info(
+            "RoomService started (room=%s, interval=%.0fs, skip_faces=%s)",
+            self._room_name or "unknown",
+            self._sample_interval_s,
+            self._skip_when_faces,
+        )
 
     def run_tick(self) -> None:
         pass  # driven by _sample_loop thread
@@ -229,6 +272,14 @@ class RoomService(Service):
     def _on_motion_position(self, _topic, payload) -> None:
         if isinstance(payload, dict) and "angle" in payload:
             self._current_angle = float(payload["angle"])
+
+    def _on_faces(self, _topic, payload) -> None:
+        """Cache the number of faces currently visible."""
+        if not isinstance(payload, dict):
+            return
+        faces = payload.get("faces") or []
+        with self._face_lock:
+            self._face_count = len(faces) if isinstance(faces, list) else 0
 
     def _on_depth_map(self, _topic, payload) -> None:
         """Cache stereo depth map (metres)."""
@@ -284,19 +335,31 @@ class RoomService(Service):
                 )
 
     def _sample_loop(self) -> None:
-        """Background thread: sample scene every _SAMPLE_INTERVAL_S seconds."""
-        while not self._stop_evt.wait(timeout=_SAMPLE_INTERVAL_S):
+        """Background thread: sample scene every sample_interval_s seconds."""
+        while not self._stop_evt.wait(timeout=self._sample_interval_s):
             self._check_scene()
 
     def _check_scene(self) -> None:
         """Capture panoramic signature; compare with baseline; prompt if diverged long enough."""
+        # Face-skip: if faces are visible, the embedding would include person
+        # edges that aren't part of the room structure — defer judgment.
+        if self._skip_when_faces:
+            with self._face_lock:
+                face_count = self._face_count
+            if face_count > 0:
+                log.debug(
+                    "RoomService: %d face(s) visible — skipping sample to avoid person-edge pollution",
+                    face_count,
+                )
+                return
+
         sig = self._panoramic_signature()
         if sig is None:
             return
 
         # Low-light skip: if the scene is too dark to be meaningful, defer
         # judgment without touching the divergence counter.
-        if sig.get("mean_brightness", 255.0) < _LOW_LIGHT_THRESH:
+        if sig.get("mean_brightness", 255.0) < self._low_light_thresh:
             log.debug(
                 "RoomService: scene too dark (mean=%.1f) — skipping sample",
                 sig["mean_brightness"],
@@ -329,23 +392,23 @@ class RoomService(Service):
                 log.debug(
                     "RoomService: scene similarity=%.3f (threshold=%.2f)",
                     similarity,
-                    _SIMILARITY_THRESH,
+                    self._similarity_thresh,
                 )
 
-                if similarity < _SIMILARITY_THRESH:
+                if similarity < self._similarity_thresh:
                     self._consec_diverged += 1
                     log.info(
                         "RoomService: scene diverged (%d/%d)",
                         self._consec_diverged,
-                        _CONSEC_DIVERGED,
+                        self._consec_diverged_threshold,
                     )
                 else:
                     self._consec_diverged = 0
 
                 elapsed_since_prompt = time.monotonic() - self._last_prompt_ts
                 if (
-                    self._consec_diverged >= _CONSEC_DIVERGED
-                    and elapsed_since_prompt >= _PROMPT_COOLDOWN_S
+                    self._consec_diverged >= self._consec_diverged_threshold
+                    and elapsed_since_prompt >= self._prompt_cooldown_s
                 ):
                     should_prompt = True
                     room_name = self._room_name

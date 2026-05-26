@@ -13,6 +13,12 @@ import pytest
 from src.core.bus import MessageBus
 from src.services.room_service import (
     RoomService,
+    _DEFAULT_CONSEC_DIVERGED,
+    _DEFAULT_LOW_LIGHT_THRESH,
+    _DEFAULT_PROMPT_COOLDOWN_S,
+    _DEFAULT_SAMPLE_INTERVAL_S,
+    _DEFAULT_SIMILARITY_THRESH,
+    _DEFAULT_SKIP_WHEN_FACES,
     _bhattacharyya,
     _compare_signatures,
     _compute_brightness_signature,
@@ -30,12 +36,13 @@ def _make_service(
     tmp_path: Path,
     vision_svc=None,
     room_name: Optional[str] = None,
+    cfg: Optional[dict] = None,
 ) -> RoomService:
     bus = MessageBus()
     state_path = tmp_path / "room_state.json"
     if room_name is not None:
         state_path.write_text(json.dumps({"name": room_name, "brightness_sig": None}))
-    svc = RoomService(bus=bus, vision_service=vision_svc, state_path=state_path)
+    svc = RoomService(bus=bus, vision_service=vision_svc, state_path=state_path, cfg=cfg)
     return svc
 
 
@@ -658,5 +665,177 @@ class TestDivergenceDetection:
         try:
             svc._check_scene()
             assert svc._consec_diverged == 0  # lighting change must not trigger divergence
+        finally:
+            svc.stop()
+
+
+# ── Config tests ──────────────────────────────────────────────────────────────
+
+
+class TestRoomServiceConfig:
+    """RoomService reads tunables from cfg dict; missing keys fall back to defaults."""
+
+    def test_defaults_applied_when_no_cfg(self, tmp_path):
+        svc = _make_service(tmp_path)
+        assert svc._sample_interval_s == _DEFAULT_SAMPLE_INTERVAL_S
+        assert svc._consec_diverged_threshold == _DEFAULT_CONSEC_DIVERGED
+        assert svc._similarity_thresh == _DEFAULT_SIMILARITY_THRESH
+        assert svc._prompt_cooldown_s == _DEFAULT_PROMPT_COOLDOWN_S
+        assert svc._low_light_thresh == _DEFAULT_LOW_LIGHT_THRESH
+        assert svc._skip_when_faces == _DEFAULT_SKIP_WHEN_FACES
+
+    def test_cfg_overrides_sample_interval(self, tmp_path):
+        svc = _make_service(tmp_path, cfg={"sample_interval_s": 120})
+        assert svc._sample_interval_s == pytest.approx(120.0)
+
+    def test_cfg_overrides_similarity_thresh(self, tmp_path):
+        svc = _make_service(tmp_path, cfg={"similarity_thresh": 0.75})
+        assert svc._similarity_thresh == pytest.approx(0.75)
+
+    def test_cfg_overrides_consec_diverged(self, tmp_path):
+        svc = _make_service(tmp_path, cfg={"consec_diverged": 5})
+        assert svc._consec_diverged_threshold == 5
+
+    def test_cfg_overrides_prompt_cooldown(self, tmp_path):
+        svc = _make_service(tmp_path, cfg={"prompt_cooldown_s": 300})
+        assert svc._prompt_cooldown_s == pytest.approx(300.0)
+
+    def test_cfg_overrides_low_light_thresh(self, tmp_path):
+        svc = _make_service(tmp_path, cfg={"low_light_thresh": 30.0})
+        assert svc._low_light_thresh == pytest.approx(30.0)
+
+    def test_cfg_overrides_skip_when_faces(self, tmp_path):
+        svc = _make_service(tmp_path, cfg={"skip_when_faces": False})
+        assert svc._skip_when_faces is False
+
+    def test_partial_cfg_uses_defaults_for_missing_keys(self, tmp_path):
+        svc = _make_service(tmp_path, cfg={"sample_interval_s": 300})
+        assert svc._sample_interval_s == pytest.approx(300.0)
+        assert svc._similarity_thresh == pytest.approx(_DEFAULT_SIMILARITY_THRESH)
+
+    def test_empty_cfg_dict_uses_all_defaults(self, tmp_path):
+        svc = _make_service(tmp_path, cfg={})
+        assert svc._sample_interval_s == pytest.approx(_DEFAULT_SAMPLE_INTERVAL_S)
+
+
+# ── Face-skip tests ───────────────────────────────────────────────────────────
+
+
+class TestFaceSkip:
+    """Samples are skipped when faces are visible (skip_when_faces=True)."""
+
+    def _bright_frame(self) -> np.ndarray:
+        """Return a well-lit structured frame that would normally pass the brightness check."""
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        frame[:, 320:] = 100
+        frame[240:] += 30
+        return frame
+
+    def test_on_faces_updates_face_count(self, tmp_path):
+        svc = _make_service(tmp_path)
+        svc.start()
+        try:
+            svc.bus.publish("perception.faces", {"faces": [{"id": 1}, {"id": 2}]})
+            deadline = time.monotonic() + 1.0
+            while True:
+                with svc._face_lock:
+                    count = svc._face_count
+                if count == 2 or time.monotonic() > deadline:
+                    break
+                time.sleep(0.02)
+            assert count == 2
+        finally:
+            svc.stop()
+
+    def test_on_faces_clears_count_when_empty(self, tmp_path):
+        svc = _make_service(tmp_path)
+        svc.start()
+        try:
+            svc.bus.publish("perception.faces", {"faces": [{"id": 1}]})
+            time.sleep(0.1)
+            svc.bus.publish("perception.faces", {"faces": []})
+            deadline = time.monotonic() + 1.0
+            while True:
+                with svc._face_lock:
+                    count = svc._face_count
+                if count == 0 or time.monotonic() > deadline:
+                    break
+                time.sleep(0.02)
+            assert count == 0
+        finally:
+            svc.stop()
+
+    def test_check_scene_skips_when_faces_present(self, tmp_path):
+        """With skip_when_faces=True, a sample is skipped when face_count > 0."""
+        frame = self._bright_frame()
+        svc = _make_service(tmp_path, vision_svc=_make_vision(frame), cfg={"skip_when_faces": True})
+        base_embedding = _compute_gradient_embedding(
+            np.zeros((480, 640, 3), dtype=np.uint8)  # very different baseline
+        )
+        svc._baseline_brightness = _compute_brightness_signature(
+            np.zeros((480, 640, 3), dtype=np.uint8)
+        )
+        svc._baseline_embedding = base_embedding
+        svc._consec_diverged = 0
+        with svc._face_lock:
+            svc._face_count = 1  # simulate face visible
+        svc.start()
+        try:
+            svc._check_scene()  # should skip entirely
+            assert svc._consec_diverged == 0
+        finally:
+            svc.stop()
+
+    def test_check_scene_does_not_skip_when_no_faces(self, tmp_path):
+        """When no faces are present, the sample proceeds normally."""
+        frame = self._bright_frame()
+        svc = _make_service(tmp_path, vision_svc=_make_vision(frame), cfg={"skip_when_faces": True})
+        svc._baseline_brightness = _compute_brightness_signature(frame)
+        svc._baseline_embedding = _compute_gradient_embedding(frame)
+        svc._consec_diverged = 0
+        with svc._face_lock:
+            svc._face_count = 0  # no faces
+        svc.start()
+        try:
+            svc._check_scene()  # should proceed and find similar scene (same frame)
+            assert svc._consec_diverged == 0  # same scene → no divergence
+        finally:
+            svc.stop()
+
+    def test_face_skip_preserves_existing_counter(self, tmp_path):
+        """Face-skip does not reset an existing divergence counter."""
+        frame = self._bright_frame()
+        svc = _make_service(tmp_path, vision_svc=_make_vision(frame), cfg={"skip_when_faces": True})
+        svc._baseline_brightness = _compute_brightness_signature(frame)
+        svc._consec_diverged = 2
+        with svc._face_lock:
+            svc._face_count = 1  # face visible — skip
+        svc.start()
+        try:
+            svc._check_scene()
+            assert svc._consec_diverged == 2  # unchanged
+        finally:
+            svc.stop()
+
+    def test_skip_when_faces_false_does_not_skip(self, tmp_path):
+        """When skip_when_faces=False, faces do not suppress the sample."""
+        # Use a very different frame vs baseline so divergence would fire normally
+        baseline = np.zeros((480, 640, 3), dtype=np.uint8)
+        current = np.full((480, 640, 3), 200, dtype=np.uint8)
+        svc = _make_service(
+            tmp_path,
+            vision_svc=_make_vision(current),
+            cfg={"skip_when_faces": False},
+        )
+        svc._baseline_brightness = _compute_brightness_signature(baseline)
+        svc._baseline_embedding = _compute_gradient_embedding(baseline)
+        svc._consec_diverged = 0
+        with svc._face_lock:
+            svc._face_count = 3  # faces visible, but skip_when_faces=False
+        svc.start()
+        try:
+            svc._check_scene()
+            # sample was NOT skipped — divergence counter should have moved
+            assert svc._consec_diverged > 0
         finally:
             svc.stop()

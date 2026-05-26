@@ -420,7 +420,7 @@ def main() -> int:
         },
     )
     services.append(tg_svc)
-    room_svc = RoomService(bus=bus, vision_service=vis)
+    room_svc = RoomService(bus=bus, vision_service=vis, cfg=_cfg.get("room_detection", {}))
     services.append(room_svc)
     services.append(ipc)
     ipc._all_services = services  # seed service registry at startup
