@@ -73,6 +73,12 @@ _CONSEC_DIVERGED: int = 3           # 3 consecutive diverged samples ≈ 15 min 
 _SIMILARITY_THRESH: float = 0.80    # combined score below this = "looks different"
 _PROMPT_COOLDOWN_S: float = 1800.0  # at most one room-change prompt every 30 minutes
 
+# Low-light skip: if mean brightness of all sweep frames is below this
+# (scale 0–255), the sample is inconclusive — skip it without incrementing
+# or resetting the divergence counter.  Prevents false alarms when the lights
+# are simply turned off.
+_LOW_LIGHT_THRESH: float = 15.0
+
 # Panoramic sweep tunables
 _SWEEP_ANGLES: tuple[float, ...] = (135.0, 175.0, 215.0)  # L / centre / R (matches default soft limits)
 _SWEEP_SETTLE_S: float = 1.0        # seconds to wait after pan before capturing frame
@@ -261,6 +267,15 @@ class RoomService(Service):
         if sig is None:
             return
 
+        # Low-light skip: if the scene is too dark to be meaningful, defer
+        # judgment without touching the divergence counter.
+        if sig.get("mean_brightness", 255.0) < _LOW_LIGHT_THRESH:
+            log.debug(
+                "RoomService: scene too dark (mean=%.1f) — skipping sample",
+                sig["mean_brightness"],
+            )
+            return
+
         should_prompt = False
         should_save = False
         room_name: Optional[str] = None
@@ -381,7 +396,13 @@ class RoomService(Service):
 
         avg_brightness = np.mean(brightness_hists, axis=0)
         avg_depth = np.mean(depth_hists, axis=0) if depth_hists else None
-        return {"brightness": avg_brightness, "depth": avg_depth}
+
+        # Compute mean brightness across all captured frames for low-light detection.
+        # Re-derive from the averaged histogram (weighted mean of bin centres).
+        bin_centres = np.linspace(4.0, 252.0, 32)
+        mean_brightness = float(np.dot(avg_brightness, bin_centres))
+
+        return {"brightness": avg_brightness, "depth": avg_depth, "mean_brightness": mean_brightness}
 
     def _prompt_room_confirmation(self, room: Optional[str]) -> None:
         if room:

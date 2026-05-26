@@ -6,7 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.26.1] - 2026-05-26
+## [1.26.2] - 2026-05-26
+### Fixed
+- **Room detection — low-light false positive**: when the lights are turned off
+  the brightness histogram collapses to near-zero and would previously score
+  far below the 0.80 threshold, triggering a false "did you move rooms?"
+  prompt after ~15 minutes of darkness.  `_check_scene()` now computes the
+  mean brightness of the averaged sweep histogram and skips the sample
+  entirely (neither incrementing nor resetting the divergence counter) if the
+  mean falls below `_LOW_LIGHT_THRESH` (default 15/255).  VERA will defer
+  room-change judgment until it can see again.
+
+
 ### Fixed / Improved
 - **Room detection — panoramic sweep**: `RoomService` now sweeps the servo to
   three positions (left/centre/right, 135°/175°/215°) when capturing a scene

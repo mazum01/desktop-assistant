@@ -272,6 +272,21 @@ class TestPanoramicSignature:
         assert "brightness" in sig
         assert len(sig["brightness"]) == 32
 
+    def test_returns_mean_brightness_key(self, tmp_path):
+        frame = np.full((480, 640, 3), 128, dtype=np.uint8)
+        svc = _make_service(tmp_path, vision_svc=_make_vision(frame))
+        sig = svc._panoramic_signature()
+        assert sig is not None
+        assert "mean_brightness" in sig
+        assert sig["mean_brightness"] > 100  # bright frame
+
+    def test_dark_frame_mean_brightness_low(self, tmp_path):
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        svc = _make_service(tmp_path, vision_svc=_make_vision(frame))
+        sig = svc._panoramic_signature()
+        assert sig is not None
+        assert sig["mean_brightness"] < 15  # should be near 0
+
     def test_returns_depth_none_when_no_depth_data(self, tmp_path):
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
         svc = _make_service(tmp_path, vision_svc=_make_vision(frame))
@@ -464,5 +479,33 @@ class TestDivergenceDetection:
             while svc._current_angle is None and time.monotonic() < deadline:
                 time.sleep(0.05)
             assert svc._current_angle == pytest.approx(155.0)
+        finally:
+            svc.stop()
+
+    def test_low_light_skips_divergence_increment(self, tmp_path):
+        """Turning off the lights should not increment the divergence counter."""
+        baseline_frame = np.full((480, 640, 3), 120, dtype=np.uint8)   # normal
+        dark_frame = np.zeros((480, 640, 3), dtype=np.uint8)            # pitch black
+        svc = _make_service(tmp_path, vision_svc=_make_vision(dark_frame))
+        svc._baseline_brightness = _compute_brightness_signature(baseline_frame)
+        svc._consec_diverged = 0
+        svc.start()
+        try:
+            svc._check_scene()  # should skip — low light
+            assert svc._consec_diverged == 0  # unchanged
+        finally:
+            svc.stop()
+
+    def test_low_light_does_not_reset_divergence_counter(self, tmp_path):
+        """Low-light samples are truly skipped — they don't reset an existing counter."""
+        baseline_frame = np.full((480, 640, 3), 120, dtype=np.uint8)
+        dark_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        svc = _make_service(tmp_path, vision_svc=_make_vision(dark_frame))
+        svc._baseline_brightness = _compute_brightness_signature(baseline_frame)
+        svc._consec_diverged = 2  # already diverged before lights went out
+        svc.start()
+        try:
+            svc._check_scene()  # low light — should leave counter alone
+            assert svc._consec_diverged == 2  # unchanged
         finally:
             svc.stop()
