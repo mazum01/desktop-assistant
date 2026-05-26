@@ -17,7 +17,9 @@ from src.services.room_service import (
     _compare_signatures,
     _compute_brightness_signature,
     _compute_depth_signature,
+    _compute_gradient_embedding,
     _compute_signature,  # backwards-compat alias
+    _cosine_similarity,
 )
 
 
@@ -126,6 +128,65 @@ class TestBhattacharyya:
         assert _bhattacharyya(s1, s2) < 0.5
 
 
+# ── Gradient embedding ────────────────────────────────────────────────────────
+
+
+class TestComputeGradientEmbedding:
+    def test_returns_float_array_correct_length(self):
+        frame = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        emb = _compute_gradient_embedding(frame)
+        assert isinstance(emb, np.ndarray)
+        assert len(emb) == 384  # 6 × 8 cells × 8 bins
+
+    def test_is_l2_normalized(self):
+        frame = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        emb = _compute_gradient_embedding(frame)
+        assert np.linalg.norm(emb) == pytest.approx(1.0, abs=1e-5)
+
+    def test_grayscale_input(self):
+        frame = np.full((480, 640), 128, dtype=np.uint8)
+        emb = _compute_gradient_embedding(frame)
+        assert len(emb) == 384
+
+    def test_lighting_invariance_uniform_scale(self):
+        """Uniformly scaling brightness should not change the embedding."""
+        rng = np.random.default_rng(7)
+        # Create a structured frame (edges, not uniform)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        frame[:, 320:, :] = 80      # right half brighter
+        frame[240:, :, :] += 40     # bottom half even brighter
+        frame_bright = np.clip(frame.astype(int) * 2, 0, 255).astype(np.uint8)
+        e1 = _compute_gradient_embedding(frame)
+        e2 = _compute_gradient_embedding(frame_bright)
+        # Gradient orientations are the same; only magnitudes change
+        # (which are normalised per cell) → embeddings should be very similar
+        assert _cosine_similarity(e1, e2) > 0.95
+
+    def test_different_structure_different_embedding(self):
+        """Frames with fundamentally different edge structure should differ."""
+        frame_h = np.zeros((480, 640, 3), dtype=np.uint8)
+        frame_h[240, :, :] = 200   # single horizontal edge
+        frame_v = np.zeros((480, 640, 3), dtype=np.uint8)
+        frame_v[:, 320, :] = 200   # single vertical edge
+        e1 = _compute_gradient_embedding(frame_h)
+        e2 = _compute_gradient_embedding(frame_v)
+        assert _cosine_similarity(e1, e2) < 0.95
+
+
+# ── Cosine similarity ─────────────────────────────────────────────────────────
+
+
+class TestCosineSimilarity:
+    def test_identical_vectors_score_one(self):
+        v = np.array([0.6, 0.8])
+        assert _cosine_similarity(v, v) == pytest.approx(1.0, abs=1e-6)
+
+    def test_orthogonal_vectors_score_zero(self):
+        v1 = np.array([1.0, 0.0])
+        v2 = np.array([0.0, 1.0])
+        assert _cosine_similarity(v1, v2) == pytest.approx(0.0, abs=1e-6)
+
+
 class TestCompareSignatures:
     def test_brightness_only_when_no_depth(self):
         h = np.ones(32) / 32
@@ -143,6 +204,30 @@ class TestCompareSignatures:
         hd = np.ones(16) / 16
         # baseline has depth, current does not
         score = _compare_signatures(hb, hd, hb, None)
+        assert score == pytest.approx(1.0, abs=1e-6)
+
+    def test_uses_embedding_when_both_present(self):
+        frame = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        e = _compute_gradient_embedding(frame)
+        hb = np.ones(32) / 32
+        score = _compare_signatures(hb, None, hb, None, e, e)
+        assert score == pytest.approx(1.0, abs=1e-5)
+
+    def test_embedding_plus_depth_when_both_available(self):
+        frame = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        e = _compute_gradient_embedding(frame)
+        hb = np.ones(32) / 32
+        hd = np.ones(16) / 16
+        score = _compare_signatures(hb, hd, hb, hd, e, e)
+        assert score == pytest.approx(1.0, abs=1e-5)
+
+    def test_falls_back_to_brightness_when_no_base_embedding(self):
+        """Legacy state file (no embedding) → histogram comparison."""
+        hb = np.ones(32) / 32
+        frame = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        e_curr = _compute_gradient_embedding(frame)
+        # base_embedding=None → even if current has embedding, fall back to histograms
+        score = _compare_signatures(hb, None, hb, None, None, e_curr)
         assert score == pytest.approx(1.0, abs=1e-6)
 
 
@@ -272,6 +357,22 @@ class TestPanoramicSignature:
         assert "brightness" in sig
         assert len(sig["brightness"]) == 32
 
+    def test_returns_embedding_key(self, tmp_path):
+        frame = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        svc = _make_service(tmp_path, vision_svc=_make_vision(frame))
+        sig = svc._panoramic_signature()
+        assert sig is not None
+        assert "embedding" in sig
+        assert sig["embedding"] is not None
+        assert len(sig["embedding"]) == 384
+
+    def test_embedding_is_l2_normalized(self, tmp_path):
+        frame = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        svc = _make_service(tmp_path, vision_svc=_make_vision(frame))
+        sig = svc._panoramic_signature()
+        assert sig is not None
+        assert np.linalg.norm(sig["embedding"]) == pytest.approx(1.0, abs=1e-5)
+
     def test_returns_mean_brightness_key(self, tmp_path):
         frame = np.full((480, 640, 3), 128, dtype=np.uint8)
         svc = _make_service(tmp_path, vision_svc=_make_vision(frame))
@@ -391,6 +492,32 @@ class TestStatePersistence:
         assert svc2._baseline_brightness is not None
         assert svc2._baseline_depth is not None
 
+    def test_save_and_reload_with_embedding(self, tmp_path):
+        state_path = tmp_path / "room_state.json"
+        frame = np.random.randint(0, 256, (480, 640, 3), dtype=np.uint8)
+        emb = _compute_gradient_embedding(frame)
+        svc = RoomService(bus=MessageBus(), vision_service=None, state_path=state_path)
+        svc._room_name = "Office"
+        svc._baseline_brightness = np.ones(32) / 32
+        svc._baseline_embedding = emb
+        svc._save_state()
+
+        svc2 = RoomService(bus=MessageBus(), vision_service=None, state_path=state_path)
+        svc2._load_state()
+        assert svc2.room_name == "Office"
+        assert svc2._baseline_embedding is not None
+        assert len(svc2._baseline_embedding) == 384
+        assert np.allclose(svc2._baseline_embedding, emb)
+
+    def test_load_state_without_embedding_leaves_embedding_none(self, tmp_path):
+        """Legacy state files without 'embedding' key should load cleanly."""
+        sig = [0.03125] * 32
+        state_path = tmp_path / "room_state.json"
+        state_path.write_text(json.dumps({"name": "Legacy Room", "brightness_sig": sig}))
+        svc = RoomService(bus=MessageBus(), vision_service=None, state_path=state_path)
+        svc._load_state()
+        assert svc._baseline_embedding is None   # no embedding in legacy file
+
 
 # ── Divergence detection ──────────────────────────────────────────────────────
 
@@ -404,6 +531,7 @@ class TestDivergenceDetection:
             assert svc._baseline_brightness is None
             svc._check_scene()
             assert svc._baseline_brightness is not None
+            assert svc._baseline_embedding is not None  # embedding also captured
         finally:
             svc.stop()
 
@@ -507,5 +635,28 @@ class TestDivergenceDetection:
         try:
             svc._check_scene()  # low light — should leave counter alone
             assert svc._consec_diverged == 2  # unchanged
+        finally:
+            svc.stop()
+
+    def test_embedding_lighting_change_does_not_diverge(self, tmp_path):
+        """
+        Gradient embedding approach: same room with changed brightness should
+        NOT diverge — the embedding is lighting-invariant.
+        """
+        # Structured frame simulating a room
+        base_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        base_frame[:, 320:, :] = 80   # right half brighter (like a wall)
+        base_frame[240:, :, :] += 40  # bottom half differently lit
+        # Brighter version: same structure, 2× brightness
+        bright_frame = np.clip(base_frame.astype(int) * 2, 0, 255).astype(np.uint8)
+
+        svc = _make_service(tmp_path, vision_svc=_make_vision(bright_frame))
+        svc._baseline_brightness = _compute_brightness_signature(base_frame)
+        svc._baseline_embedding = _compute_gradient_embedding(base_frame)
+        svc._consec_diverged = 0
+        svc.start()
+        try:
+            svc._check_scene()
+            assert svc._consec_diverged == 0  # lighting change must not trigger divergence
         finally:
             svc.stop()

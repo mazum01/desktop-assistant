@@ -6,7 +6,35 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.26.2] - 2026-05-26
+## [1.27.0] - 2026-05-26
+### Changed
+- **Room detection — gradient orientation embedding (AI approach)**:
+  Replace brightness-histogram comparison with a HOG-style gradient
+  orientation embedding (384-dim, L2-normalised, numpy-only).
+
+  **Why**: brightness histograms capture raw pixel values so any shift in
+  ambient lighting changes the signature.  Gradient descriptors capture
+  *edge structure* (door frames, furniture silhouettes, wall textures) and
+  are invariant to uniform brightness changes — turning a dimmer up or
+  down, moving from day to night lighting, etc., no longer contributes to
+  divergence.  Only structural differences between rooms do.
+
+  **How**: for each sweep angle a frame is downsampled to ~80×60 px and
+  divided into a 6×8 grid of cells; each cell accumulates a
+  magnitude-weighted gradient-orientation histogram (8 bins) normalised by
+  total gradient magnitude; the 48 cell histograms are concatenated and
+  the 384-dim vector is L2-normalised.  Multi-angle embeddings are
+  mean-pooled and re-normalised.  Cosine similarity is used for
+  comparison (threshold 0.85).  Depth histogram blends in at 30% when
+  available.
+
+  **Backwards compatibility**: old `config/room_state.json` files without
+  the `embedding` key load cleanly and fall back to the legacy Bhattacharyya
+  brightness comparison until a new baseline is captured with `vera room set`.
+
+  **No new dependencies** — pure numpy.
+
+
 ### Fixed
 - **Room detection — low-light false positive**: when the lights are turned off
   the brightness histogram collapses to near-zero and would previously score

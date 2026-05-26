@@ -9,32 +9,49 @@ confirm.
 
 Signature methodology
 ---------------------
-A room signature combines two independent histogram signals:
+A room signature combines up to three signals:
 
-1. **Multi-angle brightness histogram** (32 bins, normalised):
-   The servo sweeps to _SWEEP_ANGLES (default: left, center, right).
-   At each position a frame is downsampled to ~80×60 px and a normalised
-   brightness histogram computed.  The per-angle histograms are averaged,
-   making the signature view-invariant — rotating the head to face a
-   different wall will not by itself trigger a false divergence alarm.
+1. **Gradient orientation embedding** (384-dim, L2-normalised) — *primary*:
+   For each sweep angle a frame is downsampled to ~80×60 px and divided
+   into a 6×8 grid of cells.  In each cell a magnitude-weighted gradient-
+   orientation histogram (8 bins) is computed and normalised; the 48 cell
+   histograms are concatenated and the full 384-dim vector is L2-normalised.
+   Multiple sweep embeddings are mean-pooled and re-normalised.  Because the
+   descriptor is gradient-based it is invariant to uniform brightness
+   changes — turning the lights up or down will not shift the embedding,
+   only structural changes (new walls, different furniture silhouettes) will.
+   Comparison uses cosine similarity.
 
-2. **Depth histogram** (16 bins over [0, _DEPTH_MAX_M] m, normalised):
+2. **Depth histogram** (16 bins over [0, _DEPTH_MAX_M] m, normalised) —
+   *supplemental geometry signal*:
    The latest depth map from either the stereo or monocular depth service
-   is cached via bus subscription.  If depth data is available, a histogram
-   of per-pixel depth values is included in the signature.  This captures
-   room *geometry* (how far away the walls are), which is far more stable
-   than lighting.
+   is cached via bus subscription.  When depth data is available it is
+   blended into the similarity score (30 % weight), capturing wall
+   distances and room geometry.
 
-Comparison uses the Bhattacharyya coefficient on each component:
-    score = 0.6 × B(brightness) + 0.4 × B(depth)   [both available]
-    score = B(brightness)                            [depth unavailable]
+3. **Brightness histogram** (32 bins, normalised) — *low-light guard only*:
+   Retained to compute ``mean_brightness`` for the low-light skip.  When
+   scene illumination is below ``_LOW_LIGHT_THRESH`` the entire sample is
+   discarded (neither incrementing nor resetting the divergence counter) so
+   that turning off the lights cannot trigger a false room-change prompt.
+   The brightness histogram is also used as a fallback comparison method
+   if the gradient embedding is unavailable (e.g. legacy state files that
+   predate this feature).
+
+Similarity score:
+    score = 0.70 × cosine(embedding) + 0.30 × B(depth)   [depth available]
+    score = cosine(embedding)                              [no depth]
+    score = 0.60 × B(brightness) + 0.40 × B(depth)        [legacy fallback]
+    score = B(brightness)                                  [legacy, no depth]
 
 Thresholds and timing are tunable via module-level constants.
 
 Persistence
 -----------
-Room name and signature are stored in ``config/room_state.json`` using an
-atomic write (write to .json.tmp → replace) to survive unclean shutdowns.
+Room name and full signature are stored in ``config/room_state.json`` using
+an atomic write (write to .json.tmp → replace) to survive unclean shutdowns.
+The ``embedding`` key is new; old state files without it fall back to the
+brightness-histogram comparison method automatically.
 
 Topics subscribed:
     room.set          {"name": str}     — explicitly set the current room
@@ -70,7 +87,7 @@ _STATE_PATH = Path(__file__).parents[2] / "config" / "room_state.json"
 # Visual change-detection tunables
 _SAMPLE_INTERVAL_S: float = 300.0   # check scene every 5 minutes
 _CONSEC_DIVERGED: int = 3           # 3 consecutive diverged samples ≈ 15 min sustained change
-_SIMILARITY_THRESH: float = 0.80    # combined score below this = "looks different"
+_SIMILARITY_THRESH: float = 0.85    # combined score below this = "looks different"
 _PROMPT_COOLDOWN_S: float = 1800.0  # at most one room-change prompt every 30 minutes
 
 # Low-light skip: if mean brightness of all sweep frames is below this
@@ -91,6 +108,15 @@ _DEPTH_MAX_AGE_S: float = 30.0      # ignore depth data older than this
 # Brightness weight vs depth weight when both are available
 _W_BRIGHTNESS: float = 0.6
 _W_DEPTH: float = 0.4
+
+# Gradient embedding weights
+_GRADIENT_CELLS_ROWS: int = 6       # rows of cells in the HOG grid
+_GRADIENT_CELLS_COLS: int = 8       # columns of cells in the HOG grid
+_GRADIENT_ORI_BINS: int = 8         # orientation bins per cell
+# Embedding dims = _GRADIENT_CELLS_ROWS * _GRADIENT_CELLS_COLS * _GRADIENT_ORI_BINS = 384
+
+_W_EMBEDDING: float = 0.70          # weight for embedding cosine sim when depth available
+_W_EMBEDDING_DEPTH: float = 0.30    # weight for depth Bhattacharyya alongside embedding
 
 
 class RoomService(Service):
@@ -119,8 +145,9 @@ class RoomService(Service):
 
         # Room state
         self._room_name: Optional[str] = None
-        self._baseline_brightness: Optional[np.ndarray] = None  # 32-bin
+        self._baseline_brightness: Optional[np.ndarray] = None  # 32-bin (low-light guard)
         self._baseline_depth: Optional[np.ndarray] = None        # 16-bin or None
+        self._baseline_embedding: Optional[np.ndarray] = None    # 384-dim gradient embedding
 
         # Divergence tracking
         self._consec_diverged: int = 0
@@ -285,6 +312,9 @@ class RoomService(Service):
                 # Establish baseline on first successful capture
                 self._baseline_brightness = sig["brightness"].copy()
                 self._baseline_depth = sig["depth"].copy() if sig["depth"] is not None else None
+                self._baseline_embedding = (
+                    sig["embedding"].copy() if sig.get("embedding") is not None else None
+                )
                 should_save = True
                 log.debug("RoomService: established initial visual baseline")
             else:
@@ -293,6 +323,8 @@ class RoomService(Service):
                     self._baseline_depth,
                     sig["brightness"],
                     sig["depth"],
+                    self._baseline_embedding,
+                    sig.get("embedding"),
                 )
                 log.debug(
                     "RoomService: scene similarity=%.3f (threshold=%.2f)",
@@ -334,13 +366,22 @@ class RoomService(Service):
         with self._lock:
             self._baseline_brightness = sig["brightness"].copy()
             self._baseline_depth = sig["depth"].copy() if sig["depth"] is not None else None
+            self._baseline_embedding = (
+                sig["embedding"].copy() if sig.get("embedding") is not None else None
+            )
         self._save_state()
         log.info("RoomService: new visual baseline captured after room set")
 
     def _panoramic_signature(self) -> Optional[dict]:
         """
         Sweep the servo through _SWEEP_ANGLES, capture a frame at each position,
-        and return the averaged brightness + depth histograms.
+        and return the averaged brightness histogram, depth histogram, and
+        gradient orientation embedding.
+
+        The gradient embedding is the primary comparison signal: it is computed
+        per frame, mean-pooled across sweep angles, and re-normalised to unit
+        length.  The brightness histogram is retained for the low-light guard
+        and as a legacy fallback only.
 
         If no bus/servo is available, falls back to a single-frame capture from
         the current position.  Face tracking is paused for the duration of the
@@ -353,6 +394,7 @@ class RoomService(Service):
         sweep_possible = (self.bus is not None) and (original_angle is not None)
 
         brightness_hists: list[np.ndarray] = []
+        embedding_vecs: list[np.ndarray] = []
         depth_hists: list[np.ndarray] = []
 
         def _grab_one() -> None:
@@ -360,6 +402,7 @@ class RoomService(Service):
                 frame = self._vision_svc.latest_frame()
                 if frame is not None:
                     brightness_hists.append(_compute_brightness_signature(frame))
+                    embedding_vecs.append(_compute_gradient_embedding(frame))
             except Exception:
                 log.debug("RoomService: frame capture failed", exc_info=True)
 
@@ -397,12 +440,25 @@ class RoomService(Service):
         avg_brightness = np.mean(brightness_hists, axis=0)
         avg_depth = np.mean(depth_hists, axis=0) if depth_hists else None
 
-        # Compute mean brightness across all captured frames for low-light detection.
-        # Re-derive from the averaged histogram (weighted mean of bin centres).
+        # Mean-pool gradient embeddings across sweep angles, then re-normalise
+        # to unit length (mean of unit vectors approximates the dominant
+        # orientation distribution of the panoramic view).
+        avg_embedding: Optional[np.ndarray] = None
+        if embedding_vecs:
+            pooled = np.mean(embedding_vecs, axis=0)
+            norm = np.linalg.norm(pooled)
+            avg_embedding = pooled / (norm + 1e-8)
+
+        # Compute mean brightness from averaged histogram for low-light guard.
         bin_centres = np.linspace(4.0, 252.0, 32)
         mean_brightness = float(np.dot(avg_brightness, bin_centres))
 
-        return {"brightness": avg_brightness, "depth": avg_depth, "mean_brightness": mean_brightness}
+        return {
+            "brightness": avg_brightness,
+            "depth": avg_depth,
+            "embedding": avg_embedding,
+            "mean_brightness": mean_brightness,
+        }
 
     def _prompt_room_confirmation(self, room: Optional[str]) -> None:
         if room:
@@ -431,6 +487,9 @@ class RoomService(Service):
                 d_sig = data.get("depth_sig")
                 if d_sig and isinstance(d_sig, list):
                     self._baseline_depth = np.array(d_sig, dtype=float)
+                e_sig = data.get("embedding")
+                if e_sig and isinstance(e_sig, list):
+                    self._baseline_embedding = np.array(e_sig, dtype=float)
                 log.info("RoomService: loaded state (room=%s)", self._room_name)
         except Exception as exc:
             log.warning("RoomService: could not load state: %s", exc)
@@ -450,6 +509,11 @@ class RoomService(Service):
                         if self._baseline_depth is not None
                         else None
                     ),
+                    "embedding": (
+                        self._baseline_embedding.tolist()
+                        if self._baseline_embedding is not None
+                        else None
+                    ),
                 }
             tmp = self._state_path.with_suffix(".json.tmp")
             tmp.write_text(json.dumps(data, indent=2))
@@ -459,6 +523,63 @@ class RoomService(Service):
 
 
 # ── Pure signal-processing helpers ────────────────────────────────────────────
+
+
+def _compute_gradient_embedding(frame: np.ndarray) -> np.ndarray:
+    """
+    HOG-style gradient orientation embedding from a camera frame.
+
+    The frame is downsampled to ~80×60 px, Sobel gradients are computed, and
+    the result is divided into a grid of _GRADIENT_CELLS_ROWS × _GRADIENT_CELLS_COLS
+    cells.  Within each cell a magnitude-weighted orientation histogram
+    (_GRADIENT_ORI_BINS bins) is accumulated and normalised.  The full
+    (_GRADIENT_CELLS_ROWS × _GRADIENT_CELLS_COLS × _GRADIENT_ORI_BINS)-dim
+    vector is L2-normalised before return.
+
+    **Lighting invariance**: because the descriptor is built from *gradients*
+    (not raw pixel values), uniform brightness changes — turning lights up or
+    down — have no effect on the embedding.  Only structural changes (new
+    walls, different furniture silhouettes) shift the descriptor.
+    """
+    small = frame[::8, ::8]
+    if small.ndim == 3:
+        gray = small.mean(axis=2).astype(float)
+    else:
+        gray = small.astype(float)
+
+    # Sobel-like gradients using simple finite differences (no scipy needed).
+    gy = gray[2:, 1:-1] - gray[:-2, 1:-1]   # vertical
+    gx = gray[1:-1, 2:] - gray[1:-1, :-2]   # horizontal
+    magnitude = np.sqrt(gx**2 + gy**2)
+    orientation = np.arctan2(gy, gx)          # in [-π, π]
+
+    H, W = magnitude.shape
+    cell_h = H // _GRADIENT_CELLS_ROWS
+    cell_w = W // _GRADIENT_CELLS_COLS
+
+    features: list[np.ndarray] = []
+    for r in range(_GRADIENT_CELLS_ROWS):
+        for c in range(_GRADIENT_CELLS_COLS):
+            r0, r1 = r * cell_h, (r + 1) * cell_h
+            c0, c1 = c * cell_w, (c + 1) * cell_w
+            cell_mag = magnitude[r0:r1, c0:c1].ravel()
+            cell_ori = orientation[r0:r1, c0:c1].ravel()
+            hist, _ = np.histogram(
+                cell_ori, bins=_GRADIENT_ORI_BINS,
+                range=(-np.pi, np.pi), weights=cell_mag,
+            )
+            total = hist.sum()
+            features.append(hist / (total + 1e-8))
+
+    embedding = np.concatenate(features)
+    norm = np.linalg.norm(embedding)
+    return embedding / (norm + 1e-8)
+
+
+def _cosine_similarity(e1: np.ndarray, e2: np.ndarray) -> float:
+    """Cosine similarity between two pre-normalised L2 vectors. Range [−1, 1]."""
+    return float(np.dot(e1, e2))
+
 
 
 def _compute_brightness_signature(frame: np.ndarray) -> np.ndarray:
@@ -505,14 +626,30 @@ def _compare_signatures(
     base_depth: Optional[np.ndarray],
     curr_brightness: np.ndarray,
     curr_depth: Optional[np.ndarray],
+    base_embedding: Optional[np.ndarray] = None,
+    curr_embedding: Optional[np.ndarray] = None,
 ) -> float:
     """
-    Combined Bhattacharyya similarity between two room signatures.
+    Combined similarity score between two room signatures.  Returns a value in
+    [0, 1] where 1.0 = identical.
 
-    Returns a score in [0, 1] where 1.0 = identical.  If depth histograms
-    are available for both baseline and current, depth is weighted at
-    _W_DEPTH; otherwise only brightness is used.
+    When gradient embeddings are available for both baseline and current, the
+    primary comparison is cosine similarity (lighting-invariant).  If depth
+    histograms are also available they contribute at _W_EMBEDDING_DEPTH weight:
+        score = _W_EMBEDDING × cosine + _W_EMBEDDING_DEPTH × B(depth)
+
+    Falls back to the Bhattacharyya brightness + depth comparison when
+    embeddings are not available (e.g. legacy state files):
+        score = _W_BRIGHTNESS × B(brightness) + _W_DEPTH × B(depth)
     """
+    if base_embedding is not None and curr_embedding is not None:
+        sim = _cosine_similarity(base_embedding, curr_embedding)
+        if base_depth is not None and curr_depth is not None:
+            d_score = _bhattacharyya(base_depth, curr_depth)
+            return _W_EMBEDDING * sim + _W_EMBEDDING_DEPTH * d_score
+        return sim
+
+    # Legacy fallback: brightness histogram Bhattacharyya
     b_score = _bhattacharyya(base_brightness, curr_brightness)
     if base_depth is not None and curr_depth is not None:
         d_score = _bhattacharyya(base_depth, curr_depth)
