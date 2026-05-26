@@ -6,7 +6,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.26.0] - 2026-05-26
+## [1.26.1] - 2026-05-26
+### Fixed / Improved
+- **Room detection — panoramic sweep**: `RoomService` now sweeps the servo to
+  three positions (left/centre/right, 135°/175°/215°) when capturing a scene
+  signature, then averages the per-angle brightness histograms.  Face tracking
+  is briefly paused during the ~3 s sweep to prevent servo contention.  This
+  eliminates false positives that previously fired when VERA was pointing at a
+  different wall (single-angle baseline was overly sensitive to head orientation).
+- **Room detection — depth histogram**: `RoomService` now subscribes to
+  `vision.depth_map` and `vision.mono_depth_map` and caches the latest depth
+  map.  When depth data is available a 16-bin depth histogram (room geometry
+  fingerprint) is included in the comparison score, weighted 40% (brightness
+  60%).  Room *dimensions* are stable even as furniture moves, making the
+  combined score far more discriminating.
+- **Backwards-compatible state file**: `config/room_state.json` now stores
+  `brightness_sig` and `depth_sig` keys; the old `signature` key is still
+  loaded transparently for existing deployments.
+- **Deadlock fix**: `_check_scene()` no longer calls `_save_state()` while
+  holding `_lock` (would deadlock on first baseline establishment).
+
+
 ### Added
 - **Room awareness**: VERA now knows which room it's in.
   - New `RoomService` persists the room name and a visual scene baseline
