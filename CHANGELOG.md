@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.25.5] - 2026-05-26
+### Fixed
+- **CI flaky test** `test_first_failure_triggers_restart` — `ManagedService.last_restart_ts`
+  defaulted to `0.0`, so on a freshly-booted CI runner where `time.monotonic() < cooldown_s`
+  (300 s), the first-failure cooldown check incorrectly fired and skipped the restart.
+  Changed default to `float("-inf")` so "never restarted" always passes the cooldown guard
+  regardless of system uptime.
+
 ## [1.25.4] - 2026-05-26
 ### Changed
 - Web GUI telemetry: temperature now displays as `XX.X °C / YY.Y °F` instead

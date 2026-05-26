@@ -110,7 +110,7 @@ class ManagedService:
     max_uptime_min: Optional[int] = None
 
     # Runtime state — not part of config
-    last_restart_ts: float = field(default=0.0, init=False, repr=False)
+    last_restart_ts: float = field(default=float("-inf"), init=False, repr=False)
     consecutive_failures: int = field(default=0, init=False, repr=False)
 
     def is_systemd_active(self) -> bool:
