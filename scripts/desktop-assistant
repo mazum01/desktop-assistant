@@ -1130,6 +1130,10 @@ def cmd_help(args) -> int:
         "snapshot":         "Save a full-resolution JPEG from a camera.\n"
                             "                  Usage: snapshot [--output FILE] [--camera 1|2]\n"
                             "                  Default filename: snapshot_cam1.jpg",
+        "room":             "Show or set the room VERA is located in. Sub-commands:\n"
+                            "                  room get                      Show the current room name.\n"
+                            "                  room set <name>               Set the room (e.g. room set Living Room).\n"
+                            "                  VERA auto-detects sustained scene changes and prompts verbally.",
         "help":             "Show this command reference, or help for a specific command.\n"
                             "                  Usage: help [command]",
     }
@@ -1369,6 +1373,33 @@ def _fmt_uptime(seconds: float) -> str:
     if m:
         return f"{m}m{s:02d}s"
     return f"{s}s"
+
+
+def cmd_room_get(_args) -> int:
+    """Show the current room VERA is in."""
+    r = _request({"cmd": "last", "topic": "room.updated"})
+    payload = r.get("payload") or {}
+    name = payload.get("name") if isinstance(payload, dict) else None
+    if name:
+        print(f"Current room: {name}")
+    else:
+        print("Room not set. Use: vera room set <name>")
+    return 0
+
+
+def cmd_room_set(args) -> int:
+    """Set the current room VERA is in."""
+    name = " ".join(args.name) if isinstance(args.name, list) else str(args.name)
+    r = _request({
+        "cmd": "publish",
+        "topic": "room.set",
+        "payload": {"name": name.strip()},
+    })
+    if r.get("ok"):
+        print(f"Room set to: {name.strip()!r}")
+    else:
+        print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
 
 
 def cmd_version(_args) -> int:
@@ -1914,6 +1945,14 @@ def main() -> int:
     snap_sp.add_argument("--camera", "-c", type=int, choices=[1, 2], default=1,
                          help="Camera to snapshot: 1 (default) or 2")
     snap_sp.set_defaults(func=cmd_snapshot)
+
+    room_sp = sub.add_parser("room", help="Show or set the room VERA is located in")
+    room_sp.set_defaults(func=lambda _a: (print("Usage: vera room get | vera room set <name>"), 1)[1])
+    room_sub = room_sp.add_subparsers(dest="room_cmd")
+    room_sub.add_parser("get", help="Show the current room name").set_defaults(func=cmd_room_get)
+    room_set_sp = room_sub.add_parser("set", help="Set the current room name (e.g. vera room set Living Room)")
+    room_set_sp.add_argument("name", nargs="+", help="Room name (can contain spaces)")
+    room_set_sp.set_defaults(func=cmd_room_set)
 
     args = p.parse_args()
     if args.cmd is None:

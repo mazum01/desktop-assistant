@@ -6,6 +6,25 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.26.0] - 2026-05-26
+### Added
+- **Room awareness**: VERA now knows which room it's in.
+  - New `RoomService` persists the room name and a visual scene baseline
+    (32-bin brightness histogram) in `config/room_state.json`.
+  - On startup VERA announces the current room, or asks "Which room am I in?"
+    if no room has been assigned.
+  - Periodic visual scene sampling (every 5 minutes): if the scene looks
+    consistently different from the stored baseline for ≥15 minutes (3
+    consecutive diverged samples), VERA speaks a prompt asking the user to
+    confirm whether the room has changed.  Normal object/furniture movement
+    does not trigger this — only sustained macro-scene changes.
+  - New CLI commands: `vera room get`, `vera room set <name>`.
+  - New web API: `GET /api/room`, `PUT /api/room`.
+  - Web dashboard Telemetry card now shows the current room name with an
+    inline edit button.
+  - Architecture diagram updated with `RoomService` node and new bus topics
+    (`room.set`, `room.updated`).
+
 ## [1.25.7] - 2026-05-26
 ### Fixed
 - **Web dashboard — face thumbnails blank**: face thumbnail and photo `<img src>`

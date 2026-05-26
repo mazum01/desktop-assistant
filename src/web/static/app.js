@@ -230,6 +230,11 @@ function updateDashboard(data) {
   if (musicSong) _applyMusicSong(musicSong);
   const musicStations = last["music.stations_updated"];
   if (musicStations) _applyMusicStations(musicStations.stations || []);
+
+  // Room display
+  if (data.room !== undefined) {
+    el("stat-room").textContent = data.room || "Unknown";
+  }
 }
 
 // ── Sparkline graph ───────────────────────────────────────────────
@@ -634,6 +639,54 @@ async function deleteGuestFaces() {
       log.prepend(row);
     }
   } catch (e) { /* ignore */ }
+}
+
+// ── Room ──────────────────────────────────────────────────────────
+
+function editRoom() {
+  const nameEl = el("stat-room");
+  const editWrap = el("room-edit-wrap");
+  const editBtn = el("room-edit-btn");
+  const input = el("room-input");
+  const current = nameEl.textContent;
+  input.value = current === "Unknown" ? "" : current;
+  editWrap.style.display = "inline-flex";
+  editBtn.style.display = "none";
+  input.focus();
+  input.onkeydown = (e) => { if (e.key === "Enter") saveRoom(); if (e.key === "Escape") cancelEditRoom(); };
+}
+
+function cancelEditRoom() {
+  el("room-edit-wrap").style.display = "none";
+  el("room-edit-btn").style.display = "";
+  el("room-status").textContent = "";
+}
+
+async function saveRoom() {
+  const name = (el("room-input").value || "").trim();
+  if (!name) { el("room-status").textContent = "Enter a room name"; return; }
+  const status = el("room-status");
+  try {
+    const r = await fetch("/api/room", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      el("stat-room").textContent = name;
+      cancelEditRoom();
+      status.style.color = "var(--green)";
+      status.textContent = "Saved ✓";
+    } else {
+      status.style.color = "var(--red)";
+      status.textContent = d.detail || "Error";
+    }
+  } catch (e) {
+    el("room-status").style.color = "var(--red)";
+    el("room-status").textContent = "Network error";
+  }
+  setTimeout(() => { el("room-status").textContent = ""; }, 3000);
 }
 
 // ── Servo enable/disable ──────────────────────────────────────────

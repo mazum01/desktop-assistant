@@ -88,6 +88,10 @@ class _RenameBody(BaseModel):
     name: str
 
 
+class _RoomBody(BaseModel):
+    name: str
+
+
 class _QuietHoursBody(BaseModel):
     enabled: bool
     start: str
@@ -199,6 +203,7 @@ class WebService:
         perception_service=None,
         dense_stereo_service=None,
         mono_depth_service=None,
+        room_service=None,
         api_key: str = "",
     ) -> None:
         self.bus = bus
@@ -217,6 +222,7 @@ class WebService:
         self._perception_svc = perception_service
         self._dense_stereo_svc = dense_stereo_service
         self._mono_depth_svc = mono_depth_service
+        self._room_svc = room_service
         self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
         self._thread: Optional[threading.Thread] = None
@@ -492,6 +498,7 @@ class WebService:
             "mem_percent": mem,
             "cpu_history": list(self._cpu_history),
             "mem_history": list(self._mem_history),
+            "room": self._room_svc.room_name if self._room_svc else None,
         }
 
     # ── FastAPI app ───────────────────────────────────────────────────
@@ -718,6 +725,19 @@ class WebService:
             if self.bus:
                 self.bus.publish("settings.quiet_hours_updated", self._quiet_hours.as_dict())
             return {"ok": True, **self._quiet_hours.as_dict()}
+
+        # ── Room ──────────────────────────────────────────────────────
+
+        @app.get("/api/room")
+        async def api_get_room():
+            name = self._room_svc.room_name if self._room_svc else None
+            return {"name": name}
+
+        @app.put("/api/room")
+        async def api_set_room(body: _RoomBody):
+            if self.bus:
+                self.bus.publish("room.set", {"name": body.name})
+            return {"ok": True, "name": body.name}
 
         @app.put("/api/faces/{face_id}")
         async def api_rename_face(face_id: str, body: _RenameBody):

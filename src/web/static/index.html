@@ -116,6 +116,17 @@
           <div id="stat-audio" class="stat-value">—</div>
         </div>
       </div>
+      <div class="room-row">
+        <span class="stat-label">Room: </span>
+        <span id="stat-room" class="stat-room-name">—</span>
+        <button class="btn btn-sm btn-secondary" id="room-edit-btn" onclick="editRoom()" title="Set current room">✏️</button>
+        <span id="room-edit-wrap" style="display:none">
+          <input id="room-input" type="text" placeholder="e.g. Living Room" style="padding:.3rem .5rem;border-radius:6px;border:1px solid #555;background:#313244;color:#cdd6f4;font-size:.9rem;width:160px;" />
+          <button class="btn btn-sm btn-primary" onclick="saveRoom()">Save</button>
+          <button class="btn btn-sm btn-secondary" onclick="cancelEditRoom()">Cancel</button>
+        </span>
+        <span id="room-status" style="font-size:.85rem;margin-left:.5rem;"></span>
+      </div>
       <div class="spoken-line">
         <span class="stat-label">Last spoken: </span>
         <span id="stat-spoken" class="spoken-text">—</span>
