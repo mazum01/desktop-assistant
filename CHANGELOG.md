@@ -6,7 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.25.1] - 2026-05-25
+## [1.25.2] - 2026-05-26
+### Changed
+- Web GUI favicon updated to match the 🤖 robot icon shown in the page header.
+  Added an SVG data-URI `<link rel="icon">` as the first/preferred icon entry;
+  browsers that support SVG favicons (Chrome 80+, Firefox 41+, Safari 12+) will
+  render the emoji using the system emoji engine. The existing `.ico` / `.png`
+  entries are kept as fallbacks for older browsers.
+
+## [1.25.1] - 2026-05-26
 ### Fixed
 - **Face rename bug** — renaming a face via the web UI no longer also renames
   whichever face is currently in the camera frame.  `FaceService._on_meet` now
