@@ -56,6 +56,11 @@ function _saveApiKey() {
 if (!VERA_API_KEY) _showKeyOverlay();
 
 const WS_URL = `ws://${location.host}/ws?key=${encodeURIComponent(VERA_API_KEY)}`;
+
+// Append ?key= to URLs used in img.src (can't use custom headers for image loads).
+function authUrl(path) {
+  return `${path}?key=${encodeURIComponent(VERA_API_KEY)}`;
+}
 let ws = null;
 let wsRetryMs = 1000;
 
@@ -364,9 +369,9 @@ function makeFaceRow(face) {
   const count     = face.seen_count ?? "—";
 
   const thumbHtml = face.has_thumb
-    ? `<img src="/api/faces/${esc(face.id)}/thumb" class="face-thumb face-thumb-clickable"
+    ? `<img src="${authUrl(`/api/faces/${esc(face.id)}/thumb`)}" class="face-thumb face-thumb-clickable"
            alt="face"
-           data-lightbox-src="/api/faces/${esc(face.id)}/photo"
+           data-lightbox-src="${authUrl(`/api/faces/${esc(face.id)}/photo`)}"
            data-lightbox-label="${esc(face.name || 'Unknown')}" />`
     : `<div class="face-thumb face-thumb-placeholder">?</div>`;
 
@@ -428,14 +433,14 @@ function mergeFaces() {
   el("merge-name-a").textContent = _mergeNames[0];
   el("merge-fid-a").textContent  = _mergeIds[0].slice(0, 12) + "…";
   const imgA = el("merge-img-a");
-  imgA.src = `/api/faces/${encodeURIComponent(_mergeIds[0])}/thumb`;
+  imgA.src = authUrl(`/api/faces/${encodeURIComponent(_mergeIds[0])}/thumb`);
   imgA.onerror = () => { imgA.style.display = "none"; };
 
   // Populate face B
   el("merge-name-b").textContent = _mergeNames[1];
   el("merge-fid-b").textContent  = _mergeIds[1].slice(0, 12) + "…";
   const imgB = el("merge-img-b");
-  imgB.src = `/api/faces/${encodeURIComponent(_mergeIds[1])}/thumb`;
+  imgB.src = authUrl(`/api/faces/${encodeURIComponent(_mergeIds[1])}/thumb`);
   imgB.onerror = () => { imgB.style.display = "none"; };
 
   // Default: A = keep, B = absorb

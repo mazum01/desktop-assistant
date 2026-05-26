@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.25.7] - 2026-05-26
+### Fixed
+- **Web dashboard — face thumbnails blank**: face thumbnail and photo `<img src>`
+  URLs were missing the `?key=` query parameter, causing 401 rejections since
+  image loads cannot send custom headers. Added `authUrl()` helper and applied
+  it to all three face image locations (face list thumb, merge modal A/B thumbs,
+  and lightbox photo `data-lightbox-src`).
+
 ## [1.25.6] - 2026-05-26
 ### Added
 - **Agent Imperative #10 — CI Pipeline Review**: after every push to `main`,
