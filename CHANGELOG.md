@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.25.6] - 2026-05-26
+### Added
+- **Agent Imperative #10 — CI Pipeline Review**: after every push to `main`,
+  the agent must poll `gh run list`, wait for completion, and either report
+  "✅ CI passed" or fetch `--log-failed` output, fix the root cause, and iterate
+  until CI is green. CI red = task not done.
+
 ## [1.25.5] - 2026-05-26
 ### Fixed
 - **CI flaky test** `test_first_failure_triggers_restart` — `ManagedService.last_restart_ts`

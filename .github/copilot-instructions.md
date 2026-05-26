@@ -130,3 +130,20 @@ Run the **security-scan** skill (via sub-agent) whenever:
   separately — never silently fix security issues without explicit user
   instruction.
 
+
+## 10. CI Pipeline Review — After Every Push
+
+After every `git push` to `main`, check the CI result:
+
+1. Run `gh run list --limit 1 --json status,conclusion,databaseId` to get the
+   latest run.
+2. If `status` is still `"in_progress"` or `"queued"`, wait ~60 s and retry
+   (repeat up to 5 times before giving up).
+3. If `conclusion` is `"success"` — report "✅ CI passed" to the user and stop.
+4. If `conclusion` is `"failure"` — fetch the failure details with
+   `gh run view <id> --log-failed` and:
+   - Identify the failing test(s) and root cause.
+   - Fix the code (never mark the task complete while CI is red).
+   - Commit, push, and re-check CI until it goes green.
+5. Never leave a push without confirming CI outcome. If CI is red after your
+   commit, it is your responsibility to fix it before considering the task done.
