@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.25.4] - 2026-05-26
+### Changed
+- Web GUI telemetry: temperature now displays as `XX.X °C / YY.Y °F` instead
+  of Celsius-only with Fahrenheit hidden in a tooltip.
+
 ## [1.25.3] - 2026-05-26
 ### Fixed
 - **Favicon** — replaced blue-eye placeholder with a proper robot-face icon that

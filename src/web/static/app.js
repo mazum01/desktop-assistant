@@ -130,8 +130,7 @@ function updateDashboard(data) {
   if (temp) {
     const c = num(temp.celsius, 1);
     const f = num(temp.fahrenheit, 1);
-    el("stat-temp").textContent = `${c} °C`;
-    el("stat-temp").title = `${f} °F`;
+    el("stat-temp").textContent = `${c} °C / ${f} °F`;
     el("stat-temp").style.color = temp.ok === false ? "var(--red)" : "var(--blue)";
   }
 
