@@ -327,7 +327,12 @@ class FaceService(Service):
         self._prev_face_ids = current_face_ids
 
     def _on_meet(self, _topic, payload) -> None:
-        """CLI/web sent 'meet <name>' — name the last seen face."""
+        """CLI/web sent 'meet <name>' — name the last seen face.
+
+        When ``face_id`` is present in the payload (web-UI rename), use it
+        directly so we never accidentally rename whoever happens to be in frame.
+        Fall back to the current face only for CLI usage (no face_id supplied).
+        """
         if not isinstance(payload, dict):
             return
         given_name = (payload.get("name") or "").strip()
@@ -336,13 +341,18 @@ class FaceService(Service):
             return
         if self._registry is None:
             return
-        face_id = self._registry.get_current_face_id()
+
+        # Web-UI rename supplies the explicit face_id; CLI does not.
+        face_id = payload.get("face_id") or self._registry.get_current_face_id()
         if face_id is None:
             log.warning("face.meet: no faces in registry yet")
             self.bus.publish("av.say", {"text": "I haven't seen anyone yet to name."})
             return
+
         old_name = (self._registry.get_face(face_id) or {}).get("name", "")
-        self._registry.set_name(face_id, given_name)
+        # Skip redundant DB write when the web API already called set_name.
+        if old_name != given_name:
+            self._registry.set_name(face_id, given_name)
         self._registry.mark_greeted(face_id)
         text = f"Nice to meet you, {given_name}! I'll remember you."
         log.info("Named face %s: %r → %r", face_id[:8], old_name, given_name)

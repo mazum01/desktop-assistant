@@ -222,6 +222,41 @@ def test_meet_command_triggers_confirmation(bus, svc):
     assert any("Charlie" in s for s in spoken), f"expected name in confirmation, got: {spoken}"
 
 
+def test_meet_with_explicit_face_id_does_not_rename_current_face(bus, svc):
+    """Web-UI rename (face_id in payload) must not re-name the current face.
+
+    Bug scenario: web UI renames face X but Mark is in frame.  Without the fix,
+    _on_meet would call get_current_face_id() and rename Mark instead.
+    """
+    renamed_ids = []
+    svc._registry.set_name.side_effect = lambda fid, name: renamed_ids.append(fid)
+    svc._registry.get_face.return_value = {"name": "OldName"}
+
+    # Mark is in the camera right now
+    svc._registry.get_current_face_id.return_value = "mark-face-id"
+
+    # Web UI renames a *different* face explicitly
+    bus.publish("face.meet", {"name": "Alice", "face_id": "target-face-id"})
+    _wait()
+
+    # Only the explicit face_id should have been renamed — NOT mark-face-id
+    assert renamed_ids == ["target-face-id"], (
+        f"Expected only target-face-id renamed, got: {renamed_ids}"
+    )
+    svc._registry.get_current_face_id.assert_not_called()
+
+
+def test_meet_without_face_id_falls_back_to_current_face(bus, svc):
+    """CLI meet (no face_id) should still use get_current_face_id()."""
+    svc._registry.get_current_face_id.return_value = "cli-face-id"
+    svc._registry.get_face.return_value = {"name": "Old"}
+
+    bus.publish("face.meet", {"name": "Bob"})
+    _wait()
+
+    svc._registry.get_current_face_id.assert_called()
+
+
 # ── Varied phrases ───────────────────────────────────────────────────────────
 
 def test_varied_phrases_no_immediate_repeat(svc):

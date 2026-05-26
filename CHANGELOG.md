@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.25.1] - 2026-05-25
+### Fixed
+- **Face rename bug** — renaming a face via the web UI no longer also renames
+  whichever face is currently in the camera frame.  `FaceService._on_meet` now
+  uses `face_id` from the event payload when supplied (web-UI path), and only
+  falls back to `get_current_face_id()` when no `face_id` is present (CLI path).
+  Two new regression tests added to `tests/test_face_service.py`.
+- **Version regression corrected** — commits v1.24.3–v1.24.6 inadvertently
+  lowered the VERSION file below the previously merged v1.25.0 security release.
+  Version restored to correct semver sequence.
+
 ## [1.25.0] - 2026-05-25
 ### Added
 - **Web dashboard API key authentication** — all `/api/*`, `/stream`, `/stream2`,
