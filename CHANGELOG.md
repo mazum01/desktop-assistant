@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.25.3] - 2026-05-26
+### Fixed
+- **Favicon** — replaced blue-eye placeholder with a proper robot-face icon that
+  matches the 🤖 header icon. Regenerated all favicon formats (`.svg`, `.ico`,
+  `.png` 16/32/192) using Pillow. `favicon.svg` is now the primary entry
+  (`type="image/svg+xml"`) so modern browsers prefer it over the `.ico` fallback.
+  The SVG renders a silver robot head with cyan eyes on a dark background.
+
 ## [1.25.2] - 2026-05-26
 ### Changed
 - Web GUI favicon updated to match the 🤖 robot icon shown in the page header.
