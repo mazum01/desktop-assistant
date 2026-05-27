@@ -78,13 +78,16 @@ Configuration (config/assistant.yaml — room_detection section):
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import os
 import threading
 import time
 from pathlib import Path
 from typing import Optional
 
+import cv2
 import numpy as np
 
 from src.core.bus import MessageBus
@@ -123,6 +126,74 @@ _GRADIENT_ORI_BINS: int = 8         # orientation bins per cell
 
 _W_EMBEDDING: float = 0.70          # weight for embedding cosine sim when depth available
 _W_EMBEDDING_DEPTH: float = 0.30    # weight for depth Bhattacharyya alongside embedding
+
+# Claude vision model used for cloud-assisted room identification
+_CLAUDE_MODEL = "claude-sonnet-4-5"
+_CLAUDE_MAX_TOKENS = 64
+_CLAUDE_TIMEOUT_S = 10.0
+
+
+def _identify_room_via_claude(frame: np.ndarray) -> Optional[str]:
+    """Send a camera frame to Claude Sonnet and ask it to identify the room type.
+
+    Returns a short room-name string (e.g. "office", "living room") or None
+    if the call fails or the API key is not configured.
+
+    The frame is JPEG-compressed at 75% quality before encoding to keep the
+    payload small (~20–40 KB typical).
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        log.debug("_identify_room_via_claude: ANTHROPIC_API_KEY not set — skipping")
+        return None
+
+    try:
+        import anthropic  # lazy import — only needed when this path is hit
+
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        if not ok:
+            log.warning("_identify_room_via_claude: JPEG encode failed")
+            return None
+        b64 = base64.standard_b64encode(buf.tobytes()).decode()
+
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model=_CLAUDE_MODEL,
+            max_tokens=_CLAUDE_MAX_TOKENS,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": b64,
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": (
+                                "What type of room is shown in this image? "
+                                "Reply with only a short room name such as "
+                                "'office', 'living room', 'bedroom', 'kitchen', "
+                                "'hallway', 'dining room', 'bathroom', or similar. "
+                                "If you cannot tell, reply with 'unknown room'."
+                            ),
+                        },
+                    ],
+                }
+            ],
+        )
+        raw = msg.content[0].text.strip().lower()
+        # Trim trailing punctuation and cap length for safety
+        raw = raw.rstrip(".,!").strip()[:40]
+        log.info("_identify_room_via_claude: Claude identified room as %r", raw)
+        return raw if raw and raw != "unknown room" else None
+    except Exception as exc:
+        log.warning("_identify_room_via_claude: API call failed: %s", exc)
+        return None
 
 
 class RoomService(Service):
@@ -426,20 +497,46 @@ class RoomService(Service):
         if similarity >= thresh:
             self.bus.publish("av.say", {"text": f"I'm in the {room}."})
         else:
-            # Looks like VERA may have been moved — be honest about it.
+            # Scene doesn't match — ask Claude to identify the room from a live frame.
+            log.info(
+                "RoomService: boot mismatch (sim=%.3f) — asking Claude to identify room",
+                similarity,
+            )
             self.bus.publish(
                 "av.say",
                 {
                     "text": (
                         f"I was last in the {room}, but things look different. "
-                        "I'll figure out where I am."
+                        "Let me take a look around."
                     )
                 },
             )
-            log.info(
-                "RoomService: boot mismatch (sim=%.3f) — suppressing confident room announce",
-                similarity,
-            )
+            # Grab a raw frame for Claude (no servo sweep needed)
+            frame = None
+            if self._vision_svc is not None:
+                try:
+                    frame = self._vision_svc.latest_frame()
+                except Exception:
+                    pass
+
+            if frame is not None:
+                claude_room = _identify_room_via_claude(frame)
+                if claude_room:
+                    log.info("RoomService: Claude identified room as %r", claude_room)
+                    self.bus.publish(
+                        "av.say",
+                        {"text": f"This looks like a {claude_room} to me."},
+                    )
+                else:
+                    self.bus.publish(
+                        "av.say",
+                        {"text": "I'm not sure which room I'm in. I'll keep checking."},
+                    )
+            else:
+                self.bus.publish(
+                    "av.say",
+                    {"text": "I'm not sure which room I'm in. I'll keep checking."},
+                )
 
     def _sample_loop(self) -> None:
         """Background thread: sample scene every sample_interval_s seconds.

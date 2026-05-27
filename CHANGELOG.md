@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.28.6] - 2026-05-27
+### Fixed
+- **RoomService class definition restored**: `class RoomService(Service):` line was
+  accidentally dropped during Claude integration edits, causing `ImportError` when
+  the class was imported directly. All 652 tests now pass.
+
 ## [1.28.5] - 2026-05-27
 ### Fixed
 - **Boot room announcement now verifies before speaking**: On startup,
