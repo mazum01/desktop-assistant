@@ -521,7 +521,12 @@ class WebService:
             class _AuthMiddleware(BaseHTTPMiddleware):
                 async def dispatch(self, request, call_next):
                     path = request.url.path
-                    if path in ("/", "/health") or path.startswith("/static"):
+                    # Always-public routes (no key required)
+                    if (
+                        path in ("/", "/health")
+                        or path.startswith("/static")
+                        or path in ("/stream", "/stream2")
+                    ):
                         return await call_next(request)
                     key = (
                         request.headers.get("x-api-key")

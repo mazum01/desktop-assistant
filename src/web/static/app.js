@@ -1448,11 +1448,19 @@ function closeLightbox() {
 
 document.addEventListener("DOMContentLoaded", () => {
   // Set camera stream src with API key so MJPEG streams authenticate.
+  // Attach onerror AFTER setting src so the initial HTML src="" doesn't
+  // hide cam2-wrap before we get a chance to load it properly.
   const _streamKey = encodeURIComponent(VERA_API_KEY);
   const _cam1 = document.getElementById('camera-stream');
   const _cam2 = document.getElementById('camera-stream2');
   if (_cam1) _cam1.src = `/stream?key=${_streamKey}`;
-  if (_cam2) _cam2.src = `/stream2?key=${_streamKey}`;
+  if (_cam2) {
+    _cam2.onerror = () => {
+      const wrap = document.getElementById('cam2-wrap');
+      if (wrap) wrap.style.display = 'none';
+    };
+    _cam2.src = `/stream2?key=${_streamKey}`;
+  }
 
   el("say-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") doSay();

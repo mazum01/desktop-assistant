@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.27.3] - 2026-05-27
+### Fixed
+- **Web GUI — Cam 2 no longer disappears on page load**: the inline
+  `onerror` on the Cam 2 `<img>` was firing when the browser initially
+  tried to load `src="/stream2"` (before the API key was appended in
+  `DOMContentLoaded`), permanently hiding `cam2-wrap`.  Fixed by starting
+  the img with an empty `src=""` in HTML, then in `DOMContentLoaded`
+  setting the correct keyed URL and attaching the `onerror` handler only
+  after the src is set.
+- **Stream endpoints exempt from API key auth**: `/stream` and `/stream2`
+  are now publicly accessible (no `?key=` required), allowing OpenClaw and
+  other local consumers to access the camera feeds directly.  All control
+  and data API endpoints (`/api/*`, `/ws`) remain protected.
+
 ## [1.27.2] - 2026-05-27
 ### Added
 - **Web GUI — Room Detection visualisation panel**: the telemetry card now
