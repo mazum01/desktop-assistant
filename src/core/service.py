@@ -90,6 +90,12 @@ class Service:
     # ── Internal ───────────────────────────────────────────────────────
 
     def _run_loop(self) -> None:
+        # tick_seconds == 0 means the service is driven entirely by its own
+        # internal threads (e.g. RoomService, ClockService).  Simply block
+        # until stop() is called so we don't spin-burn a CPU core.
+        if self.tick_seconds == 0:
+            self._stop_event.wait()
+            return
         while not self._stop_event.is_set():
             tick_start = time.monotonic()
             try:

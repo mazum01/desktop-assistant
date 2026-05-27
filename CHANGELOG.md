@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.27.6] - 2026-05-27
+### Fixed
+- **Camera FPS drop — CPU spin loop in `Service._run_loop`**: services whose
+  `run_tick()` does nothing (i.e. `tick_seconds = 0`) were looping at millions
+  of iterations per second because `Event.wait(0)` returns immediately.
+  `RoomService` and `ClockService` both set `tick_seconds = 0` (they are driven
+  by their own internal threads), so their `svc-room` and `svc-clock` service
+  threads were each burning a full CPU core.  Combined with the ONNX Runtime
+  worker threads spawned during TTS synthesis, this saturated all 4 Pi 5 cores
+  (~90–100 % CPU), starving the camera encoder threads and capping MJPEG
+  delivery at ~5–8 fps.  The base `Service._run_loop` now detects `tick_seconds
+  == 0` and simply blocks on `stop_event.wait()` until the service is shut
+  down, reducing idle CPU usage for these services to ~0 %.
+
 ## [1.27.5] - 2026-05-27
 ### Fixed
 - **Camera FPS drop — GIL starvation in mono depth service**: the depth map
