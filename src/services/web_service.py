@@ -525,7 +525,6 @@ class WebService:
                     if (
                         path in ("/", "/health")
                         or path.startswith("/static")
-                        or path in ("/stream", "/stream2")
                     ):
                         return await call_next(request)
                     key = (

@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.27.4] - 2026-05-27
+### Security
+- **Re-enable API key auth on `/stream` and `/stream2`**: stream routes are
+  now protected again — a valid `?key=<VERA_API_KEY>` or `X-API-Key` header
+  is required for all camera feeds, consistent with every other protected
+  endpoint.
+### Fixed
+- **OpenClaw `grab-frame` skill passes API key**: `grab_frame.py` now reads
+  `VERA_API_KEY` from the process environment, falling back to
+  `/etc/desktop-assistant/secrets.env`, and appends `?key=` to all stream
+  and snapshot URLs so OpenClaw can access protected camera feeds.
+
 ## [1.27.3] - 2026-05-27
 ### Fixed
 - **Web GUI — Cam 2 no longer disappears on page load**: the inline
