@@ -368,18 +368,78 @@ class RoomService(Service):
     # ── Internal ──────────────────────────────────────────────────────
 
     def _announce_on_start(self) -> None:
-        time.sleep(6.0)  # allow AV service to finish initialising
+        """Speak the room name on startup — but verify first.
+
+        Waits for the AV service and cameras to settle, then takes a quick
+        scene sample.  If the current scene matches the stored baseline with
+        sufficient confidence the room name is announced normally.  If it
+        doesn't match (VERA may have been moved while powered off) a tentative
+        message is spoken and the regular divergence detection takes over.
+        """
+        time.sleep(6.0)  # allow AV service and cameras to initialise
+        if not self.bus:
+            return
+
         with self._lock:
             room = self._room_name
-        if room:
-            if self.bus:
-                self.bus.publish("av.say", {"text": f"I'm in the {room}."})
+            has_baseline = (
+                self._baseline_embedding is not None
+                or self._baseline_brightness is not None
+            )
+
+        if not room:
+            self.bus.publish(
+                "av.say",
+                {"text": "Which room am I in? You can tell me with 'vera room set <name>'."},
+            )
+            return
+
+        # If there is no baseline we can't verify — announce normally.
+        if not has_baseline:
+            self.bus.publish("av.say", {"text": f"I'm in the {room}."})
+            return
+
+        # Grab a quick single-frame signature (no servo sweep needed here).
+        sig = self._panoramic_signature()
+        if sig is None:
+            # Camera not ready — fall back to trusting the saved name.
+            self.bus.publish("av.say", {"text": f"I'm in the {room}."})
+            return
+
+        with self._lock:
+            similarity = _compare_signatures(
+                self._baseline_brightness,
+                self._baseline_depth,
+                sig["brightness"],
+                sig["depth"],
+                self._baseline_embedding,
+                sig.get("embedding"),
+            )
+            self._last_similarity = similarity
+            thresh = self._similarity_thresh
+
+        log.info(
+            "RoomService: boot scene check — similarity=%.3f threshold=%.2f room=%s",
+            similarity, thresh, room,
+        )
+
+        if similarity >= thresh:
+            self.bus.publish("av.say", {"text": f"I'm in the {room}."})
         else:
-            if self.bus:
-                self.bus.publish(
-                    "av.say",
-                    {"text": "Which room am I in? You can tell me with 'vera room set <name>'."},
-                )
+            # Looks like VERA may have been moved — be honest about it.
+            self.bus.publish(
+                "av.say",
+                {
+                    "text": (
+                        f"I was last in the {room}, but things look different. "
+                        "I'll figure out where I am."
+                    )
+                },
+            )
+            log.info(
+                "RoomService: boot mismatch (sim=%.3f) — suppressing confident room announce",
+                similarity,
+            )
 
     def _sample_loop(self) -> None:
         """Background thread: sample scene every sample_interval_s seconds.

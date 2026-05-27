@@ -6,7 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.28.4] - 2026-05-27
+## [1.28.5] - 2026-05-27
+### Fixed
+- **Boot room announcement now verifies before speaking**: On startup,
+  `_announce_on_start` takes a quick scene sample and compares it to the
+  stored baseline before committing to the room name. If similarity ≥
+  threshold → "I'm in the {room}." (same as before). If similarity is low
+  (VERA may have been moved while powered off) → "I was last in the {room},
+  but things look different. I'll figure out where I am." — and regular
+  divergence detection takes over from there. Falls back to the old confident
+  announcement if the camera or baseline is unavailable.
+
+
 ### Fixed
 - **Guest 1 → Mark merge**: The orphaned Guest 1 embedding (similarity 0.705
   to Mark — clearly him) was reassigned directly into Mark's embedding set and
