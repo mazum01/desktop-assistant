@@ -219,6 +219,39 @@ main {
 }
 .room-drift-dot.filled { background: var(--red); border-color: var(--red); }
 .room-drift-label { font-size: .8rem; color: var(--text-dim); }
+.room-sparkline-row { align-items: center; }
+.room-sparkline-wrap { flex: 1; min-width: 0; }
+.room-sim-sparkline {
+  display: block;
+  width: 100%;
+  height: 40px;
+  border-radius: 4px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+}
+.room-strikes-badge {
+  flex-shrink: 0;
+  font-size: .78rem;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 10px;
+  border: 1px solid;
+  background: rgba(63,185,80,.12);
+  color: var(--green);
+  border-color: var(--green);
+  white-space: nowrap;
+  transition: background .3s, color .3s, border-color .3s;
+}
+.room-strikes-badge.warn {
+  background: rgba(210,153,34,.12);
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+.room-strikes-badge.danger {
+  background: rgba(248,81,73,.12);
+  color: var(--red);
+  border-color: var(--red);
+}
 .room-chip {
   display: inline-flex;
   align-items: center;

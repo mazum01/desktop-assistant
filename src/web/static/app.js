@@ -254,6 +254,91 @@ function updateDashboard(data) {
 
 // ── Room detection visualisation ──────────────────────────────────
 
+// Ring buffer storing the last 20 similarity readings for the history sparkline.
+const _roomSimHistory = [];
+const _ROOM_SIM_HISTORY_MAX = 20;
+
+function _pushRoomSim(sim) {
+  if (sim == null) return;
+  _roomSimHistory.push(sim);
+  if (_roomSimHistory.length > _ROOM_SIM_HISTORY_MAX)
+    _roomSimHistory.shift();
+}
+
+function _drawRoomSparkline(thresh) {
+  const canvas = el("room-sim-sparkline");
+  if (!canvas || _roomSimHistory.length < 1) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth  || 160;
+  const h = canvas.clientHeight || 40;
+  if (canvas.width  !== Math.round(w * dpr) ||
+      canvas.height !== Math.round(h * dpr)) {
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const pad = 4;
+  const yw  = h - pad * 2;
+  const xw  = w - pad * 2;
+
+  // Map similarity [0.6, 1.0] → pixel height (clamp outside that range)
+  const simMin = 0.60, simMax = 1.00;
+  const toY = v => pad + yw * (1 - Math.min(1, Math.max(0, (v - simMin) / (simMax - simMin))));
+  const toX = i => pad + (xw / Math.max(_roomSimHistory.length - 1, 1)) * i;
+
+  // Threshold line
+  const ty = toY(thresh);
+  ctx.beginPath();
+  ctx.setLineDash([4, 3]);
+  ctx.strokeStyle = "rgba(210,153,34,0.5)";
+  ctx.lineWidth = 1;
+  ctx.moveTo(pad, ty);
+  ctx.lineTo(w - pad, ty);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Threshold label
+  ctx.fillStyle = "rgba(210,153,34,0.7)";
+  ctx.font = "9px monospace";
+  ctx.fillText((thresh * 100).toFixed(0) + "%", w - pad - 22, ty - 2);
+
+  // Area fill
+  const grad = ctx.createLinearGradient(0, pad, 0, h - pad);
+  grad.addColorStop(0, "rgba(88,166,255,0.25)");
+  grad.addColorStop(1, "rgba(88,166,255,0.02)");
+  ctx.beginPath();
+  ctx.moveTo(toX(0), h - pad);
+  for (let i = 0; i < _roomSimHistory.length; i++) {
+    ctx.lineTo(toX(i), toY(_roomSimHistory[i]));
+  }
+  ctx.lineTo(toX(_roomSimHistory.length - 1), h - pad);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  for (let i = 0; i < _roomSimHistory.length; i++) {
+    const x = toX(i), y = toY(_roomSimHistory[i]);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = "#58a6ff";
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+
+  // Current value dot
+  const last = _roomSimHistory[_roomSimHistory.length - 1];
+  const dotColor = last >= thresh ? "#3fb950" : last >= thresh - 0.1 ? "#d2993a" : "#f85149";
+  ctx.beginPath();
+  ctx.arc(toX(_roomSimHistory.length - 1), toY(last), 3, 0, Math.PI * 2);
+  ctx.fillStyle = dotColor;
+  ctx.fill();
+}
+
 function updateRoomDetail(d) {
   if (!d) return;
 
@@ -277,19 +362,16 @@ function updateRoomDetail(d) {
     }
   }
 
-  // Drift counter dots
-  const count = d.consec_diverged || 0;
+  // Similarity history sparkline + strikes badge
+  _pushRoomSim(sim);
+  _drawRoomSparkline(thresh);
+  const count = d.consec_diverged  || 0;
   const max   = d.consec_diverged_threshold || 3;
-  let dotsHtml = "";
-  for (let i = 0; i < max; i++) {
-    dotsHtml += `<span class="room-drift-dot${i < count ? " filled" : ""}"></span>`;
-  }
-  const dotsEl = el("room-drift-dots");
-  if (dotsEl) dotsEl.innerHTML = dotsHtml;
-  const labelEl = el("room-drift-label");
-  if (labelEl) {
-    labelEl.textContent = count > 0 ? `${count}/${max} diverged` : "stable";
-    labelEl.style.color = count > 0 ? "var(--yellow)" : "var(--text-dim)";
+  const badge = el("room-strikes-badge");
+  if (badge) {
+    badge.textContent = `${count} / ${max} strikes`;
+    badge.className   = "room-strikes-badge" +
+      (count === 0 ? "" : count < max ? " warn" : " danger");
   }
 
   // Status chips

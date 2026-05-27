@@ -137,10 +137,12 @@
             <span id="room-stability-pct" class="room-stability-pct">—</span>
           </div>
         </div>
-        <div class="room-detail-row">
-          <span class="stat-label">Drift</span>
-          <span id="room-drift-dots"></span>
-          <span id="room-drift-label" class="room-drift-label"></span>
+        <div class="room-detail-row room-sparkline-row">
+          <span class="stat-label">History</span>
+          <div class="room-sparkline-wrap">
+            <canvas id="room-sim-sparkline" class="room-sim-sparkline"></canvas>
+          </div>
+          <span id="room-strikes-badge" class="room-strikes-badge">— / — strikes</span>
         </div>
         <div class="room-detail-row" id="room-chips-row"></div>
         <div class="room-detail-row">

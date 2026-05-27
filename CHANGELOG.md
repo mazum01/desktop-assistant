@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.28.3] - 2026-05-29
+### Changed
+- **Room detail panel — drift dots replaced with similarity sparkline**: The
+  three hollow/filled dots are gone. A canvas-based area chart now shows the
+  last 20 similarity readings over time, with a dashed yellow threshold line
+  and a color-coded end-dot (green/yellow/red). A `0 / 3 strikes` pill badge
+  (green → yellow → red) replaces the drift label. The change makes it much
+  easier to see whether readings are trending toward divergence or recovering.
+
 ## [1.28.0] - 2026-05-27
 ### Changed
 - **Face recognition threshold raised 0.50 → 0.60**: reduces false-positive
