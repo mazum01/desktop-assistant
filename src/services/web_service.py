@@ -499,6 +499,7 @@ class WebService:
             "cpu_history": list(self._cpu_history),
             "mem_history": list(self._mem_history),
             "room": self._room_svc.room_name if self._room_svc else None,
+            "room_detail": self._room_svc.get_status_dict() if self._room_svc else None,
         }
 
     # ── FastAPI app ───────────────────────────────────────────────────
@@ -732,6 +733,12 @@ class WebService:
         async def api_get_room():
             name = self._room_svc.room_name if self._room_svc else None
             return {"name": name}
+
+        @app.get("/api/room/status")
+        async def api_room_status():
+            if not self._room_svc:
+                raise HTTPException(503, "room service unavailable")
+            return self._room_svc.get_status_dict()
 
         @app.put("/api/room")
         async def api_set_room(body: _RoomBody):

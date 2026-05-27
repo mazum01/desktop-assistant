@@ -184,6 +184,11 @@ class RoomService(Service):
         self._consec_diverged: int = 0
         self._last_prompt_ts: float = float("-inf")
 
+        # Visualisation telemetry (written by sampler thread; read by get_status_dict)
+        self._last_similarity: Optional[float] = None   # cosine/combined score from last run
+        self._last_check_ts: float = float("-inf")      # monotonic timestamp of last _check_scene call
+        self._last_skip_reason: Optional[str] = None    # "faces" | "low_light" | None
+
         # Current servo angle (updated via motion.position subscription)
         self._current_angle: Optional[float] = None
 
@@ -209,7 +214,49 @@ class RoomService(Service):
         with self._lock:
             return self._room_name
 
-    # ── Service lifecycle ─────────────────────────────────────────────
+    def get_status_dict(self) -> dict:
+        """Return a snapshot of room detection state for the web dashboard."""
+        now = time.monotonic()
+        with self._lock:
+            name = self._room_name
+            baseline_ready = (
+                self._baseline_embedding is not None
+                or self._baseline_brightness is not None
+            )
+            last_similarity = self._last_similarity
+            consec_diverged = self._consec_diverged
+            last_prompt_ts = self._last_prompt_ts
+
+        with self._face_lock:
+            face_count = self._face_count
+
+        last_check_ts = self._last_check_ts
+        last_skip_reason = self._last_skip_reason
+
+        last_check_age_s = (
+            round(now - last_check_ts, 1) if last_check_ts != float("-inf") else None
+        )
+        last_prompt_age_s = (
+            round(now - last_prompt_ts, 1) if last_prompt_ts != float("-inf") else None
+        )
+
+        return {
+            "name": name,
+            "baseline_ready": baseline_ready,
+            "last_similarity": (
+                round(float(last_similarity), 4) if last_similarity is not None else None
+            ),
+            "similarity_thresh": self._similarity_thresh,
+            "consec_diverged": consec_diverged,
+            "consec_diverged_threshold": self._consec_diverged_threshold,
+            "last_check_age_s": last_check_age_s,
+            "last_prompt_age_s": last_prompt_age_s,
+            "last_skip_reason": last_skip_reason,
+            "faces_present": face_count > 0,
+            "skip_when_faces": self._skip_when_faces,
+            "sample_interval_s": self._sample_interval_s,
+        }
+
 
     def on_start(self) -> None:
         self._load_state()
@@ -341,12 +388,15 @@ class RoomService(Service):
 
     def _check_scene(self) -> None:
         """Capture panoramic signature; compare with baseline; prompt if diverged long enough."""
+        self._last_check_ts = time.monotonic()
+
         # Face-skip: if faces are visible, the embedding would include person
         # edges that aren't part of the room structure — defer judgment.
         if self._skip_when_faces:
             with self._face_lock:
                 face_count = self._face_count
             if face_count > 0:
+                self._last_skip_reason = "faces"
                 log.debug(
                     "RoomService: %d face(s) visible — skipping sample to avoid person-edge pollution",
                     face_count,
@@ -360,11 +410,14 @@ class RoomService(Service):
         # Low-light skip: if the scene is too dark to be meaningful, defer
         # judgment without touching the divergence counter.
         if sig.get("mean_brightness", 255.0) < self._low_light_thresh:
+            self._last_skip_reason = "low_light"
             log.debug(
                 "RoomService: scene too dark (mean=%.1f) — skipping sample",
                 sig["mean_brightness"],
             )
             return
+
+        self._last_skip_reason = None
 
         should_prompt = False
         should_save = False
@@ -389,6 +442,7 @@ class RoomService(Service):
                     self._baseline_embedding,
                     sig.get("embedding"),
                 )
+                self._last_similarity = similarity
                 log.debug(
                     "RoomService: scene similarity=%.3f (threshold=%.2f)",
                     similarity,

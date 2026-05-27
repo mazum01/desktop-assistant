@@ -127,6 +127,28 @@
         </span>
         <span id="room-status" style="font-size:.85rem;margin-left:.5rem;"></span>
       </div>
+      <!-- Room detection detail panel -->
+      <div id="room-detail" class="room-detail">
+        <div class="room-detail-row">
+          <span class="stat-label">Scene Stability</span>
+          <div class="room-stability-wrap">
+            <div class="room-stability-bar">
+              <div id="room-stability-fill" class="room-stability-fill" style="width:0%"></div>
+            </div>
+            <span id="room-stability-pct" class="room-stability-pct">—</span>
+          </div>
+        </div>
+        <div class="room-detail-row">
+          <span class="stat-label">Drift</span>
+          <span id="room-drift-dots"></span>
+          <span id="room-drift-label" class="room-drift-label"></span>
+        </div>
+        <div class="room-detail-row" id="room-chips-row"></div>
+        <div class="room-detail-row">
+          <span class="stat-label">Last Scan</span>
+          <span id="room-last-scan" class="room-last-scan">—</span>
+        </div>
+      </div>
       <div class="spoken-line">
         <span class="stat-label">Last spoken: </span>
         <span id="stat-spoken" class="spoken-text">—</span>

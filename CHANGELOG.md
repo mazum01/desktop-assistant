@@ -6,6 +6,26 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.27.2] - 2026-05-27
+### Added
+- **Web GUI — Room Detection visualisation panel**: the telemetry card now
+  shows a live room-awareness panel below the room name:
+  - **Scene Stability bar** — colour-coded progress bar (green ≥ threshold,
+    yellow within 10 pp, red below) showing the last cosine-similarity score
+    as a percentage.
+  - **Drift counter** — N dots (filled red = diverged, hollow = ok) showing
+    how many consecutive diverged samples have accumulated towards the prompt
+    threshold.
+  - **Status chips** — contextual badges: "✓ Scanning", "⚠ No baseline",
+    "🌑 Low light", "👤 Faces — skipped", "⚠ Diverged".
+  - **Last Scan** — human-friendly age ("30s ago", "5m ago", "1.2h ago").
+- `RoomService.get_status_dict()` — new public method returning a full
+  telemetry snapshot (similarity, drift counter, skip reason, config, etc.).
+- `GET /api/room/status` — new REST endpoint returning the same dict.
+- `room_detail` field added to the WebSocket status snapshot (every 1 s).
+- `_last_similarity`, `_last_check_ts`, `_last_skip_reason` tracking fields
+  in `RoomService`; updated in `_check_scene()`.
+
 ## [1.27.1] - 2026-05-26
 ### Added
 - **Room detection — configurable tunables**: all timing and sensitivity

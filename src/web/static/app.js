@@ -235,9 +235,78 @@ function updateDashboard(data) {
   if (data.room !== undefined) {
     el("stat-room").textContent = data.room || "Unknown";
   }
+  if (data.room_detail) updateRoomDetail(data.room_detail);
 }
 
-// ── Sparkline graph ───────────────────────────────────────────────
+// ── Room detection visualisation ──────────────────────────────────
+
+function updateRoomDetail(d) {
+  if (!d) return;
+
+  // Scene stability bar
+  const sim = d.last_similarity;
+  const thresh = d.similarity_thresh != null ? d.similarity_thresh : 0.85;
+  const fillEl = el("room-stability-fill");
+  const pctEl  = el("room-stability-pct");
+  if (sim != null) {
+    const pct = Math.round(sim * 100);
+    fillEl.style.width = pct + "%";
+    if (sim >= thresh)           fillEl.style.background = "var(--green)";
+    else if (sim >= thresh - 0.1) fillEl.style.background = "var(--yellow)";
+    else                          fillEl.style.background = "var(--red)";
+    pctEl.textContent = pct + "%";
+  } else {
+    fillEl.style.width = "0%";
+    fillEl.style.background = "var(--text-dim)";
+    pctEl.textContent = "—";
+  }
+
+  // Drift counter dots
+  const count = d.consec_diverged || 0;
+  const max   = d.consec_diverged_threshold || 3;
+  let dotsHtml = "";
+  for (let i = 0; i < max; i++) {
+    dotsHtml += `<span class="room-drift-dot${i < count ? " filled" : ""}"></span>`;
+  }
+  const dotsEl = el("room-drift-dots");
+  if (dotsEl) dotsEl.innerHTML = dotsHtml;
+  const labelEl = el("room-drift-label");
+  if (labelEl) {
+    labelEl.textContent = count > 0 ? `${count}/${max} diverged` : "stable";
+    labelEl.style.color = count > 0 ? "var(--yellow)" : "var(--text-dim)";
+  }
+
+  // Status chips
+  const chips = [];
+  if (!d.baseline_ready) {
+    chips.push(`<span class="room-chip room-chip-warn">⚠ No baseline</span>`);
+  }
+  if (d.last_skip_reason === "low_light") {
+    chips.push(`<span class="room-chip room-chip-warn">🌑 Low light</span>`);
+  } else if (d.last_skip_reason === "faces") {
+    chips.push(`<span class="room-chip room-chip-info">👤 Faces — skipped</span>`);
+  } else if (d.faces_present && d.skip_when_faces) {
+    chips.push(`<span class="room-chip room-chip-info">👤 Faces visible</span>`);
+  }
+  if (count >= max) {
+    chips.push(`<span class="room-chip room-chip-err">⚠ Diverged</span>`);
+  } else if (chips.length === 0) {
+    chips.push(`<span class="room-chip room-chip-ok">✓ Scanning</span>`);
+  }
+  const chipsRow = el("room-chips-row");
+  if (chipsRow) chipsRow.innerHTML = chips.join("");
+
+  // Last scan age
+  const age    = d.last_check_age_s;
+  const scanEl = el("room-last-scan");
+  if (scanEl) {
+    if (age == null)      scanEl.textContent = "Never";
+    else if (age < 60)    scanEl.textContent = `${Math.round(age)}s ago`;
+    else if (age < 3600)  scanEl.textContent = `${Math.round(age / 60)}m ago`;
+    else                  scanEl.textContent = `${(age / 3600).toFixed(1)}h ago`;
+  }
+}
+
 
 function drawSparkline(canvasId, values, color) {
   const canvas = document.getElementById(canvasId);

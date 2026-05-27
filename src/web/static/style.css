@@ -177,7 +177,65 @@ main {
 .room-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; color: var(--text-dim); }
 .stat-room-name { color: var(--text); font-weight: 600; }
 
-/* ── Services pills ──────────────────────────────────────────── */
+/* ── Room detection detail panel ───────────────────────────── */
+.room-detail {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.room-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.room-detail-row .stat-label { min-width: 90px; flex-shrink: 0; }
+.room-stability-wrap { display: flex; align-items: center; gap: 8px; flex: 1; }
+.room-stability-bar {
+  flex: 1;
+  max-width: 160px;
+  height: 8px;
+  background: var(--bg3);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.room-stability-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 4px;
+  background: var(--text-dim);
+  transition: width .5s ease, background .5s ease;
+}
+.room-stability-pct { font-size: .82rem; color: var(--text-dim); min-width: 36px; }
+.room-drift-dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  margin-right: 3px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+}
+.room-drift-dot.filled { background: var(--red); border-color: var(--red); }
+.room-drift-label { font-size: .8rem; color: var(--text-dim); }
+.room-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: .75rem;
+  border: 1px solid;
+  margin-right: 4px;
+}
+.room-chip-ok   { background: rgba(63,185,80,.12);  color: var(--green);  border-color: var(--green); }
+.room-chip-warn { background: rgba(210,153,34,.12); color: var(--yellow); border-color: var(--yellow); }
+.room-chip-info { background: rgba(88,166,255,.12); color: var(--blue);   border-color: var(--blue); }
+.room-chip-err  { background: rgba(248,81,73,.12);  color: var(--red);    border-color: var(--red); }
+.room-last-scan { font-size: .82rem; color: var(--text-dim); }
+
+
 .pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .pill {
   padding: 4px 12px;
