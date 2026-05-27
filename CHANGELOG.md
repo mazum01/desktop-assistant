@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.27.5] - 2026-05-27
+### Fixed
+- **Camera FPS drop — GIL starvation in mono depth service**: the depth map
+  serialisation in `MonoDepthService._process_frame` used nested Python list
+  comprehensions with 81,920 `round(float(v))` calls per inference, holding
+  the GIL for ~56ms per call (113ms total when metric depth was also computed).
+  At 3 Hz this consumed ~17% of all Python CPU time, starving the camera
+  encoder threads and capping effective MJPEG delivery at ~5–6 fps.
+  Replaced with `np.round(...).tolist()` which completes in ~5ms — a 10–13×
+  speedup — and reduces GIL hold time from 167ms/s to ~15ms/s.
+
 ## [1.27.4] - 2026-05-27
 ### Security
 - **Re-enable API key auth on `/stream` and `/stream2`**: stream routes are
