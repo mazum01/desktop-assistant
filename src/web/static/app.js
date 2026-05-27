@@ -116,8 +116,22 @@ function connectWS() {
     try {
       const data = JSON.parse(evt.data);
       updateDashboard(data);
-    } catch (e) { /* ignore */ }
+    } catch (e) { console.error('[VERA] WS update error:', e); }
   };
+}
+
+// ── Room status polling (REST fallback for stability gauge) ───────
+// Polls /api/room/status every 10 s so the gauge updates even if
+// the WebSocket path fails to deliver room_detail.
+function _startRoomPoller() {
+  async function poll() {
+    try {
+      const r = await fetch("/api/room/status");
+      if (r.ok) updateRoomDetail(await r.json());
+    } catch (_) {}
+    setTimeout(poll, 10000);
+  }
+  setTimeout(poll, 2000); // first poll after 2 s (let WS try first)
 }
 
 // ── Dashboard update ──────────────────────────────────────────────
@@ -248,17 +262,19 @@ function updateRoomDetail(d) {
   const thresh = d.similarity_thresh != null ? d.similarity_thresh : 0.85;
   const fillEl = el("room-stability-fill");
   const pctEl  = el("room-stability-pct");
-  if (sim != null) {
-    const pct = Math.round(sim * 100);
-    fillEl.style.width = pct + "%";
-    if (sim >= thresh)           fillEl.style.background = "var(--green)";
-    else if (sim >= thresh - 0.1) fillEl.style.background = "var(--yellow)";
-    else                          fillEl.style.background = "var(--red)";
-    pctEl.textContent = pct + "%";
-  } else {
-    fillEl.style.width = "0%";
-    fillEl.style.background = "var(--text-dim)";
-    pctEl.textContent = "—";
+  if (fillEl && pctEl) {
+    if (sim != null) {
+      const pct = Math.round(sim * 100);
+      fillEl.style.width = pct + "%";
+      if (sim >= thresh)            fillEl.style.background = "var(--green)";
+      else if (sim >= thresh - 0.1) fillEl.style.background = "var(--yellow)";
+      else                          fillEl.style.background = "var(--red)";
+      pctEl.textContent = pct + "%";
+    } else {
+      fillEl.style.width = "0%";
+      fillEl.style.background = "var(--text-dim)";
+      pctEl.textContent = "—";
+    }
   }
 
   // Drift counter dots
@@ -1484,6 +1500,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadMusicStatus();
   loadDepthSettings();
   connectWS();
+  _startRoomPoller();
   initFpsCounters();
   loadTrackingParams();
   initCardDragDrop();

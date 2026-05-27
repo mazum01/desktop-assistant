@@ -39,7 +39,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
   stale/excess embeddings, bringing Mark from 137 to 20 and Alaina from 25
   to 20.
 
-## [1.28.1] - 2026-05-27
+## [1.28.2] - 2026-05-27
+### Fixed
+- **Room stability gauge showed "—" despite correct server data**: Added a
+  REST-polling fallback (`_startRoomPoller`) that fetches `/api/room/status`
+  every 10 s and calls `updateRoomDetail` directly, bypassing any WebSocket
+  delivery issue.  Added null guards in `updateRoomDetail` to prevent a
+  silent TypeError from blocking the update.  Changed the WebSocket catch
+  from silently swallowing errors to `console.error` so JS errors are visible
+  in browser dev-tools.
+
+
 ### Fixed
 - **Room detection stability gauge always showed "—" after restart**: `last_similarity`
   was not persisted in `room_state.json` and the sample loop waited the full 10-minute
