@@ -39,7 +39,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
   stale/excess embeddings, bringing Mark from 137 to 20 and Alaina from 25
   to 20.
 
-## [1.27.6] - 2026-05-27
+## [1.28.1] - 2026-05-27
+### Fixed
+- **Room detection stability gauge always showed "—" after restart**: `last_similarity`
+  was not persisted in `room_state.json` and the sample loop waited the full 10-minute
+  interval before the first check.  Two fixes: (1) `last_similarity` is now saved to
+  state and restored on load so the last known score is shown immediately; (2) the
+  sample loop runs an initial check 8 seconds after startup so the gauge is refreshed
+  quickly without waiting a full interval.
+
+
 ### Fixed
 - **Camera FPS drop — CPU spin loop in `Service._run_loop`**: services whose
   `run_tick()` does nothing (i.e. `tick_seconds = 0`) were looping at millions

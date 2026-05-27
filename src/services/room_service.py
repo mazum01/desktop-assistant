@@ -382,7 +382,16 @@ class RoomService(Service):
                 )
 
     def _sample_loop(self) -> None:
-        """Background thread: sample scene every sample_interval_s seconds."""
+        """Background thread: sample scene every sample_interval_s seconds.
+
+        Runs an initial check after a short warmup delay so the stability
+        gauge is populated on the web GUI shortly after startup rather than
+        waiting the full sample interval.
+        """
+        # Initial warmup check: wait 8s for cameras to stabilise, then check once.
+        if not self._stop_evt.wait(timeout=8.0):
+            self._check_scene()
+        # Regular interval loop.
         while not self._stop_evt.wait(timeout=self._sample_interval_s):
             self._check_scene()
 
@@ -471,6 +480,9 @@ class RoomService(Service):
         if should_save:
             self._save_state()
             return
+
+        # Persist the updated similarity score so web GUI shows it immediately on next restart.
+        self._save_state()
 
         if should_prompt:
             self._prompt_room_confirmation(room_name)
@@ -607,6 +619,14 @@ class RoomService(Service):
                 e_sig = data.get("embedding")
                 if e_sig and isinstance(e_sig, list):
                     self._baseline_embedding = np.array(e_sig, dtype=float)
+                # Restore last known similarity so the web GUI shows a value
+                # immediately on startup instead of "—" until the next check.
+                saved_sim = data.get("last_similarity")
+                if saved_sim is not None:
+                    try:
+                        self._last_similarity = float(saved_sim)
+                    except (TypeError, ValueError):
+                        pass
                 log.info("RoomService: loaded state (room=%s)", self._room_name)
         except Exception as exc:
             log.warning("RoomService: could not load state: %s", exc)
@@ -631,6 +651,7 @@ class RoomService(Service):
                         if self._baseline_embedding is not None
                         else None
                     ),
+                    "last_similarity": self._last_similarity,
                 }
             tmp = self._state_path.with_suffix(".json.tmp")
             tmp.write_text(json.dumps(data, indent=2))
