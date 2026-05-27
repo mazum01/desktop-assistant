@@ -129,7 +129,7 @@ _W_EMBEDDING_DEPTH: float = 0.30    # weight for depth Bhattacharyya alongside e
 
 # Claude vision model used for cloud-assisted room identification
 _CLAUDE_MODEL = "claude-sonnet-4-5"
-_CLAUDE_MAX_TOKENS = 64
+_CLAUDE_MAX_TOKENS = 100
 _CLAUDE_TIMEOUT_S = 10.0
 
 
@@ -176,10 +176,18 @@ def _identify_room_via_claude(frame: np.ndarray) -> Optional[str]:
                             "type": "text",
                             "text": (
                                 "What type of room is shown in this image? "
+                                "Base your answer on architectural layout, furniture arrangement, "
+                                "and fixtures — not on soft furnishings alone (blankets, throws, "
+                                "or pillows on a sofa are common in living rooms, not just bedrooms). "
+                                "Look for: TV or entertainment centre → living room; "
+                                "desk and monitor → office; "
+                                "dining table → dining room; "
+                                "bed frame or headboard → bedroom; "
+                                "cooker or worktop → kitchen. "
                                 "Reply with only a short room name such as "
                                 "'office', 'living room', 'bedroom', 'kitchen', "
                                 "'hallway', 'dining room', 'bathroom', or similar. "
-                                "If you cannot tell, reply with 'unknown room'."
+                                "If you genuinely cannot tell, reply with 'unknown room'."
                             ),
                         },
                     ],

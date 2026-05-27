@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.28.7] - 2026-05-27
+### Fixed
+- **Claude room ID prompt improved**: Added explicit guidance to look for
+  architectural/layout cues (TV, bookshelves, dining area) rather than soft
+  furnishings alone; blankets/throws on a sofa no longer cause misidentification
+  as bedroom. Raised `_CLAUDE_MAX_TOKENS` from 64 → 100 to prevent token-starved
+  responses from truncating multi-word room names.
+
 ## [1.28.6] - 2026-05-27
 ### Fixed
 - **RoomService class definition restored**: `class RoomService(Service):` line was
