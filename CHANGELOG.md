@@ -6,7 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.28.3] - 2026-05-29
+## [1.28.4] - 2026-05-27
+### Fixed
+- **Guest 1 → Mark merge**: The orphaned Guest 1 embedding (similarity 0.705
+  to Mark — clearly him) was reassigned directly into Mark's embedding set and
+  the stale face record was removed. Mark is held at the 20-embedding cap.
+- **`_TENTATIVE_LOW` lowered 0.45 → 0.40**: Widens the tentative-match window,
+  meaning a frame that scores in [0.40, 0.60) against a known identity now
+  accumulates stabilisation votes instead of falling through to Guest
+  registration. Reduces the chance of Mark being mislabelled as a new Guest
+  when lighting or pose temporarily depresses the similarity score.
+
+
 ### Changed
 - **Room detail panel — drift dots replaced with similarity sparkline**: The
   three hollow/filled dots are gone. A canvas-based area chart now shows the
