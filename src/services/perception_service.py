@@ -353,12 +353,25 @@ class PerceptionService(Service):
                                 if stab is None or stab["done"]:
                                     self._registry.add_embedding_if_needed(face_id, emb)
                             else:
-                                cached = self._find_cached_face(cx, cy)
-                                if cached:
-                                    face_id, name = cached
+                                # Try tentative match before falling back to Guest registration.
+                                # A tentative match (score in [0.45, threshold)) means we have
+                                # a plausible candidate but not enough confidence to commit.
+                                # Continue accumulating stabilisation votes without creating
+                                # a new Guest entry.
+                                tentative = self._registry.find_tentative_match(emb)
+                                if tentative:
+                                    face_id, name, score = tentative
                                     self._registry.update_seen(face_id)
+                                    log.debug(
+                                        "Tentative match %s → %r (score=%.3f)", face_id[:8], name, score
+                                    )
                                 else:
-                                    face_id, name = self._identify_or_register(frame, f, emb)
+                                    cached = self._find_cached_face(cx, cy)
+                                    if cached:
+                                        face_id, name = cached
+                                        self._registry.update_seen(face_id)
+                                    else:
+                                        face_id, name = self._identify_or_register(frame, f, emb)
                         else:
                             # ── Sim mode — position-cache + crop match ─────────
                             cached = self._find_cached_face(cx, cy)

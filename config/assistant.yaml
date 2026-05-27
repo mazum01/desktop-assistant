@@ -90,12 +90,18 @@ face_recognition:
   greeting_cooldown_jitter_pct: 25  # ± jitter percentage (e.g. 25 → 30 min ± 7.5 min)
   min_absence_s: 30               # face must have been absent this long before re-greeting
   confidence_threshold: 0.5       # minimum detection confidence to trigger a greeting
+  # max_fps: SCRFD face-detection rate on the Hailo-8.
+  #   Higher = lower detection latency but more Hailo contention with object detection
+  #   and more Python GIL pressure (each inference cycle briefly holds the GIL for
+  #   pre/postprocessing). 5 Hz gives smooth camera streaming; use 10 Hz if you need
+  #   faster reaction to new faces appearing.
+  max_fps: 5.0
   # Matching quality controls.
   # match_threshold: cosine similarity required to accept a recognition hit.
-  #   0.50 is the recommended value for ArcFace MobileFaceNet; lower values
-  #   increase false-positive rate (wrong person recognised), higher values
-  #   increase false-negative rate (known person not recognised).
-  match_threshold: 0.50
+  #   0.60 provides a good balance between false positives and false negatives
+  #   for ArcFace MobileFaceNet.  Scores in [0.45, 0.60) enter a tentative
+  #   zone where stabilisation accumulates more votes before deciding.
+  match_threshold: 0.60
   # min_face_px: faces narrower or shorter than this many pixels are skipped
   #   for embedding. Tiny/distant faces produce noisy embeddings that degrade
   #   the identity gallery. 80px (≈ 0.5 m at normal desk-camera FOV) is a

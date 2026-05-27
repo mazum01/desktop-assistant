@@ -140,6 +140,7 @@ def main() -> int:
     )
     _depth_cfg_raw = _cfg.get("depth", {})
     _perc_cfg = PerceptionConfig(
+        max_fps=float(_fr_cfg.get("max_fps", 10.0)),
         recognition_enabled=_recognition_enabled,
         match_threshold=float(_fr_cfg.get("match_threshold", 0.50)),
         min_face_px=int(_fr_cfg.get("min_face_px", 80)),

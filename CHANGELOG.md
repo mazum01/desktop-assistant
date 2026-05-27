@@ -6,6 +6,39 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.28.0] - 2026-05-27
+### Changed
+- **Face recognition threshold raised 0.50 → 0.60**: reduces false-positive
+  identifications (known person incorrectly matched to a different identity).
+- **Tentative-match zone [0.45, 0.60)**: when ArcFace similarity falls between
+  0.45 and the new 0.60 threshold, the detection is treated as tentative.
+  Stabilisation continues accumulating votes without immediately registering a
+  new Guest entry, dramatically reducing spurious "Guest N" churn.
+- **Margin-based matching (Fix 3)**: the winning identity must lead the
+  runner-up by ≥ 0.10 cosine similarity.  Ambiguous frames (two identities
+  too close together) return no match rather than committing to a guess,
+  preventing Mark ↔ Alaina cross-contamination.
+- **Quality gate raised 0.20 → 0.30**: new embeddings whose cosine similarity
+  to the identity centroid falls below 0.30 are now rejected — previously
+  0.20 was too permissive and allowed side-profile / occluded captures to
+  pollute the gallery.
+- **Blur check in ArcFace embed**: aligned 112×112 crops with Laplacian
+  variance < 80 are rejected before inference.  Motion blur and defocus no
+  longer produce noisy embeddings.
+- **Gallery cap enforcement in `prune_gallery`**: `prune_gallery()` now also
+  enforces the 20-embedding cap per identity after quality pruning, keeping
+  only the most recent 20 qualifying embeddings.  Previously only quality
+  pruning was applied, allowing stale bulk-capture sessions to accumulate
+  hundreds of entries (Mark had 137).
+- **Auto-merge Guest identities (Fix 4)**: before creating a new "Guest N"
+  entry, `register()` scans existing Guest identities for cosine similarity
+  ≥ 0.75.  If found, the face is merged into that identity rather than
+  spawning a duplicate, eliminating the "multiple Guest entries for the same
+  person" problem.
+- **Gallery pruned on deploy**: ran `da face clean-gallery` — removed 122
+  stale/excess embeddings, bringing Mark from 137 to 20 and Alaina from 25
+  to 20.
+
 ## [1.27.6] - 2026-05-27
 ### Fixed
 - **Camera FPS drop — CPU spin loop in `Service._run_loop`**: services whose

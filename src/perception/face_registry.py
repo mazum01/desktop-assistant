@@ -39,12 +39,15 @@ log = logging.getLogger(__name__)
 
 _DEFAULT_DB = Path.home() / ".local" / "share" / "desktop-assistant" / "faces.db"
 _DEFAULT_THUMBS = Path.home() / ".local" / "share" / "desktop-assistant" / "thumbs"
-_MATCH_THRESHOLD = 0.50      # cosine similarity ≥ this → same person
+_MATCH_THRESHOLD = 0.60      # cosine similarity ≥ this → confirmed same person (raised from 0.50)
+_TENTATIVE_LOW   = 0.45      # cosine similarity ≥ this → tentative match (avoid Guest creation)
+_MATCH_MARGIN    = 0.10      # winning identity must lead runner-up by at least this
+_GUEST_MERGE_MIN = 0.75      # auto-merge new Guest if existing Guest scores ≥ this
 _EMBED_DIM = 512
 _EMBED_CAP = 20              # max embeddings stored per identity (sliding window)
 _AGG_TOP_K = 3               # mean of top-K individual scores per identity during matching
 _QUALITY_GATE_MIN_FRAMES = 5 # minimum stored embeddings before quality-gating new arrivals
-_QUALITY_GATE_MIN_SIM = 0.20 # reject new embedding if < this similar to identity centroid
+_QUALITY_GATE_MIN_SIM = 0.30 # reject new embedding if < this similar to identity centroid (raised from 0.20)
 
 
 class FaceRegistry:
@@ -126,6 +129,11 @@ class FaceRegistry:
         an outlier embedding in the gallery cannot win on its own — the identity
         must score consistently across multiple stored samples.
 
+        Additionally requires the winner to lead the runner-up by at least
+        ``_MATCH_MARGIN`` cosine similarity points.  Ambiguous scores (two
+        identities too close together) return ``None`` rather than committing
+        to a guess, preventing cross-identity confusion.
+
         Returns ``(face_id, name, score)`` or ``None`` if no match.
         """
         if self._emb_matrix is None:
@@ -141,6 +149,7 @@ class FaceRegistry:
         best_id: Optional[str] = None
         best_name: Optional[str] = None
         best_score = -1.0
+        second_best = -1.0
         for fid, name, idxs in zip(
             self._identity_ids, self._identity_names, self._identity_slices
         ):
@@ -150,11 +159,70 @@ class FaceRegistry:
             k = min(_AGG_TOP_K, len(face_scores))
             agg = float(np.mean(np.partition(face_scores, -k)[-k:]))
             if agg > best_score:
+                second_best = best_score
                 best_score = agg
                 best_id = fid
                 best_name = name
+            elif agg > second_best:
+                second_best = agg
 
         if best_score >= self._threshold and best_id is not None:
+            margin = best_score - second_best
+            if margin < _MATCH_MARGIN:
+                log.debug(
+                    "find_match: ambiguous (best=%.3f, 2nd=%.3f, margin=%.3f < %.2f)",
+                    best_score, second_best, margin, _MATCH_MARGIN,
+                )
+                return None
+            return best_id, best_name, best_score
+        return None
+
+    def find_tentative_match(
+        self, embedding: np.ndarray
+    ) -> Optional[Tuple[str, str, float]]:
+        """Return the best identity match in the tentative zone [_TENTATIVE_LOW, threshold).
+
+        Called when ``find_match`` returns None.  A tentative match means the
+        embedding is somewhat plausible for a known identity but not confident
+        enough to commit.  The caller should continue accumulating stabilisation
+        votes rather than immediately registering a new Guest.
+
+        Applies the same margin check as ``find_match``.
+        Returns ``(face_id, name, score)`` or ``None``.
+        """
+        if self._emb_matrix is None:
+            self._build_emb_cache()
+
+        mat = self._emb_matrix
+        if mat is None or mat.shape[0] == 0:
+            return None
+
+        scores = mat @ embedding
+
+        best_id: Optional[str] = None
+        best_name: Optional[str] = None
+        best_score = -1.0
+        second_best = -1.0
+        for fid, name, idxs in zip(
+            self._identity_ids, self._identity_names, self._identity_slices
+        ):
+            if not idxs:
+                continue
+            face_scores = scores[idxs]
+            k = min(_AGG_TOP_K, len(face_scores))
+            agg = float(np.mean(np.partition(face_scores, -k)[-k:]))
+            if agg > best_score:
+                second_best = best_score
+                best_score = agg
+                best_id = fid
+                best_name = name
+            elif agg > second_best:
+                second_best = agg
+
+        if _TENTATIVE_LOW <= best_score < self._threshold and best_id is not None:
+            margin = best_score - second_best
+            if margin < _MATCH_MARGIN:
+                return None
             return best_id, best_name, best_score
         return None
 
@@ -267,10 +335,39 @@ class FaceRegistry:
         # face_id and name unchanged; identity_slices already points at idx
 
     def register(self, embedding: np.ndarray) -> Tuple[str, str]:
-        """Create a new identity and store its first embedding.
+        """Create a new Guest identity (or merge into an existing similar Guest).
 
-        Returns ``(face_id, auto_name)`` where auto_name is "Guest N".
+        Before creating a new row, scans all existing Guest identities for
+        cosine similarity ≥ ``_GUEST_MERGE_MIN``.  If found, the incoming
+        embedding is merged into that identity instead of spawning a new one.
+        This prevents the same unknown person from accumulating multiple
+        "Guest N" entries across re-appearances.
+
+        Returns ``(face_id, auto_name)`` — either the merged identity or the
+        newly created one.
         """
+        # Attempt to merge with an existing Guest identity (avoids Guest explosion).
+        if not np.all(embedding == 0):
+            if self._emb_matrix is None:
+                self._build_emb_cache()
+            if self._emb_matrix is not None and self._emb_matrix.shape[0] > 0:
+                scores = self._emb_matrix @ embedding
+                for fid, name, idxs in zip(
+                    self._identity_ids, self._identity_names, self._identity_slices
+                ):
+                    if not name.startswith("Guest ") or not idxs:
+                        continue
+                    k = min(_AGG_TOP_K, len(idxs))
+                    agg = float(np.mean(np.partition(scores[idxs], -k)[-k:]))
+                    if agg >= _GUEST_MERGE_MIN:
+                        log.info(
+                            "register: merged new embedding into existing Guest %s (%r, sim=%.3f)",
+                            fid[:8], name, agg,
+                        )
+                        self.update_seen(fid)
+                        self.add_embedding_if_needed(fid, embedding)
+                        return fid, name
+
         now = time.time()
         face_id = str(uuid.uuid4())
         auto_name = self._next_guest_name()
@@ -558,25 +655,25 @@ class FaceRegistry:
         self.delete_thumbnail(face_id)
         return cur2.rowcount > 0
 
-    def prune_gallery(self, min_sim: float = _QUALITY_GATE_MIN_SIM) -> int:
-        """Retroactively apply the quality gate to all stored embeddings.
+    def prune_gallery(self, min_sim: float = _QUALITY_GATE_MIN_SIM, cap: int = _EMBED_CAP) -> int:
+        """Retroactively apply the quality gate and cap to all stored embeddings.
 
-        For each identity, computes the centroid of all its embeddings and
-        removes any embedding whose cosine similarity to that centroid falls
-        below *min_sim*.  At least ``_QUALITY_GATE_MIN_FRAMES`` embeddings are
-        always preserved per identity (the best-scoring ones), so no identity
-        is ever reduced below the minimum needed for reliable matching.
+        For each identity:
+        1. Computes the centroid and removes any embedding whose cosine similarity
+           falls below *min_sim*.
+        2. Enforces *cap*: if more than *cap* embeddings remain after quality
+           pruning, keeps only the most recent *cap* embeddings.
 
-        This is useful after upgrading from a version that lacked the quality
-        gate — stale / contaminated captures (occluded faces, wrong person in
-        frame during training) would otherwise persist and cause
-        mis-identification.  Returns the total number of embeddings removed.
+        At least ``_QUALITY_GATE_MIN_FRAMES`` embeddings are always preserved per
+        identity (the best-scoring ones), so no identity is ever emptied.
+
+        Returns the total number of embeddings removed.
         """
         removed = 0
         face_ids = [r["id"] for r in self._conn.execute("SELECT id FROM faces").fetchall()]
         for face_id in face_ids:
             rows = self._conn.execute(
-                "SELECT id, embedding FROM face_embeddings WHERE face_id = ? "
+                "SELECT id, embedding, created_at FROM face_embeddings WHERE face_id = ? "
                 "ORDER BY created_at ASC",
                 (face_id,),
             ).fetchall()
@@ -595,6 +692,14 @@ class FaceRegistry:
                 top_idx = np.argpartition(sims, -_QUALITY_GATE_MIN_FRAMES)[-_QUALITY_GATE_MIN_FRAMES:]
                 keep_mask = np.zeros(len(rows), dtype=bool)
                 keep_mask[top_idx] = True
+
+            # Apply cap: if too many qualify, keep only the most recent *cap* embeddings.
+            # rows is already sorted ASC by created_at, so the newest are at the end.
+            if keep_mask.sum() > cap:
+                keep_indices = np.where(keep_mask)[0]
+                evict = keep_indices[:-cap]  # drop the oldest among the keepers
+                keep_mask[evict] = False
+
             for i, row in enumerate(rows):
                 if not keep_mask[i]:
                     self._conn.execute("DELETE FROM face_embeddings WHERE id = ?", (row["id"],))
@@ -602,7 +707,7 @@ class FaceRegistry:
         if removed:
             self._conn.commit()
             self._invalidate_emb_cache()
-            log.info("prune_gallery: removed %d outlier embedding(s)", removed)
+            log.info("prune_gallery: removed %d outlier/excess embedding(s)", removed)
         return removed
 
     def clear_embeddings(self, face_id: str) -> int:

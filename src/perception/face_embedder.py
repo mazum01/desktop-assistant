@@ -120,6 +120,14 @@ class FaceEmbedder:
             log.warning("Face alignment failed: %s", exc)
             return zero
 
+        # Blur check: reject heavily blurred crops before ArcFace inference.
+        # Laplacian variance < 80 indicates motion blur or defocus that produces
+        # noisy embeddings and pollutes the gallery.
+        lap_var = cv2.Laplacian(crop, cv2.CV_64F).var()
+        if lap_var < 80.0:
+            log.debug("embed: rejected blurry crop (laplacian=%.1f)", lap_var)
+            return zero
+
         try:
             outputs = self._engine.infer({self._input_name: crop})
         except Exception as exc:
