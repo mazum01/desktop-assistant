@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.29.1] - 2026-05-28
+### Fixed
+- `RadonService._last_red_alert` initialised to `float("-inf")` instead of `0.0`
+  so the first Red-level alert always fires, even on a freshly booted machine
+  where `time.monotonic()` is near zero.
+
 ## [1.29.0] - 2026-05-28
 ### Added
 - **EcoQube radon monitor integration** (`src/services/radon_service.py`):
