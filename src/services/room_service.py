@@ -650,7 +650,14 @@ class RoomService(Service):
         self._save_state()
 
         if should_prompt:
-            self._prompt_room_confirmation(room_name)
+            # Grab a live frame so Claude can suggest what room it sees.
+            frame = None
+            if self._vision_svc is not None:
+                try:
+                    frame = self._vision_svc.latest_frame()
+                except Exception:
+                    pass
+            self._prompt_room_confirmation(room_name, frame=frame)
 
     def _capture_and_store_baseline(self) -> None:
         """Capture a panoramic baseline signature and persist state."""
@@ -754,19 +761,56 @@ class RoomService(Service):
             "mean_brightness": mean_brightness,
         }
 
-    def _prompt_room_confirmation(self, room: Optional[str]) -> None:
+    def _prompt_room_confirmation(self, room: Optional[str], frame=None) -> None:
+        """Ask the user to confirm the current room, optionally using Claude to suggest one.
+
+        When a live *frame* is supplied and the Anthropic key is configured,
+        Claude is asked to identify the room from the image.  Its answer is
+        woven into the spoken prompt so the user hears something like:
+          "I notice things look quite different. This looks like a living room
+           to me — am I still in the office? You can update with 'vera room set'."
+        """
+        # Try to get Claude's guess from the live frame.
+        claude_room: Optional[str] = None
+        if frame is not None:
+            try:
+                claude_room = _identify_room_via_claude(frame)
+            except Exception as exc:
+                log.warning("RoomService: Claude identification failed: %s", exc)
+
         if room:
-            text = (
-                f"I notice my surroundings look quite different. "
-                f"Am I still in the {room}? "
-                f"You can update my location with 'vera room set'."
-            )
+            if claude_room and claude_room.lower() != room.lower():
+                text = (
+                    f"I notice my surroundings look quite different. "
+                    f"This looks like a {claude_room} to me — "
+                    f"am I still in the {room}? "
+                    f"You can update my location with 'vera room set'."
+                )
+            elif claude_room:
+                # Claude agrees with stored room — mismatch may be transient
+                text = (
+                    f"Things look a bit different, but this still looks like a {claude_room}. "
+                    f"Am I still in the {room}? "
+                    f"You can update my location with 'vera room set'."
+                )
+            else:
+                text = (
+                    f"I notice my surroundings look quite different. "
+                    f"Am I still in the {room}? "
+                    f"You can update my location with 'vera room set'."
+                )
         else:
-            text = (
-                "Which room am I in? "
-                "You can tell me with 'vera room set <name>'."
-            )
-        log.info("RoomService: prompting room confirmation (current=%s)", room)
+            if claude_room:
+                text = (
+                    f"This looks like a {claude_room} to me. "
+                    f"You can confirm with 'vera room set {claude_room}'."
+                )
+            else:
+                text = (
+                    "Which room am I in? "
+                    "You can tell me with 'vera room set <name>'."
+                )
+        log.info("RoomService: prompting room confirmation (current=%s, claude=%s)", room, claude_room)
         if self.bus:
             self.bus.publish("av.say", {"text": text})
 

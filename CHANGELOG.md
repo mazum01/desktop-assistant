@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.28.8] - 2026-05-27
+### Added
+- **Claude room ID integrated into ongoing detection**: When `_check_scene()`
+  detects sustained divergence and fires a room-confirmation prompt, a live
+  camera frame is now passed to `_identify_room_via_claude()`. VERA speaks
+  its guess ("This looks like a living room to me — am I still in the office?")
+  rather than a generic "things look different" message. Works for both the
+  known-room (name mismatch) and unknown-room (no room set) cases.
+
 ## [1.28.7] - 2026-05-27
 ### Fixed
 - **Claude room ID prompt improved**: Added explicit guidance to look for
