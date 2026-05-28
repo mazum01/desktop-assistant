@@ -45,6 +45,17 @@ _ARCFACE_REF = np.array(
 
 _EMBED_DIM = 512
 
+# Blur thresholds (Laplacian variance on the 112×112 aligned BGR crop).
+# Two-tier policy:
+#   * `_BLUR_MIN_EMBED` — below this we don't even run ArcFace; the crop is
+#     too smeary to produce a meaningful embedding. Returns zero vector.
+#   * `_BLUR_MIN_STORE` — embeddings BELOW this score are still used for
+#     matching against existing identities, but they will NOT be added to
+#     the gallery. This stops blurry frames from polluting the stored
+#     prototypes while still letting us recognize the person live.
+_BLUR_MIN_EMBED = 100.0
+_BLUR_MIN_STORE = 180.0
+
 
 class FaceEmbedder:
     """Extract ArcFace embeddings via the Hailo-8 MobileFaceNet HEF.
@@ -61,6 +72,11 @@ class FaceEmbedder:
         self._engine = None
         self._input_name: str = "input_layer1"
         self._output_name: str = "output_layer1"
+        # Laplacian variance from the most recent embed() call.
+        # Callers can read this to decide whether the embedding is sharp
+        # enough to commit to the persistent gallery (>= _BLUR_MIN_STORE)
+        # versus merely good enough for live matching (>= _BLUR_MIN_EMBED).
+        self.last_lap_var: float = 0.0
 
         try:
             from src.perception.hailo_inference import HailoInference
@@ -87,6 +103,16 @@ class FaceEmbedder:
     @property
     def hardware_ready(self) -> bool:
         return not self._sim
+
+    @property
+    def last_was_sharp_enough_to_store(self) -> bool:
+        """True if the last embed() call's crop was sharp enough for the gallery.
+
+        Use this gate before calling FaceRegistry.add_embedding_if_needed() so
+        only crisp captures populate the long-term gallery. Frames that fail
+        this check can still be used for live matching.
+        """
+        return self.last_lap_var >= _BLUR_MIN_STORE
 
     # ── Public API ───────────────────────────────────────────────────────
 
@@ -121,11 +147,12 @@ class FaceEmbedder:
             return zero
 
         # Blur check: reject heavily blurred crops before ArcFace inference.
-        # Laplacian variance < 80 indicates motion blur or defocus that produces
-        # noisy embeddings and pollutes the gallery.
-        lap_var = cv2.Laplacian(crop, cv2.CV_64F).var()
-        if lap_var < 80.0:
-            log.debug("embed: rejected blurry crop (laplacian=%.1f)", lap_var)
+        # See _BLUR_MIN_EMBED / _BLUR_MIN_STORE for the two-tier policy.
+        lap_var = float(cv2.Laplacian(crop, cv2.CV_64F).var())
+        self.last_lap_var = lap_var
+        if lap_var < _BLUR_MIN_EMBED:
+            log.debug("embed: rejected blurry crop (laplacian=%.1f < %.0f)",
+                      lap_var, _BLUR_MIN_EMBED)
             return zero
 
         try:

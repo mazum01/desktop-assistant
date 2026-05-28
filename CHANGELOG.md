@@ -6,6 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.28.10] - 2026-05-28
+### Added
+- **Two-tier blur rejection for face embeddings**: previously a single
+  Laplacian-variance threshold of 80 controlled both the embed and store
+  paths — too lenient for storage. Now:
+  - `_BLUR_MIN_EMBED = 100` (was 80): below this we skip ArcFace entirely.
+  - `_BLUR_MIN_STORE = 180` (new): embeddings below this still match against
+    the existing gallery (so you stay recognized live) but are **not**
+    written to the persistent store. Prevents motion-blurred / defocused
+    frames from contaminating identity prototypes.
+- `FaceEmbedder.last_lap_var` and `last_was_sharp_enough_to_store` properties
+  expose the most recent blur score so callers can gate storage cleanly.
+- `PerceptionService` now checks the storage gate at both `add_embedding_if_needed`
+  sites — confirmed-match reinforcement and stabilisation-commit.
+
 ## [1.28.9] - 2026-05-28
 ### Fixed
 - **Face misidentification root cause addressed**:

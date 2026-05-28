@@ -351,7 +351,9 @@ class PerceptionService(Service):
                                 self._registry.update_seen(face_id)
                                 # Defer add_embedding_if_needed until identity is confirmed
                                 if stab is None or stab["done"]:
-                                    self._registry.add_embedding_if_needed(face_id, emb)
+                                    # Only commit to gallery if the crop was sharp
+                                    if self._embedder.last_was_sharp_enough_to_store:
+                                        self._registry.add_embedding_if_needed(face_id, emb)
                             else:
                                 # Try tentative match before falling back to Guest registration.
                                 # A tentative match (score in [0.45, threshold)) means we have
@@ -411,7 +413,12 @@ class PerceptionService(Service):
                                 stabilization_changed = committed_name != initial_name_out
                                 stab["done"] = True
                                 # Now safe to reinforce the confirmed identity
-                                if embedder_ok and emb.any():
+                                # — but only if the crop was sharp enough for storage.
+                                if (
+                                    embedder_ok
+                                    and emb.any()
+                                    and self._embedder.last_was_sharp_enough_to_store
+                                ):
                                     self._registry.add_embedding_if_needed(face_id, emb)
                                 log.info(
                                     "Identity stabilised at %s → %r (initial=%r, votes=%s)",
