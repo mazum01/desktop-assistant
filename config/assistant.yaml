@@ -238,3 +238,27 @@ radon:
   alert_on_red: true
   # Minimum seconds between Red-alert TTS announcements (prevents repeated nagging).
   red_alert_cooldown_s: 3600
+
+drop:
+  # DROP water softener system — local MQTT integration.
+  #
+  # SETUP (one-time):
+  #   1. Install the Mosquitto broker: sudo apt-get install -y mosquitto
+  #   2. Open the DROP Connect app on your phone.
+  #   3. Go to System → Advanced → Configure MQTT.
+  #   4. Set broker address to this Pi's IP (or hostname), port 1883.
+  #   5. Leave username/password blank (or set mqtt_user/mqtt_pass below).
+  #   6. Tap Connect — the Hub will announce devices within ~60 seconds.
+  #
+  # MQTT broker address and port (default: local Mosquitto on port 1883).
+  mqtt_host: "localhost"
+  mqtt_port: 1883
+  # Optional broker credentials (leave empty for anonymous access).
+  mqtt_user: ""
+  mqtt_pass: ""
+  # Speak a TTS alert when a leak is detected.
+  alert_on_leak: true
+  # Speak a TTS alert when salt is low.
+  alert_on_salt_low: true
+  # Minimum seconds between repeat salt-low TTS alerts.
+  salt_alert_cooldown_s: 7200

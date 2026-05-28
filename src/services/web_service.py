@@ -61,6 +61,8 @@ GET  /api/depth/mono         Colorized mono depth map JPEG (TURBO colormap) — 
 GET  /api/depth/query        Depth statistics: nearest/farthest/mean + per-face depths
 GET  /api/radon               Current radon reading (cached from EcoSense cloud)
 POST /api/radon/announce      Speak current radon level aloud via TTS
+GET  /api/drop                Current DROP water softener reading (MQTT)
+POST /api/drop/announce       Speak current DROP status aloud via TTS
 GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
 """
@@ -207,6 +209,7 @@ class WebService:
         mono_depth_service=None,
         room_service=None,
         radon_service=None,
+        drop_service=None,
         api_key: str = "",
     ) -> None:
         self.bus = bus
@@ -227,6 +230,7 @@ class WebService:
         self._mono_depth_svc = mono_depth_service
         self._room_svc = room_service
         self._radon_svc = radon_service
+        self._drop_svc = drop_service
         self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
         self._thread: Optional[threading.Thread] = None
@@ -1650,6 +1654,69 @@ class WebService:
                     f"Warning: basement radon level is {pcil} picocuries per liter. "
                     f"That's Red — the EPA recommends fixing your home above 4 picocuries per liter."
                 )
+            if self.bus:
+                self.bus.publish("av.say", {"text": text})
+            return {"ok": True, "text": text}
+
+        # ── DROP water softener ────────────────────────────────────────────────
+
+        @app.get("/api/drop")
+        async def api_drop_reading():
+            """Return the latest cached DROP water system reading."""
+            if self._drop_svc is None:
+                return {"available": False, "error": "DROP service not loaded"}
+            if self._drop_svc.degraded:
+                return {
+                    "available": False,
+                    "degraded": True,
+                    "devices": [],
+                    "error": (
+                        "DROP service degraded — MQTT broker unreachable or dependencies missing. "
+                        "Run: sudo apt-get install -y mosquitto, then configure "
+                        "your DROP Hub in the DROP app (System → Advanced → Configure MQTT)."
+                    ),
+                }
+            reading = self._drop_svc.get_reading()
+            devices = self._drop_svc.get_devices()
+            return {
+                "available": True,
+                "reading": reading or {},
+                "devices": devices,
+            }
+
+        @app.post("/api/drop/announce")
+        async def api_drop_announce():
+            """Speak the current DROP water softener status aloud via TTS."""
+            if self._drop_svc is None or self._drop_svc.degraded:
+                return {"ok": False, "error": "DROP service unavailable"}
+            reading = self._drop_svc.get_reading()
+            if not reading:
+                return {"ok": False, "error": "No DROP reading available yet"}
+
+            parts: list[str] = []
+            flow = reading.get("flow_gpm")
+            if flow is not None:
+                parts.append(f"current flow is {flow:.1f} gallons per minute")
+            used = reading.get("used_today_gal")
+            if used is not None:
+                parts.append(f"{used:.0f} gallons used today")
+            capacity = reading.get("capacity_remaining_gal")
+            if capacity is not None:
+                parts.append(f"{capacity:.0f} gallons of softener capacity remaining")
+            pressure = reading.get("pressure_psi")
+            if pressure is not None:
+                parts.append(f"system pressure is {pressure:.0f} PSI")
+            if reading.get("salt_low"):
+                parts.append("salt level is LOW — add salt to the brine tank soon")
+            if reading.get("water_on") is False:
+                parts.append("WARNING: water supply is shut off")
+
+            name = reading.get("softener_name", "water softener")
+            if parts:
+                text = f"DROP {name} status: {'; '.join(parts)}."
+            else:
+                text = f"The DROP {name} is connected but no readings are available yet."
+
             if self.bus:
                 self.bus.publish("av.say", {"text": text})
             return {"ok": True, "text": text}

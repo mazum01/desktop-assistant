@@ -6,6 +6,28 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.31.0] - 2026-05-28
+### Added
+- **DROP water softener integration** — local MQTT service (`src/services/drop_service.py`)
+  connecting VERA to the DROP Hub via a local Mosquitto MQTT broker. Subscribes to
+  `drop_connect/discovery/#` and per-device data topics; parses data using `dropmqttapi`.
+  Surfaces flow rate, daily usage, capacity remaining, system pressure, TDS in/out, salt
+  level, water supply state, protect mode, and leak detection. Speaks TTS alerts on leak
+  and salt-low events.
+- `GET /api/drop` and `POST /api/drop/announce` web API endpoints.
+- `vera drop status` and `vera drop announce` CLI commands.
+- OpenClaw `drop` skill (`.github/skills/drop/`) — synced to
+  `~/.openclaw/workspace/skills/drop/` with status/announce subcommands.
+- `paho-mqtt>=2.1.0` and `dropmqttapi>=1.0.3` added to `requirements.txt`.
+- `drop:` section added to `config/assistant.yaml` with MQTT broker settings and alert
+  configuration, including one-time setup instructions.
+- 10 unit tests in `tests/test_drop_service.py`.
+
+**One-time setup required by user:**
+1. `sudo apt-get install -y mosquitto`
+2. Open DROP app → System → Advanced → Configure MQTT
+3. Set broker address to Pi's IP, port 1883, then tap Connect
+
 ## [1.30.3] - 2026-05-28
 ### Added
 - OpenClaw radon skill (`.github/skills/radon/`) — exposes `status` and `announce`

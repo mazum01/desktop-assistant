@@ -40,6 +40,7 @@ from src.services.notification_service import NotificationService
 from src.services.telegram_service import TelegramService
 from src.services.room_service import RoomService
 from src.services.radon_service import RadonService
+from src.services.drop_service import DropService
 
 # The thermal service runs in a separate process. Its IPCBridge PUBs on
 # this endpoint; we SUBscribe to it from the core IPCBridge and re-emit
@@ -426,6 +427,8 @@ def main() -> int:
     services.append(room_svc)
     radon_svc = RadonService(bus=bus, cfg=_cfg.get("radon", {}))
     services.append(radon_svc)
+    drop_svc = DropService(bus=bus, cfg=_cfg.get("drop", {}))
+    services.append(drop_svc)
     services.append(ipc)
     ipc._all_services = services  # seed service registry at startup
     if _web_enabled:
@@ -438,6 +441,7 @@ def main() -> int:
                              mono_depth_service=mono_depth_svc,
                              room_service=room_svc,
                              radon_service=radon_svc,
+                             drop_service=drop_svc,
                              api_key=_api_key)
         services.append(web_svc)
         web_svc._all_services = services  # seed service registry at startup

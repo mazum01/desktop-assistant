@@ -1137,6 +1137,9 @@ def cmd_help(args) -> int:
         "radon":            "EcoQube radon monitor. Sub-commands:\n"
                             "                  radon status                  Show current pCi/L, Bq/m³, and EPA alert level.\n"
                             "                  radon announce                Speak the current radon level via TTS.",
+        "drop":             "DROP water softener system (local MQTT). Sub-commands:\n"
+                            "                  drop status                   Show flow, usage, capacity, pressure, salt, TDS.\n"
+                            "                  drop announce                 Speak the current softener status via TTS.",
         "help":             "Show this command reference, or help for a specific command.\n"
                             "                  Usage: help [command]",
     }
@@ -1408,6 +1411,79 @@ def cmd_radon(args) -> int:
             print(f"  Level   : {color}{pcil:.2f} pCi/L  ({bqm3:.0f} Bq/m³){RESET}")
             print(f"  Alert   : {color}{alert}{RESET}")
             print(f"  Updated : {updated}")
+            print()
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_drop(args) -> int:
+    """Show DROP water softener status or announce it via TTS."""
+    subcmd = getattr(args, "drop_cmd", "status")
+    try:
+        if subcmd == "announce":
+            d = _http_post("/api/drop/announce", {})
+            if d.get("ok"):
+                print("DROP status announced via TTS.")
+                print(f"  \"{d.get('text', '')}\"")
+            else:
+                print(f"Error: {d.get('error', 'unknown error')}", file=sys.stderr)
+                return 1
+        else:
+            d = _http_get("/api/drop")
+            if not d.get("available"):
+                print(f"DROP service unavailable: {d.get('error', 'no reading yet')}")
+                return 1
+            r = d.get("reading", {})
+            devices = d.get("devices", [])
+            RESET = "\033[0m"
+            YELLOW = "\033[33m"
+            RED = "\033[31m"
+            GREEN = "\033[32m"
+
+            print("\nDROP Water System")
+            print("─" * 40)
+            name = r.get("softener_name", "Softener")
+            print(f"  Device    : {name}")
+            flow = r.get("flow_gpm")
+            if flow is not None:
+                print(f"  Flow      : {flow:.2f} gpm")
+            used = r.get("used_today_gal")
+            if used is not None:
+                print(f"  Used today: {used:.0f} gal")
+            capacity = r.get("capacity_remaining_gal")
+            if capacity is not None:
+                print(f"  Capacity  : {capacity:.0f} gal remaining")
+            pressure = r.get("pressure_psi")
+            if pressure is not None:
+                print(f"  Pressure  : {pressure:.0f} PSI")
+            tds_in = r.get("tds_in_ppm")
+            tds_out = r.get("tds_out_ppm")
+            if tds_in is not None:
+                print(f"  TDS in    : {tds_in} ppm")
+            if tds_out is not None:
+                print(f"  TDS out   : {tds_out} ppm")
+            salt_low = r.get("salt_low")
+            if salt_low is True:
+                print(f"  Salt      : {YELLOW}LOW — add salt{RESET}")
+            elif salt_low is False:
+                print(f"  Salt      : {GREEN}OK{RESET}")
+            water_on = r.get("water_on")
+            if water_on is False:
+                print(f"  Water     : {RED}SHUT OFF{RESET}")
+            elif water_on is True:
+                print(f"  Water     : {GREEN}ON{RESET}")
+            protect = r.get("protect_mode")
+            if protect:
+                print(f"  Protect   : {protect}")
+            updated = r.get("last_updated")
+            if updated:
+                import datetime
+                ts = datetime.datetime.fromtimestamp(updated).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"  Updated   : {ts}")
+            if len(devices) > 1:
+                print(f"  Devices   : {', '.join(d['name'] for d in devices)}")
             print()
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -1999,6 +2075,12 @@ def main() -> int:
     radon_sub = radon_sp.add_subparsers(dest="radon_cmd")
     radon_sub.add_parser("status",   help="Show current radon level").set_defaults(func=cmd_radon)
     radon_sub.add_parser("announce", help="Speak radon level via TTS").set_defaults(func=cmd_radon)
+
+    drop_sp = sub.add_parser("drop", help="DROP water softener system")
+    drop_sp.set_defaults(func=lambda _a: (print("Usage: vera drop status | vera drop announce"), 1)[1])
+    drop_sub = drop_sp.add_subparsers(dest="drop_cmd")
+    drop_sub.add_parser("status",   help="Show current water softener status").set_defaults(func=cmd_drop)
+    drop_sub.add_parser("announce", help="Speak softener status via TTS").set_defaults(func=cmd_drop)
 
     args = p.parse_args()
     if args.cmd is None:
