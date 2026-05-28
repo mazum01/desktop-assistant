@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
-"""
-Fetch and announce the current basement radon reading from VERA's EcoQube cache.
+"""Query or announce the basement radon level from the EcoQube monitor."""
 
-Usage:
-    python3 radon.py           # fetch + speak aloud
-    python3 radon.py --silent  # fetch only (no TTS announcement)
-"""
-
-import argparse
 import json
 import sys
 import urllib.request
@@ -15,74 +8,48 @@ import urllib.error
 
 BASE_URL = "http://localhost:8080"
 
-
-def _get(path: str) -> dict:
-    with urllib.request.urlopen(f"{BASE_URL}{path}", timeout=10) as resp:
-        return json.loads(resp.read())
+USAGE = "Usage: radon.py [status|announce]  (default: status)"
 
 
-def _post(path: str, body: dict) -> dict:
-    data = json.dumps(body).encode()
+def cmd_status() -> dict:
+    try:
+        with urllib.request.urlopen(f"{BASE_URL}/api/radon", timeout=5) as resp:
+            return json.loads(resp.read())
+    except urllib.error.URLError as exc:
+        return {"ok": False, "error": f"Cannot reach assistant: {exc}"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def cmd_announce() -> dict:
     req = urllib.request.Request(
-        f"{BASE_URL}{path}",
-        data=data,
-        headers={"Content-Type": "application/json"},
+        f"{BASE_URL}/api/radon/announce",
+        data=b"",
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        return json.loads(resp.read())
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch basement radon reading")
-    parser.add_argument("--silent", action="store_true",
-                        help="Return JSON only; do not speak aloud")
-    args = parser.parse_args()
-
     try:
-        data = _get("/api/radon")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return json.loads(resp.read())
     except urllib.error.URLError as exc:
-        print(json.dumps({"ok": False, "error": f"Cannot reach assistant: {exc}"}))
-        sys.exit(1)
+        return {"ok": False, "error": f"Cannot reach assistant: {exc}"}
     except Exception as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}))
+        return {"ok": False, "error": str(exc)}
+
+
+def main():
+    subcommand = sys.argv[1].lower() if len(sys.argv) > 1 else "status"
+
+    if subcommand in ("status", ""):
+        result = cmd_status()
+    elif subcommand == "announce":
+        result = cmd_announce()
+    else:
+        print(json.dumps({"ok": False, "error": f"Unknown subcommand '{subcommand}'. {USAGE}"}))
         sys.exit(1)
-
-    if not data.get("available", True):
-        print(json.dumps({
-            "ok": False,
-            "available": False,
-            "error": "Radon service degraded — credentials not configured.",
-        }))
-        sys.exit(1)
-
-    reading = data.get("reading")
-    if not reading:
-        print(json.dumps({
-            "ok": False,
-            "available": False,
-            "error": "No radon reading cached yet — service may still be polling.",
-        }))
-        sys.exit(1)
-
-    result = {
-        "ok": True,
-        "radon_pcil": reading.get("radon_pcil"),
-        "radon_bqm3": reading.get("radon_bqm3"),
-        "alert": reading.get("alert", "Unknown"),
-        "device_name": reading.get("device_name", "EcoQube"),
-        "last_updated": reading.get("last_updated"),
-    }
-    if reading.get("error"):
-        result["device_error"] = reading["error"]
-
-    if not args.silent:
-        try:
-            _post("/api/radon/announce", {})
-        except Exception as exc:
-            result["announce_error"] = str(exc)
 
     print(json.dumps(result))
+    if not result.get("ok"):
+        sys.exit(1)
 
 
 if __name__ == "__main__":

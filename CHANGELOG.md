@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.30.3] - 2026-05-28
+### Added
+- OpenClaw radon skill (`.github/skills/radon/`) — exposes `status` and `announce`
+  subcommands so OpenClaw agents can query the EcoQube reading or speak it aloud.
+  Replaces the older `--silent`-flag variant with a cleaner subcommand interface.
+
 ## [1.30.2] - 2026-05-28
 ### Fixed
 - CI red: `test_red_alert_publishes_tts` was asserting the old `tts.speak` topic
