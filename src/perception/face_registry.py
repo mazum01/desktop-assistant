@@ -47,7 +47,7 @@ _EMBED_DIM = 512
 _EMBED_CAP = 20              # max embeddings stored per identity (sliding window)
 _AGG_TOP_K = 3               # mean of top-K individual scores per identity during matching
 _QUALITY_GATE_MIN_FRAMES = 5 # minimum stored embeddings before quality-gating new arrivals
-_QUALITY_GATE_MIN_SIM = 0.30 # reject new embedding if < this similar to identity centroid (raised from 0.20)
+_QUALITY_GATE_MIN_SIM = 0.45 # reject new embedding if < this similar to identity centroid (raised from 0.30 — 0.30 was too permissive and allowed contamination of identities like Mark)
 
 
 class FaceRegistry:

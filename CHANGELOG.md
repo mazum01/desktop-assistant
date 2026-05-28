@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.28.9] - 2026-05-28
+### Fixed
+- **Face misidentification root cause addressed**:
+  - **DB cleanup**: removed 5 contaminated embeddings from Mark's gallery
+    (centroid similarity < 0.55 — almost certainly not Mark). Mark's mean
+    intra-class cosine rose 0.436 → 0.545.
+  - **Guest cleanup**: deleted 12 Guest identities (20 embeddings) and 100
+    orphan embedding groups — these were polluting the matching space.
+  - **Quality gate tightened**: `_QUALITY_GATE_MIN_SIM` raised from 0.30 →
+    0.45. The old threshold let non-Mark faces score above the centroid
+    floor and slowly poison Mark's gallery. 0.45 lines up with real
+    intra-class similarity for known identities.
+
 ## [1.28.8] - 2026-05-27
 ### Added
 - **Claude room ID integrated into ongoing detection**: When `_check_scene()`
