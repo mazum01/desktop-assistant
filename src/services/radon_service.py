@@ -256,7 +256,7 @@ class RadonService:
         pcil = reading.get("radon_pcil", "unknown")
         if self.bus:
             self.bus.publish(
-                "tts.speak",
+                "av.say",
                 {
                     "text": (
                         f"Warning: basement radon level is {pcil} picocuries per liter. "

@@ -1651,7 +1651,7 @@ class WebService:
                     f"That's Red — the EPA recommends fixing your home above 4 picocuries per liter."
                 )
             if self.bus:
-                self.bus.publish("tts.speak", {"text": text})
+                self.bus.publish("av.say", {"text": text})
             return {"ok": True, "text": text}
 
         return app

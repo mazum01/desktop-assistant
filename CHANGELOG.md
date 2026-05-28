@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.30.1] - 2026-05-28
+### Fixed
+- Radon announce TTS silent: `web_service.py` and `radon_service.py` were publishing
+  to `tts.speak` (non-existent topic). Corrected to `av.say` (the topic AVService
+  actually subscribes to). Announce now correctly synthesizes speech via Piper.
+
 ## [1.30.0] - 2026-05-28
 ### Fixed
 - **Face recognition Guest-cascade bug** (`src/perception/face_registry.py`):
