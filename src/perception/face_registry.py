@@ -282,15 +282,28 @@ class FaceRegistry:
         self._invalidate_emb_cache()
 
     def _append_to_cache(
-        self, row_id: str, face_id: str, name: str, embedding: np.ndarray
+        self, row_id: Optional[str], face_id: str, name: str, embedding: np.ndarray
     ) -> None:
         """Append one embedding row to the in-memory cache without a full rebuild.
 
         No-op if the cache hasn't been built yet (will be built lazily on next
-        find_match call).
+        find_match call).  When *row_id* is None (zero/blurry embedding not
+        persisted) only the identity slot is registered — no matrix row is added.
         """
         if self._emb_matrix is None:
             return
+
+        # Register identity slot even if we have no valid embedding yet.
+        if face_id not in self._id_to_slot:
+            slot = len(self._identity_ids)
+            self._id_to_slot[face_id] = slot
+            self._identity_ids.append(face_id)
+            self._identity_names.append(name)
+            self._identity_slices.append([])
+
+        if row_id is None or np.all(embedding == 0):
+            return  # identity slot registered; no matrix row to add
+
         vec = embedding.astype(np.float32)
         if vec.shape[0] != _EMBED_DIM:
             return
@@ -299,14 +312,7 @@ class FaceRegistry:
         self._emb_face_ids.append(face_id)
         self._emb_names.append(name)
         self._emb_row_ids.append(row_id)
-        if face_id in self._id_to_slot:
-            self._identity_slices[self._id_to_slot[face_id]].append(mat_idx)
-        else:
-            slot = len(self._identity_ids)
-            self._id_to_slot[face_id] = slot
-            self._identity_ids.append(face_id)
-            self._identity_names.append(name)
-            self._identity_slices.append([mat_idx])
+        self._identity_slices[self._id_to_slot[face_id]].append(mat_idx)
 
     def _replace_in_cache(
         self, old_row_id: str, new_row_id: str, face_id: str, name: str, embedding: np.ndarray
@@ -371,21 +377,29 @@ class FaceRegistry:
         now = time.time()
         face_id = str(uuid.uuid4())
         auto_name = self._next_guest_name()
-        row_id = str(uuid.uuid4())
 
         self._conn.execute(
             "INSERT INTO faces (id, name, first_seen, last_seen, last_greeted, last_absent, seen_count) "
             "VALUES (?, ?, ?, ?, 0, 0, 1)",
             (face_id, auto_name, now, now),
         )
-        self._conn.execute(
-            "INSERT INTO face_embeddings (id, face_id, embedding, created_at) "
-            "VALUES (?, ?, ?, ?)",
-            (row_id, face_id, embedding.tobytes(), now),
-        )
-        self._conn.commit()
-        self._append_to_cache(row_id, face_id, auto_name, embedding)
-        log.info("Registered new face %s as %r", face_id[:8], auto_name)
+        # Only persist the initial embedding if it is non-zero (i.e. not a blurry/failed crop).
+        # A Guest with no stored embedding will accumulate one once a sharp frame is captured.
+        if not np.all(embedding == 0):
+            row_id = str(uuid.uuid4())
+            self._conn.execute(
+                "INSERT INTO face_embeddings (id, face_id, embedding, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (row_id, face_id, embedding.tobytes(), now),
+            )
+            self._conn.commit()
+            self._append_to_cache(row_id, face_id, auto_name, embedding)
+        else:
+            self._conn.commit()
+            # Still need a cache slot for this identity (no embedding yet).
+            self._append_to_cache(None, face_id, auto_name, embedding)
+        log.info("Registered new face %s as %r (has_embedding=%s)",
+                 face_id[:8], auto_name, not np.all(embedding == 0))
         return face_id, auto_name
 
     def set_name(self, face_id: str, name: str) -> bool:

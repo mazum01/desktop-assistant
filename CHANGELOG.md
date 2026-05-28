@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.28.11] - 2026-05-28
+### Fixed
+- **Blurry-frame Guest creation blocked**: When `embedder_ok` is False (crop
+  too blurry for ArcFace — Laplacian < 100) the perception loop no longer falls
+  through to `_identify_or_register`. The detection is skipped for that frame;
+  a new Guest is only created once a sharp frame is captured.
+- **`register()` no longer stores zero/blurry embeddings**: The initial embedding
+  row is only written to SQLite if the embedding is non-zero. A Guest registered
+  from a blurry frame gets an identity slot but no embedding until a crisp frame
+  arrives.
+- **Crop-match path blur-gated**: `_identify_or_register` crop-match also now
+  checks `last_was_sharp_enough_to_store` before calling `add_embedding_if_needed`.
+- **`_append_to_cache` hardened**: Accepts `row_id=None` (zero-embedding case);
+  registers the identity slot without adding a spurious zero row to the matrix.
+- **DB cleanup**: Purged 5 single-appearance, single-embedding Guests (seen ≤ 3)
+  created under the old blur threshold.
+
 ## [1.28.10] - 2026-05-28
 ### Added
 - **Two-tier blur rejection for face embeddings**: previously a single

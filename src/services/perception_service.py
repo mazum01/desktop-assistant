@@ -375,13 +375,16 @@ class PerceptionService(Service):
                                     else:
                                         face_id, name = self._identify_or_register(frame, f, emb)
                         else:
-                            # ── Sim mode — position-cache + crop match ─────────
+                            # ── Sim mode / blurry frame — position-cache only ──────
+                            # Do NOT create a new Guest from a blurry/zero embedding.
+                            # Wait for a sharp frame before anchoring the identity.
                             cached = self._find_cached_face(cx, cy)
                             if cached:
                                 face_id, name = cached
                                 self._registry.update_seen(face_id)
                             else:
-                                face_id, name = self._identify_or_register(frame, f, emb)
+                                # Skip this detection — no reliable embedding available.
+                                continue
 
                         # ── Stabilisation buffer update ────────────────────────
                         is_stabilizing = False
@@ -559,7 +562,12 @@ class PerceptionService(Service):
             if crop_match:
                 face_id, name, score = crop_match
                 self._registry.update_seen(face_id)
-                if emb is not None and emb.any():
+                if (
+                    emb is not None
+                    and emb.any()
+                    and self._embedder is not None
+                    and self._embedder.last_was_sharp_enough_to_store
+                ):
                     self._registry.add_embedding_if_needed(face_id, emb)
                 # Refresh thumbnail with a cleaner crop if needed
                 if self._registry.thumbnail_path(face_id) is None:
