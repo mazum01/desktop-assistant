@@ -29,7 +29,14 @@ psutil>=5.9.0
 # Native C++ extensions (build with scripts/build_scrfd_decode.sh)
 pybind11>=2.12.0
 
+# Anthropic Claude SDK — cloud-assisted room identification
+anthropic>=0.50.0
+
 # Testing
 pytest>=8.0
 httpx>=0.27.0
 ruamel.yaml>=0.17
+
+# EcoSense EcoQube radon monitor — Cognito cloud authentication
+pycognito>=2024.1.1
+botocore>=1.34.0

@@ -6,6 +6,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.29.0] - 2026-05-28
+### Added
+- **EcoQube radon monitor integration** (`src/services/radon_service.py`):
+  Background service that polls the EcoSense cloud API (via AWS Cognito auth)
+  every 5 minutes and caches the current radon reading. Credentials stored in
+  `/etc/desktop-assistant/secrets.env` as `ECOSENSE_USERNAME` / `ECOSENSE_PASSWORD`.
+  Starts in degraded mode (no polling) if credentials are absent.
+  Publishes `radon.reading` events on the bus. Speaks a TTS warning when the
+  radon level exceeds 4.0 pCi/L (EPA action threshold), with a 1-hour cooldown.
+- **`radon` skill** (`.github/skills/radon/`): Queries `/api/radon` and
+  announces the current reading aloud. Supports `--silent` flag for JSON-only
+  output. Returns pCi/L and Bq/m³ with EPA alert colour.
+- **`GET /api/radon`** — Returns the cached radon reading (or degraded status).
+- **`POST /api/radon/announce`** — Speaks the current radon level via TTS with
+  context-appropriate phrasing based on alert level.
+- **`config/assistant.yaml` `radon:` section** — configures poll interval,
+  Red-alert TTS toggle, and cooldown.
+- **`pycognito` and `botocore`** added to `requirements.txt`.
+- **`tests/test_radon_service.py`** — 14 unit tests covering alert levels,
+  device parsing, degraded mode, TTS alerts, and thread safety.
+
 ## [1.28.12] - 2026-05-28
 ### Fixed
 - **Named identity gallery pruning**: Centroid-based pruning applied to all

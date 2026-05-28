@@ -229,3 +229,12 @@ room_detection:
   # Skip the sample entirely when faces are visible in the frame.
   # Prevents person edges from polluting the room embedding.
   skip_when_faces: true
+
+radon:
+  # EcoSense EcoQube cloud polling — credentials via secrets.env.
+  # How often to poll the EcoSense cloud API (seconds). Default: 5 minutes.
+  poll_interval_s: 300
+  # Speak a TTS warning when the level exceeds the EPA action threshold (4.0 pCi/L).
+  alert_on_red: true
+  # Minimum seconds between Red-alert TTS announcements (prevents repeated nagging).
+  red_alert_cooldown_s: 3600

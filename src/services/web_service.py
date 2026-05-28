@@ -59,6 +59,8 @@ PUT  /api/settings/depth     Toggle depth at runtime  body: {"dense_enabled": bo
 GET  /api/depth/map          Colorized depth map JPEG (TURBO colormap) — requires dense_enabled
 GET  /api/depth/mono         Colorized mono depth map JPEG (TURBO colormap) — requires mono_enabled
 GET  /api/depth/query        Depth statistics: nearest/farthest/mean + per-face depths
+GET  /api/radon               Current radon reading (cached from EcoSense cloud)
+POST /api/radon/announce      Speak current radon level aloud via TTS
 GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
 """
@@ -204,6 +206,7 @@ class WebService:
         dense_stereo_service=None,
         mono_depth_service=None,
         room_service=None,
+        radon_service=None,
         api_key: str = "",
     ) -> None:
         self.bus = bus
@@ -223,6 +226,7 @@ class WebService:
         self._dense_stereo_svc = dense_stereo_service
         self._mono_depth_svc = mono_depth_service
         self._room_svc = room_service
+        self._radon_svc = radon_service
         self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
         self._thread: Optional[threading.Thread] = None
@@ -1574,5 +1578,57 @@ class WebService:
             if self.bus:
                 self.bus.publish("music.set_station", {"station_id": body.station_id})
             return {"ok": True}
+
+        # ── Radon monitor ─────────────────────────────────────────────────────
+
+        @app.get("/api/radon")
+        async def api_radon_reading():
+            """Return the latest cached radon reading from the EcoQube."""
+            if self._radon_svc is None:
+                return {"available": False, "error": "Radon service not loaded"}
+            if self._radon_svc.degraded:
+                return {
+                    "available": False,
+                    "degraded": True,
+                    "error": (
+                        "EcoSense credentials not configured. "
+                        "Add ECOSENSE_USERNAME and ECOSENSE_PASSWORD to "
+                        "/etc/desktop-assistant/secrets.env"
+                    ),
+                }
+            reading = self._radon_svc.get_reading()
+            return {"available": True, "reading": reading}
+
+        @app.post("/api/radon/announce")
+        async def api_radon_announce():
+            """Speak the current radon level aloud via TTS."""
+            if self._radon_svc is None or self._radon_svc.degraded:
+                return {"ok": False, "error": "Radon service unavailable"}
+            reading = self._radon_svc.get_reading()
+            if not reading:
+                return {"ok": False, "error": "No radon reading available yet"}
+            pcil = reading.get("radon_pcil")
+            alert = reading.get("alert", "Unknown")
+            device = reading.get("device_name", "EcoQube")
+            if pcil is None:
+                text = f"{device} has no reading yet — the device may be initialising."
+            elif alert == "Green":
+                text = (
+                    f"The basement radon level is {pcil} picocuries per liter. "
+                    f"That's Green — well below the EPA action threshold."
+                )
+            elif alert == "Orange":
+                text = (
+                    f"The basement radon level is {pcil} picocuries per liter. "
+                    f"That's Orange — the EPA recommends considering mitigation above 2.7."
+                )
+            else:
+                text = (
+                    f"Warning: basement radon level is {pcil} picocuries per liter. "
+                    f"That's Red — the EPA recommends fixing your home above 4 picocuries per liter."
+                )
+            if self.bus:
+                self.bus.publish("tts.speak", {"text": text})
+            return {"ok": True, "text": text}
 
         return app
