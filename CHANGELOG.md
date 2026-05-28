@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.30.2] - 2026-05-28
+### Fixed
+- CI red: `test_red_alert_publishes_tts` was asserting the old `tts.speak` topic
+  after v1.30.1 corrected the source to `av.say`. Updated test to match.
+
 ## [1.30.1] - 2026-05-28
 ### Fixed
 - Radon announce TTS silent: `web_service.py` and `radon_service.py` were publishing

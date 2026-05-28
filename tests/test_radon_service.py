@@ -142,7 +142,7 @@ def test_red_alert_publishes_tts():
     svc._maybe_alert_red(red_reading)
     bus.publish.assert_called_once()
     topic, payload = bus.publish.call_args[0]
-    assert topic == "tts.speak"
+    assert topic == "av.say"
     assert "radon" in payload["text"].lower()
 
 
