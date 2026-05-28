@@ -68,7 +68,7 @@ class RadonService:
         self._lock = threading.Lock()
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        self._last_red_alert: float = 0.0
+        self._last_red_alert: float = float("-inf")
         self._degraded = False  # True when credentials are missing
 
     # ── Service lifecycle ─────────────────────────────────────────────────
