@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.31.1] - 2026-05-28
+### Fixed
+- CI: added `paho-mqtt` and `dropmqttapi` to the force-install step in `.github/workflows/ci.yml`
+  so DROP service tests pass in the GitHub Actions environment.
+
 ## [1.31.0] - 2026-05-28
 ### Added
 - **DROP water softener integration** — local MQTT service (`src/services/drop_service.py`)
