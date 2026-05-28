@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.28.12] - 2026-05-28
+### Fixed
+- **Named identity gallery pruning**: Centroid-based pruning applied to all
+  named identities with cohesion < 0.45. Removed 25 contaminated embeddings
+  across Carson (−1), Mona (−10), Alaina (−13), Ryan (−2), Piper (−2).
+  Results: Alaina 0.256→0.478, Piper 0.414→0.578, Mona 0.233→0.369 (further
+  pruning reaches diminishing returns — inherent appearance variation), Carson
+  and Ryan reduced to 1 clean embedding each. These contaminated galleries were
+  a secondary cause of Mark being misidentified as a named person.
+
 ## [1.28.11] - 2026-05-28
 ### Fixed
 - **Blurry-frame Guest creation blocked**: When `embedder_ok` is False (crop
