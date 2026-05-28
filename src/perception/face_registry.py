@@ -43,11 +43,17 @@ _MATCH_THRESHOLD = 0.60      # cosine similarity ≥ this → confirmed same per
 _TENTATIVE_LOW   = 0.40      # cosine similarity ≥ this → tentative match (avoid Guest creation)
 _MATCH_MARGIN    = 0.10      # winning identity must lead runner-up by at least this
 _GUEST_MERGE_MIN = 0.75      # auto-merge new Guest if existing Guest scores ≥ this
+_NEW_IDENTITY_MAX_SIM = 0.50 # cosine to ALL existing identities must be below this to allow Guest creation
 _EMBED_DIM = 512
 _EMBED_CAP = 20              # max embeddings stored per identity (sliding window)
 _AGG_TOP_K = 3               # mean of top-K individual scores per identity during matching
 _QUALITY_GATE_MIN_FRAMES = 5 # minimum stored embeddings before quality-gating new arrivals
 _QUALITY_GATE_MIN_SIM = 0.45 # reject new embedding if < this similar to identity centroid (raised from 0.30 — 0.30 was too permissive and allowed contamination of identities like Mark)
+
+
+def _is_guest_name(name: str | None) -> bool:
+    """Return True when *name* is an auto-generated Guest placeholder."""
+    return bool(name) and name.startswith("Guest ")
 
 
 class FaceRegistry:
@@ -145,11 +151,11 @@ class FaceRegistry:
 
         scores = mat @ embedding          # (N,) — one BLAS call over all individual rows
 
-        # Per-identity mean-of-top-K aggregation.
-        best_id: Optional[str] = None
-        best_name: Optional[str] = None
-        best_score = -1.0
-        second_best = -1.0
+        # Per-identity mean-of-top-K aggregation. Collect ALL identities so we can
+        # apply named-vs-guest tie-breaking later (a "Guest" entry that's close to
+        # a named identity is almost always the same person — never let a Guest
+        # outrank a named identity on a margin tie).
+        ranked: list[tuple[float, str, str]] = []   # (agg_score, face_id, name)
         for fid, name, idxs in zip(
             self._identity_ids, self._identity_names, self._identity_slices
         ):
@@ -158,22 +164,68 @@ class FaceRegistry:
             face_scores = scores[idxs]
             k = min(_AGG_TOP_K, len(face_scores))
             agg = float(np.mean(np.partition(face_scores, -k)[-k:]))
-            if agg > best_score:
-                second_best = best_score
-                best_score = agg
-                best_id = fid
-                best_name = name
-            elif agg > second_best:
-                second_best = agg
+            ranked.append((agg, fid, name))
+
+        if not ranked:
+            return None
+        ranked.sort(key=lambda t: -t[0])
+        best_score, best_id, best_name = ranked[0]
+        second_best = ranked[1][0] if len(ranked) > 1 else -1.0
+
+        # Named-over-Guest preference: if the top scorer is a Guest but a named
+        # identity is within margin AND above the threshold, prefer the named one.
+        # Guest entries are auto-generated placeholders; named identities were
+        # intentionally created by the user and should win ties.
+        if best_score >= self._threshold and _is_guest_name(best_name):
+            for s, fid, name in ranked[1:]:
+                if s < self._threshold:
+                    break
+                if not _is_guest_name(name) and best_score - s < _MATCH_MARGIN:
+                    log.debug(
+                        "find_match: prefer named %r (%.3f) over Guest %r (%.3f)",
+                        name, s, best_name, best_score,
+                    )
+                    best_score, best_id, best_name = s, fid, name
+                    # Recompute runner-up excluding the chosen one
+                    second_best = max(
+                        (ss for ss, _, _ in ranked if (ss, _, _) != (best_score, best_id, best_name)),
+                        default=-1.0,
+                    )
+                    break
 
         if best_score >= self._threshold and best_id is not None:
             margin = best_score - second_best
             if margin < _MATCH_MARGIN:
-                log.debug(
-                    "find_match: ambiguous (best=%.3f, 2nd=%.3f, margin=%.3f < %.2f)",
-                    best_score, second_best, margin, _MATCH_MARGIN,
+                # Margin failure: if the runner-up is a Guest and the winner is named
+                # (or vice versa), we ALREADY preferred named above; here both are
+                # the same type. Still return the winner — refusing to identify
+                # causes the perception pipeline to create yet another Guest, which
+                # makes the gallery contamination problem worse on every frame.
+                # Only return None when BOTH competing identities are NAMED (a real
+                # ambiguity that needs more data to resolve).
+                runner_up_name = None
+                for s, _fid, n in ranked[1:]:
+                    if abs(s - second_best) < 1e-6:
+                        runner_up_name = n
+                        break
+                both_named = (
+                    runner_up_name is not None
+                    and not _is_guest_name(best_name)
+                    and not _is_guest_name(runner_up_name)
                 )
-                return None
+                if both_named:
+                    log.debug(
+                        "find_match: ambiguous between named identities %r=%.3f and %r=%.3f",
+                        best_name, best_score, runner_up_name, second_best,
+                    )
+                    return None
+                # Otherwise, return the winner — refusing to identify here is what
+                # was creating Guest-floods (every margin failure → new Guest of
+                # the same person → next frame even more ambiguous).
+                log.debug(
+                    "find_match: low margin (%.3f) but returning %r=%.3f (avoid Guest cascade)",
+                    margin, best_name, best_score,
+                )
             return best_id, best_name, best_score
         return None
 
@@ -199,10 +251,7 @@ class FaceRegistry:
 
         scores = mat @ embedding
 
-        best_id: Optional[str] = None
-        best_name: Optional[str] = None
-        best_score = -1.0
-        second_best = -1.0
+        ranked: list[tuple[float, str, str]] = []
         for fid, name, idxs in zip(
             self._identity_ids, self._identity_names, self._identity_slices
         ):
@@ -211,18 +260,26 @@ class FaceRegistry:
             face_scores = scores[idxs]
             k = min(_AGG_TOP_K, len(face_scores))
             agg = float(np.mean(np.partition(face_scores, -k)[-k:]))
-            if agg > best_score:
-                second_best = best_score
-                best_score = agg
-                best_id = fid
-                best_name = name
-            elif agg > second_best:
-                second_best = agg
+            ranked.append((agg, fid, name))
+
+        if not ranked:
+            return None
+        ranked.sort(key=lambda t: -t[0])
+        best_score, best_id, best_name = ranked[0]
+        second_best = ranked[1][0] if len(ranked) > 1 else -1.0
+
+        # Named-over-Guest preference (same logic as find_match)
+        if _TENTATIVE_LOW <= best_score < self._threshold and _is_guest_name(best_name):
+            for s, fid, name in ranked[1:]:
+                if s < _TENTATIVE_LOW:
+                    break
+                if not _is_guest_name(name) and best_score - s < _MATCH_MARGIN:
+                    best_score, best_id, best_name = s, fid, name
+                    break
 
         if _TENTATIVE_LOW <= best_score < self._threshold and best_id is not None:
-            margin = best_score - second_best
-            if margin < _MATCH_MARGIN:
-                return None
+            # Return the best candidate even on small margins — see find_match for
+            # rationale (refusing only causes Guest-cascade).
             return best_id, best_name, best_score
         return None
 
@@ -343,36 +400,87 @@ class FaceRegistry:
     def register(self, embedding: np.ndarray) -> Tuple[str, str]:
         """Create a new Guest identity (or merge into an existing similar Guest).
 
-        Before creating a new row, scans all existing Guest identities for
-        cosine similarity ≥ ``_GUEST_MERGE_MIN``.  If found, the incoming
-        embedding is merged into that identity instead of spawning a new one.
-        This prevents the same unknown person from accumulating multiple
-        "Guest N" entries across re-appearances.
+        Before creating a new row, scans all existing identities (Guests AND
+        named) for cosine similarity ≥ ``_GUEST_MERGE_MIN``.  If found, the
+        incoming embedding is merged into that identity instead of spawning a
+        new one.  This prevents the same person from accumulating multiple
+        "Guest N" entries across re-appearances.  Critically, this includes
+        merging into NAMED identities — without this, a known person whose
+        live embedding is borderline can spawn a Guest "twin" that then competes
+        with the named identity on every future frame (the Guest-cascade bug).
+
+        Also gates Guest creation: if the embedding has cosine ≥
+        ``_NEW_IDENTITY_MAX_SIM`` to ANY existing identity but didn't qualify
+        for auto-merge, the registration is REFUSED — the perception layer
+        will then keep stabilising rather than polluting the gallery.
 
         Returns ``(face_id, auto_name)`` — either the merged identity or the
-        newly created one.
+        newly created one.  Returns ``(existing_id, name)`` if merged.
         """
-        # Attempt to merge with an existing Guest identity (avoids Guest explosion).
+        # Scan all existing identities for an auto-merge candidate.
         if not np.all(embedding == 0):
             if self._emb_matrix is None:
                 self._build_emb_cache()
             if self._emb_matrix is not None and self._emb_matrix.shape[0] > 0:
                 scores = self._emb_matrix @ embedding
+                best_named: tuple[float, str, str] | None = None
+                best_guest: tuple[float, str, str] | None = None
                 for fid, name, idxs in zip(
                     self._identity_ids, self._identity_names, self._identity_slices
                 ):
-                    if not name.startswith("Guest ") or not idxs:
+                    if not idxs:
                         continue
                     k = min(_AGG_TOP_K, len(idxs))
                     agg = float(np.mean(np.partition(scores[idxs], -k)[-k:]))
-                    if agg >= _GUEST_MERGE_MIN:
-                        log.info(
-                            "register: merged new embedding into existing Guest %s (%r, sim=%.3f)",
-                            fid[:8], name, agg,
+                    if _is_guest_name(name):
+                        if best_guest is None or agg > best_guest[0]:
+                            best_guest = (agg, fid, name)
+                    else:
+                        if best_named is None or agg > best_named[0]:
+                            best_named = (agg, fid, name)
+
+                # Prefer named identity merge (always — a named identity match
+                # at the merge threshold means this is the same person).
+                if best_named is not None and best_named[0] >= _GUEST_MERGE_MIN:
+                    agg, fid, name = best_named
+                    log.info(
+                        "register: auto-merged into NAMED identity %s (%r, sim=%.3f) — preventing Guest twin",
+                        fid[:8], name, agg,
+                    )
+                    self.update_seen(fid)
+                    self.add_embedding_if_needed(fid, embedding)
+                    return fid, name
+
+                if best_guest is not None and best_guest[0] >= _GUEST_MERGE_MIN:
+                    agg, fid, name = best_guest
+                    log.info(
+                        "register: merged new embedding into existing Guest %s (%r, sim=%.3f)",
+                        fid[:8], name, agg,
+                    )
+                    self.update_seen(fid)
+                    self.add_embedding_if_needed(fid, embedding)
+                    return fid, name
+
+                # Strict gate: if ANY existing identity is "similar but not merge-worthy",
+                # refuse to create a new Guest. The perception layer will keep stabilising;
+                # eventually we'll get either a clearer embedding (→ match) or sustained
+                # truly-unknown frames (→ all identities below threshold → safe to register).
+                top_sim = max(
+                    (best_named[0] if best_named else -1.0),
+                    (best_guest[0] if best_guest else -1.0),
+                )
+                if top_sim >= _NEW_IDENTITY_MAX_SIM:
+                    closest = best_named or best_guest
+                    if closest is not None:
+                        log.debug(
+                            "register: refusing new Guest — closest identity %r at sim=%.3f ≥ %.2f gate",
+                            closest[2], top_sim, _NEW_IDENTITY_MAX_SIM,
                         )
-                        self.update_seen(fid)
-                        self.add_embedding_if_needed(fid, embedding)
-                        return fid, name
+                    # Return the closest existing identity so the caller has SOMETHING
+                    # to label this face as. Marking it seen reinforces good gating.
+                    if closest is not None:
+                        self.update_seen(closest[1])
+                        return closest[1], closest[2]
 
         now = time.time()
         face_id = str(uuid.uuid4())

@@ -1134,6 +1134,9 @@ def cmd_help(args) -> int:
                             "                  room get                      Show the current room name.\n"
                             "                  room set <name>               Set the room (e.g. room set Living Room).\n"
                             "                  VERA auto-detects sustained scene changes and prompts verbally.",
+        "radon":            "EcoQube radon monitor. Sub-commands:\n"
+                            "                  radon status                  Show current pCi/L, Bq/m³, and EPA alert level.\n"
+                            "                  radon announce                Speak the current radon level via TTS.",
         "help":             "Show this command reference, or help for a specific command.\n"
                             "                  Usage: help [command]",
     }
@@ -1373,6 +1376,43 @@ def _fmt_uptime(seconds: float) -> str:
     if m:
         return f"{m}m{s:02d}s"
     return f"{s}s"
+
+
+def cmd_radon(args) -> int:
+    """Show the current radon level or announce it via TTS."""
+    subcmd = getattr(args, "radon_cmd", "status")
+    try:
+        if subcmd == "announce":
+            d = _http_post("/api/radon/announce", {})
+            if d.get("ok"):
+                print("Radon level announced via TTS.")
+            else:
+                print(f"Error: {d.get('error', 'unknown error')}", file=sys.stderr)
+                return 1
+        else:
+            d = _http_get("/api/radon")
+            if not d.get("available"):
+                print(f"Radon service unavailable: {d.get('error', 'no reading yet')}")
+                return 1
+            r = d.get("reading", {})
+            pcil   = r.get("radon_pcil")
+            bqm3   = r.get("radon_bqm3")
+            alert  = r.get("alert", "—")
+            device = r.get("device_name", "EcoQube")
+            updated = r.get("last_updated", "—")
+            ALERT_COLOR = {"Green": "\033[32m", "Orange": "\033[33m", "Red": "\033[31m"}
+            RESET = "\033[0m"
+            color = ALERT_COLOR.get(alert, "")
+            print(f"\nRadon Monitor — {device}")
+            print("─" * 40)
+            print(f"  Level   : {color}{pcil:.2f} pCi/L  ({bqm3:.0f} Bq/m³){RESET}")
+            print(f"  Alert   : {color}{alert}{RESET}")
+            print(f"  Updated : {updated}")
+            print()
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    return 0
 
 
 def cmd_room_get(_args) -> int:
@@ -1953,6 +1993,12 @@ def main() -> int:
     room_set_sp = room_sub.add_parser("set", help="Set the current room name (e.g. vera room set Living Room)")
     room_set_sp.add_argument("name", nargs="+", help="Room name (can contain spaces)")
     room_set_sp.set_defaults(func=cmd_room_set)
+
+    radon_sp = sub.add_parser("radon", help="EcoQube radon monitor")
+    radon_sp.set_defaults(func=lambda _a: (print("Usage: vera radon status | vera radon announce"), 1)[1])
+    radon_sub = radon_sp.add_subparsers(dest="radon_cmd")
+    radon_sub.add_parser("status",   help="Show current radon level").set_defaults(func=cmd_radon)
+    radon_sub.add_parser("announce", help="Speak radon level via TTS").set_defaults(func=cmd_radon)
 
     args = p.parse_args()
     if args.cmd is None:

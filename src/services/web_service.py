@@ -247,6 +247,8 @@ class WebService:
         # CPU/memory history — 60 samples (≈ 60 s at 1 Hz)
         self._cpu_history: collections.deque = collections.deque(maxlen=60)
         self._mem_history: collections.deque = collections.deque(maxlen=60)
+        # Radon history — 60 samples of pCi/L values
+        self._radon_history: collections.deque = collections.deque(maxlen=60)
         # Prime the non-blocking cpu_percent sampler so the first real read is accurate
         psutil.cpu_percent(interval=None)
 
@@ -490,6 +492,22 @@ class WebService:
         self._cpu_history.append(round(cpu, 1))
         self._mem_history.append(round(mem, 1))
 
+        # Radon snapshot — pull from service if available
+        radon_pcil = None
+        radon_bqm3 = None
+        radon_alert = None
+        radon_device = None
+        if self._radon_svc and not self._radon_svc.degraded:
+            r = self._radon_svc.get_reading()
+            if r:
+                radon_pcil = r.get("radon_pcil")
+                radon_bqm3 = r.get("radon_bqm3")
+                radon_alert = r.get("alert")
+                radon_device = r.get("device_name")
+                if radon_pcil is not None:
+                    # Scale 0-10 pCi/L → 0-100 for sparkline (EPA action = 40%)
+                    self._radon_history.append(round(min(radon_pcil / 10.0 * 100, 100), 1))
+
         return {
             "version": get_version(),
             "ts": time.time(),
@@ -504,6 +522,11 @@ class WebService:
             "mem_history": list(self._mem_history),
             "room": self._room_svc.room_name if self._room_svc else None,
             "room_detail": self._room_svc.get_status_dict() if self._room_svc else None,
+            "radon_pcil": radon_pcil,
+            "radon_bqm3": radon_bqm3,
+            "radon_alert": radon_alert,
+            "radon_device": radon_device,
+            "radon_history": list(self._radon_history),
         }
 
     # ── FastAPI app ───────────────────────────────────────────────────

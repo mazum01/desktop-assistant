@@ -6,6 +6,48 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.30.0] - 2026-05-28
+### Fixed
+- **Face recognition Guest-cascade bug** (`src/perception/face_registry.py`):
+  Recognition was creating 70+ "Guest" entries per day, almost all of which
+  were the same known person (Mark) misidentified. Root cause was the
+  `_MATCH_MARGIN` check refusing to identify when a named identity was within
+  0.10 cosine of any other identity. Once the first Guest-twin was created,
+  every future frame matched both the real Mark and the Guest-twin too
+  closely → margin failed → another Guest of Mark was created → next frame
+  even more ambiguous. Pure feedback loop.
+- `find_match` now **prefers named identities over Guests** on margin ties
+  (Guest entries are auto-generated placeholders; named identities are
+  intentional and should always win when scores are close).
+- `find_match` now **returns the best candidate even on low margins**, EXCEPT
+  when both top scorers are NAMED identities (which is a genuine ambiguity
+  needing more data). The old behaviour caused the cascade.
+- `register` now **auto-merges into NAMED identities** (not just Guests) when
+  the incoming embedding scores ≥ 0.75 cosine — this prevents creating Guest
+  twins of known people in the first place.
+- `register` now applies a **strict creation gate** (`_NEW_IDENTITY_MAX_SIM`
+  = 0.50): if the incoming embedding has ≥ 0.50 cosine to ANY existing
+  identity but didn't qualify for auto-merge, no new Guest is created;
+  instead the closest existing identity is returned. This stops Guest
+  inflation from borderline embeddings.
+- Cleaned contaminated face registry: deleted 12 Mark-twin Guests (auto-merged
+  ~28k cumulative seen_count back into Mark), purged 27 singleton-embedding
+  Guests, pruned 1 outlier embedding from Mark's gallery, wiped Carson's
+  2-embedding contaminated gallery (face row preserved — re-train via UI).
+  Result: 52 identities → 13.
+
+### Added
+- **Radon sparkline in web dashboard** (`src/web/static/index.html`):
+  New "Radon Monitor" card with live pCi/L reading, alert pill (Green/Orange/Red
+  colour-coded), device name, and 60-sample sparkline driven by WebSocket.
+  Includes an "Announce" button that calls `POST /api/radon/announce`.
+- **`vera radon` CLI command** (`scripts/desktop-assistant`):
+  - `vera radon status` — Shows pCi/L, Bq/m³, EPA alert level, device, and
+    last-updated timestamp (colour-coded by alert).
+  - `vera radon announce` — Speaks the current radon level via TTS.
+- `_build_status_snapshot` now includes `radon_pcil`, `radon_bqm3`,
+  `radon_alert`, `radon_device`, and `radon_history` (60-sample deque).
+
 ## [1.29.1] - 2026-05-28
 ### Fixed
 - `RadonService._last_red_alert` initialised to `float("-inf")` instead of `0.0`

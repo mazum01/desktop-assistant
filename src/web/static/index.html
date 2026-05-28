@@ -183,6 +183,28 @@
       </div>
     </section>
 
+    <!-- ── Radon Monitor ────────────────────────────────────────── -->
+    <section class="card" id="card-radon">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Radon Monitor &nbsp;<button class="btn btn-secondary btn-sm" id="radon-announce-btn" onclick="announceRadon()" title="Speak current radon level via TTS">📢 Announce</button></h2>
+      <div class="resource-graphs">
+        <div class="resource-graph-wrap" style="flex:1">
+          <div class="resource-graph-label" style="display:flex;align-items:center;gap:8px">
+            <span id="stat-radon-pcil" class="resource-pct">—</span>
+            <span style="font-size:11px;color:var(--muted)">pCi/L</span>
+            <span id="stat-radon-bqm3" style="font-size:11px;color:var(--muted)"></span>
+            <span id="stat-radon-alert" class="pill" style="font-size:11px;margin-left:4px">—</span>
+            <span id="stat-radon-device" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
+          </div>
+          <canvas id="radon-graph" class="resource-canvas" width="400" height="60"></canvas>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;padding:0 4px">
+            <span>60 min ago</span>
+            <span>EPA action: 4.0 pCi/L</span>
+            <span>now</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ── Face Registry ───────────────────────────────────────── -->
     <section class="card" id="card-faces">
       <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Face Registry &nbsp;<button class="btn btn-danger btn-sm" onclick="deleteAllFaces()" title="Delete all known faces permanently">🗑 Delete All</button> &nbsp;<button class="btn btn-warning btn-sm" onclick="deleteGuestFaces()" title="Remove unnamed Guest entries">👤 Remove Guests</button> &nbsp;<button class="btn btn-secondary btn-sm" onclick="refreshFaces()" title="Prune outlier embeddings and re-identify all faces">↺ Re-identify</button></h2>

@@ -237,6 +237,23 @@ function updateDashboard(data) {
     drawSparkline("mem-graph", data.mem_history, "#3fb950");
   }
 
+  // Radon monitor
+  if (data.radon_pcil != null) {
+    const alert = data.radon_alert || "Green";
+    const color = alert === "Red" ? "#f85149" : alert === "Orange" ? "#d29922" : "#3fb950";
+    el("stat-radon-pcil").textContent = data.radon_pcil.toFixed(2);
+    el("stat-radon-bqm3").textContent = `(${data.radon_bqm3?.toFixed(0) ?? "?"} Bq/m³)`;
+    const alertEl = el("stat-radon-alert");
+    alertEl.textContent = alert;
+    alertEl.className = "pill";
+    alertEl.style.background = color + "33";
+    alertEl.style.color = color;
+    alertEl.style.border = `1px solid ${color}66`;
+    if (data.radon_device) el("stat-radon-device").textContent = data.radon_device;
+    if (data.radon_history && data.radon_history.length >= 2)
+      drawSparkline("radon-graph", data.radon_history, color);
+  }
+
   // Music state/song updates from bus events
   const musicState = last["music.state_changed"];
   if (musicState) _applyMusicState(musicState.state || "stopped");
@@ -1496,6 +1513,21 @@ async function sendUtterance() {
   }
 }
 
+
+async function announceRadon() {
+  const btn = el("radon-announce-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "📢 Announcing…"; }
+  try {
+    const r = await fetch("/api/radon/announce", { method: "POST" });
+    const d = await r.json();
+    if (!d.ok) console.warn("Radon announce:", d.error || d);
+  } catch (e) {
+    console.warn("announceRadon error:", e);
+  }
+  setTimeout(() => {
+    if (btn) { btn.disabled = false; btn.textContent = "📢 Announce"; }
+  }, 3000);
+}
 
 async function restartDaemon() {
   if (!confirm("Restart the vera-core service?")) return;
