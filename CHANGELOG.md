@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.31.3] - 2026-05-31
+### Fixed
+- DROP service: hub publishes data directly to `drop_connect/{hub}/data/{id}` topics
+  without sending discovery messages first. Changed `_on_connect` to subscribe to
+  `drop_connect/#` (was `drop_connect/discovery/#`) and added `_auto_register_device()`
+  which creates `_Device` entries on-the-fly by inferring type from payload fields
+  (`pMode`/`usedToday` → softener, `capacity`/`resInUse` → hub, `leak` → leak sensor).
+  Added 2 new tests for auto-registration.
+
 ## [1.31.2] - 2026-05-31
 ### Fixed
 - DROP MQTT: configured `mqtt_user`/`mqtt_pass` in `config/assistant.yaml` (`drop`/`REDACTED_MQTT_PASS`).

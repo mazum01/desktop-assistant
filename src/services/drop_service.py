@@ -206,8 +206,10 @@ class DropService:
             return
         log.info("DropService: connected to %s:%s", self._mqtt_host, self._mqtt_port)
         self._degraded = False
-        client.subscribe(_DISCOVERY_TOPIC, qos=0)
-        log.info("DropService: subscribed to %s", _DISCOVERY_TOPIC)
+        # Subscribe to ALL drop_connect topics — the hub publishes directly to
+        # data topics without sending discovery messages first.
+        client.subscribe("drop_connect/#", qos=0)
+        log.info("DropService: subscribed to drop_connect/#")
 
     def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties=None) -> None:
         log.warning("DropService: disconnected from MQTT broker")
@@ -248,15 +250,28 @@ class DropService:
                     dev_type=disc.device_type,
                     data_topic=disc.data_topic,
                 )
-        # Subscribe to data topic for this device
-        client.subscribe(disc.data_topic, qos=0)
-        log.debug("DropService: subscribed to data topic %s", disc.data_topic)
+
+    def _infer_device_type(self, payload_dict: dict) -> str:
+        """Infer DROP device type from payload field names."""
+        keys = set(payload_dict.keys())
+        if "pMode" in keys or "usedToday" in keys:
+            return _DEV_SOFTENER
+        if "capacity" in keys or "resInUse" in keys:
+            return _DEV_HUB
+        if "leak" in keys:
+            return _DEV_LEAK
+        if "salt" in keys:
+            return _DEV_SALT
+        return _DEV_HUB
 
     # ── Data handling ──────────────────────────────────────────────────────
 
     def _handle_data(self, topic: str, payload: bytes) -> None:
-        # Find matching device by topic prefix
+        # Auto-discover device from topic if not yet registered.
+        # Topic format: drop_connect/{hub_id}/data/{device_id}[/...]
         device = self._find_device_for_topic(topic)
+        if device is None:
+            device = self._auto_register_device(topic, payload)
         if device is None:
             return
 
@@ -277,11 +292,50 @@ class DropService:
     def _find_device_for_topic(self, topic: str) -> Optional[_Device]:
         with self._lock:
             for device in self._devices.values():
-                # data_topic is like "drop_connect/DROP-xxx/data/1/#"
+                # data_topic is like "drop_connect/DROP-xxx/data/1/#" or exact
                 prefix = device.data_topic.rstrip("/#")
                 if topic.startswith(prefix):
                     return device
         return None
+
+    def _auto_register_device(self, topic: str, payload: bytes) -> Optional[_Device]:
+        """Create a _Device entry from an unseen data topic + payload."""
+        # topic: drop_connect/{hub_id}/data/{device_id}[/suffix]
+        parts = topic.split("/")
+        if len(parts) < 4:
+            return None
+        hub_id    = parts[1]
+        device_id = parts[3]
+        key = f"{hub_id}_{device_id}"
+
+        import json
+        try:
+            payload_dict = json.loads(payload)
+        except Exception:
+            payload_dict = {}
+
+        dev_type = self._infer_device_type(payload_dict)
+        # Build a human-readable name from device type
+        names = {
+            _DEV_SOFTENER: "Softener",
+            _DEV_HUB:      "Hub",
+            _DEV_SALT:     "Salt Sensor",
+            _DEV_LEAK:     "Leak Sensor",
+            _DEV_FILTER:   "Filter",
+            _DEV_PV:       "Protection Valve",
+        }
+        name = names.get(dev_type, f"Device-{device_id}")
+        data_topic = f"drop_connect/{hub_id}/data/{device_id}"
+
+        device = _Device(name=name, dev_type=dev_type, data_topic=data_topic)
+        with self._lock:
+            if key not in self._devices:
+                log.info(
+                    "DropService: auto-discovered %s '%s' (type=%s) from topic %s",
+                    key, name, dev_type, topic,
+                )
+                self._devices[key] = device
+            return self._devices[key]
 
     def _merge_reading(self, device: _Device) -> None:
         api = device.api

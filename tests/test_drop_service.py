@@ -190,3 +190,32 @@ def test_no_leak_alert_when_disabled():
 
     svc._check_alerts(device)
     bus.publish.assert_not_called()
+
+
+def test_auto_register_device_softener():
+    """_auto_register_device() creates a softener device from a payload with pMode."""
+    svc = DropService()
+    import json
+    payload = json.dumps({
+        "curFlow": 0, "peakFlow": 2.2, "usedToday": 3.37, "avgUsed": 94,
+        "water": 1, "bypass": 0, "pMode": "home", "battery": 100,
+    }).encode()
+    device = svc._auto_register_device("drop_connect/DROP-4_4FE2E2/data/255", payload)
+    assert device is not None
+    assert device.dev_type == "soft"
+    assert device.name == "Softener"
+    assert len(svc.get_devices()) == 1
+
+
+def test_auto_register_device_hub():
+    """_auto_register_device() creates a hub device from a payload with capacity."""
+    svc = DropService()
+    import json
+    payload = json.dumps({
+        "curFlow": 0, "bypass": 0, "battery": 0, "capacity": 534.33,
+        "resInUse": 0, "psi": None,
+    }).encode()
+    device = svc._auto_register_device("drop_connect/DROP-4_4FE2E2/data/0", payload)
+    assert device is not None
+    assert device.dev_type == "hub"
+    assert device.name == "Hub"
