@@ -207,7 +207,7 @@ watchdog:
   enabled: true
   check_interval_s: 30          # how often to poll each service
   restart_cooldown_min: 5       # minimum minutes between restarts of same service
-  telegram_notify: true         # send Telegram message on every auto-fix
+  telegram_notify: false        # send Telegram message on every auto-fix
   openclaw_stuck_threshold: 10  # "Bot not initialized" lines in 60s → restart openclaw
   openclaw_max_uptime_min: 90   # force restart after 90 min to guard against Telegram polling stall
 
@@ -253,9 +253,9 @@ drop:
   # MQTT broker address and port (default: local Mosquitto on port 1883).
   mqtt_host: "localhost"
   mqtt_port: 1883
-  # Optional broker credentials (leave empty for anonymous access).
-  mqtt_user: ""
-  mqtt_pass: ""
+  # Broker credentials for the DROP Hub connection.
+  mqtt_user: "drop"
+  mqtt_pass: "REDACTED_MQTT_PASS"
   # Speak a TTS alert when a leak is detected.
   alert_on_leak: true
   # Speak a TTS alert when salt is low.

@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.31.2] - 2026-05-31
+### Fixed
+- DROP MQTT: configured `mqtt_user`/`mqtt_pass` in `config/assistant.yaml` (`drop`/`REDACTED_MQTT_PASS`).
+  The DROP Hub app requires credentials; anonymous connections are rejected.
+  A one-time setup script `~/setup-mqtt-drop.sh` configures Mosquitto with a
+  listener on port 1883, disables anonymous access, and installs the password file.
+
 ## [1.31.1] - 2026-05-28
 ### Fixed
 - CI: added `paho-mqtt` and `dropmqttapi` to the force-install step in `.github/workflows/ci.yml`
