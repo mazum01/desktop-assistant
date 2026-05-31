@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.32.0] - 2026-05-31
+### Changed
+- TTS voice model switched from `en_US-lessac-high` (109 MB, 14–15 s/sentence) to
+  `en_US-amy-medium` (61 MB, ~0.7–5 s/sentence) — **3–20× latency reduction** on Pi 5.
+  Short phrases like "Okay" now synthesize in under 1 second.
+- TTS voice model is now configurable via `config/assistant.yaml` under the new `tts:`
+  section (`piper_voice_name`, `piper_length_scale`). Override without changing code.
+- Updated `core_main.py` to instantiate `TextToSpeech` with config-driven `TTSConfig`
+  before passing it to `AVService`.
+
 ## [1.31.3] - 2026-05-31
 ### Fixed
 - DROP service: hub publishes data directly to `drop_connect/{hub}/data/{id}` topics

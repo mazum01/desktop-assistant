@@ -265,7 +265,13 @@ def main() -> int:
 
     tracking_svc: "TrackingService | None" = None  # forward-ref for rotation callback
 
-    av = AVService(bus=bus)
+    _tts_cfg = _cfg.get("tts", {})
+    from src.audio.tts import TextToSpeech, TTSConfig as _TTSConfig
+    _tts = TextToSpeech(_TTSConfig(
+        piper_voice_name=str(_tts_cfg.get("piper_voice_name", "en_US-amy-medium")),
+        piper_length_scale=float(_tts_cfg.get("piper_length_scale", 1.15)),
+    ))
+    av = AVService(bus=bus, tts=_tts)
     vis = VisionService(bus=bus, camera_config=_camera_cfg,
                         servo_min_deg=_soft_min_deg, servo_max_deg=_soft_max_deg)
     ipc = IPCBridge(

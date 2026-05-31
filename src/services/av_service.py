@@ -81,8 +81,9 @@ class AVService(Service):
         self._audio_worker: Optional[threading.Thread] = None
         self._last_recording_path: Optional[Path] = None
         # Single-threaded synthesis executor: TTS synthesis is CPU-heavy
-        # (~17s on Pi 5). All synthesis runs here so the audio worker only
-        # blocks during actual playback (~3-5s), keeping recording responsive.
+        # (~9s cold-start, ~1–5s warm on Pi 5 with amy-medium). All synthesis
+        # runs here so the audio worker only blocks during actual playback,
+        # keeping recording responsive.
         self._synth_executor: concurrent.futures.ThreadPoolExecutor = (
             concurrent.futures.ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="tts-synth"
@@ -128,7 +129,7 @@ class AVService(Service):
 
         # Pre-warm TTS in background. The announcement is enqueued ONLY AFTER
         # the model loads so the audio worker stays free for recording requests
-        # during the ~22 s Piper ONNX cold-start.
+        # during the ~9 s Piper ONNX cold-start (amy-medium on Pi 5).
         if self._tts is not None and hasattr(self._tts, "prewarm"):
             threading.Thread(
                 target=self._prewarm_tts,

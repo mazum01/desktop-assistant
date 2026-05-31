@@ -262,3 +262,13 @@ drop:
   alert_on_salt_low: true
   # Minimum seconds between repeat salt-low TTS alerts.
   salt_alert_cooldown_s: 7200
+
+
+tts:
+  # Piper voice model to use for synthesis.
+  # Available models in config/piper/:
+  #   en_US-amy-medium    (~61 MB, ~0.7–5s synthesis) ← default, balanced
+  #   en_US-lessac-high   (~109 MB, ~14–15s synthesis) — higher quality, slow
+  piper_voice_name: en_US-amy-medium
+  # TTS speech rate (1.0 = natural speed; 1.15 = slightly slower / computer-like).
+  piper_length_scale: 1.15

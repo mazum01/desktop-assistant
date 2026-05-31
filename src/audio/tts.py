@@ -38,7 +38,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 @dataclass
 class TTSConfig:
     # ── Piper settings ──────────────────────────────────────────────────
-    piper_voice_name: str = "en_US-lessac-high"
+    piper_voice_name: str = "en_US-amy-medium"
     piper_model: Optional[str] = None   # override with explicit .onnx path
     piper_length_scale: float = 1.15    # slightly slower — TNG-computer pacing
     piper_noise_scale: float = 0.3      # flatter prosody — measured computer delivery
