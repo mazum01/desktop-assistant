@@ -914,3 +914,27 @@ main {
 .card.drag-over-bottom {
   box-shadow: 0 3px 0 0 var(--blue), var(--shadow);
 }
+
+/* ── IoT plugin device cards ─────────────────────────────────────── */
+.iot-primary-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.iot-primary-unit {
+  font-size: 13px;
+  color: var(--muted);
+}
+.iot-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.iot-metrics span { white-space: nowrap; }
+.iot-card-icon { margin-right: 4px; }
+.iot-detail { font-size: 11px; }

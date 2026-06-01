@@ -335,6 +335,118 @@ function updateDashboard(data) {
     el("stat-room").textContent = data.room || "Unknown";
   }
   if (data.room_detail) updateRoomDetail(data.room_detail);
+
+  // IoT plugin devices — auto-render cards in Smart Home tab
+  if (data.iot && typeof data.iot === "object") {
+    renderIoTDevices(data.iot);
+  }
+}
+
+// ── IoT plugin device cards ────────────────────────────────────────
+
+// Sparkline history buffers per IoT device id
+const _iotHistories = {};
+
+function renderIoTDevices(iot) {
+  const pane = el("tab-smart-home");
+  if (!pane) return;
+
+  for (const [deviceId, snap] of Object.entries(iot)) {
+    const cardId = `iot-card-${deviceId}`;
+    let card = el(cardId);
+
+    if (!card) {
+      // First time — create the card and append to pane
+      card = document.createElement("section");
+      card.className = "card";
+      card.id = cardId;
+      card.dataset.iotDevice = deviceId;
+      card.innerHTML = `
+        <h2>
+          <span class="drag-handle" title="Drag to reorder">⠿</span>
+          <span class="iot-card-icon">${snap.device_icon || "🔌"}</span>
+          <span class="iot-card-name">${snap.device_name || deviceId}</span>
+          <button class="btn btn-secondary btn-sm" onclick="announceIotDevice('${deviceId}')" title="Speak status via TTS">📢 Announce</button>
+        </h2>
+        <div class="iot-primary-row">
+          <span class="resource-pct iot-primary-value">—</span>
+          <span class="iot-primary-unit"></span>
+          <span class="pill iot-badge-row"></span>
+          <span class="iot-detail" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
+        </div>
+        <canvas class="resource-canvas iot-sparkline" id="iot-graph-${deviceId}" height="60" width="400"></canvas>
+        <div class="iot-metrics"></div>
+      `;
+      pane.appendChild(card);
+      _iotHistories[deviceId] = [];
+    }
+
+    // Update card content
+    const available = snap.available !== false;
+    const disp      = snap.display || {};
+    const primary   = disp.primary   || {};
+    const badges    = disp.badges    || [];
+    const metrics   = disp.metrics   || [];
+    const detail    = disp.detail    || "";
+
+    const valueEl  = card.querySelector(".iot-primary-value");
+    const unitEl   = card.querySelector(".iot-primary-unit");
+    const badgeEl  = card.querySelector(".iot-badge-row");
+    const detailEl = card.querySelector(".iot-detail");
+    const metricsEl = card.querySelector(".iot-metrics");
+
+    if (!available) {
+      if (valueEl) valueEl.textContent = "—";
+      if (unitEl)  unitEl.textContent = "";
+      if (badgeEl) { badgeEl.textContent = snap.error || "unavailable"; badgeEl.style.cssText = "background:#f8514933;color:#f85149;border:1px solid #f8514966"; }
+      if (detailEl) detailEl.textContent = "";
+      if (metricsEl) metricsEl.innerHTML = "";
+    } else {
+      const color = primary.color || "#58a6ff";
+      if (valueEl) { valueEl.textContent = primary.value || "—"; valueEl.style.color = color; }
+      if (unitEl)  unitEl.textContent = primary.unit || "";
+
+      // Badges
+      if (badgeEl) {
+        if (badges.length > 0) {
+          const b = badges[0];
+          const bc = b.color || "#3fb950";
+          badgeEl.textContent = b.text || "";
+          badgeEl.style.cssText = `background:${bc}33;color:${bc};border:1px solid ${bc}66`;
+        } else {
+          badgeEl.textContent = "";
+          badgeEl.style.cssText = "";
+        }
+      }
+
+      if (detailEl) detailEl.textContent = detail;
+
+      // Metrics grid
+      if (metricsEl) {
+        metricsEl.innerHTML = metrics
+          .map(m => `<span><b>${m.label}:</b> ${m.value}</span>`)
+          .join("");
+      }
+    }
+
+    // Sparkline — append to history and draw
+    if (snap.history && snap.history.length) {
+      _iotHistories[deviceId] = snap.history;
+    }
+    const hist = _iotHistories[deviceId];
+    if (hist && hist.length >= 2) {
+      const color = (disp.primary || {}).color || "#58a6ff";
+      drawSparkline(`iot-graph-${deviceId}`, hist, color);
+    }
+  }
+}
+
+async function announceIotDevice(deviceId) {
+  try {
+    const resp = await fetch(`/api/iot/${deviceId}/announce`, { method: "POST" });
+    const data = await resp.json();
+    if (!data.ok) console.warn("IoT announce error:", data.error);
+  } catch (e) { console.error("IoT announce request failed:", e); }
 }
 
 // ── Room detection visualisation ──────────────────────────────────

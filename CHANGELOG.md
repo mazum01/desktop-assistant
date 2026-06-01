@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.36.0] - 2026-06-01
+### Added
+- **Modular IoT plugin system** (`src/iot/`): `IoTDevice` abstract base class and `IoTRegistry` for wiring new IoT devices into VERA with minimal boilerplate.
+  - `IoTDevice` ABC: `device_id`, `device_name`, `device_icon`, `start()`, `stop()`, `get_snapshot()`, `announce()`.
+  - `IoTRegistry`: `register()`, `get()`, `all()`, `get_all_snapshots()`, `get_device_list()`, `unregister()`.
+  - Standardised `get_snapshot()` schema: `available`, `error`, `display` (primary/badges/metrics/detail), `history`, `history_label`.
+- REST API endpoints: `GET /api/iot`, `GET /api/iot/{id}`, `POST /api/iot/{id}/announce`.
+- WebSocket snapshot now includes `"iot"` key with all registered device snapshots.
+- Frontend (`app.js`): `renderIoTDevices()` auto-creates and updates IoT device cards in the **Smart Home** tab on each WebSocket update; `announceIotDevice()` calls `/api/iot/{id}/announce`.
+- CSS styles for IoT cards (`.iot-primary-row`, `.iot-metrics`, `.iot-badge-row`, etc.).
+- 22 unit tests for `IoTDevice` and `IoTRegistry` in `tests/test_iot_base.py`.
+
+### How to add a new IoT device
+1. Create a class in `src/iot/devices/my_device.py` that subclasses `IoTDevice`.
+2. In `core_main.py`, import the class and call `iot_registry.register(MyDevice(...))`.
+3. Add config in `config/assistant.yaml` under the matching key.
+
 ## [1.35.1] - 2026-06-01
 ### Changed
 - Moved **Controls** card (servo, camera, TTS, object detection) to the **System** tab.

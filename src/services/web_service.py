@@ -63,6 +63,9 @@ GET  /api/radon               Current radon reading (cached from EcoSense cloud)
 POST /api/radon/announce      Speak current radon level aloud via TTS
 GET  /api/drop                Current DROP water softener reading (MQTT)
 POST /api/drop/announce       Speak current DROP status aloud via TTS
+GET  /api/iot               List all registered IoT plugin devices
+GET  /api/iot/{id}          Latest snapshot for a specific IoT device
+POST /api/iot/{id}/announce Speak status of a specific IoT device via TTS
 GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
 """
@@ -210,6 +213,7 @@ class WebService:
         room_service=None,
         radon_service=None,
         drop_service=None,
+        iot_registry=None,
         api_key: str = "",
     ) -> None:
         self.bus = bus
@@ -231,6 +235,7 @@ class WebService:
         self._room_svc = room_service
         self._radon_svc = radon_service
         self._drop_svc = drop_service
+        self._iot_registry = iot_registry
         self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
         self._thread: Optional[threading.Thread] = None
@@ -545,6 +550,7 @@ class WebService:
             "radon_history": list(self._radon_history),
             "drop": drop_reading,
             "drop_flow_history": list(self._drop_flow_history),
+            "iot": self._iot_registry.get_all_snapshots() if self._iot_registry else {},
         }
 
     # ── FastAPI app ───────────────────────────────────────────────────
@@ -1732,6 +1738,50 @@ class WebService:
                 text = f"The DROP {name} is connected but no readings are available yet."
 
             if self.bus:
+                self.bus.publish("av.say", {"text": text})
+            return {"ok": True, "text": text}
+
+        # ── IoT plugin endpoints ──────────────────────────────────────────
+        # These routes are always registered; when no iot_registry is set
+        # they return an empty list / 404.
+
+        @app.get("/api/iot")
+        async def api_iot_list():
+            """Return summary of all registered IoT plugin devices."""
+            if self._iot_registry is None:
+                return {"devices": []}
+            return {"devices": self._iot_registry.get_device_list()}
+
+        @app.get("/api/iot/{device_id}")
+        async def api_iot_snapshot(device_id: str):
+            """Return the latest snapshot for a specific IoT device."""
+            if self._iot_registry is None:
+                raise HTTPException(status_code=404, detail="IoT registry not available")
+            dev = self._iot_registry.get(device_id)
+            if dev is None:
+                raise HTTPException(status_code=404, detail=f"IoT device '{device_id}' not found")
+            try:
+                snap = dev.get_snapshot()
+            except Exception as exc:
+                raise HTTPException(status_code=503, detail=str(exc))
+            snap["device_id"]   = dev.device_id
+            snap["device_name"] = dev.device_name
+            snap["device_icon"] = dev.device_icon
+            return JSONResponse(snap)
+
+        @app.post("/api/iot/{device_id}/announce")
+        async def api_iot_announce(device_id: str):
+            """Speak the status of a specific IoT device aloud via TTS."""
+            if self._iot_registry is None:
+                raise HTTPException(status_code=404, detail="IoT registry not available")
+            dev = self._iot_registry.get(device_id)
+            if dev is None:
+                raise HTTPException(status_code=404, detail=f"IoT device '{device_id}' not found")
+            try:
+                text = dev.announce()
+            except Exception as exc:
+                raise HTTPException(status_code=503, detail=str(exc))
+            if self.bus and text:
                 self.bus.publish("av.say", {"text": text})
             return {"ok": True, "text": text}
 
