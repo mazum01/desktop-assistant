@@ -330,6 +330,7 @@ function renderIoTDevices(iot) {
         </div>
         <canvas class="resource-canvas iot-sparkline" id="iot-graph-${deviceId}" height="60" width="400"></canvas>
         <div class="iot-metrics"></div>
+        <div class="iot-actions" style="display:none;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
       `;
       pane.appendChild(card);
       _iotHistories[deviceId] = [];
@@ -343,12 +344,14 @@ function renderIoTDevices(iot) {
     const badges    = disp.badges    || [];
     const metrics   = disp.metrics   || [];
     const detail    = disp.detail    || "";
+    const actions   = snap.actions   || [];
 
     const valueEl   = card.querySelector(".iot-primary-value");
     const unitEl    = card.querySelector(".iot-primary-unit");
     const badgeEl   = card.querySelector(".iot-badge-row");
     const detailEl  = card.querySelector(".iot-detail");
     const metricsEl = card.querySelector(".iot-metrics");
+    const actionsEl = card.querySelector(".iot-actions");
 
     if (!available) {
       if (valueEl) valueEl.textContent = "—";
@@ -356,6 +359,7 @@ function renderIoTDevices(iot) {
       if (badgeEl) { badgeEl.textContent = snap.error || "unavailable"; badgeEl.style.cssText = "background:#f8514933;color:#f85149;border:1px solid #f8514966"; }
       if (detailEl) detailEl.textContent = "";
       if (metricsEl) metricsEl.innerHTML = "";
+      if (actionsEl) { actionsEl.innerHTML = ""; actionsEl.style.display = "none"; }
     } else {
       const color = primary.color || "#58a6ff";
       if (valueEl) { valueEl.textContent = primary.value || "—"; valueEl.style.color = color; }
@@ -382,6 +386,24 @@ function renderIoTDevices(iot) {
           .map(m => `<span><b>${m.label}:</b> ${m.value}</span>`)
           .join("");
       }
+
+      // Action buttons
+      if (actionsEl) {
+        if (actions.length > 0) {
+          actionsEl.style.display = "flex";
+          actionsEl.innerHTML = actions.map(a => {
+            const btnColor = a.color || "#58a6ff";
+            return `<button class="btn btn-sm" style="background:${btnColor}22;border:1px solid ${btnColor}66;color:${btnColor}"
+              onclick="doIotAction('${deviceId}', '${a.id}', ${!!a.requires_pin})"
+              title="${a.label}">
+              ${a.icon || ""} ${a.label}
+            </button>`;
+          }).join("");
+        } else {
+          actionsEl.style.display = "none";
+          actionsEl.innerHTML = "";
+        }
+      }
     }
 
     // Sparkline — append to history and draw
@@ -402,6 +424,26 @@ async function announceIotDevice(deviceId) {
     const data = await resp.json();
     if (!data.ok) console.warn("IoT announce error:", data.error);
   } catch (e) { console.error("IoT announce request failed:", e); }
+}
+
+async function doIotAction(deviceId, action, requiresPin) {
+  let params = {};
+  if (requiresPin) {
+    const pin = window.prompt(`Enter PIN to ${action} ${deviceId}:`);
+    if (pin === null) return; // user cancelled
+    params.pin = pin;
+  }
+  try {
+    const resp = await fetch(`/api/iot/${deviceId}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, params }),
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      alert(`Action failed: ${data.message || "Unknown error"}`);
+    }
+  } catch (e) { console.error("IoT action request failed:", e); }
 }
 
 // ── IoT CRUD modals ───────────────────────────────────────────────

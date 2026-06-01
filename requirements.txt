@@ -44,3 +44,6 @@ botocore>=1.34.0
 # DROP water softener — local MQTT integration
 paho-mqtt>=2.1.0
 dropmqttapi>=1.0.3
+
+# Yale WiFi locks — August/Yale cloud API
+yalesmartalarmclient>=0.4.3

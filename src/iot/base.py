@@ -70,6 +70,31 @@ class IoTDevice(ABC):
 
     # ── Optional overrides ───────────────────────────────────────────────────
 
+    def execute_action(self, action: str, params: dict | None = None) -> dict:
+        """Execute a device-specific action (e.g. lock, unlock, open, close).
+
+        Returns a dict with at least ``{"ok": bool, "message": str}``.
+        The default implementation returns an error; subclasses override this.
+
+        *params* is an optional dict of action-specific parameters (e.g.
+        ``{"pin": "1234"}`` for an unlock action).
+        """
+        return {"ok": False, "message": f"Action '{action}' not supported by {self.device_name}"}
+
+    def get_actions(self) -> list[dict]:
+        """Return a list of available actions for this device.
+
+        Each action dict has:
+          ``id``          (str)  — action identifier, passed to ``execute_action()``
+          ``label``       (str)  — human-readable label shown on the button
+          ``icon``        (str)  — emoji icon for the button
+          ``color``       (str)  — CSS hex color for the button (optional)
+          ``requires_pin``(bool) — whether a PIN prompt is needed before calling (optional)
+
+        The default returns an empty list (no actions).
+        """
+        return []
+
     def announce(self) -> str:
         """Return a TTS-friendly status string for this device.
 

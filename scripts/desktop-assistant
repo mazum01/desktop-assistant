@@ -1155,7 +1155,13 @@ def cmd_help(args) -> int:
                             "                    [--config '{\"key\": \"val\"}']   Optional JSON config for the device.\n"
                             "                  iot config <id> [k=v ...]     Show or update device config.\n"
                             "                  iot remove <id>               Stop and unregister a device.\n"
-                            "                  iot announce <id>             Speak device status via TTS.",
+                            "                  iot announce <id>             Speak device status via TTS.\n"
+                            "                  iot action <id> <action>      Execute device action (e.g. lock, unlock).\n"
+                            "                    [--params '{\"pin\":\"XXXX\"}']   Optional JSON params for the action.",
+        "lock":             "Yale WiFi lock shortcuts. Sub-commands:\n"
+                            "                  lock status                   Show Yale lock state.\n"
+                            "                  lock lock                     Lock the door now.\n"
+                            "                  lock unlock [--pin XXXX]      Unlock the door (prompts for PIN if omitted).",
         "help":             "Show this command reference, or help for a specific command.\n"
                             "                  Usage: help [command]",
     }
@@ -1658,8 +1664,89 @@ def cmd_iot(args) -> int:
                 print(f"Error: {d.get('detail', d.get('error', 'unknown'))}", file=sys.stderr)
                 return 1
 
+        elif subcmd == "action":
+            device_id = getattr(args, "device_id", None)
+            action    = getattr(args, "action_name", None)
+            if not device_id or not action:
+                print("Usage: vera iot action <device_id> <action> [--params '{\"key\":\"val\"}']", file=sys.stderr)
+                return 1
+            params_str = getattr(args, "params", None) or "{}"
+            try:
+                params = json.loads(params_str)
+            except json.JSONDecodeError as exc:
+                print(f"Invalid JSON params: {exc}", file=sys.stderr)
+                return 1
+            d = _http_post(f"/api/iot/{device_id}/action", {"action": action, "params": params})
+            if d.get("ok"):
+                msg = d.get("message", "Action completed.")
+                print(f"✓ {msg}")
+            else:
+                msg = d.get("message") or d.get("detail") or d.get("error") or "unknown error"
+                print(f"✗ {msg}", file=sys.stderr)
+                return 1
+
         else:
             print(f"Unknown iot subcommand: {subcmd!r}", file=sys.stderr)
+            return 1
+
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_lock(args) -> int:
+    """Convenience command for Yale lock operations."""
+    BOLD  = "\033[1m"
+    GREEN = "\033[32m"
+    RED   = "\033[31m"
+    RESET = "\033[0m"
+    subcmd = getattr(args, "lock_cmd", "status")
+    device_id = "yale_lock"
+
+    try:
+        if subcmd == "status":
+            d = _http_get(f"/api/iot/{device_id}")
+            available = d.get("available", False)
+            if not available:
+                print(f"Yale lock: {RED}unavailable{RESET}  {d.get('error', '')}")
+                return 1
+            disp    = d.get("display") or {}
+            primary = disp.get("primary") or {}
+            value   = primary.get("value", "—")
+            unit    = primary.get("unit", "")
+            print(f"\n🔒  {BOLD}Yale Lock{RESET}")
+            print("─" * 40)
+            print(f"  State   : {BOLD}{value}{RESET}{(' — ' + unit) if unit else ''}")
+            metrics = disp.get("metrics") or []
+            for m in metrics:
+                print(f"  {m.get('label', ''):<12}: {m.get('value', '')}")
+            print()
+
+        elif subcmd == "lock":
+            d = _http_post(f"/api/iot/{device_id}/action", {"action": "lock", "params": {}})
+            if d.get("ok"):
+                print(f"🔒  {GREEN}Locked{RESET}")
+            else:
+                msg = d.get("message") or d.get("detail") or "unknown error"
+                print(f"✗ {msg}", file=sys.stderr)
+                return 1
+
+        elif subcmd == "unlock":
+            pin = getattr(args, "pin", None) or ""
+            if not pin:
+                import getpass
+                pin = getpass.getpass("Yale PIN: ")
+            d = _http_post(f"/api/iot/{device_id}/action", {"action": "unlock", "params": {"pin": pin}})
+            if d.get("ok"):
+                print(f"🔓  {RED}Unlocked{RESET}")
+            else:
+                msg = d.get("message") or d.get("detail") or "unknown error"
+                print(f"✗ {msg}", file=sys.stderr)
+                return 1
+
+        else:
+            print(f"Unknown lock subcommand: {subcmd!r}", file=sys.stderr)
             return 1
 
     except Exception as exc:
@@ -2260,7 +2347,7 @@ def main() -> int:
     drop_sub.add_parser("announce", help="Speak softener status via TTS").set_defaults(func=cmd_drop)
 
     # ── IoT plugin CRUD subcommand group ─────────────────────────────
-    iot_sp = sub.add_parser("iot", help="IoT plugin device management (list/types/status/add/config/remove/announce)")
+    iot_sp = sub.add_parser("iot", help="IoT plugin device management (list/types/status/add/config/remove/announce/action)")
     iot_sp.set_defaults(func=lambda _a: (print("Usage: vera iot <subcommand>  (try 'vera iot list')"), 1)[1])
     iot_sub = iot_sp.add_subparsers(dest="iot_cmd", metavar="<subcommand>")
     iot_sub.required = True
@@ -2291,6 +2378,24 @@ def main() -> int:
     ssp = iot_sub.add_parser("announce", help="Speak device status via TTS")
     ssp.add_argument("device_id", metavar="<device_id>")
     ssp.set_defaults(func=cmd_iot)
+
+    ssp = iot_sub.add_parser("action", help="Execute a device-specific action (e.g. lock, unlock)")
+    ssp.add_argument("device_id",    metavar="<device_id>")
+    ssp.add_argument("action_name",  metavar="<action>",  help="Action id (e.g. lock, unlock)")
+    ssp.add_argument("--params", "-p", default=None, metavar="JSON",
+                     help="JSON params, e.g. '{\"pin\": \"1234\"}'")
+    ssp.set_defaults(func=cmd_iot)
+
+    lock_sp = sub.add_parser("lock", help="Yale lock shortcuts: status, lock, unlock")
+    lock_sp.set_defaults(func=lambda _a: (print("Usage: vera lock <status|lock|unlock>"), 1)[1])
+    lock_sub = lock_sp.add_subparsers(dest="lock_cmd", metavar="<subcommand>")
+    lock_sub.required = True
+
+    lock_sub.add_parser("status", help="Show Yale lock state").set_defaults(func=cmd_lock)
+    lock_sub.add_parser("lock",   help="Lock the Yale lock now").set_defaults(func=cmd_lock)
+    usp = lock_sub.add_parser("unlock", help="Unlock the Yale lock (prompts for PIN if not given)")
+    usp.add_argument("--pin", default=None, metavar="PIN", help="Unlock PIN code")
+    usp.set_defaults(func=cmd_lock)
 
     args = p.parse_args()
     if args.cmd is None:

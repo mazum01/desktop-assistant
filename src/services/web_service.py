@@ -70,6 +70,7 @@ GET  /api/iot/{id}          Latest snapshot for a specific IoT device
 PUT  /api/iot/{id}          Reconfigure a device (stop/update/start)  body: {"config": {}}
 DELETE /api/iot/{id}        Stop and unregister an IoT device
 POST /api/iot/{id}/announce Speak status of a specific IoT device via TTS
+POST /api/iot/{id}/action   Execute device action  body: {"action": str, "params": {}}
 GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
 """
@@ -124,6 +125,11 @@ class _IoTCreateBody(BaseModel):
 
 class _IoTUpdateBody(BaseModel):
     config: dict
+
+
+class _IoTActionBody(BaseModel):
+    action: str
+    params: Optional[dict] = None
 
 
 class _RecordBody(BaseModel):
@@ -1755,5 +1761,19 @@ class WebService:
             if self.bus and text:
                 self.bus.publish("av.say", {"text": text})
             return {"ok": True, "text": text}
+
+        @app.post("/api/iot/{device_id}/action")
+        async def api_iot_action(device_id: str, body: _IoTActionBody):
+            """Execute a device-specific action (e.g. lock, unlock)."""
+            if self._iot_registry is None:
+                raise HTTPException(status_code=404, detail="IoT registry not available")
+            dev = self._iot_registry.get(device_id)
+            if dev is None:
+                raise HTTPException(status_code=404, detail=f"IoT device '{device_id}' not found")
+            try:
+                result = dev.execute_action(body.action, body.params)
+            except Exception as exc:
+                raise HTTPException(status_code=503, detail=str(exc))
+            return result
 
         return app

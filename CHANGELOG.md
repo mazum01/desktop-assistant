@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.0] - 2026-06-01
+### Added
+- **Yale WiFi lock integration** — full IoT plugin for Yale smart locks via the August/Yale cloud API.
+  - `src/services/yale_service.py` — `YaleService` wraps `yalesmartalarmclient`; background polling
+    thread; `lock()` / `unlock(pin)` operations; graceful degradation on missing library or bad creds.
+  - `src/iot/devices/yale_device.py` — `YaleDevice` IoT plugin (`_hardwired=False`); coloured lock-state
+    primary, auto-lock metric, lock/unlock action buttons (unlock prompts for PIN), `announce()` TTS.
+  - `src/iot/base.py` — added `execute_action(action, params)` and `get_actions()` methods to `IoTDevice`
+    base class; default returns "not supported".
+  - `src/services/web_service.py` — new `POST /api/iot/{id}/action` endpoint; `_IoTActionBody` Pydantic model.
+  - `src/web/static/app.js` — IoT cards now render action buttons from `snap.actions`; new `doIotAction()`
+    function with optional PIN prompt for unlock.
+  - `scripts/desktop-assistant` — new `vera iot action <id> <action> [--params JSON]` subcommand;
+    new `vera lock <status|lock|unlock [--pin]>` top-level shortcut; `cmd_help()` updated.
+  - `requirements.txt` — added `yalesmartalarmclient>=0.4.3`.
+  - `tests/test_yale_service.py` / `tests/test_yale_device.py` — full test coverage.
+
 ## [1.38.0] - 2026-06-01
 ### Changed
 - **Radon Monitor + DROP Water Softener migrated to IoT plugin system** — both devices are now
