@@ -205,6 +205,30 @@
       </div>
     </section>
 
+    <!-- ── DROP Water Softener ──────────────────────────────────── -->
+    <section class="card" id="card-drop">
+      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Water Softener &nbsp;<button class="btn btn-secondary btn-sm" id="drop-announce-btn" onclick="announceDrop()" title="Speak current water softener status via TTS">📢 Announce</button></h2>
+      <div class="resource-graphs">
+        <div class="resource-graph-wrap" style="flex:1">
+          <div class="resource-graph-label" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span id="stat-drop-flow" class="resource-pct">—</span>
+            <span style="font-size:11px;color:var(--muted)">gpm</span>
+            <span id="stat-drop-used" style="font-size:11px;color:var(--muted)"></span>
+            <span id="stat-drop-capacity" style="font-size:11px;color:var(--muted)"></span>
+            <span id="stat-drop-status" class="pill" style="font-size:11px;margin-left:4px">—</span>
+            <span id="stat-drop-salt" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
+          </div>
+          <canvas id="drop-flow-graph" class="resource-canvas" width="400" height="60"></canvas>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;padding:0 4px">
+            <span>60 min ago</span>
+            <span>Flow rate (gpm)</span>
+            <span>now</span>
+          </div>
+        </div>
+      </div>
+      <div id="drop-detail" style="font-size:11px;color:var(--muted);margin-top:6px;display:flex;gap:16px;flex-wrap:wrap"></div>
+    </section>
+
     <!-- ── Face Registry ───────────────────────────────────────── -->
     <section class="card" id="card-faces">
       <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Face Registry &nbsp;<button class="btn btn-danger btn-sm" onclick="deleteAllFaces()" title="Delete all known faces permanently">🗑 Delete All</button> &nbsp;<button class="btn btn-warning btn-sm" onclick="deleteGuestFaces()" title="Remove unnamed Guest entries">👤 Remove Guests</button> &nbsp;<button class="btn btn-secondary btn-sm" onclick="refreshFaces()" title="Prune outlier embeddings and re-identify all faces">↺ Re-identify</button></h2>

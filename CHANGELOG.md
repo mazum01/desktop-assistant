@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.33.0] - 2026-06-01
+### Added
+- DROP water softener card in the web dashboard: live flow rate, daily usage,
+  softener capacity, water status (protecting / bypass / off), salt OK/LOW badge,
+  peak flow, average daily usage, hub flow, and a 60-minute flow sparkline.
+- 📢 Announce button in the DROP card triggers TTS status readout.
+- `drop` and `drop_flow_history` fields added to the `/api/status` WebSocket payload
+  so the frontend receives live data on every 1-second poll.
+
 ## [1.32.1] - 2026-06-01
 ### Changed
 - TTS voice switched from `en_US-amy-medium` to `en_US-lessac-medium` — same

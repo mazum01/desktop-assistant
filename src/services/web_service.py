@@ -253,6 +253,8 @@ class WebService:
         self._mem_history: collections.deque = collections.deque(maxlen=60)
         # Radon history — 60 samples of pCi/L values
         self._radon_history: collections.deque = collections.deque(maxlen=60)
+        # DROP flow history — 60 samples of flow_gpm values
+        self._drop_flow_history: collections.deque = collections.deque(maxlen=60)
         # Prime the non-blocking cpu_percent sampler so the first real read is accurate
         psutil.cpu_percent(interval=None)
 
@@ -512,6 +514,16 @@ class WebService:
                     # Scale 0-10 pCi/L → 0-100 for sparkline (EPA action = 40%)
                     self._radon_history.append(round(min(radon_pcil / 10.0 * 100, 100), 1))
 
+        # DROP snapshot — pull from service if available
+        drop_reading = None
+        if self._drop_svc and not self._drop_svc.degraded:
+            drop_reading = self._drop_svc.get_reading()
+            if drop_reading and drop_reading.get("flow_gpm") is not None:
+                # Scale flow 0-5 gpm → 0-100 for sparkline
+                self._drop_flow_history.append(
+                    round(min(drop_reading["flow_gpm"] / 5.0 * 100, 100), 1)
+                )
+
         return {
             "version": get_version(),
             "ts": time.time(),
@@ -531,6 +543,8 @@ class WebService:
             "radon_alert": radon_alert,
             "radon_device": radon_device,
             "radon_history": list(self._radon_history),
+            "drop": drop_reading,
+            "drop_flow_history": list(self._drop_flow_history),
         }
 
     # ── FastAPI app ───────────────────────────────────────────────────

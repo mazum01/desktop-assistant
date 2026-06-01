@@ -254,6 +254,54 @@ function updateDashboard(data) {
       drawSparkline("radon-graph", data.radon_history, color);
   }
 
+  // DROP water softener
+  if (data.drop) {
+    const d = data.drop;
+    const flow = d.flow_gpm ?? 0;
+    el("stat-drop-flow").textContent = flow.toFixed(2);
+
+    if (d.used_today_gal != null)
+      el("stat-drop-used").textContent = `${d.used_today_gal.toFixed(1)} gal today`;
+    if (d.capacity_remaining_gal != null)
+      el("stat-drop-capacity").textContent = `${d.capacity_remaining_gal.toFixed(0)} gal remaining`;
+
+    const statusEl = el("stat-drop-status");
+    const waterOn = d.water_on !== false;
+    const bypass  = d.bypass_on === true;
+    const mode    = d.protect_mode || "home";
+    if (!waterOn) {
+      statusEl.textContent = "Water OFF";
+      statusEl.style.cssText = "background:#f8514933;color:#f85149;border:1px solid #f8514966";
+    } else if (bypass) {
+      statusEl.textContent = "Bypass";
+      statusEl.style.cssText = "background:#d2992233;color:#d29922;border:1px solid #d2992266";
+    } else {
+      statusEl.textContent = mode === "away" ? "Away" : mode === "vacation" ? "Vacation" : "Protecting";
+      statusEl.style.cssText = "background:#3fb95033;color:#3fb950;border:1px solid #3fb95066";
+    }
+
+    const saltEl = el("stat-drop-salt");
+    if (d.salt_low === true) {
+      saltEl.textContent = "⚠ Salt LOW";
+      saltEl.style.color = "#f85149";
+    } else if (d.salt_low === false) {
+      saltEl.textContent = "Salt OK";
+      saltEl.style.color = "var(--muted)";
+    }
+
+    // Detail row: peak flow, avg usage, pressure
+    const detail = el("drop-detail");
+    const parts = [];
+    if (d.peak_flow_gpm != null) parts.push(`Peak: ${d.peak_flow_gpm.toFixed(1)} gpm`);
+    if (d.avg_used_gal != null)  parts.push(`Avg/day: ${d.avg_used_gal.toFixed(0)} gal`);
+    if (d.pressure_psi != null)  parts.push(`Pressure: ${d.pressure_psi.toFixed(0)} PSI`);
+    if (d.hub_flow != null)      parts.push(`Hub flow: ${d.hub_flow.toFixed(2)} gpm`);
+    detail.innerHTML = parts.map(p => `<span>${p}</span>`).join("");
+
+    if (data.drop_flow_history && data.drop_flow_history.length >= 2)
+      drawSparkline("drop-flow-graph", data.drop_flow_history, "#58a6ff");
+  }
+
   // Music state/song updates from bus events
   const musicState = last["music.state_changed"];
   if (musicState) _applyMusicState(musicState.state || "stopped");
@@ -1523,6 +1571,21 @@ async function announceRadon() {
     if (!d.ok) console.warn("Radon announce:", d.error || d);
   } catch (e) {
     console.warn("announceRadon error:", e);
+  }
+  setTimeout(() => {
+    if (btn) { btn.disabled = false; btn.textContent = "📢 Announce"; }
+  }, 3000);
+}
+
+async function announceDrop() {
+  const btn = el("drop-announce-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "📢 Announcing…"; }
+  try {
+    const r = await fetch("/api/drop/announce", { method: "POST" });
+    const d = await r.json();
+    if (!d.ok) console.warn("DROP announce:", d.error || d);
+  } catch (e) {
+    console.warn("announceDrop error:", e);
   }
   setTimeout(() => {
     if (btn) { btn.disabled = false; btn.textContent = "📢 Announce"; }
