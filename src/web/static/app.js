@@ -1,5 +1,25 @@
 /* VERA Dashboard — app.js */
 
+// ── Tab navigation ────────────────────────────────────────────────────────
+
+const _TAB_KEY     = 'vera-active-tab';
+const _DEFAULT_TAB = 'overview';
+
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  const pane = document.getElementById('tab-' + tabId);
+  if (pane) pane.classList.add('active');
+  const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+  if (btn) btn.classList.add('active');
+  localStorage.setItem(_TAB_KEY, tabId);
+}
+
+function initTabs() {
+  const saved = localStorage.getItem(_TAB_KEY) || _DEFAULT_TAB;
+  switchTab(saved);
+}
+
 // ── API key management ────────────────────────────────────────────────────
 // The dashboard requires an API key (set via VERA_API_KEY in secrets.env).
 // On first visit the login overlay is shown; the key is stored in
@@ -1640,6 +1660,8 @@ function closeLightbox() {
 // ── Say on enter key ──────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
+  initTabs();
+
   // Set camera stream src with API key so MJPEG streams authenticate.
   // Attach onerror AFTER setting src so the initial HTML src="" doesn't
   // hide cam2-wrap before we get a chance to load it properly.
@@ -2239,23 +2261,27 @@ function _drawTrackingChart(cv) {
 
 // ── Drag-and-drop card reordering ────────────────────────────────────────────
 // Cards are reordered by dragging the ⠿ handle in each card's header.
-// Order is persisted in localStorage so it survives page refresh.
+// Order is persisted in localStorage (per tab-pane) so it survives page refresh.
 
-const _CARD_ORDER_KEY = "da-card-order";
+const _CARD_ORDER_KEY = "da-tab-order";
 let _dragSrcCard = null;
 let _dragHandleDown = false;
 
 function initCardDragDrop() {
-  const main = document.querySelector("main");
+  // Migrate away from old single-key order (pre-tab layout)
+  localStorage.removeItem("da-card-order");
 
-  // Restore saved order from localStorage
-  const saved = JSON.parse(localStorage.getItem(_CARD_ORDER_KEY) || "null");
-  if (saved && Array.isArray(saved)) {
-    saved.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) main.appendChild(el);
-    });
-  }
+  // Restore saved card order for each pane independently
+  document.querySelectorAll('.tab-pane').forEach(pane => {
+    const key = `${_CARD_ORDER_KEY}-${pane.id}`;
+    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    if (saved && Array.isArray(saved)) {
+      saved.forEach(id => {
+        const card = document.getElementById(id);
+        if (card && card.closest('.tab-pane') === pane) pane.appendChild(card);
+      });
+    }
+  });
 
   // Attach mousedown on every drag handle to gate which drags are allowed
   document.querySelectorAll(".drag-handle").forEach(handle => {
@@ -2263,7 +2289,7 @@ function initCardDragDrop() {
     handle.addEventListener("mouseup",   () => { _dragHandleDown = false; });
   });
 
-  document.querySelectorAll("main > .card").forEach(card => {
+  document.querySelectorAll(".tab-pane > .card").forEach(card => {
     // Only allow drag when initiated from the handle
     card.addEventListener("dragstart", e => {
       if (!_dragHandleDown) { e.preventDefault(); return; }
@@ -2302,20 +2328,23 @@ function initCardDragDrop() {
       e.preventDefault();
       card.classList.remove("drag-over-top", "drag-over-bottom");
       if (!_dragSrcCard || _dragSrcCard === card) return;
+      // Only allow drop within the same tab-pane
+      const pane = card.closest('.tab-pane');
+      if (!pane || !pane.contains(_dragSrcCard)) return;
       const rect = card.getBoundingClientRect();
       const insertBefore = e.clientY < rect.top + rect.height / 2;
-      main.insertBefore(_dragSrcCard, insertBefore ? card : card.nextSibling);
-      _saveCardOrder();
+      pane.insertBefore(_dragSrcCard, insertBefore ? card : card.nextSibling);
+      _saveCardOrder(pane);
     });
   });
 
   // Make cards draggable (needed for HTML5 DnD API)
-  document.querySelectorAll("main > .card").forEach(c => c.setAttribute("draggable", "true"));
+  document.querySelectorAll(".tab-pane > .card").forEach(c => c.setAttribute("draggable", "true"));
 }
 
-function _saveCardOrder() {
-  const order = Array.from(document.querySelectorAll("main > .card")).map(c => c.id);
-  localStorage.setItem(_CARD_ORDER_KEY, JSON.stringify(order));
+function _saveCardOrder(pane) {
+  const order = Array.from(pane.querySelectorAll(':scope > .card')).map(c => c.id);
+  localStorage.setItem(`${_CARD_ORDER_KEY}-${pane.id}`, JSON.stringify(order));
 }
 
 // ── Depth Estimation ──────────────────────────────────────────────

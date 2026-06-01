@@ -1,824 +1,780 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VERA</title>
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-  <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png" />
-  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16.png" />
-  <link rel="apple-touch-icon" sizes="192x192" href="/static/favicon-192.png" />
-  <link rel="stylesheet" href="/static/style.css" />
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>VERA</title>
+<link href="/static/favicon.svg" rel="icon" type="image/svg+xml"/>
+<link href="/static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="/static/favicon-32.png" rel="icon" sizes="32x32" type="image/png"/>
+<link href="/static/favicon-16.png" rel="icon" sizes="16x16" type="image/png"/>
+<link href="/static/favicon-192.png" rel="apple-touch-icon" sizes="192x192"/>
+<link href="/static/style.css" rel="stylesheet"/>
 </head>
 <body>
-  <!-- ── Header ──────────────────────────────────────────────── -->
-  <header>
-    <div class="header-left">
-      <span class="logo">🤖</span>
-      <div>
-        <h1>VERA</h1>
-        <span id="version-uptime" class="subtext">connecting…</span>
-      </div>
-    </div>
-    <div id="health-badge" class="badge badge-unknown">⬤ connecting</div>
-  </header>
+<!-- ── Header ──────────────────────────────────────────────── -->
+<div class="page-header"><header>
+<div class="header-left">
+<span class="logo">🤖</span>
+<div>
+<h1>VERA</h1>
+<span class="subtext" id="version-uptime">connecting…</span>
+</div>
+</div>
+<div class="badge badge-unknown" id="health-badge">⬤ connecting</div>
+</header>
+    <nav class="tab-nav"><button class="tab-btn" data-tab="overview" onclick="switchTab('overview')">🏠 Overview</button><button class="tab-btn" data-tab="perception" onclick="switchTab('perception')">🎭 Perception</button><button class="tab-btn" data-tab="smart-home" onclick="switchTab('smart-home')">🏡 Smart Home</button><button class="tab-btn" data-tab="controls" onclick="switchTab('controls')">🎛️ Controls</button><button class="tab-btn" data-tab="system" onclick="switchTab('system')">⚙️ System</button></nav>
+  </div>
+<main>
+    <!-- ══ TAB: OVERVIEW ════════════════════════════════════════ -->
+    <div class="tab-pane" id="tab-overview">
+      <section class="card camera-card" id="card-camera">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Camera Feeds</h2>
+<div class="camera-feeds">
+<div class="camera-feed-wrap">
+<div class="camera-label">Cam 1 — Face Tracking</div>
+<div class="camera-wrap">
+<img alt="camera stream" id="camera-stream" src="/stream"/>
+<span class="face-overlay" id="face-overlay">0 faces</span>
+<span class="fps-overlay" id="fps-overlay-1">– fps</span>
+</div>
+</div>
+<div class="camera-feed-wrap" id="cam2-wrap">
+<div class="camera-label">Cam 2 — Raw</div>
+<div class="camera-wrap">
+<img alt="camera 2 stream" id="camera-stream2" src=""/>
+<span class="fps-overlay" id="fps-overlay-2">– fps</span>
+</div>
+</div>
+</div>
+</section>
 
-  <main>
-    <!-- ── Camera + Faces ──────────────────────────────────────── -->
-    <section class="card camera-card" id="card-camera">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Camera Feeds</h2>
-      <div class="camera-feeds">
-        <div class="camera-feed-wrap">
-          <div class="camera-label">Cam 1 — Face Tracking</div>
-          <div class="camera-wrap">
-            <img id="camera-stream" src="/stream" alt="camera stream" />
-            <span id="face-overlay" class="face-overlay">0 faces</span>
-            <span id="fps-overlay-1" class="fps-overlay">– fps</span>
-          </div>
-        </div>
-        <div class="camera-feed-wrap" id="cam2-wrap">
-          <div class="camera-label">Cam 2 — Raw</div>
-          <div class="camera-wrap">
-            <img id="camera-stream2" src="" alt="camera 2 stream" />
-            <span id="fps-overlay-2" class="fps-overlay">– fps</span>
-          </div>
-        </div>
-      </div>
-    </section>
+      <section class="card" id="card-telemetry">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Telemetry</h2>
+<div class="grid-4">
+<div class="stat-box">
+<div class="stat-label">Temperature</div>
+<div class="stat-value" id="stat-temp">—</div>
+</div>
+<div class="stat-box">
+<div class="stat-label">Fan</div>
+<div class="stat-value" id="stat-fan">—</div>
+</div>
+<div class="stat-box">
+<div class="stat-label">Servo Angle</div>
+<div class="stat-value" id="stat-servo">—</div>
+</div>
+<div class="stat-box">
+<div class="stat-label">Microphone</div>
+<div class="stat-value" id="stat-audio">—</div>
+</div>
+</div>
+<div class="room-row">
+<span class="stat-label">Room: </span>
+<span class="stat-room-name" id="stat-room">—</span>
+<button class="btn btn-sm btn-secondary" id="room-edit-btn" onclick="editRoom()" title="Set current room">✏️</button>
+<span id="room-edit-wrap" style="display:none">
+<input id="room-input" placeholder="e.g. Living Room" style="padding:.3rem .5rem;border-radius:6px;border:1px solid #555;background:#313244;color:#cdd6f4;font-size:.9rem;width:160px;" type="text"/>
+<button class="btn btn-sm btn-primary" onclick="saveRoom()">Save</button>
+<button class="btn btn-sm btn-secondary" onclick="cancelEditRoom()">Cancel</button>
+</span>
+<span id="room-status" style="font-size:.85rem;margin-left:.5rem;"></span>
+</div>
+<!-- Room detection detail panel -->
+<div class="room-detail" id="room-detail">
+<div class="room-detail-row">
+<span class="stat-label">Scene Stability</span>
+<div class="room-stability-wrap">
+<div class="room-stability-bar">
+<div class="room-stability-fill" id="room-stability-fill" style="width:0%"></div>
+</div>
+<span class="room-stability-pct" id="room-stability-pct">—</span>
+</div>
+</div>
+<div class="room-detail-row room-sparkline-row">
+<span class="stat-label">History</span>
+<div class="room-sparkline-wrap">
+<canvas class="room-sim-sparkline" id="room-sim-sparkline"></canvas>
+</div>
+<span class="room-strikes-badge" id="room-strikes-badge">— / — strikes</span>
+</div>
+<div class="room-detail-row" id="room-chips-row"></div>
+<div class="room-detail-row">
+<span class="stat-label">Last Scan</span>
+<span class="room-last-scan" id="room-last-scan">—</span>
+</div>
+</div>
+<div class="spoken-line">
+<span class="stat-label">Last spoken: </span>
+<span class="spoken-text" id="stat-spoken">—</span>
+</div>
+</section>
 
-    <!-- ── Head Tracking Tuning ────────────────────────────────── -->
-    <section class="card" id="card-tracking">
-      <h2>
-        <span class="drag-handle" title="Drag to reorder">⠿</span>Head Tracking Tuning
-        <button class="btn btn-sm btn-secondary" onclick="toggleTuningPanel()"
-          id="tuning-toggle-btn" style="float:right">▾ Show</button>
-      </h2>
-      <div id="tuning-panel" style="display:none">
-        <div class="tuning-controls">
-          <div class="tuning-preset-row">
-            <label>Preset:</label>
-            <select id="tuning-preset-select">
-              <option value="">— select —</option>
-              <option value="default">Default</option>
-              <option value="snappy">Snappy</option>
-              <option value="smooth">Smooth</option>
-            </select>
-            <button class="btn btn-secondary btn-sm" onclick="applyTrackingPreset()">Apply</button>
-            <button class="btn btn-secondary btn-sm" onclick="resetTrackingParams()">↺ Reset</button>
-            <button class="btn btn-primary btn-sm" onclick="saveTrackingParams()">💾 Save to config</button>
-            <span id="tuning-save-status" class="status-text"></span>
-          </div>
+      <section class="card" id="card-resources">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>System Resources</h2>
+<div class="resource-graphs">
+<div class="resource-graph-wrap">
+<div class="resource-graph-label">
+            CPU <span class="resource-pct" id="stat-cpu">—</span>
+</div>
+<canvas class="resource-canvas" height="60" id="cpu-graph" width="400"></canvas>
+</div>
+<div class="resource-graph-wrap">
+<div class="resource-graph-label">
+            Memory <span class="resource-pct" id="stat-mem">—</span>
+</div>
+<canvas class="resource-canvas" height="60" id="mem-graph" width="400"></canvas>
+</div>
+</div>
+</section>
 
-          <div id="tuning-sliders"></div>
+      <section class="card" id="card-services">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Services  <button class="btn btn-warning btn-sm" onclick="restartDaemon()" title="Restart the vera-core systemd service">⟳ Restart Daemon</button></h2>
+<div class="pill-row" id="services-container">
+<span class="pill pill-unknown">loading…</span>
+</div>
+</section>
 
-          <div class="tuning-autotune-row">
-            <button class="btn btn-warning" onclick="startAutoTune()" id="autotune-start-btn">
+      <section class="card" id="card-events">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Event Log <span class="subtext">(last 20)</span></h2>
+<div class="event-log" id="event-log"></div>
+</section>
+
+</div>
+
+    <!-- ══ TAB: PERCEPTION ══════════════════════════════════════ -->
+    <div class="tab-pane" id="tab-perception">
+      <section class="card" id="card-faces">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Face Registry  <button class="btn btn-danger btn-sm" onclick="deleteAllFaces()" title="Delete all known faces permanently">🗑 Delete All</button>  <button class="btn btn-warning btn-sm" onclick="deleteGuestFaces()" title="Remove unnamed Guest entries">👤 Remove Guests</button>  <button class="btn btn-secondary btn-sm" onclick="refreshFaces()" title="Prune outlier embeddings and re-identify all faces">↺ Re-identify</button></h2>
+<div id="face-registry-wrap">
+<table id="face-table">
+<thead>
+<tr>
+<th></th>
+<th>Name</th>
+<th>First Seen</th>
+<th>Last Seen</th>
+<th>Seen</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="face-tbody">
+<tr><td class="empty-row" colspan="6">Loading…</td></tr>
+</tbody>
+</table>
+<div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+<button class="btn btn-secondary btn-sm" onclick="loadFaces()" title="Reload the face list">↺ Refresh</button>
+<button class="btn btn-primary btn-sm" disabled="" id="merge-btn" onclick="mergeFaces()" title="Select exactly two faces to merge">⛓ Merge Selected</button>
+<span id="merge-hint" style="font-size:12px;color:var(--muted)">Select 2 faces to merge</span>
+</div>
+</div>
+</section>
+
+      <section class="card" id="card-tracking">
+<h2>
+<span class="drag-handle" title="Drag to reorder">⠿</span>Head Tracking Tuning
+        <button class="btn btn-sm btn-secondary" id="tuning-toggle-btn" onclick="toggleTuningPanel()" style="float:right">▾ Show</button>
+</h2>
+<div id="tuning-panel" style="display:none">
+<div class="tuning-controls">
+<div class="tuning-preset-row">
+<label>Preset:</label>
+<select id="tuning-preset-select">
+<option value="">— select —</option>
+<option value="default">Default</option>
+<option value="snappy">Snappy</option>
+<option value="smooth">Smooth</option>
+</select>
+<button class="btn btn-secondary btn-sm" onclick="applyTrackingPreset()">Apply</button>
+<button class="btn btn-secondary btn-sm" onclick="resetTrackingParams()">↺ Reset</button>
+<button class="btn btn-primary btn-sm" onclick="saveTrackingParams()">💾 Save to config</button>
+<span class="status-text" id="tuning-save-status"></span>
+</div>
+<div id="tuning-sliders"></div>
+<div class="tuning-autotune-row">
+<button class="btn btn-warning" id="autotune-start-btn" onclick="startAutoTune()">
               🎯 Run Auto-Tune (~20 s)
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="cancelAutoTune()"
-              id="autotune-cancel-btn" style="display:none">Cancel</button>
-            <span id="autotune-status" class="status-text"></span>
-          </div>
-        </div>
-
-        <div class="tuning-chart-wrap">
-          <div class="tuning-chart-legend">
-            <span style="color:#888">— face raw</span> &nbsp;
-            <span style="color:#4cc">— face smoothed</span> &nbsp;
-            <span style="color:#4f4">— target angle</span> &nbsp;
+<button class="btn btn-secondary btn-sm" id="autotune-cancel-btn" onclick="cancelAutoTune()" style="display:none">Cancel</button>
+<span class="status-text" id="autotune-status"></span>
+</div>
+</div>
+<div class="tuning-chart-wrap">
+<div class="tuning-chart-legend">
+<span style="color:#888">— face raw</span>  
+            <span style="color:#4cc">— face smoothed</span>  
+            <span style="color:#4f4">— target angle</span>  
             <span style="color:#fa4">— servo angle</span>
-          </div>
-          <canvas id="tracking-chart" width="800" height="160"></canvas>
-        </div>
-      </div>
-    </section>
+</div>
+<canvas height="160" id="tracking-chart" width="800"></canvas>
+</div>
+</div>
+</section>
 
-    <!-- ── Status Grid ─────────────────────────────────────────── -->
-    <section class="card" id="card-telemetry">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Telemetry</h2>
-      <div class="grid-4">
-        <div class="stat-box">
-          <div class="stat-label">Temperature</div>
-          <div id="stat-temp" class="stat-value">—</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Fan</div>
-          <div id="stat-fan" class="stat-value">—</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Servo Angle</div>
-          <div id="stat-servo" class="stat-value">—</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Microphone</div>
-          <div id="stat-audio" class="stat-value">—</div>
-        </div>
-      </div>
-      <div class="room-row">
-        <span class="stat-label">Room: </span>
-        <span id="stat-room" class="stat-room-name">—</span>
-        <button class="btn btn-sm btn-secondary" id="room-edit-btn" onclick="editRoom()" title="Set current room">✏️</button>
-        <span id="room-edit-wrap" style="display:none">
-          <input id="room-input" type="text" placeholder="e.g. Living Room" style="padding:.3rem .5rem;border-radius:6px;border:1px solid #555;background:#313244;color:#cdd6f4;font-size:.9rem;width:160px;" />
-          <button class="btn btn-sm btn-primary" onclick="saveRoom()">Save</button>
-          <button class="btn btn-sm btn-secondary" onclick="cancelEditRoom()">Cancel</button>
-        </span>
-        <span id="room-status" style="font-size:.85rem;margin-left:.5rem;"></span>
-      </div>
-      <!-- Room detection detail panel -->
-      <div id="room-detail" class="room-detail">
-        <div class="room-detail-row">
-          <span class="stat-label">Scene Stability</span>
-          <div class="room-stability-wrap">
-            <div class="room-stability-bar">
-              <div id="room-stability-fill" class="room-stability-fill" style="width:0%"></div>
-            </div>
-            <span id="room-stability-pct" class="room-stability-pct">—</span>
-          </div>
-        </div>
-        <div class="room-detail-row room-sparkline-row">
-          <span class="stat-label">History</span>
-          <div class="room-sparkline-wrap">
-            <canvas id="room-sim-sparkline" class="room-sim-sparkline"></canvas>
-          </div>
-          <span id="room-strikes-badge" class="room-strikes-badge">— / — strikes</span>
-        </div>
-        <div class="room-detail-row" id="room-chips-row"></div>
-        <div class="room-detail-row">
-          <span class="stat-label">Last Scan</span>
-          <span id="room-last-scan" class="room-last-scan">—</span>
-        </div>
-      </div>
-      <div class="spoken-line">
-        <span class="stat-label">Last spoken: </span>
-        <span id="stat-spoken" class="spoken-text">—</span>
-      </div>
-    </section>
-
-    <!-- ── System Resources ────────────────────────────────────── -->
-    <section class="card" id="card-resources">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>System Resources</h2>
-      <div class="resource-graphs">
-        <div class="resource-graph-wrap">
-          <div class="resource-graph-label">
-            CPU <span id="stat-cpu" class="resource-pct">—</span>
-          </div>
-          <canvas id="cpu-graph" class="resource-canvas" width="400" height="60"></canvas>
-        </div>
-        <div class="resource-graph-wrap">
-          <div class="resource-graph-label">
-            Memory <span id="stat-mem" class="resource-pct">—</span>
-          </div>
-          <canvas id="mem-graph" class="resource-canvas" width="400" height="60"></canvas>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Services ────────────────────────────────────────────── -->
-    <section class="card" id="card-services">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Services &nbsp;<button class="btn btn-warning btn-sm" onclick="restartDaemon()" title="Restart the vera-core systemd service">⟳ Restart Daemon</button></h2>
-      <div id="services-container" class="pill-row">
-        <span class="pill pill-unknown">loading…</span>
-      </div>
-    </section>
-
-    <!-- ── Radon Monitor ────────────────────────────────────────── -->
-    <section class="card" id="card-radon">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Radon Monitor &nbsp;<button class="btn btn-secondary btn-sm" id="radon-announce-btn" onclick="announceRadon()" title="Speak current radon level via TTS">📢 Announce</button></h2>
-      <div class="resource-graphs">
-        <div class="resource-graph-wrap" style="flex:1">
-          <div class="resource-graph-label" style="display:flex;align-items:center;gap:8px">
-            <span id="stat-radon-pcil" class="resource-pct">—</span>
-            <span style="font-size:11px;color:var(--muted)">pCi/L</span>
-            <span id="stat-radon-bqm3" style="font-size:11px;color:var(--muted)"></span>
-            <span id="stat-radon-alert" class="pill" style="font-size:11px;margin-left:4px">—</span>
-            <span id="stat-radon-device" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
-          </div>
-          <canvas id="radon-graph" class="resource-canvas" width="400" height="60"></canvas>
-          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;padding:0 4px">
-            <span>60 min ago</span>
-            <span>EPA action: 4.0 pCi/L</span>
-            <span>now</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── DROP Water Softener ──────────────────────────────────── -->
-    <section class="card" id="card-drop">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Water Softener &nbsp;<button class="btn btn-secondary btn-sm" id="drop-announce-btn" onclick="announceDrop()" title="Speak current water softener status via TTS">📢 Announce</button></h2>
-      <div class="resource-graphs">
-        <div class="resource-graph-wrap" style="flex:1">
-          <div class="resource-graph-label" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            <span id="stat-drop-flow" class="resource-pct">—</span>
-            <span style="font-size:11px;color:var(--muted)">gpm</span>
-            <span id="stat-drop-used" style="font-size:11px;color:var(--muted)"></span>
-            <span id="stat-drop-capacity" style="font-size:11px;color:var(--muted)"></span>
-            <span id="stat-drop-status" class="pill" style="font-size:11px;margin-left:4px">—</span>
-            <span id="stat-drop-salt" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
-          </div>
-          <canvas id="drop-flow-graph" class="resource-canvas" width="400" height="60"></canvas>
-          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;padding:0 4px">
-            <span>60 min ago</span>
-            <span>Flow rate (gpm)</span>
-            <span>now</span>
-          </div>
-        </div>
-      </div>
-      <div id="drop-detail" style="font-size:11px;color:var(--muted);margin-top:6px;display:flex;gap:16px;flex-wrap:wrap"></div>
-    </section>
-
-    <!-- ── Face Registry ───────────────────────────────────────── -->
-    <section class="card" id="card-faces">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Face Registry &nbsp;<button class="btn btn-danger btn-sm" onclick="deleteAllFaces()" title="Delete all known faces permanently">🗑 Delete All</button> &nbsp;<button class="btn btn-warning btn-sm" onclick="deleteGuestFaces()" title="Remove unnamed Guest entries">👤 Remove Guests</button> &nbsp;<button class="btn btn-secondary btn-sm" onclick="refreshFaces()" title="Prune outlier embeddings and re-identify all faces">↺ Re-identify</button></h2>
-      <div id="face-registry-wrap">
-        <table id="face-table">
-          <thead>
-            <tr>
-              <th></th>
-              <th>Name</th>
-              <th>First Seen</th>
-              <th>Last Seen</th>
-              <th>Seen</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="face-tbody">
-            <tr><td colspan="6" class="empty-row">Loading…</td></tr>
-          </tbody>
-        </table>
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-          <button class="btn btn-secondary btn-sm" onclick="loadFaces()" title="Reload the face list">↺ Refresh</button>
-          <button class="btn btn-primary btn-sm" id="merge-btn" onclick="mergeFaces()" disabled title="Select exactly two faces to merge">⛓ Merge Selected</button>
-          <span id="merge-hint" style="font-size:12px;color:var(--muted)">Select 2 faces to merge</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Controls ────────────────────────────────────────────── -->
-    <section class="card" id="card-controls">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Controls</h2>
-      <div class="controls-grid">
-
-        <div class="control-group">
-          <label>Say something</label>
-          <div class="row-input">
-            <input type="text" id="say-input" placeholder="Enter text to speak…" />
-            <button class="btn btn-primary" onclick="doSay()">Speak</button>
-          </div>
-        </div>
-
-        <div class="control-group">
-          <label>Audio Clip</label>
-          <div class="row-input" style="align-items:center;gap:10px;flex-wrap:wrap">
-            <label style="font-size:13px;color:var(--text-dim)">Seconds</label>
-            <input type="number" id="record-seconds" min="1" max="120" step="1" value="5"
-              style="width:80px" />
-            <button class="btn btn-secondary" onclick="doRecordClip()">Record</button>
-            <button class="btn btn-primary" onclick="doPlaybackClip()">Playback</button>
-            <span id="record-status" class="qh-status"></span>
-          </div>
-          <div class="row-input" style="margin-top:6px;align-items:center;gap:10px;flex-wrap:wrap">
-            <progress id="record-progress" max="1" value="0" style="width:220px;display:none"></progress>
-            <span id="record-remaining" style="font-size:12px;color:var(--text-muted)"></span>
-          </div>
-        </div>
-
-        <div class="control-group">
-          <label>Pan servo  <span id="pan-angle-display">180°</span></label>
-          <div class="row-input">
-            <input type="range" id="pan-slider" min="1" max="360" value="180" />
-            <button class="btn btn-primary" onclick="doPan()">Go</button>
-          </div>
-          <div class="row-input" style="margin-top:6px">
-            <label class="qh-toggle" style="margin:0">
-              <input type="checkbox" id="servo-enabled" onchange="saveServoEnabled(this.checked)" />
-              <span>Enable servo motion</span>
-            </label>
-          </div>
-          <div class="row-input" style="margin-top:4px">
-            <label class="qh-toggle" style="margin:0">
-              <input type="checkbox" id="face-tracking-enabled" onchange="saveFaceTrackingEnabled(this.checked)" />
-              <span>Face tracking (servo follows detected face)</span>
-            </label>
-          </div>
-          <div class="row-input" style="margin-top:4px">
-            <label class="qh-toggle" style="margin:0">
-              <input type="checkbox" id="random-motion-enabled" onchange="saveRandomMotionEnabled(this.checked)" />
-              <span>Random motion (idle gaze when no face)</span>
-            </label>
-          </div>
-          <div class="row-input" style="margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap">
-            <label style="font-size:13px;color:var(--text-dim)">Travel limits:</label>
-            <label style="font-size:13px">
-              Min&nbsp;<input type="number" id="servo-travel-min" min="1" max="359" step="1" value="135"
-                style="width:65px;margin-left:4px" />°
-            </label>
-            <label style="font-size:13px">
-              Max&nbsp;<input type="number" id="servo-travel-max" min="2" max="360" step="1" value="215"
-                style="width:65px;margin-left:4px" />°
-            </label>
-            <button class="btn btn-primary btn-sm" onclick="saveServoLimits()">Set</button>
-            <span id="servo-limits-status" class="qh-status"></span>
-          </div>
-        </div>
-
-        <div class="control-group">
-          <label>Cam 1 Rotation  <span id="cam-rotation-display">0°</span></label>
-          <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
-            <input type="range" id="cam-rotation-slider" min="0" max="359" step="1" value="0"
-                   oninput="document.getElementById('cam-rotation-display').textContent=this.value+'°'" />
-            <select id="cam-rotation-preset" style="width:90px"
-                    onchange="setCamRotationPreset(this.value)">
-              <option value="">Preset…</option>
-              <option value="0">0°</option>
-              <option value="90">90°</option>
-              <option value="180">180°</option>
-              <option value="270">270°</option>
-            </select>
-            <button class="btn btn-primary btn-sm" onclick="saveCamRotation()">Set</button>
-            <span id="cam-rotation-status" class="qh-status"></span>
-          </div>
-        </div>
-
-        <div class="control-group">
-          <label>Cam 2 Rotation  <span id="cam2-rotation-display">0°</span></label>
-          <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
-            <input type="range" id="cam2-rotation-slider" min="0" max="359" step="1" value="0"
-                   oninput="document.getElementById('cam2-rotation-display').textContent=this.value+'°'" />
-            <select id="cam2-rotation-preset" style="width:90px"
-                    onchange="setCam2RotationPreset(this.value)">
-              <option value="">Preset…</option>
-              <option value="0">0°</option>
-              <option value="90">90°</option>
-              <option value="180">180°</option>
-              <option value="270">270°</option>
-            </select>
-            <button class="btn btn-primary btn-sm" onclick="saveCam2Rotation()">Set</button>
-            <span id="cam2-rotation-status" class="qh-status"></span>
-          </div>
-        </div>
-
-        <div class="control-group">
-          <label>Cam 2 Capture Resolution <small style="color:var(--text-muted)">(sensor resolution — higher = better panorama quality)</small></label>
-          <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
-            <select id="cam2-capture-resolution-select" onchange="saveCam2CaptureResolution(this.value)" style="width:200px">
-              <option value="640x480">640×480</option>
-              <option value="1280x720">1280×720 (HD 720p)</option>
-              <option value="1920x1080" selected>1920×1080 (Full HD)</option>
-            </select>
-            <span id="cam2-capture-resolution-status" class="qh-status"></span>
-          </div>
-        </div>
-
-        <div class="control-group">
-          <label>Cam 2 Stream Resolution <small style="color:var(--text-muted)">(MJPEG output — does not affect snapshot quality)</small></label>
-          <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
-            <select id="cam2-stream-resolution-select" onchange="saveCam2StreamResolution(this.value)" style="width:200px">
-              <option value="320x180">320×180 (low bandwidth)</option>
-              <option value="426x240">426×240</option>
-              <option value="640x360" selected>640×360 (default)</option>
-              <option value="854x480">854×480</option>
-              <option value="1280x720">1280×720 (HD)</option>
-              <option value="1920x1080">1920×1080 (Full HD — slow)</option>
-            </select>
-            <span id="cam2-stream-resolution-status" class="qh-status"></span>
-          </div>
-        </div>
-
-        <div class="control-group">
-          <label>Stream Resolution <small style="color:var(--text-muted)">(MJPEG output — camera FOV unchanged)</small></label>
-          <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
-            <select id="cam-stream-resolution-select" onchange="saveStreamResolution(this.value)" style="width:200px">
-              <option value="320x180">320×180 (low bandwidth)</option>
-              <option value="426x240">426×240</option>
-              <option value="640x360" selected>640×360 (default)</option>
-              <option value="854x480">854×480</option>
-              <option value="1280x720">1280×720 (HD 720p)</option>
-              <option value="1920x1080">1920×1080 (Full HD — slow)</option>
-            </select>
-            <span id="cam-stream-resolution-status" class="qh-status"></span>
-          </div>
-        </div>
-
-        <div class="control-group">
-          <label>System</label>
-          <div class="row-input">
-            <button class="btn btn-secondary" onclick="doVersion()">Speak Version</button>
-            <button class="btn btn-secondary" onclick="doDescribe()">Describe What I See</button>
-          </div>
-          <div class="row-input" style="margin-top:6px">
-            <label class="qh-toggle" style="margin:0">
-              <input type="checkbox" id="object-detection-enabled" onchange="saveObjectDetectionEnabled(this.checked)" />
-              <span>Object classification (detects COCO objects via Hailo-8)</span>
-            </label>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-    </section>
-
-    <!-- ── Depth Estimation ──────────────────────────────────────── -->
-    <section class="card" id="card-depth">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>📐 Depth Estimation</h2>
-
-      <div class="control-group">
-        <label>Dense Stereo (SGBM)</label>
-        <div class="row-input">
-          <label class="qh-toggle" style="margin:0">
-            <input type="checkbox" id="depth-dense-enabled" onchange="saveDepthSettings()" />
-            <span>Enable dense stereo depth</span>
-          </label>
-          <span id="depth-dense-cal" style="font-size:0.8em;margin-left:8px;color:var(--text-muted)"></span>
-        </div>
-      </div>
-
-      <div class="control-group">
-        <label>Monocular Depth (Hailo-8 scdepthv3)</label>
-        <div class="row-input">
-          <label class="qh-toggle" style="margin:0">
-            <input type="checkbox" id="depth-mono-enabled" onchange="saveDepthSettings()" />
-            <span>Enable monocular depth</span>
-          </label>
-          <span id="depth-mono-hw" style="font-size:0.8em;margin-left:8px;color:var(--text-muted)"></span>
-        </div>
-      </div>
-
-      <div class="control-group" id="depth-stats-row" style="display:none">
-        <label>Depth Stats</label>
-        <div style="font-size:0.85em;color:var(--text-muted)">
-          <span>Nearest: <strong id="depth-nearest">—</strong></span> &nbsp;
-          <span>Mean: <strong id="depth-mean">—</strong></span> &nbsp;
+      <section class="card" id="card-depth">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>📐 Depth Estimation</h2>
+<div class="control-group">
+<label>Dense Stereo (SGBM)</label>
+<div class="row-input">
+<label class="qh-toggle" style="margin:0">
+<input id="depth-dense-enabled" onchange="saveDepthSettings()" type="checkbox"/>
+<span>Enable dense stereo depth</span>
+</label>
+<span id="depth-dense-cal" style="font-size:0.8em;margin-left:8px;color:var(--text-muted)"></span>
+</div>
+</div>
+<div class="control-group">
+<label>Monocular Depth (Hailo-8 scdepthv3)</label>
+<div class="row-input">
+<label class="qh-toggle" style="margin:0">
+<input id="depth-mono-enabled" onchange="saveDepthSettings()" type="checkbox"/>
+<span>Enable monocular depth</span>
+</label>
+<span id="depth-mono-hw" style="font-size:0.8em;margin-left:8px;color:var(--text-muted)"></span>
+</div>
+</div>
+<div class="control-group" id="depth-stats-row" style="display:none">
+<label>Depth Stats</label>
+<div style="font-size:0.85em;color:var(--text-muted)">
+<span>Nearest: <strong id="depth-nearest">—</strong></span>  
+          <span>Mean: <strong id="depth-mean">—</strong></span>  
           <span>Farthest: <strong id="depth-farthest">—</strong></span>
-          &nbsp;<button class="btn btn-sm" onclick="refreshDepthStats()">↺</button>
-        </div>
-      </div>
-
-      <div class="control-group" id="depth-maps-row">
-        <label>Depth Maps</label>
-        <div class="row-input" style="gap:8px;flex-wrap:wrap">
-          <div style="flex:1;min-width:200px">
-            <div style="font-size:0.8em;color:var(--text-muted);margin-bottom:4px">Dense stereo</div>
-            <img id="depth-map-img" src="" alt="Dense depth map"
-                 style="width:100%;border-radius:4px;cursor:pointer;display:none"
-                 onclick="openLightbox(this.src,'Dense Depth Map')" />
-            <div id="depth-map-placeholder" style="padding:8px;color:var(--text-muted);font-size:0.8em">
+           <button class="btn btn-sm" onclick="refreshDepthStats()">↺</button>
+</div>
+</div>
+<div class="control-group" id="depth-maps-row">
+<label>Depth Maps</label>
+<div class="row-input" style="gap:8px;flex-wrap:wrap">
+<div style="flex:1;min-width:200px">
+<div style="font-size:0.8em;color:var(--text-muted);margin-bottom:4px">Dense stereo</div>
+<img alt="Dense depth map" id="depth-map-img" onclick="openLightbox(this.src,'Dense Depth Map')" src="" style="width:100%;border-radius:4px;cursor:pointer;display:none"/>
+<div id="depth-map-placeholder" style="padding:8px;color:var(--text-muted);font-size:0.8em">
               (disabled or no calibration)
             </div>
-            <button class="btn btn-sm" onclick="refreshDepthMap()" style="margin-top:4px">↺ Refresh</button>
-          </div>
-          <div style="flex:1;min-width:200px">
-            <div style="font-size:0.8em;color:var(--text-muted);margin-bottom:4px">Monocular (Hailo-8)</div>
-            <img id="depth-mono-img" src="" alt="Mono depth map"
-                 style="width:100%;border-radius:4px;cursor:pointer;display:none"
-                 onclick="openLightbox(this.src,'Monocular Depth Map')" />
-            <div id="depth-mono-placeholder" style="padding:8px;color:var(--text-muted);font-size:0.8em">
+<button class="btn btn-sm" onclick="refreshDepthMap()" style="margin-top:4px">↺ Refresh</button>
+</div>
+<div style="flex:1;min-width:200px">
+<div style="font-size:0.8em;color:var(--text-muted);margin-bottom:4px">Monocular (Hailo-8)</div>
+<img alt="Mono depth map" id="depth-mono-img" onclick="openLightbox(this.src,'Monocular Depth Map')" src="" style="width:100%;border-radius:4px;cursor:pointer;display:none"/>
+<div id="depth-mono-placeholder" style="padding:8px;color:var(--text-muted);font-size:0.8em">
               (disabled or hardware not ready)
             </div>
-            <button class="btn btn-sm" onclick="refreshMonoMap()" style="margin-top:4px">↺ Refresh</button>
-          </div>
-        </div>
-      </div>
-    </section>
+<button class="btn btn-sm" onclick="refreshMonoMap()" style="margin-top:4px">↺ Refresh</button>
+</div>
+</div>
+</div>
+</section>
 
-    <!-- ── Music (Pandora) ───────────────────────────────────── -->
-    <section class="card" id="card-music">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎵 Music (Pandora)</h2>
-      <div id="music-not-configured" style="display:none;color:var(--yellow);margin-bottom:8px;font-size:0.9em">
+</div>
+
+    <!-- ══ TAB: SMART HOME ══════════════════════════════════════ -->
+    <div class="tab-pane" id="tab-smart-home">
+      <section class="card" id="card-radon">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Radon Monitor  <button class="btn btn-secondary btn-sm" id="radon-announce-btn" onclick="announceRadon()" title="Speak current radon level via TTS">📢 Announce</button></h2>
+<div class="resource-graphs">
+<div class="resource-graph-wrap" style="flex:1">
+<div class="resource-graph-label" style="display:flex;align-items:center;gap:8px">
+<span class="resource-pct" id="stat-radon-pcil">—</span>
+<span style="font-size:11px;color:var(--muted)">pCi/L</span>
+<span id="stat-radon-bqm3" style="font-size:11px;color:var(--muted)"></span>
+<span class="pill" id="stat-radon-alert" style="font-size:11px;margin-left:4px">—</span>
+<span id="stat-radon-device" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
+</div>
+<canvas class="resource-canvas" height="60" id="radon-graph" width="400"></canvas>
+<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;padding:0 4px">
+<span>60 min ago</span>
+<span>EPA action: 4.0 pCi/L</span>
+<span>now</span>
+</div>
+</div>
+</div>
+</section>
+
+      <section class="card" id="card-drop">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Water Softener  <button class="btn btn-secondary btn-sm" id="drop-announce-btn" onclick="announceDrop()" title="Speak current water softener status via TTS">📢 Announce</button></h2>
+<div class="resource-graphs">
+<div class="resource-graph-wrap" style="flex:1">
+<div class="resource-graph-label" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+<span class="resource-pct" id="stat-drop-flow">—</span>
+<span style="font-size:11px;color:var(--muted)">gpm</span>
+<span id="stat-drop-used" style="font-size:11px;color:var(--muted)"></span>
+<span id="stat-drop-capacity" style="font-size:11px;color:var(--muted)"></span>
+<span class="pill" id="stat-drop-status" style="font-size:11px;margin-left:4px">—</span>
+<span id="stat-drop-salt" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
+</div>
+<canvas class="resource-canvas" height="60" id="drop-flow-graph" width="400"></canvas>
+<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;padding:0 4px">
+<span>60 min ago</span>
+<span>Flow rate (gpm)</span>
+<span>now</span>
+</div>
+</div>
+</div>
+<div id="drop-detail" style="font-size:11px;color:var(--muted);margin-top:6px;display:flex;gap:16px;flex-wrap:wrap"></div>
+</section>
+
+</div>
+
+    <!-- ══ TAB: CONTROLS ════════════════════════════════════════ -->
+    <div class="tab-pane" id="tab-controls">
+      <section class="card" id="card-controls">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Controls</h2>
+<div class="controls-grid">
+<div class="control-group">
+<label>Say something</label>
+<div class="row-input">
+<input id="say-input" placeholder="Enter text to speak…" type="text"/>
+<button class="btn btn-primary" onclick="doSay()">Speak</button>
+</div>
+</div>
+<div class="control-group">
+<label>Audio Clip</label>
+<div class="row-input" style="align-items:center;gap:10px;flex-wrap:wrap">
+<label style="font-size:13px;color:var(--text-dim)">Seconds</label>
+<input id="record-seconds" max="120" min="1" step="1" style="width:80px" type="number" value="5"/>
+<button class="btn btn-secondary" onclick="doRecordClip()">Record</button>
+<button class="btn btn-primary" onclick="doPlaybackClip()">Playback</button>
+<span class="qh-status" id="record-status"></span>
+</div>
+<div class="row-input" style="margin-top:6px;align-items:center;gap:10px;flex-wrap:wrap">
+<progress id="record-progress" max="1" style="width:220px;display:none" value="0"></progress>
+<span id="record-remaining" style="font-size:12px;color:var(--text-muted)"></span>
+</div>
+</div>
+<div class="control-group">
+<label>Pan servo  <span id="pan-angle-display">180°</span></label>
+<div class="row-input">
+<input id="pan-slider" max="360" min="1" type="range" value="180"/>
+<button class="btn btn-primary" onclick="doPan()">Go</button>
+</div>
+<div class="row-input" style="margin-top:6px">
+<label class="qh-toggle" style="margin:0">
+<input id="servo-enabled" onchange="saveServoEnabled(this.checked)" type="checkbox"/>
+<span>Enable servo motion</span>
+</label>
+</div>
+<div class="row-input" style="margin-top:4px">
+<label class="qh-toggle" style="margin:0">
+<input id="face-tracking-enabled" onchange="saveFaceTrackingEnabled(this.checked)" type="checkbox"/>
+<span>Face tracking (servo follows detected face)</span>
+</label>
+</div>
+<div class="row-input" style="margin-top:4px">
+<label class="qh-toggle" style="margin:0">
+<input id="random-motion-enabled" onchange="saveRandomMotionEnabled(this.checked)" type="checkbox"/>
+<span>Random motion (idle gaze when no face)</span>
+</label>
+</div>
+<div class="row-input" style="margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap">
+<label style="font-size:13px;color:var(--text-dim)">Travel limits:</label>
+<label style="font-size:13px">
+              Min <input id="servo-travel-min" max="359" min="1" step="1" style="width:65px;margin-left:4px" type="number" value="135"/>°
+            </label>
+<label style="font-size:13px">
+              Max <input id="servo-travel-max" max="360" min="2" step="1" style="width:65px;margin-left:4px" type="number" value="215"/>°
+            </label>
+<button class="btn btn-primary btn-sm" onclick="saveServoLimits()">Set</button>
+<span class="qh-status" id="servo-limits-status"></span>
+</div>
+</div>
+<div class="control-group">
+<label>Cam 1 Rotation  <span id="cam-rotation-display">0°</span></label>
+<div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
+<input id="cam-rotation-slider" max="359" min="0" oninput="document.getElementById('cam-rotation-display').textContent=this.value+'°'" step="1" type="range" value="0"/>
+<select id="cam-rotation-preset" onchange="setCamRotationPreset(this.value)" style="width:90px">
+<option value="">Preset…</option>
+<option value="0">0°</option>
+<option value="90">90°</option>
+<option value="180">180°</option>
+<option value="270">270°</option>
+</select>
+<button class="btn btn-primary btn-sm" onclick="saveCamRotation()">Set</button>
+<span class="qh-status" id="cam-rotation-status"></span>
+</div>
+</div>
+<div class="control-group">
+<label>Cam 2 Rotation  <span id="cam2-rotation-display">0°</span></label>
+<div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
+<input id="cam2-rotation-slider" max="359" min="0" oninput="document.getElementById('cam2-rotation-display').textContent=this.value+'°'" step="1" type="range" value="0"/>
+<select id="cam2-rotation-preset" onchange="setCam2RotationPreset(this.value)" style="width:90px">
+<option value="">Preset…</option>
+<option value="0">0°</option>
+<option value="90">90°</option>
+<option value="180">180°</option>
+<option value="270">270°</option>
+</select>
+<button class="btn btn-primary btn-sm" onclick="saveCam2Rotation()">Set</button>
+<span class="qh-status" id="cam2-rotation-status"></span>
+</div>
+</div>
+<div class="control-group">
+<label>Cam 2 Capture Resolution <small style="color:var(--text-muted)">(sensor resolution — higher = better panorama quality)</small></label>
+<div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
+<select id="cam2-capture-resolution-select" onchange="saveCam2CaptureResolution(this.value)" style="width:200px">
+<option value="640x480">640×480</option>
+<option value="1280x720">1280×720 (HD 720p)</option>
+<option selected="" value="1920x1080">1920×1080 (Full HD)</option>
+</select>
+<span class="qh-status" id="cam2-capture-resolution-status"></span>
+</div>
+</div>
+<div class="control-group">
+<label>Cam 2 Stream Resolution <small style="color:var(--text-muted)">(MJPEG output — does not affect snapshot quality)</small></label>
+<div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
+<select id="cam2-stream-resolution-select" onchange="saveCam2StreamResolution(this.value)" style="width:200px">
+<option value="320x180">320×180 (low bandwidth)</option>
+<option value="426x240">426×240</option>
+<option selected="" value="640x360">640×360 (default)</option>
+<option value="854x480">854×480</option>
+<option value="1280x720">1280×720 (HD)</option>
+<option value="1920x1080">1920×1080 (Full HD — slow)</option>
+</select>
+<span class="qh-status" id="cam2-stream-resolution-status"></span>
+</div>
+</div>
+<div class="control-group">
+<label>Stream Resolution <small style="color:var(--text-muted)">(MJPEG output — camera FOV unchanged)</small></label>
+<div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
+<select id="cam-stream-resolution-select" onchange="saveStreamResolution(this.value)" style="width:200px">
+<option value="320x180">320×180 (low bandwidth)</option>
+<option value="426x240">426×240</option>
+<option selected="" value="640x360">640×360 (default)</option>
+<option value="854x480">854×480</option>
+<option value="1280x720">1280×720 (HD 720p)</option>
+<option value="1920x1080">1920×1080 (Full HD — slow)</option>
+</select>
+<span class="qh-status" id="cam-stream-resolution-status"></span>
+</div>
+</div>
+<div class="control-group">
+<label>System</label>
+<div class="row-input">
+<button class="btn btn-secondary" onclick="doVersion()">Speak Version</button>
+<button class="btn btn-secondary" onclick="doDescribe()">Describe What I See</button>
+</div>
+<div class="row-input" style="margin-top:6px">
+<label class="qh-toggle" style="margin:0">
+<input id="object-detection-enabled" onchange="saveObjectDetectionEnabled(this.checked)" type="checkbox"/>
+<span>Object classification (detects COCO objects via Hailo-8)</span>
+</label>
+</div>
+</div>
+</div>
+</section>
+
+      <section class="card" id="card-music">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎵 Music (Pandora)</h2>
+<div id="music-not-configured" style="display:none;color:var(--yellow);margin-bottom:8px;font-size:0.9em">
         ⚠ pianobar not configured. Create <code>~/.config/pianobar/config</code> with your Pandora credentials.
       </div>
-
-      <!-- Album art + metadata row -->
-      <div class="music-player-row">
-        <div class="music-art" id="music-art-wrap">
-          <img id="music-art-img" src="" alt="Album Art" style="display:none"
-               onerror="this.style.display='none';document.getElementById('music-art-placeholder').style.display='flex'">
-          <div id="music-art-placeholder" class="music-art-placeholder">♫</div>
-        </div>
-        <div class="music-info">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-            <span id="music-state-icon" style="font-size:1.2em">■</span>
-            <span id="music-song-title" style="font-weight:600">—</span>
-          </div>
-          <div style="font-size:0.85em;color:var(--text-muted)">
-            <span id="music-song-artist"></span>
-          </div>
-          <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px">
-            <span id="music-song-album"></span>
-          </div>
-          <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;opacity:0.7">
-            <span id="music-song-station"></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Progress bar -->
-      <div class="music-progress-row">
-        <span id="music-elapsed" style="font-size:0.8em;color:var(--text-muted);min-width:38px">0:00</span>
-        <input type="range" id="music-progress-bar" class="music-progress-bar"
-               min="0" max="100" value="0" disabled>
-        <span id="music-duration" style="font-size:0.8em;color:var(--text-muted);min-width:38px;text-align:right">0:00</span>
-      </div>
-
-      <!-- Playback controls -->
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button class="btn btn-primary" onclick="musicPlay()">▶ Play</button>
-        <button class="btn btn-sm" onclick="musicPause()">⏸ Pause</button>
-        <button class="btn btn-sm" onclick="musicNext()">⏭ Next</button>
-        <button class="btn btn-sm" onclick="musicStop()">■ Stop</button>
-        <button class="btn btn-sm" onclick="musicThumbsUp()" title="Love this song">👍</button>
-        <button class="btn btn-sm" onclick="musicThumbsDown()" title="Ban this song">👎</button>
-      </div>
-
-      <!-- Station selector -->
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-        <label style="font-size:0.9em">Station</label>
-        <select id="music-station-select" style="flex:1;min-width:180px" onchange="musicSetStation(this.value)">
-          <option value="">— select station —</option>
-        </select>
-        <span id="music-status" style="font-size:0.85em;color:var(--green)"></span>
-      </div>
-
-      <!-- Volume control -->
-      <div class="music-volume-row">
-        <label style="font-size:0.85em;min-width:56px">🔊 Vol</label>
-        <input type="range" id="music-volume-slider" min="0" max="100" value="50"
-               oninput="musicSetVolume(this.value)" style="flex:1">
-        <span id="music-volume-label" style="font-size:0.85em;min-width:36px;text-align:right">50%</span>
-      </div>
-
-      <!-- EQ preset -->
-      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
-        <label style="font-size:0.85em;min-width:56px">🎚 EQ (voice)</label>
-        <select id="music-eq-select" style="flex:1" onchange="musicSetEq(this.value)">
-          <option value="flat">Flat</option>
-          <option value="bass_boost">Bass Boost</option>
-          <option value="treble_boost">Treble Boost</option>
-          <option value="vocal">Vocal</option>
-          <option value="loudness">Loudness</option>
-          <option value="warm">Warm</option>
-          <option value="custom">Custom…</option>
-        </select>
-      </div>
-
-      <!-- Custom EQ bands — shown only when "Custom" is selected -->
-      <div id="custom-eq-panel" style="display:none;margin-top:12px;padding:10px;
+<!-- Album art + metadata row -->
+<div class="music-player-row">
+<div class="music-art" id="music-art-wrap">
+<img alt="Album Art" id="music-art-img" onerror="this.style.display='none';document.getElementById('music-art-placeholder').style.display='flex'" src="" style="display:none"/>
+<div class="music-art-placeholder" id="music-art-placeholder">♫</div>
+</div>
+<div class="music-info">
+<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+<span id="music-state-icon" style="font-size:1.2em">■</span>
+<span id="music-song-title" style="font-weight:600">—</span>
+</div>
+<div style="font-size:0.85em;color:var(--text-muted)">
+<span id="music-song-artist"></span>
+</div>
+<div style="font-size:0.8em;color:var(--text-muted);margin-top:2px">
+<span id="music-song-album"></span>
+</div>
+<div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;opacity:0.7">
+<span id="music-song-station"></span>
+</div>
+</div>
+</div>
+<!-- Progress bar -->
+<div class="music-progress-row">
+<span id="music-elapsed" style="font-size:0.8em;color:var(--text-muted);min-width:38px">0:00</span>
+<input class="music-progress-bar" disabled="" id="music-progress-bar" max="100" min="0" type="range" value="0"/>
+<span id="music-duration" style="font-size:0.8em;color:var(--text-muted);min-width:38px;text-align:right">0:00</span>
+</div>
+<!-- Playback controls -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+<button class="btn btn-primary" onclick="musicPlay()">▶ Play</button>
+<button class="btn btn-sm" onclick="musicPause()">⏸ Pause</button>
+<button class="btn btn-sm" onclick="musicNext()">⏭ Next</button>
+<button class="btn btn-sm" onclick="musicStop()">■ Stop</button>
+<button class="btn btn-sm" onclick="musicThumbsUp()" title="Love this song">👍</button>
+<button class="btn btn-sm" onclick="musicThumbsDown()" title="Ban this song">👎</button>
+</div>
+<!-- Station selector -->
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+<label style="font-size:0.9em">Station</label>
+<select id="music-station-select" onchange="musicSetStation(this.value)" style="flex:1;min-width:180px">
+<option value="">— select station —</option>
+</select>
+<span id="music-status" style="font-size:0.85em;color:var(--green)"></span>
+</div>
+<!-- Volume control -->
+<div class="music-volume-row">
+<label style="font-size:0.85em;min-width:56px">🔊 Vol</label>
+<input id="music-volume-slider" max="100" min="0" oninput="musicSetVolume(this.value)" style="flex:1" type="range" value="50"/>
+<span id="music-volume-label" style="font-size:0.85em;min-width:36px;text-align:right">50%</span>
+</div>
+<!-- EQ preset -->
+<div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+<label style="font-size:0.85em;min-width:56px">🎚 EQ (voice)</label>
+<select id="music-eq-select" onchange="musicSetEq(this.value)" style="flex:1">
+<option value="flat">Flat</option>
+<option value="bass_boost">Bass Boost</option>
+<option value="treble_boost">Treble Boost</option>
+<option value="vocal">Vocal</option>
+<option value="loudness">Loudness</option>
+<option value="warm">Warm</option>
+<option value="custom">Custom…</option>
+</select>
+</div>
+<!-- Custom EQ bands — shown only when "Custom" is selected -->
+<div id="custom-eq-panel" style="display:none;margin-top:12px;padding:10px;
            border:1px solid var(--border);border-radius:6px">
-        <div style="font-size:0.85em;font-weight:600;margin-bottom:8px">Custom EQ Bands (voice TTS only)</div>
-        <table style="width:100%;font-size:0.8em;border-collapse:collapse" id="custom-eq-table">
-          <thead>
-            <tr>
-              <th style="text-align:left;padding:2px 6px">Band</th>
-              <th style="text-align:left;padding:2px 6px">Hz</th>
-              <th style="text-align:left;padding:2px 6px">Gain (dB)</th>
-              <th style="text-align:left;padding:2px 6px">Q</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="custom-eq-rows"></tbody>
-        </table>
-        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-secondary btn-sm" onclick="customEqAddBand()">+ Band</button>
-          <button class="btn btn-primary btn-sm" onclick="customEqSave()">Apply</button>
-          <span id="custom-eq-status" class="qh-status"></span>
-        </div>
-      </div>
-    </section>
-    <section class="card" id="card-greeting">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>💬 Greeting Settings</h2>
-      <div class="qh-form">
-        <div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-          <label style="flex:1;min-width:160px">
+<div style="font-size:0.85em;font-weight:600;margin-bottom:8px">Custom EQ Bands (voice TTS only)</div>
+<table id="custom-eq-table" style="width:100%;font-size:0.8em;border-collapse:collapse">
+<thead>
+<tr>
+<th style="text-align:left;padding:2px 6px">Band</th>
+<th style="text-align:left;padding:2px 6px">Hz</th>
+<th style="text-align:left;padding:2px 6px">Gain (dB)</th>
+<th style="text-align:left;padding:2px 6px">Q</th>
+<th></th>
+</tr>
+</thead>
+<tbody id="custom-eq-rows"></tbody>
+</table>
+<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn btn-secondary btn-sm" onclick="customEqAddBand()">+ Band</button>
+<button class="btn btn-primary btn-sm" onclick="customEqSave()">Apply</button>
+<span class="qh-status" id="custom-eq-status"></span>
+</div>
+</div>
+</section>
+
+      <section class="card" id="card-greeting">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>💬 Greeting Settings</h2>
+<div class="qh-form">
+<div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+<label style="flex:1;min-width:160px">
             Cooldown (min)
-            <input type="number" id="greeting-cooldown" min="1" max="240" step="1" value="30"
-              style="width:80px;margin-left:8px" />
-          </label>
-          <label style="flex:1;min-width:160px">
+            <input id="greeting-cooldown" max="240" min="1" step="1" style="width:80px;margin-left:8px" type="number" value="30">
+</input></label>
+<label style="flex:1;min-width:160px">
             Jitter (%)
-            <input type="number" id="greeting-jitter" min="0" max="50" step="5" value="25"
-              style="width:70px;margin-left:8px" />
-          </label>
-        </div>
-        <div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:8px">
-          <label style="flex:1;min-width:160px">
+            <input id="greeting-jitter" max="50" min="0" step="5" style="width:70px;margin-left:8px" type="number" value="25">
+</input></label>
+</div>
+<div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:8px">
+<label style="flex:1;min-width:160px">
             Min absence (s)
-            <input type="number" id="greeting-min-absence" min="5" max="300" step="5" value="30"
-              style="width:70px;margin-left:8px" />
-          </label>
-          <label style="flex:1;min-width:160px">
+            <input id="greeting-min-absence" max="300" min="5" step="5" style="width:70px;margin-left:8px" type="number" value="30"/>
+</label>
+<label style="flex:1;min-width:160px">
             Min confidence
-            <input type="number" id="greeting-confidence" min="0.1" max="1.0" step="0.05" value="0.5"
-              style="width:70px;margin-left:8px" />
-          </label>
-        </div>
-        <button class="btn btn-primary" style="margin-top:10px" onclick="saveGreetingSettings()">Save</button>
-        <span id="greeting-status" class="qh-status"></span>
-      </div>
-    </section>
+            <input id="greeting-confidence" max="1.0" min="0.1" step="0.05" style="width:70px;margin-left:8px" type="number" value="0.5"/>
+</label>
+</div>
+<button class="btn btn-primary" onclick="saveGreetingSettings()" style="margin-top:10px">Save</button>
+<span class="qh-status" id="greeting-status"></span>
+</div>
+</section>
 
-    <!-- ── Quiet Hours ────────────────────────────────────────── -->
-    <section class="card" id="card-quiet">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>🌙 Quiet Hours</h2>
-      <div class="qh-form">
-        <label class="qh-toggle">
-          <input type="checkbox" id="qh-enabled" />
-          <span>Enable quiet hours</span>
-        </label>
-        <div class="qh-times">
-          <label>
+      <section class="card" id="card-quiet">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🌙 Quiet Hours</h2>
+<div class="qh-form">
+<label class="qh-toggle">
+<input id="qh-enabled" type="checkbox"/>
+<span>Enable quiet hours</span>
+</label>
+<div class="qh-times">
+<label>
             Start
-            <input type="time" id="qh-start" value="21:00" />
-          </label>
-          <span class="qh-sep">→</span>
-          <label>
+            <input id="qh-start" type="time" value="21:00"/>
+</label>
+<span class="qh-sep">→</span>
+<label>
             End
-            <input type="time" id="qh-end" value="06:00" />
-          </label>
-        </div>
-        <button class="btn btn-primary" onclick="saveQuietHours()">Save</button>
-        <span id="qh-status" class="qh-status"></span>
-      </div>
-    </section>
+            <input id="qh-end" type="time" value="06:00"/>
+</label>
+</div>
+<button class="btn btn-primary" onclick="saveQuietHours()">Save</button>
+<span class="qh-status" id="qh-status"></span>
+</div>
+</section>
 
-    <!-- ── Skills ──────────────────────────────────────────────────── -->
-    <section class="card" id="card-skills">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎯 Voice Skills <button class="btn btn-secondary btn-sm" onclick="toggleSkills()" id="skills-toggle-btn">Show</button></h2>
-      <div id="skills-panel" style="display:none">
-        <p style="font-size:13px;color:var(--text-dim);margin:4px 0 8px 0">
+      <section class="card" id="card-skills">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎯 Voice Skills <button class="btn btn-secondary btn-sm" id="skills-toggle-btn" onclick="toggleSkills()">Show</button></h2>
+<div id="skills-panel" style="display:none">
+<p style="font-size:13px;color:var(--text-dim);margin:4px 0 8px 0">
           Speak these phrases (or type them below) to trigger a skill.
           Use the toggle to enable/disable skills and ⚙ to configure them.
         </p>
-        <table class="help-table" id="skills-table">
-          <thead><tr><th style="width:28px"></th><th>Skill</th><th>Example phrase</th><th style="width:32px"></th></tr></thead>
-          <tbody id="skills-tbody"><tr><td colspan="4">Loading…</td></tr></tbody>
-        </table>
-        <div class="btn-row" style="margin-top:8px">
-          <input type="text" id="utterance-input" placeholder="Type an utterance to test…" class="text-input" style="flex:1" />
-          <button class="btn btn-primary" onclick="sendUtterance()">Dispatch</button>
-        </div>
-      </div>
-    </section>
+<table class="help-table" id="skills-table">
+<thead><tr><th style="width:28px"></th><th>Skill</th><th>Example phrase</th><th style="width:32px"></th></tr></thead>
+<tbody id="skills-tbody"><tr><td colspan="4">Loading…</td></tr></tbody>
+</table>
+<div class="btn-row" style="margin-top:8px">
+<input class="text-input" id="utterance-input" placeholder="Type an utterance to test…" style="flex:1" type="text"/>
+<button class="btn btn-primary" onclick="sendUtterance()">Dispatch</button>
+</div>
+</div>
+</section>
 
-        <!-- ── Event Log ───────────────────────────────────────────── -->
-    <section class="card" id="card-events">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Event Log <span class="subtext">(last 20)</span></h2>
-      <div id="event-log" class="event-log"></div>
-    </section>
+</div>
 
-    <!-- ── System Power ────────────────────────────────────────── -->
-    <section class="card" id="card-power">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>System Power</h2>
-      <div class="btn-row">
-        <button class="btn btn-warning" onclick="systemReboot()" id="btn-reboot">↺ Reboot</button>
-        <button class="btn btn-danger"  onclick="systemShutdown()" id="btn-shutdown">⏻ Shutdown</button>
-      </div>
-    </section>
-    <!-- ── Help ────────────────────────────────────────────────────── -->
-    <section class="card" id="card-help">
-      <h2><span class="drag-handle" title="Drag to reorder">⠿</span>❓ Help <button class="btn btn-secondary btn-sm" onclick="toggleHelp()" id="help-toggle-btn">Show</button></h2>
-      <div id="help-panel" style="display:none">
-        <div class="help-grid">
-          <div>
-            <h3>CLI Quick Reference</h3>
-            <table class="help-table">
-              <tr><td><code>da status</code></td><td>Health and telemetry dashboard</td></tr>
-              <tr><td><code>da say "hello"</code></td><td>Speak text through speakers</td></tr>
-              <tr><td><code>da joke</code></td><td>Tell a random joke</td></tr>
-              <tr><td><code>da time</code></td><td>Announce current time</td></tr>
-              <tr><td><code>da servo pan --to 180</code></td><td>Pan servo to angle</td></tr>
-              <tr><td><code>da servo enable/disable</code></td><td>Enable or disable servo</td></tr>
-              <tr><td><code>da servo limits --min 135 --max 215</code></td><td>Set travel limits</td></tr>
-              <tr><td><code>da face-tracking enable</code></td><td>Head follows detected faces</td></tr>
-              <tr><td><code>da random-motion enable</code></td><td>Idle gaze drifts</td></tr>
-              <tr><td><code>da object-detection enable</code></td><td>Enable COCO object classification</td></tr>
-              <tr><td><code>da object-detection disable</code></td><td>Disable object classification</td></tr>
-              <tr><td><code>da system ping</code></td><td>Confirm daemon is running</td></tr>
-              <tr><td><code>da system restart</code></td><td>Restart the daemon</td></tr>
-              <tr><td><code>da system version</code></td><td>Speak version number</td></tr>
-              <tr><td><code>da system reboot</code></td><td>Reboot the Pi</td></tr>
-              <tr><td><code>da system shutdown</code></td><td>Shut down the Pi</td></tr>
-              <tr><td><code>da face meet "Alice"</code></td><td>Name the most recently seen face</td></tr>
-              <tr><td><code>da face list</code></td><td>List all known faces</td></tr>
-              <tr><td><code>da face forget-all</code></td><td>Delete all faces from registry</td></tr>
-              <tr><td><code>da face forget-guests</code></td><td>Remove unnamed Guest faces</td></tr>
-              <tr><td><code>da face greeting-cooldown 30</code></td><td>Set greeting cooldown (minutes)</td></tr>
-              <tr><td><code>da vision describe</code></td><td>Speak everything currently seen</td></tr>
-              <tr><td><code>da vision rotation &lt;deg&gt;</code></td><td>Set camera rotation 0–359°</td></tr>
-              <tr><td><code>da vision rotation-status</code></td><td>Show current camera rotation</td></tr>
-              <tr><td><code>da music play [station]</code></td><td>Start Pandora (optional station name)</td></tr>
-              <tr><td><code>da music stop / next / pause</code></td><td>Control playback</td></tr>
-              <tr><td><code>da music thumbs-up / thumbs-down</code></td><td>Love or ban current song</td></tr>
-              <tr><td><code>da music stations</code></td><td>List available stations</td></tr>
-              <tr><td><code>da music status</code></td><td>Show current playback state</td></tr>
-              <tr><td><code>da skills list</code></td><td>List all voice skills with enabled state</td></tr>
-              <tr><td><code>da skills enable &lt;name&gt;</code></td><td>Enable a skill</td></tr>
-              <tr><td><code>da skills disable &lt;name&gt;</code></td><td>Disable a skill</td></tr>
-              <tr><td><code>da skills config &lt;name&gt;</code></td><td>Show skill configuration</td></tr>
-              <tr><td><code>da skills config &lt;name&gt; k=v</code></td><td>Set skill config value(s)</td></tr>
-              <tr><td><code>da watch</code></td><td>Stream all bus events (Ctrl-C to stop)</td></tr>
-              <tr><td><code>da help</code></td><td>Full command reference</td></tr>
-            </table>
-          </div>
-          <div>
-            <h3>Dashboard Sections</h3>
-            <ul class="help-list">
-              <li><strong>Camera Feed</strong> — Live MJPEG stream with face ovals (green) and object boxes (cyan).</li>
-              <li><strong>Telemetry</strong> — Temperature, fan duty, servo angle, microphone level, and last spoken text.</li>
-              <li><strong>Services</strong> — Live status of each internal service. Use ⟳ to restart the daemon.</li>
-              <li><strong>Face Registry</strong> — Known faces with thumbnails, seen counts, and merge/delete actions. Click a thumbnail to enlarge.</li>
-              <li><strong>Controls</strong> — Say text, pan servo, toggle tracking, adjust travel limits, speak version, describe scene.</li>
-              <li><strong>Greeting Settings</strong> — Configure face greeting cooldown, jitter, minimum absence, and confidence threshold.</li>
-              <li><strong>Music (Pandora)</strong> — Play, pause, skip, love/ban songs, and select stations via pianobar.</li>
-              <li><strong>Quiet Hours</strong> — Suppress TTS announcements during a configured time window.</li>
-              <li><strong>Voice Skills</strong> — Live list of all registered skills with example phrases. Test utterances directly from the browser.</li>
-              <li><strong>Event Log</strong> — Last 20 bus events (newest first).</li>
-              <li><strong>System Power</strong> — Reboot or shut down the Pi from the browser.</li>
-            </ul>
-            <h3>Object Detection</h3>
-            <p style="font-size:13px;color:var(--text-dim);margin:4px 0">
+    <!-- ══ TAB: SYSTEM ══════════════════════════════════════════ -->
+    <div class="tab-pane" id="tab-system">
+      <section class="card" id="card-power">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>System Power</h2>
+<div class="btn-row">
+<button class="btn btn-warning" id="btn-reboot" onclick="systemReboot()">↺ Reboot</button>
+<button class="btn btn-danger" id="btn-shutdown" onclick="systemShutdown()">⏻ Shutdown</button>
+</div>
+</section>
+
+      <section class="card" id="card-help">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>❓ Help <button class="btn btn-secondary btn-sm" id="help-toggle-btn" onclick="toggleHelp()">Show</button></h2>
+<div id="help-panel" style="display:none">
+<div class="help-grid">
+<div>
+<h3>CLI Quick Reference</h3>
+<table class="help-table">
+<tr><td><code>da status</code></td><td>Health and telemetry dashboard</td></tr>
+<tr><td><code>da say "hello"</code></td><td>Speak text through speakers</td></tr>
+<tr><td><code>da joke</code></td><td>Tell a random joke</td></tr>
+<tr><td><code>da time</code></td><td>Announce current time</td></tr>
+<tr><td><code>da servo pan --to 180</code></td><td>Pan servo to angle</td></tr>
+<tr><td><code>da servo enable/disable</code></td><td>Enable or disable servo</td></tr>
+<tr><td><code>da servo limits --min 135 --max 215</code></td><td>Set travel limits</td></tr>
+<tr><td><code>da face-tracking enable</code></td><td>Head follows detected faces</td></tr>
+<tr><td><code>da random-motion enable</code></td><td>Idle gaze drifts</td></tr>
+<tr><td><code>da object-detection enable</code></td><td>Enable COCO object classification</td></tr>
+<tr><td><code>da object-detection disable</code></td><td>Disable object classification</td></tr>
+<tr><td><code>da system ping</code></td><td>Confirm daemon is running</td></tr>
+<tr><td><code>da system restart</code></td><td>Restart the daemon</td></tr>
+<tr><td><code>da system version</code></td><td>Speak version number</td></tr>
+<tr><td><code>da system reboot</code></td><td>Reboot the Pi</td></tr>
+<tr><td><code>da system shutdown</code></td><td>Shut down the Pi</td></tr>
+<tr><td><code>da face meet "Alice"</code></td><td>Name the most recently seen face</td></tr>
+<tr><td><code>da face list</code></td><td>List all known faces</td></tr>
+<tr><td><code>da face forget-all</code></td><td>Delete all faces from registry</td></tr>
+<tr><td><code>da face forget-guests</code></td><td>Remove unnamed Guest faces</td></tr>
+<tr><td><code>da face greeting-cooldown 30</code></td><td>Set greeting cooldown (minutes)</td></tr>
+<tr><td><code>da vision describe</code></td><td>Speak everything currently seen</td></tr>
+<tr><td><code>da vision rotation &lt;deg&gt;</code></td><td>Set camera rotation 0–359°</td></tr>
+<tr><td><code>da vision rotation-status</code></td><td>Show current camera rotation</td></tr>
+<tr><td><code>da music play [station]</code></td><td>Start Pandora (optional station name)</td></tr>
+<tr><td><code>da music stop / next / pause</code></td><td>Control playback</td></tr>
+<tr><td><code>da music thumbs-up / thumbs-down</code></td><td>Love or ban current song</td></tr>
+<tr><td><code>da music stations</code></td><td>List available stations</td></tr>
+<tr><td><code>da music status</code></td><td>Show current playback state</td></tr>
+<tr><td><code>da skills list</code></td><td>List all voice skills with enabled state</td></tr>
+<tr><td><code>da skills enable &lt;name&gt;</code></td><td>Enable a skill</td></tr>
+<tr><td><code>da skills disable &lt;name&gt;</code></td><td>Disable a skill</td></tr>
+<tr><td><code>da skills config &lt;name&gt;</code></td><td>Show skill configuration</td></tr>
+<tr><td><code>da skills config &lt;name&gt; k=v</code></td><td>Set skill config value(s)</td></tr>
+<tr><td><code>da watch</code></td><td>Stream all bus events (Ctrl-C to stop)</td></tr>
+<tr><td><code>da help</code></td><td>Full command reference</td></tr>
+</table>
+</div>
+<div>
+<h3>Dashboard Sections</h3>
+<ul class="help-list">
+<li><strong>Camera Feed</strong> — Live MJPEG stream with face ovals (green) and object boxes (cyan).</li>
+<li><strong>Telemetry</strong> — Temperature, fan duty, servo angle, microphone level, and last spoken text.</li>
+<li><strong>Services</strong> — Live status of each internal service. Use ⟳ to restart the daemon.</li>
+<li><strong>Face Registry</strong> — Known faces with thumbnails, seen counts, and merge/delete actions. Click a thumbnail to enlarge.</li>
+<li><strong>Controls</strong> — Say text, pan servo, toggle tracking, adjust travel limits, speak version, describe scene.</li>
+<li><strong>Greeting Settings</strong> — Configure face greeting cooldown, jitter, minimum absence, and confidence threshold.</li>
+<li><strong>Music (Pandora)</strong> — Play, pause, skip, love/ban songs, and select stations via pianobar.</li>
+<li><strong>Quiet Hours</strong> — Suppress TTS announcements during a configured time window.</li>
+<li><strong>Voice Skills</strong> — Live list of all registered skills with example phrases. Test utterances directly from the browser.</li>
+<li><strong>Event Log</strong> — Last 20 bus events (newest first).</li>
+<li><strong>System Power</strong> — Reboot or shut down the Pi from the browser.</li>
+</ul>
+<h3>Object Detection</h3>
+<p style="font-size:13px;color:var(--text-dim);margin:4px 0">
               Detects 80 COCO classes (person, laptop, cup, etc.) at ~3 fps using YOLOv8s on Hailo-8.
               Cyan rectangles show detected objects; green ovals show recognized faces.
               Click <em>Describe What I See</em> to have DA speak a summary.
             </p>
-          </div>
-        </div>
-      </div>
-    </section>
+</div>
+</div>
+</div>
+</section>
+
+</div>
+
   </main>
-
-  <script src="/static/app.js"></script>
-
-  <!-- ── Lightbox overlay ──────────────────────────────────────── -->
-  <div id="lightbox" class="lightbox" onclick="closeLightbox()">
-    <div class="lightbox-inner" onclick="event.stopPropagation()">
-      <button class="lightbox-close" onclick="closeLightbox()" aria-label="Close">✕</button>
-      <img id="lightbox-img" src="" alt="face full size" class="lightbox-img" />
-      <p id="lightbox-label" class="lightbox-label"></p>
-    </div>
-  </div>
-
-  <!-- ── Merge modal ───────────────────────────────────────────── -->
-  <div id="merge-modal" class="lightbox" onclick="closeMergeModal()">
-    <div class="merge-modal-inner" onclick="event.stopPropagation()">
-      <button class="lightbox-close" onclick="closeMergeModal()" aria-label="Close">✕</button>
-      <h3 class="merge-modal-title">⛓ Merge Faces</h3>
-      <p class="merge-modal-desc">
+<script src="/static/app.js"></script>
+<!-- ── Lightbox overlay ──────────────────────────────────────── -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+<div class="lightbox-inner" onclick="event.stopPropagation()">
+<button aria-label="Close" class="lightbox-close" onclick="closeLightbox()">✕</button>
+<img alt="face full size" class="lightbox-img" id="lightbox-img" src="">
+<p class="lightbox-label" id="lightbox-label"></p>
+</img></div>
+</div>
+<!-- ── Merge modal ───────────────────────────────────────────── -->
+<div class="lightbox" id="merge-modal" onclick="closeMergeModal()">
+<div class="merge-modal-inner" onclick="event.stopPropagation()">
+<button aria-label="Close" class="lightbox-close" onclick="closeMergeModal()">✕</button>
+<h3 class="merge-modal-title">⛓ Merge Faces</h3>
+<p class="merge-modal-desc">
         Choose which face to <strong>keep</strong> (parent) and which to
-        <strong>absorb</strong> (child, will be deleted).<br>
+        <strong>absorb</strong> (child, will be deleted).<br/>
         Embeddings, seen count, and first-seen date from the child are merged into the parent.
       </p>
-      <div class="merge-modal-faces">
-        <!-- Face A -->
-        <div class="merge-face-card" id="merge-card-a">
-          <div class="merge-thumb-wrap">
-            <img id="merge-img-a" src="" alt="" class="merge-thumb" />
-          </div>
-          <div class="merge-face-name" id="merge-name-a"></div>
-          <div class="merge-face-id" id="merge-fid-a"></div>
-          <div class="merge-role-btns">
-            <label class="merge-role-label merge-keep-label">
-              <input type="radio" name="merge-keep" value="a" id="merge-keep-a" onchange="updateMergeRoles()" checked />
+<div class="merge-modal-faces">
+<!-- Face A -->
+<div class="merge-face-card" id="merge-card-a">
+<div class="merge-thumb-wrap">
+<img alt="" class="merge-thumb" id="merge-img-a" src=""/>
+</div>
+<div class="merge-face-name" id="merge-name-a"></div>
+<div class="merge-face-id" id="merge-fid-a"></div>
+<div class="merge-role-btns">
+<label class="merge-role-label merge-keep-label">
+<input checked="" id="merge-keep-a" name="merge-keep" onchange="updateMergeRoles()" type="radio" value="a"/>
               ✅ Keep (parent)
             </label>
-            <label class="merge-role-label merge-absorb-label">
-              <input type="radio" name="merge-keep" value="b" id="merge-absorb-a-btn" onchange="updateMergeRoles()" />
+<label class="merge-role-label merge-absorb-label">
+<input id="merge-absorb-a-btn" name="merge-keep" onchange="updateMergeRoles()" type="radio" value="b"/>
               🗑 Absorb (delete)
             </label>
-          </div>
-        </div>
-
-        <div class="merge-swap-btn" onclick="swapMergeRoles()" title="Swap parent/child">⇄</div>
-
-        <!-- Face B -->
-        <div class="merge-face-card" id="merge-card-b">
-          <div class="merge-thumb-wrap">
-            <img id="merge-img-b" src="" alt="" class="merge-thumb" />
-          </div>
-          <div class="merge-face-name" id="merge-name-b"></div>
-          <div class="merge-face-id" id="merge-fid-b"></div>
-          <div class="merge-role-btns">
-            <label class="merge-role-label merge-keep-label">
-              <input type="radio" name="merge-keep" value="b" id="merge-keep-b" onchange="updateMergeRoles()" />
+</div>
+</div>
+<div class="merge-swap-btn" onclick="swapMergeRoles()" title="Swap parent/child">⇄</div>
+<!-- Face B -->
+<div class="merge-face-card" id="merge-card-b">
+<div class="merge-thumb-wrap">
+<img alt="" class="merge-thumb" id="merge-img-b" src=""/>
+</div>
+<div class="merge-face-name" id="merge-name-b"></div>
+<div class="merge-face-id" id="merge-fid-b"></div>
+<div class="merge-role-btns">
+<label class="merge-role-label merge-keep-label">
+<input id="merge-keep-b" name="merge-keep" onchange="updateMergeRoles()" type="radio" value="b"/>
               ✅ Keep (parent)
             </label>
-            <label class="merge-role-label merge-absorb-label">
-              <input type="radio" name="merge-keep" value="a" id="merge-absorb-b-btn" onchange="updateMergeRoles()" />
+<label class="merge-role-label merge-absorb-label">
+<input id="merge-absorb-b-btn" name="merge-keep" onchange="updateMergeRoles()" type="radio" value="a"/>
               🗑 Absorb (delete)
             </label>
-          </div>
-        </div>
-      </div>
-
-      <div id="merge-summary" class="merge-summary"></div>
-
-      <div class="merge-modal-actions">
-        <button class="btn btn-secondary" onclick="closeMergeModal()">Cancel</button>
-        <button class="btn btn-danger" id="merge-confirm-btn" onclick="confirmMerge()">⛓ Merge</button>
-      </div>
-    </div>
-  </div>
+</div>
+</div>
+</div>
+<div class="merge-summary" id="merge-summary"></div>
+<div class="merge-modal-actions">
+<button class="btn btn-secondary" onclick="closeMergeModal()">Cancel</button>
+<button class="btn btn-danger" id="merge-confirm-btn" onclick="confirmMerge()">⛓ Merge</button>
+</div>
+</div>
+</div>
 </body>
 </html>

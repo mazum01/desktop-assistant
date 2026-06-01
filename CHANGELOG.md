@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.35.0] - 2026-06-01
+### Added
+- Web GUI reorganized into a 5-tab layout: **Overview** (camera, telemetry,
+  resources, services, events), **Perception** (faces, tracking, depth),
+  **Smart Home** (radon, DROP water softener), **Controls** (servo, audio,
+  music, greeting, quiet hours, skills), and **System** (power, help).
+- Tab nav bar is sticky (scrolls with header) and persists the active tab in
+  `localStorage` across page refreshes.
+- Per-tab card drag-and-drop reordering — cards can be reordered within their
+  own tab; order persisted in `localStorage` per pane.
+- Fixed stray `</section>` in `card-controls` (orphan tag from prior edit).
+
 ## [1.34.1] - 2026-06-01
 ### Fixed
 - Radon hourly OpenClaw job (24 Claude API calls/day) replaced by native VERA

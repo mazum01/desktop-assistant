@@ -26,6 +26,14 @@ html, body {
   min-height: 100vh;
 }
 
+/* ── Page header (sticky wrapper: header + tab nav) ─────────── */
+.page-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--bg2);
+}
+
 /* ── Header ──────────────────────────────────────────────────── */
 header {
   display: flex;
@@ -34,9 +42,6 @@ header {
   padding: 14px 24px;
   background: var(--bg2);
   border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 100;
 }
 .header-left { display: flex; align-items: center; gap: 12px; }
 .logo { font-size: 28px; }
@@ -53,17 +58,50 @@ h1 { font-size: 18px; font-weight: 600; }
 .badge-degraded{ background: rgba(248,81,73,.15);  color: var(--red);   border: 1px solid var(--red); }
 .badge-unknown { background: rgba(139,148,158,.15);color: var(--text-dim); border: 1px solid var(--border); }
 
+/* ── Tab navigation ──────────────────────────────────────────── */
+.tab-nav {
+  display: flex;
+  gap: 2px;
+  padding: 0 16px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab-nav::-webkit-scrollbar { display: none; }
+.tab-btn {
+  padding: 9px 16px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s, border-color .15s, background .15s;
+  margin-bottom: -1px;
+  border-radius: 4px 4px 0 0;
+}
+.tab-btn:hover { color: var(--text); background: var(--bg3); }
+.tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 600; }
+
 /* ── Main layout ─────────────────────────────────────────────── */
 main {
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px 16px;
-  display: grid;
+}
+
+/* Tab panes: each is a 2-col grid when active */
+.tab-pane {
+  display: none;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
+.tab-pane.active { display: grid; }
 
-/* camera spans full width */
+/* camera spans full width within its tab-pane grid */
 .camera-card { grid-column: 1 / -1; }
 
 /* ── Cards ───────────────────────────────────────────────────── */
@@ -220,7 +258,7 @@ main {
 .room-drift-dot.filled { background: var(--red); border-color: var(--red); }
 .room-drift-label { font-size: .8rem; color: var(--text-dim); }
 .room-sparkline-row { align-items: center; }
-.room-sparkline-wrap { flex: 1; min-width: 0; }
+.room-sparkline-wrap { flex: 1; max-width: 160px; min-width: 0; }
 .room-sim-sparkline {
   display: block;
   width: 100%;
