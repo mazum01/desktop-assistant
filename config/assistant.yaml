@@ -245,6 +245,11 @@ radon:
   alert_on_red: true
   # Minimum seconds between Red-alert TTS announcements (prevents repeated nagging).
   red_alert_cooldown_s: 3600
+  # Send a Telegram message when radon exceeds this level (pCi/L). Set to 0 to disable.
+  # This replaces the OpenClaw hourly LLM-based radon check — no Claude API call needed.
+  telegram_alert_pcil: 1.5
+  # Minimum seconds between Telegram radon alerts (default: 2 hours).
+  telegram_alert_cooldown_s: 7200
 
 drop:
   # DROP water softener system — local MQTT integration.

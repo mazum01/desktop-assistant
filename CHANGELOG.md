@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.34.1] - 2026-06-01
+### Fixed
+- Radon hourly OpenClaw job (24 Claude API calls/day) replaced by native VERA
+  `telegram.send` publish in `RadonService` when level ≥ threshold — no LLM call needed.
+- Email triage OpenClaw cron changed from `0 8-22 * * *` to `0 8-20 * * *` so it
+  no longer fires at 10pm inside quiet hours (21:00–05:00).
+### Added
+- `radon.telegram_alert_pcil` and `radon.telegram_alert_cooldown_s` config options in
+  `assistant.yaml` for native radon Telegram alerts (default: 1.5 pCi/L, 2-hour cooldown).
+- `email_check_needed.py` pre-check wrapper: email triage agent now skips Claude
+  entirely when all emails are handled by known-good/junk rules (no uncertain emails).
+
 ## [1.34.0] - 2026-06-01
 ### Added
 - All VERA TTS utterances now forwarded to Telegram/OpenClaw via `av.spoke`

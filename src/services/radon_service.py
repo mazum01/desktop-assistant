@@ -64,11 +64,19 @@ class RadonService:
         self._red_alert_cooldown: float = float(
             self._cfg.get("red_alert_cooldown_s", 3600)
         )
+        # Telegram alert when radon ≥ this threshold (pCi/L); 0 disables
+        self._telegram_alert_pcil: float = float(
+            self._cfg.get("telegram_alert_pcil", 1.5)
+        )
+        self._telegram_cooldown: float = float(
+            self._cfg.get("telegram_alert_cooldown_s", 7200)
+        )
         self._latest: Optional[dict] = None
         self._lock = threading.Lock()
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._last_red_alert: float = float("-inf")
+        self._last_telegram_alert: float = float("-inf")
         self._degraded = False  # True when credentials are missing
 
     # ── Service lifecycle ─────────────────────────────────────────────────
@@ -137,6 +145,7 @@ class RadonService:
                     if self.bus:
                         self.bus.publish("radon.reading", reading)
                     self._maybe_alert_red(reading)
+                    self._maybe_alert_telegram(reading)
             except Exception as exc:
                 log.warning("RadonService poll error: %s", exc)
                 with self._lock:
@@ -270,6 +279,29 @@ class RadonService:
                 pcil,
                 reading.get("radon_bqm3", 0),
             )
+
+    def _maybe_alert_telegram(self, reading: dict) -> None:
+        """Send a Telegram message when radon exceeds the configured threshold.
+
+        This replaces the OpenClaw hourly LLM-based radon check — VERA publishes
+        directly to ``telegram.send`` so no Claude API call is needed.
+        """
+        if not self.bus or self._telegram_alert_pcil <= 0:
+            return
+        pcil = reading.get("radon_pcil")
+        if pcil is None or pcil < self._telegram_alert_pcil:
+            return
+        now = time.monotonic()
+        if now - self._last_telegram_alert < self._telegram_cooldown:
+            return
+        self._last_telegram_alert = now
+        alert_color = reading.get("alert", "Unknown")
+        msg = (
+            f"⚠️ Radon alert: {pcil:.2f} pCi/L ({alert_color}) — "
+            f"above your {self._telegram_alert_pcil:.1f} pCi/L threshold."
+        )
+        self.bus.publish("telegram.send", {"text": msg})
+        log.warning("RadonService: Telegram alert sent — %.2f pCi/L (%s)", pcil, alert_color)
 
 
 def _compute_alert(radon_pcil: float) -> str:
