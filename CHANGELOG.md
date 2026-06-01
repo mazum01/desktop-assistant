@@ -6,7 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.35.0] - 2026-06-01
+## [1.35.1] - 2026-06-01
+### Changed
+- Moved **Controls** card (servo, camera, TTS, object detection) to the **System** tab.
+- Renamed the **Controls** tab to **🎵 Music** — now contains: Music, Greeting Settings, Quiet Hours, Voice Skills.
+
+
 ### Added
 - Web GUI reorganized into a 5-tab layout: **Overview** (camera, telemetry,
   resources, services, events), **Perception** (faces, tracking, depth),

@@ -24,12 +24,12 @@
 </div>
 <div class="badge badge-unknown" id="health-badge">⬤ connecting</div>
 </header>
-    <nav class="tab-nav"><button class="tab-btn" data-tab="overview" onclick="switchTab('overview')">🏠 Overview</button><button class="tab-btn" data-tab="perception" onclick="switchTab('perception')">🎭 Perception</button><button class="tab-btn" data-tab="smart-home" onclick="switchTab('smart-home')">🏡 Smart Home</button><button class="tab-btn" data-tab="controls" onclick="switchTab('controls')">🎛️ Controls</button><button class="tab-btn" data-tab="system" onclick="switchTab('system')">⚙️ System</button></nav>
-  </div>
+<nav class="tab-nav"><button class="tab-btn" data-tab="overview" onclick="switchTab('overview')">🏠 Overview</button><button class="tab-btn" data-tab="perception" onclick="switchTab('perception')">🎭 Perception</button><button class="tab-btn" data-tab="smart-home" onclick="switchTab('smart-home')">🏡 Smart Home</button><button class="tab-btn" data-tab="controls" onclick="switchTab('controls')">🎵 Music</button><button class="tab-btn" data-tab="system" onclick="switchTab('system')">⚙️ System</button></nav>
+</div>
 <main>
-    <!-- ══ TAB: OVERVIEW ════════════════════════════════════════ -->
-    <div class="tab-pane" id="tab-overview">
-      <section class="card camera-card" id="card-camera">
+<!-- ══ TAB: OVERVIEW ════════════════════════════════════════ -->
+<div class="tab-pane" id="tab-overview">
+<section class="card camera-card" id="card-camera">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Camera Feeds</h2>
 <div class="camera-feeds">
 <div class="camera-feed-wrap">
@@ -49,8 +49,7 @@
 </div>
 </div>
 </section>
-
-      <section class="card" id="card-telemetry">
+<section class="card" id="card-telemetry">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Telemetry</h2>
 <div class="grid-4">
 <div class="stat-box">
@@ -110,8 +109,7 @@
 <span class="spoken-text" id="stat-spoken">—</span>
 </div>
 </section>
-
-      <section class="card" id="card-resources">
+<section class="card" id="card-resources">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>System Resources</h2>
 <div class="resource-graphs">
 <div class="resource-graph-wrap">
@@ -128,24 +126,20 @@
 </div>
 </div>
 </section>
-
-      <section class="card" id="card-services">
+<section class="card" id="card-services">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Services  <button class="btn btn-warning btn-sm" onclick="restartDaemon()" title="Restart the vera-core systemd service">⟳ Restart Daemon</button></h2>
 <div class="pill-row" id="services-container">
 <span class="pill pill-unknown">loading…</span>
 </div>
 </section>
-
-      <section class="card" id="card-events">
+<section class="card" id="card-events">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Event Log <span class="subtext">(last 20)</span></h2>
 <div class="event-log" id="event-log"></div>
 </section>
-
 </div>
-
-    <!-- ══ TAB: PERCEPTION ══════════════════════════════════════ -->
-    <div class="tab-pane" id="tab-perception">
-      <section class="card" id="card-faces">
+<!-- ══ TAB: PERCEPTION ══════════════════════════════════════ -->
+<div class="tab-pane" id="tab-perception">
+<section class="card" id="card-faces">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Face Registry  <button class="btn btn-danger btn-sm" onclick="deleteAllFaces()" title="Delete all known faces permanently">🗑 Delete All</button>  <button class="btn btn-warning btn-sm" onclick="deleteGuestFaces()" title="Remove unnamed Guest entries">👤 Remove Guests</button>  <button class="btn btn-secondary btn-sm" onclick="refreshFaces()" title="Prune outlier embeddings and re-identify all faces">↺ Re-identify</button></h2>
 <div id="face-registry-wrap">
 <table id="face-table">
@@ -170,8 +164,7 @@
 </div>
 </div>
 </section>
-
-      <section class="card" id="card-tracking">
+<section class="card" id="card-tracking">
 <h2>
 <span class="drag-handle" title="Drag to reorder">⠿</span>Head Tracking Tuning
         <button class="btn btn-sm btn-secondary" id="tuning-toggle-btn" onclick="toggleTuningPanel()" style="float:right">▾ Show</button>
@@ -211,8 +204,7 @@
 </div>
 </div>
 </section>
-
-      <section class="card" id="card-depth">
+<section class="card" id="card-depth">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>📐 Depth Estimation</h2>
 <div class="control-group">
 <label>Dense Stereo (SGBM)</label>
@@ -265,12 +257,10 @@
 </div>
 </div>
 </section>
-
 </div>
-
-    <!-- ══ TAB: SMART HOME ══════════════════════════════════════ -->
-    <div class="tab-pane" id="tab-smart-home">
-      <section class="card" id="card-radon">
+<!-- ══ TAB: SMART HOME ══════════════════════════════════════ -->
+<div class="tab-pane" id="tab-smart-home">
+<section class="card" id="card-radon">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Radon Monitor  <button class="btn btn-secondary btn-sm" id="radon-announce-btn" onclick="announceRadon()" title="Speak current radon level via TTS">📢 Announce</button></h2>
 <div class="resource-graphs">
 <div class="resource-graph-wrap" style="flex:1">
@@ -290,8 +280,7 @@
 </div>
 </div>
 </section>
-
-      <section class="card" id="card-drop">
+<section class="card" id="card-drop">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Water Softener  <button class="btn btn-secondary btn-sm" id="drop-announce-btn" onclick="announceDrop()" title="Speak current water softener status via TTS">📢 Announce</button></h2>
 <div class="resource-graphs">
 <div class="resource-graph-wrap" style="flex:1">
@@ -313,11 +302,171 @@
 </div>
 <div id="drop-detail" style="font-size:11px;color:var(--muted);margin-top:6px;display:flex;gap:16px;flex-wrap:wrap"></div>
 </section>
-
 </div>
+<!-- ══ TAB: CONTROLS ════════════════════════════════════════ -->
+<div class="tab-pane" id="tab-controls">
 
-    <!-- ══ TAB: CONTROLS ════════════════════════════════════════ -->
-    <div class="tab-pane" id="tab-controls">
+<section class="card" id="card-music">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎵 Music (Pandora)</h2>
+<div id="music-not-configured" style="display:none;color:var(--yellow);margin-bottom:8px;font-size:0.9em">
+        ⚠ pianobar not configured. Create <code>~/.config/pianobar/config</code> with your Pandora credentials.
+      </div>
+<!-- Album art + metadata row -->
+<div class="music-player-row">
+<div class="music-art" id="music-art-wrap">
+<img alt="Album Art" id="music-art-img" onerror="this.style.display='none';document.getElementById('music-art-placeholder').style.display='flex'" src="" style="display:none"/>
+<div class="music-art-placeholder" id="music-art-placeholder">♫</div>
+</div>
+<div class="music-info">
+<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+<span id="music-state-icon" style="font-size:1.2em">■</span>
+<span id="music-song-title" style="font-weight:600">—</span>
+</div>
+<div style="font-size:0.85em;color:var(--text-muted)">
+<span id="music-song-artist"></span>
+</div>
+<div style="font-size:0.8em;color:var(--text-muted);margin-top:2px">
+<span id="music-song-album"></span>
+</div>
+<div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;opacity:0.7">
+<span id="music-song-station"></span>
+</div>
+</div>
+</div>
+<!-- Progress bar -->
+<div class="music-progress-row">
+<span id="music-elapsed" style="font-size:0.8em;color:var(--text-muted);min-width:38px">0:00</span>
+<input class="music-progress-bar" disabled="" id="music-progress-bar" max="100" min="0" type="range" value="0"/>
+<span id="music-duration" style="font-size:0.8em;color:var(--text-muted);min-width:38px;text-align:right">0:00</span>
+</div>
+<!-- Playback controls -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+<button class="btn btn-primary" onclick="musicPlay()">▶ Play</button>
+<button class="btn btn-sm" onclick="musicPause()">⏸ Pause</button>
+<button class="btn btn-sm" onclick="musicNext()">⏭ Next</button>
+<button class="btn btn-sm" onclick="musicStop()">■ Stop</button>
+<button class="btn btn-sm" onclick="musicThumbsUp()" title="Love this song">👍</button>
+<button class="btn btn-sm" onclick="musicThumbsDown()" title="Ban this song">👎</button>
+</div>
+<!-- Station selector -->
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+<label style="font-size:0.9em">Station</label>
+<select id="music-station-select" onchange="musicSetStation(this.value)" style="flex:1;min-width:180px">
+<option value="">— select station —</option>
+</select>
+<span id="music-status" style="font-size:0.85em;color:var(--green)"></span>
+</div>
+<!-- Volume control -->
+<div class="music-volume-row">
+<label style="font-size:0.85em;min-width:56px">🔊 Vol</label>
+<input id="music-volume-slider" max="100" min="0" oninput="musicSetVolume(this.value)" style="flex:1" type="range" value="50"/>
+<span id="music-volume-label" style="font-size:0.85em;min-width:36px;text-align:right">50%</span>
+</div>
+<!-- EQ preset -->
+<div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+<label style="font-size:0.85em;min-width:56px">🎚 EQ (voice)</label>
+<select id="music-eq-select" onchange="musicSetEq(this.value)" style="flex:1">
+<option value="flat">Flat</option>
+<option value="bass_boost">Bass Boost</option>
+<option value="treble_boost">Treble Boost</option>
+<option value="vocal">Vocal</option>
+<option value="loudness">Loudness</option>
+<option value="warm">Warm</option>
+<option value="custom">Custom…</option>
+</select>
+</div>
+<!-- Custom EQ bands — shown only when "Custom" is selected -->
+<div id="custom-eq-panel" style="display:none;margin-top:12px;padding:10px;
+           border:1px solid var(--border);border-radius:6px">
+<div style="font-size:0.85em;font-weight:600;margin-bottom:8px">Custom EQ Bands (voice TTS only)</div>
+<table id="custom-eq-table" style="width:100%;font-size:0.8em;border-collapse:collapse">
+<thead>
+<tr>
+<th style="text-align:left;padding:2px 6px">Band</th>
+<th style="text-align:left;padding:2px 6px">Hz</th>
+<th style="text-align:left;padding:2px 6px">Gain (dB)</th>
+<th style="text-align:left;padding:2px 6px">Q</th>
+<th></th>
+</tr>
+</thead>
+<tbody id="custom-eq-rows"></tbody>
+</table>
+<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn btn-secondary btn-sm" onclick="customEqAddBand()">+ Band</button>
+<button class="btn btn-primary btn-sm" onclick="customEqSave()">Apply</button>
+<span class="qh-status" id="custom-eq-status"></span>
+</div>
+</div>
+</section>
+<section class="card" id="card-greeting">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>💬 Greeting Settings</h2>
+<div class="qh-form">
+<div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+<label style="flex:1;min-width:160px">
+            Cooldown (min)
+            <input id="greeting-cooldown" max="240" min="1" step="1" style="width:80px;margin-left:8px" type="number" value="30"/>
+</label>
+<label style="flex:1;min-width:160px">
+            Jitter (%)
+            <input id="greeting-jitter" max="50" min="0" step="5" style="width:70px;margin-left:8px" type="number" value="25"/>
+</label>
+</div>
+<div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:8px">
+<label style="flex:1;min-width:160px">
+            Min absence (s)
+            <input id="greeting-min-absence" max="300" min="5" step="5" style="width:70px;margin-left:8px" type="number" value="30"/>
+</label>
+<label style="flex:1;min-width:160px">
+            Min confidence
+            <input id="greeting-confidence" max="1.0" min="0.1" step="0.05" style="width:70px;margin-left:8px" type="number" value="0.5"/>
+</label>
+</div>
+<button class="btn btn-primary" onclick="saveGreetingSettings()" style="margin-top:10px">Save</button>
+<span class="qh-status" id="greeting-status"></span>
+</div>
+</section>
+<section class="card" id="card-quiet">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🌙 Quiet Hours</h2>
+<div class="qh-form">
+<label class="qh-toggle">
+<input id="qh-enabled" type="checkbox"/>
+<span>Enable quiet hours</span>
+</label>
+<div class="qh-times">
+<label>
+            Start
+            <input id="qh-start" type="time" value="21:00"/>
+</label>
+<span class="qh-sep">→</span>
+<label>
+            End
+            <input id="qh-end" type="time" value="06:00"/>
+</label>
+</div>
+<button class="btn btn-primary" onclick="saveQuietHours()">Save</button>
+<span class="qh-status" id="qh-status"></span>
+</div>
+</section>
+<section class="card" id="card-skills">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎯 Voice Skills <button class="btn btn-secondary btn-sm" id="skills-toggle-btn" onclick="toggleSkills()">Show</button></h2>
+<div id="skills-panel" style="display:none">
+<p style="font-size:13px;color:var(--text-dim);margin:4px 0 8px 0">
+          Speak these phrases (or type them below) to trigger a skill.
+          Use the toggle to enable/disable skills and ⚙ to configure them.
+        </p>
+<table class="help-table" id="skills-table">
+<thead><tr><th style="width:28px"></th><th>Skill</th><th>Example phrase</th><th style="width:32px"></th></tr></thead>
+<tbody id="skills-tbody"><tr><td colspan="4">Loading…</td></tr></tbody>
+</table>
+<div class="btn-row" style="margin-top:8px">
+<input class="text-input" id="utterance-input" placeholder="Type an utterance to test…" style="flex:1" type="text"/>
+<button class="btn btn-primary" onclick="sendUtterance()">Dispatch</button>
+</div>
+</div>
+</section>
+</div>
+<!-- ══ TAB: SYSTEM ══════════════════════════════════════════ -->
+<div class="tab-pane" id="tab-system">
       <section class="card" id="card-controls">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Controls</h2>
 <div class="controls-grid">
@@ -463,181 +612,14 @@
 </div>
 </section>
 
-      <section class="card" id="card-music">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎵 Music (Pandora)</h2>
-<div id="music-not-configured" style="display:none;color:var(--yellow);margin-bottom:8px;font-size:0.9em">
-        ⚠ pianobar not configured. Create <code>~/.config/pianobar/config</code> with your Pandora credentials.
-      </div>
-<!-- Album art + metadata row -->
-<div class="music-player-row">
-<div class="music-art" id="music-art-wrap">
-<img alt="Album Art" id="music-art-img" onerror="this.style.display='none';document.getElementById('music-art-placeholder').style.display='flex'" src="" style="display:none"/>
-<div class="music-art-placeholder" id="music-art-placeholder">♫</div>
-</div>
-<div class="music-info">
-<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-<span id="music-state-icon" style="font-size:1.2em">■</span>
-<span id="music-song-title" style="font-weight:600">—</span>
-</div>
-<div style="font-size:0.85em;color:var(--text-muted)">
-<span id="music-song-artist"></span>
-</div>
-<div style="font-size:0.8em;color:var(--text-muted);margin-top:2px">
-<span id="music-song-album"></span>
-</div>
-<div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;opacity:0.7">
-<span id="music-song-station"></span>
-</div>
-</div>
-</div>
-<!-- Progress bar -->
-<div class="music-progress-row">
-<span id="music-elapsed" style="font-size:0.8em;color:var(--text-muted);min-width:38px">0:00</span>
-<input class="music-progress-bar" disabled="" id="music-progress-bar" max="100" min="0" type="range" value="0"/>
-<span id="music-duration" style="font-size:0.8em;color:var(--text-muted);min-width:38px;text-align:right">0:00</span>
-</div>
-<!-- Playback controls -->
-<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-<button class="btn btn-primary" onclick="musicPlay()">▶ Play</button>
-<button class="btn btn-sm" onclick="musicPause()">⏸ Pause</button>
-<button class="btn btn-sm" onclick="musicNext()">⏭ Next</button>
-<button class="btn btn-sm" onclick="musicStop()">■ Stop</button>
-<button class="btn btn-sm" onclick="musicThumbsUp()" title="Love this song">👍</button>
-<button class="btn btn-sm" onclick="musicThumbsDown()" title="Ban this song">👎</button>
-</div>
-<!-- Station selector -->
-<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-<label style="font-size:0.9em">Station</label>
-<select id="music-station-select" onchange="musicSetStation(this.value)" style="flex:1;min-width:180px">
-<option value="">— select station —</option>
-</select>
-<span id="music-status" style="font-size:0.85em;color:var(--green)"></span>
-</div>
-<!-- Volume control -->
-<div class="music-volume-row">
-<label style="font-size:0.85em;min-width:56px">🔊 Vol</label>
-<input id="music-volume-slider" max="100" min="0" oninput="musicSetVolume(this.value)" style="flex:1" type="range" value="50"/>
-<span id="music-volume-label" style="font-size:0.85em;min-width:36px;text-align:right">50%</span>
-</div>
-<!-- EQ preset -->
-<div style="display:flex;gap:8px;align-items:center;margin-top:8px">
-<label style="font-size:0.85em;min-width:56px">🎚 EQ (voice)</label>
-<select id="music-eq-select" onchange="musicSetEq(this.value)" style="flex:1">
-<option value="flat">Flat</option>
-<option value="bass_boost">Bass Boost</option>
-<option value="treble_boost">Treble Boost</option>
-<option value="vocal">Vocal</option>
-<option value="loudness">Loudness</option>
-<option value="warm">Warm</option>
-<option value="custom">Custom…</option>
-</select>
-</div>
-<!-- Custom EQ bands — shown only when "Custom" is selected -->
-<div id="custom-eq-panel" style="display:none;margin-top:12px;padding:10px;
-           border:1px solid var(--border);border-radius:6px">
-<div style="font-size:0.85em;font-weight:600;margin-bottom:8px">Custom EQ Bands (voice TTS only)</div>
-<table id="custom-eq-table" style="width:100%;font-size:0.8em;border-collapse:collapse">
-<thead>
-<tr>
-<th style="text-align:left;padding:2px 6px">Band</th>
-<th style="text-align:left;padding:2px 6px">Hz</th>
-<th style="text-align:left;padding:2px 6px">Gain (dB)</th>
-<th style="text-align:left;padding:2px 6px">Q</th>
-<th></th>
-</tr>
-</thead>
-<tbody id="custom-eq-rows"></tbody>
-</table>
-<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-<button class="btn btn-secondary btn-sm" onclick="customEqAddBand()">+ Band</button>
-<button class="btn btn-primary btn-sm" onclick="customEqSave()">Apply</button>
-<span class="qh-status" id="custom-eq-status"></span>
-</div>
-</div>
-</section>
-
-      <section class="card" id="card-greeting">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>💬 Greeting Settings</h2>
-<div class="qh-form">
-<div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-<label style="flex:1;min-width:160px">
-            Cooldown (min)
-            <input id="greeting-cooldown" max="240" min="1" step="1" style="width:80px;margin-left:8px" type="number" value="30">
-</input></label>
-<label style="flex:1;min-width:160px">
-            Jitter (%)
-            <input id="greeting-jitter" max="50" min="0" step="5" style="width:70px;margin-left:8px" type="number" value="25">
-</input></label>
-</div>
-<div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:8px">
-<label style="flex:1;min-width:160px">
-            Min absence (s)
-            <input id="greeting-min-absence" max="300" min="5" step="5" style="width:70px;margin-left:8px" type="number" value="30"/>
-</label>
-<label style="flex:1;min-width:160px">
-            Min confidence
-            <input id="greeting-confidence" max="1.0" min="0.1" step="0.05" style="width:70px;margin-left:8px" type="number" value="0.5"/>
-</label>
-</div>
-<button class="btn btn-primary" onclick="saveGreetingSettings()" style="margin-top:10px">Save</button>
-<span class="qh-status" id="greeting-status"></span>
-</div>
-</section>
-
-      <section class="card" id="card-quiet">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🌙 Quiet Hours</h2>
-<div class="qh-form">
-<label class="qh-toggle">
-<input id="qh-enabled" type="checkbox"/>
-<span>Enable quiet hours</span>
-</label>
-<div class="qh-times">
-<label>
-            Start
-            <input id="qh-start" type="time" value="21:00"/>
-</label>
-<span class="qh-sep">→</span>
-<label>
-            End
-            <input id="qh-end" type="time" value="06:00"/>
-</label>
-</div>
-<button class="btn btn-primary" onclick="saveQuietHours()">Save</button>
-<span class="qh-status" id="qh-status"></span>
-</div>
-</section>
-
-      <section class="card" id="card-skills">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎯 Voice Skills <button class="btn btn-secondary btn-sm" id="skills-toggle-btn" onclick="toggleSkills()">Show</button></h2>
-<div id="skills-panel" style="display:none">
-<p style="font-size:13px;color:var(--text-dim);margin:4px 0 8px 0">
-          Speak these phrases (or type them below) to trigger a skill.
-          Use the toggle to enable/disable skills and ⚙ to configure them.
-        </p>
-<table class="help-table" id="skills-table">
-<thead><tr><th style="width:28px"></th><th>Skill</th><th>Example phrase</th><th style="width:32px"></th></tr></thead>
-<tbody id="skills-tbody"><tr><td colspan="4">Loading…</td></tr></tbody>
-</table>
-<div class="btn-row" style="margin-top:8px">
-<input class="text-input" id="utterance-input" placeholder="Type an utterance to test…" style="flex:1" type="text"/>
-<button class="btn btn-primary" onclick="sendUtterance()">Dispatch</button>
-</div>
-</div>
-</section>
-
-</div>
-
-    <!-- ══ TAB: SYSTEM ══════════════════════════════════════════ -->
-    <div class="tab-pane" id="tab-system">
-      <section class="card" id="card-power">
+<section class="card" id="card-power">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>System Power</h2>
 <div class="btn-row">
 <button class="btn btn-warning" id="btn-reboot" onclick="systemReboot()">↺ Reboot</button>
 <button class="btn btn-danger" id="btn-shutdown" onclick="systemShutdown()">⏻ Shutdown</button>
 </div>
 </section>
-
-      <section class="card" id="card-help">
+<section class="card" id="card-help">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>❓ Help <button class="btn btn-secondary btn-sm" id="help-toggle-btn" onclick="toggleHelp()">Show</button></h2>
 <div id="help-panel" style="display:none">
 <div class="help-grid">
@@ -707,18 +689,16 @@
 </div>
 </div>
 </section>
-
 </div>
-
-  </main>
+</main>
 <script src="/static/app.js"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">
 <button aria-label="Close" class="lightbox-close" onclick="closeLightbox()">✕</button>
-<img alt="face full size" class="lightbox-img" id="lightbox-img" src="">
+<img alt="face full size" class="lightbox-img" id="lightbox-img" src=""/>
 <p class="lightbox-label" id="lightbox-label"></p>
-</img></div>
+</div>
 </div>
 <!-- ── Merge modal ───────────────────────────────────────────── -->
 <div class="lightbox" id="merge-modal" onclick="closeMergeModal()">
