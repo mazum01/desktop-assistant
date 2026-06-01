@@ -267,8 +267,9 @@ drop:
 tts:
   # Piper voice model to use for synthesis.
   # Available models in config/piper/:
-  #   en_US-amy-medium    (~61 MB, ~0.7–5s synthesis) ← default, balanced
-  #   en_US-lessac-high   (~109 MB, ~14–15s synthesis) — higher quality, slow
-  piper_voice_name: en_US-amy-medium
+  #   en_US-lessac-medium  (~61 MB, ~0.6–4s synthesis) ← default, balanced quality
+  #   en_US-amy-medium     (~61 MB, ~0.7–5s synthesis) — alternate voice
+  #   en_US-lessac-high    (~109 MB, ~14–15s synthesis) — higher quality, slow
+  piper_voice_name: en_US-lessac-medium
   # TTS speech rate (1.0 = natural speed; 1.15 = slightly slower / computer-like).
   piper_length_scale: 1.15

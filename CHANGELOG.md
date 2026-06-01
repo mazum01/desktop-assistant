@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.32.1] - 2026-06-01
+### Changed
+- TTS voice switched from `en_US-amy-medium` to `en_US-lessac-medium` — same
+  61 MB model size and ~0.6–4 s synthesis speed, but the Lessac voice character
+  matches the previous high-quality model (lessac-high) used before v1.32.0.
+
 ## [1.32.0] - 2026-05-31
 ### Changed
 - TTS voice model switched from `en_US-lessac-high` (109 MB, 14–15 s/sentence) to
