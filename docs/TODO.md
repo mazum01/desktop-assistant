@@ -74,6 +74,19 @@ Smoke-test scripts for each component (`scripts/test_<device>.py` exits 0).
   Requires `src/hardware/servo.py` rewrite + Pi hardware UART freed up.
   See `PROJECT_PHASES.md § Future Upgrades` for wiring and library details.
 
+- [ ] **MyQ garage door opener integration (via ratgdo)** — Chamberlain/MyQ blocked
+  all third-party API access in October 2023; `pymyq` and all cloud-based libraries
+  are permanently broken. The recommended alternative is
+  [**ratgdo**](https://paulwieland.github.io/ratgdo/) (~$12 ESP32 board), which
+  physically wires to the MyQ opener's Security+ 2.0 bus (3 wires) and exposes
+  full local MQTT control (open/close/stop, door state, light, motion events).
+  Implementation plan once hardware is added:
+  - Subscribe to `ratgdo/<name>/status/door` for state (open/closed/opening/closing)
+  - Publish to `ratgdo/<name>/command/door` for open/close/stop commands
+  - Create `src/iot/devices/ratgdo_device.py` as a non-hardwired `IoTDevice` plugin
+    (user adds one entry per opener via the IoT Add Device UI)
+  - Add `vera garage` CLI command + TTS announce skill
+
 ---
 
 ## Security & Privacy
