@@ -38,7 +38,7 @@ jobs:
           # Install everything from requirements.txt, ignoring Pi-specific failures
           pip install -r requirements.txt || true
           # Force-install the packages that CI absolutely needs (may have been skipped above)
-          pip install pytest numpy soundfile sounddevice fastapi httpx psutil ruamel.yaml pyzmq opencv-python-headless pyyaml paho-mqtt dropmqttapi
+          pip install pytest numpy soundfile sounddevice fastapi httpx psutil ruamel.yaml pyzmq opencv-python-headless pyyaml paho-mqtt dropmqttapi yalesmartalarmclient
 
       - name: Pytest
         env:

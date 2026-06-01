@@ -2,11 +2,43 @@
 
 from __future__ import annotations
 
+import sys
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.iot.devices.yale_device import YaleDevice
+# ── Provide a minimal mock of yalesmartalarmclient if not installed ───────────
+
+def _ensure_yale_mock():
+    if "yalesmartalarmclient" in sys.modules:
+        return
+
+    import enum
+
+    class YaleLockState(enum.Enum):
+        LOCKED    = 1
+        UNLOCKED  = 2
+        DOOR_OPEN = 3
+        UNKNOWN   = 4
+
+    pkg = types.ModuleType("yalesmartalarmclient")
+    lock_mod = types.ModuleType("yalesmartalarmclient.lock")
+    lock_mod.YaleLockState = YaleLockState
+    exc_mod = types.ModuleType("yalesmartalarmclient.exceptions")
+    exc_mod.AuthenticationError = type("AuthenticationError", (Exception,), {})
+    client_mod = types.ModuleType("yalesmartalarmclient.client")
+    client_mod.YaleSmartAlarmClient = MagicMock()
+
+    sys.modules["yalesmartalarmclient"]            = pkg
+    sys.modules["yalesmartalarmclient.lock"]       = lock_mod
+    sys.modules["yalesmartalarmclient.exceptions"] = exc_mod
+    sys.modules["yalesmartalarmclient.client"]     = client_mod
+
+
+_ensure_yale_mock()
+
+from src.iot.devices.yale_device import YaleDevice  # noqa: E402
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
