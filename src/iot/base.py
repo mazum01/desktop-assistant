@@ -42,6 +42,14 @@ class IoTDevice(ABC):
     device_name: str = ""   # Display name, e.g. "Soil Moisture"
     device_icon: str = "🔌" # Emoji shown in card header
 
+    # ── Optional class-level flags ────────────────────────────────────────────
+    _hardwired: bool = False
+    """When True the device is always registered by core_main at startup,
+    never saved to ``config/iot_devices.json``, and excluded from the
+    ``/api/iot/types`` discovery list (so it cannot be double-added via the UI).
+    Radon and DROP are hardwired because they are always present on VERA.
+    """
+
     def __init__(self, bus: Any = None, cfg: dict | None = None) -> None:
         self.bus   = bus
         self._cfg  = cfg or {}

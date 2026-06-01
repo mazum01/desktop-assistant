@@ -39,10 +39,10 @@ from src.core.runtime_state import load as _load_runtime, save as _save_runtime
 from src.services.notification_service import NotificationService
 from src.services.telegram_service import TelegramService
 from src.services.room_service import RoomService
-from src.services.radon_service import RadonService
-from src.services.drop_service import DropService
 from src.iot.registry import IoTRegistry
 from src.iot.loader import load_persisted as _iot_load_persisted
+from src.iot.devices.radon_device import RadonDevice
+from src.iot.devices.drop_device import DropDevice
 
 # The thermal service runs in a separate process. Its IPCBridge PUBs on
 # this endpoint; we SUBscribe to it from the core IPCBridge and re-emit
@@ -435,16 +435,18 @@ def main() -> int:
     services.append(tg_svc)
     room_svc = RoomService(bus=bus, vision_service=vis, cfg=_cfg.get("room_detection", {}))
     services.append(room_svc)
-    radon_svc = RadonService(bus=bus, cfg=_cfg.get("radon", {}))
-    services.append(radon_svc)
-    drop_svc = DropService(bus=bus, cfg=_cfg.get("drop", {}))
-    services.append(drop_svc)
 
     iot_registry = IoTRegistry()
     _iot_load_persisted(iot_registry, bus=bus)
-    # To hard-wire a new IoT device plugin at startup:
-    #   from src.iot.devices.my_device import MyDevice
-    #   iot_registry.register(MyDevice(bus=bus, cfg=_cfg.get("my_device", {})))
+
+    # ── Hardwired IoT devices (always on, never user-removable) ──────────────
+    radon_dev = RadonDevice(bus=bus, cfg=_cfg.get("radon", {}))
+    iot_registry.register(radon_dev)
+    radon_dev.start()
+
+    drop_dev = DropDevice(bus=bus, cfg=_cfg.get("drop", {}))
+    iot_registry.register(drop_dev)
+    drop_dev.start()
 
     services.append(ipc)
     ipc._all_services = services  # seed service registry at startup
@@ -457,8 +459,6 @@ def main() -> int:
                              dense_stereo_service=dense_stereo_svc,
                              mono_depth_service=mono_depth_svc,
                              room_service=room_svc,
-                             radon_service=radon_svc,
-                             drop_service=drop_svc,
                              iot_registry=iot_registry,
                              api_key=_api_key)
         services.append(web_svc)

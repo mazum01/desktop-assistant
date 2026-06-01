@@ -224,8 +224,6 @@ class WebService:
         dense_stereo_service=None,
         mono_depth_service=None,
         room_service=None,
-        radon_service=None,
-        drop_service=None,
         iot_registry=None,
         api_key: str = "",
     ) -> None:
@@ -246,8 +244,6 @@ class WebService:
         self._dense_stereo_svc = dense_stereo_service
         self._mono_depth_svc = mono_depth_service
         self._room_svc = room_service
-        self._radon_svc = radon_service
-        self._drop_svc = drop_service
         self._iot_registry = iot_registry
         self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
@@ -269,10 +265,6 @@ class WebService:
         # CPU/memory history — 60 samples (≈ 60 s at 1 Hz)
         self._cpu_history: collections.deque = collections.deque(maxlen=60)
         self._mem_history: collections.deque = collections.deque(maxlen=60)
-        # Radon history — 60 samples of pCi/L values
-        self._radon_history: collections.deque = collections.deque(maxlen=60)
-        # DROP flow history — 60 samples of flow_gpm values
-        self._drop_flow_history: collections.deque = collections.deque(maxlen=60)
         # Prime the non-blocking cpu_percent sampler so the first real read is accurate
         psutil.cpu_percent(interval=None)
 
@@ -516,32 +508,6 @@ class WebService:
         self._cpu_history.append(round(cpu, 1))
         self._mem_history.append(round(mem, 1))
 
-        # Radon snapshot — pull from service if available
-        radon_pcil = None
-        radon_bqm3 = None
-        radon_alert = None
-        radon_device = None
-        if self._radon_svc and not self._radon_svc.degraded:
-            r = self._radon_svc.get_reading()
-            if r:
-                radon_pcil = r.get("radon_pcil")
-                radon_bqm3 = r.get("radon_bqm3")
-                radon_alert = r.get("alert")
-                radon_device = r.get("device_name")
-                if radon_pcil is not None:
-                    # Scale 0-10 pCi/L → 0-100 for sparkline (EPA action = 40%)
-                    self._radon_history.append(round(min(radon_pcil / 10.0 * 100, 100), 1))
-
-        # DROP snapshot — pull from service if available
-        drop_reading = None
-        if self._drop_svc and not self._drop_svc.degraded:
-            drop_reading = self._drop_svc.get_reading()
-            if drop_reading and drop_reading.get("flow_gpm") is not None:
-                # Scale flow 0-5 gpm → 0-100 for sparkline
-                self._drop_flow_history.append(
-                    round(min(drop_reading["flow_gpm"] / 5.0 * 100, 100), 1)
-                )
-
         return {
             "version": get_version(),
             "ts": time.time(),
@@ -556,13 +522,6 @@ class WebService:
             "mem_history": list(self._mem_history),
             "room": self._room_svc.room_name if self._room_svc else None,
             "room_detail": self._room_svc.get_status_dict() if self._room_svc else None,
-            "radon_pcil": radon_pcil,
-            "radon_bqm3": radon_bqm3,
-            "radon_alert": radon_alert,
-            "radon_device": radon_device,
-            "radon_history": list(self._radon_history),
-            "drop": drop_reading,
-            "drop_flow_history": list(self._drop_flow_history),
             "iot": self._iot_registry.get_all_snapshots() if self._iot_registry else {},
         }
 
@@ -1643,50 +1602,24 @@ class WebService:
 
         @app.get("/api/radon")
         async def api_radon_reading():
-            """Return the latest cached radon reading from the EcoQube."""
-            if self._radon_svc is None:
-                return {"available": False, "error": "Radon service not loaded"}
-            if self._radon_svc.degraded:
-                return {
-                    "available": False,
-                    "degraded": True,
-                    "error": (
-                        "EcoSense credentials not configured. "
-                        "Add ECOSENSE_USERNAME and ECOSENSE_PASSWORD to "
-                        "/etc/desktop-assistant/secrets.env"
-                    ),
-                }
-            reading = self._radon_svc.get_reading()
+            """Return the latest cached radon reading (delegates to IoT registry)."""
+            dev = self._iot_registry.get("radon") if self._iot_registry else None
+            if dev is None:
+                return {"available": False, "error": "Radon device not registered"}
+            snap = dev.get_snapshot()
+            if not snap.get("available"):
+                return {"available": False, "error": snap.get("error"), "degraded": True}
+            svc = getattr(dev, "_svc", None)
+            reading = svc.get_reading() if svc else None
             return {"available": True, "reading": reading}
 
         @app.post("/api/radon/announce")
         async def api_radon_announce():
-            """Speak the current radon level aloud via TTS."""
-            if self._radon_svc is None or self._radon_svc.degraded:
-                return {"ok": False, "error": "Radon service unavailable"}
-            reading = self._radon_svc.get_reading()
-            if not reading:
-                return {"ok": False, "error": "No radon reading available yet"}
-            pcil = reading.get("radon_pcil")
-            alert = reading.get("alert", "Unknown")
-            device = reading.get("device_name", "EcoQube")
-            if pcil is None:
-                text = f"{device} has no reading yet — the device may be initialising."
-            elif alert == "Green":
-                text = (
-                    f"The basement radon level is {pcil} picocuries per liter. "
-                    f"That's Green — well below the EPA action threshold."
-                )
-            elif alert == "Orange":
-                text = (
-                    f"The basement radon level is {pcil} picocuries per liter. "
-                    f"That's Orange — the EPA recommends considering mitigation above 2.7."
-                )
-            else:
-                text = (
-                    f"Warning: basement radon level is {pcil} picocuries per liter. "
-                    f"That's Red — the EPA recommends fixing your home above 4 picocuries per liter."
-                )
+            """Speak the current radon level aloud via TTS (delegates to IoT registry)."""
+            dev = self._iot_registry.get("radon") if self._iot_registry else None
+            if dev is None:
+                return {"ok": False, "error": "Radon device not registered"}
+            text = dev.announce()
             if self.bus:
                 self.bus.publish("av.say", {"text": text})
             return {"ok": True, "text": text}
@@ -1695,61 +1628,26 @@ class WebService:
 
         @app.get("/api/drop")
         async def api_drop_reading():
-            """Return the latest cached DROP water system reading."""
-            if self._drop_svc is None:
-                return {"available": False, "error": "DROP service not loaded"}
-            if self._drop_svc.degraded:
-                return {
-                    "available": False,
-                    "degraded": True,
-                    "devices": [],
-                    "error": (
-                        "DROP service degraded — MQTT broker unreachable or dependencies missing. "
-                        "Run: sudo apt-get install -y mosquitto, then configure "
-                        "your DROP Hub in the DROP app (System → Advanced → Configure MQTT)."
-                    ),
-                }
-            reading = self._drop_svc.get_reading()
-            devices = self._drop_svc.get_devices()
-            return {
-                "available": True,
-                "reading": reading or {},
-                "devices": devices,
-            }
+            """Return the latest cached DROP water system reading (delegates to IoT registry)."""
+            dev = self._iot_registry.get("drop") if self._iot_registry else None
+            if dev is None:
+                return {"available": False, "error": "DROP device not registered"}
+            snap = dev.get_snapshot()
+            if not snap.get("available"):
+                return {"available": False, "error": snap.get("error"), "degraded": True,
+                        "devices": []}
+            svc = getattr(dev, "_svc", None)
+            reading = svc.get_reading() if svc else None
+            devices = svc.get_devices() if svc else []
+            return {"available": True, "reading": reading or {}, "devices": devices}
 
         @app.post("/api/drop/announce")
         async def api_drop_announce():
-            """Speak the current DROP water softener status aloud via TTS."""
-            if self._drop_svc is None or self._drop_svc.degraded:
-                return {"ok": False, "error": "DROP service unavailable"}
-            reading = self._drop_svc.get_reading()
-            if not reading:
-                return {"ok": False, "error": "No DROP reading available yet"}
-
-            parts: list[str] = []
-            flow = reading.get("flow_gpm")
-            if flow is not None:
-                parts.append(f"current flow is {flow:.1f} gallons per minute")
-            used = reading.get("used_today_gal")
-            if used is not None:
-                parts.append(f"{used:.0f} gallons used today")
-            capacity = reading.get("capacity_remaining_gal")
-            if capacity is not None:
-                parts.append(f"{capacity:.0f} gallons of softener capacity remaining")
-            pressure = reading.get("pressure_psi")
-            if pressure is not None:
-                parts.append(f"system pressure is {pressure:.0f} PSI")
-            if reading.get("salt_low"):
-                parts.append("salt level is LOW — add salt to the brine tank soon")
-            if reading.get("water_on") is False:
-                parts.append("WARNING: water supply is shut off")
-
-            name = reading.get("softener_name", "water softener")
-            if parts:
-                text = f"DROP {name} status: {'; '.join(parts)}."
-            else:
-                text = f"The DROP {name} is connected but no readings are available yet."
-
+            """Speak the current DROP status aloud via TTS (delegates to IoT registry)."""
+            dev = self._iot_registry.get("drop") if self._iot_registry else None
+            if dev is None:
+                return {"ok": False, "error": "DROP device not registered"}
+            text = dev.announce()
             if self.bus:
                 self.bus.publish("av.say", {"text": text})
             return {"ok": True, "text": text}

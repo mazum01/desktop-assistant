@@ -48,6 +48,7 @@ def discover_types() -> dict[str, type[IoTDevice]]:
                 and issubclass(cls, IoTDevice)
                 and cls.device_id
                 and not inspect.isabstract(cls)
+                and not getattr(cls, "_hardwired", False)  # skip always-on devices
             ):
                 if cls.device_id in types:
                     log.warning(
@@ -146,6 +147,8 @@ def save_persisted(registry: "IoTRegistry", path: Path | None = None) -> None:
     for dev in registry.all():
         if dev.device_id not in known_types:
             continue  # not a discoverable plugin — skip (e.g. hardwired devices)
+        if getattr(dev, "_hardwired", False):
+            continue  # hardwired devices are always auto-registered; never persisted
         entries.append({"type_id": dev.device_id, "config": dict(dev._cfg)})
 
     try:

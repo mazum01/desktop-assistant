@@ -6,6 +6,35 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.38.0] - 2026-06-01
+### Changed
+- **Radon Monitor + DROP Water Softener migrated to IoT plugin system** — both devices are now
+  registered as `_hardwired = True` IoTDevice subclasses (`RadonDevice`, `DropDevice`) rather than
+  standalone services wired directly into the web layer.
+  - `src/iot/devices/radon_device.py` — `RadonDevice` wraps `RadonService`; delivers `get_snapshot()`
+    with pCi/L primary value, EPA-coloured alert badge, Bq/m³ metric, 60-sample normalised sparkline,
+    and custom `announce()` text.
+  - `src/iot/devices/drop_device.py` — `DropDevice` wraps `DropService`; delivers `get_snapshot()`
+    with flow rate primary, water-status + salt badges, full metrics row, 60-sample sparkline,
+    and custom `announce()` text.
+  - `src/iot/base.py` — added `_hardwired: bool = False` class attribute; hardwired devices are
+    auto-registered at startup, excluded from the Add Device UI, never persisted to
+    `config/iot_devices.json`, and cannot be deleted via any interface.
+  - `src/iot/loader.py` — `discover_types()` skips `_hardwired=True` classes;
+    `save_persisted()` skips hardwired device instances.
+  - `src/assistant/core_main.py` — creates `RadonDevice`/`DropDevice` and registers them via
+    `iot_registry.register()` / `dev.start()`; removed direct `RadonService`/`DropService` wiring.
+  - `src/services/web_service.py` — removed `radon_service`/`drop_service` constructor params,
+    `_radon_history`/`_drop_flow_history` deques, and radon/drop blocks from `_build_snapshot()`;
+    legacy REST endpoints `/api/radon`, `/api/radon/announce`, `/api/drop`, `/api/drop/announce`
+    now delegate to `IoTRegistry.get("radon"/"drop")` for backward compatibility.
+  - `src/web/static/index.html` — removed hard-wired `#card-radon` and `#card-drop` HTML sections;
+    both cards are now auto-rendered by `renderIoTDevices()` from the `data.iot` WebSocket snapshot.
+  - `src/web/static/app.js` — removed legacy radon/drop WebSocket rendering blocks; IoT cards
+    are fully handled by the generic `renderIoTDevices()` renderer.
+
+---
+
 ## [1.37.0] - 2026-06-01
 ### Added
 - **IoT Plugin CRUD across all interfaces** — add, configure, and remove IoT device plugins without editing any files.

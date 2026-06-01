@@ -264,48 +264,6 @@
   <span class="iot-toolbar-title">🏡 Smart Home</span>
   <button class="btn btn-sm" onclick="openIoTAddModal()" id="iot-add-btn">＋ Add IoT Device</button>
 </div>
-<section class="card" id="card-radon">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Radon Monitor  <button class="btn btn-secondary btn-sm" id="radon-announce-btn" onclick="announceRadon()" title="Speak current radon level via TTS">📢 Announce</button></h2>
-<div class="resource-graphs">
-<div class="resource-graph-wrap" style="flex:1">
-<div class="resource-graph-label" style="display:flex;align-items:center;gap:8px">
-<span class="resource-pct" id="stat-radon-pcil">—</span>
-<span style="font-size:11px;color:var(--muted)">pCi/L</span>
-<span id="stat-radon-bqm3" style="font-size:11px;color:var(--muted)"></span>
-<span class="pill" id="stat-radon-alert" style="font-size:11px;margin-left:4px">—</span>
-<span id="stat-radon-device" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
-</div>
-<canvas class="resource-canvas" height="60" id="radon-graph" width="400"></canvas>
-<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;padding:0 4px">
-<span>60 min ago</span>
-<span>EPA action: 4.0 pCi/L</span>
-<span>now</span>
-</div>
-</div>
-</div>
-</section>
-<section class="card" id="card-drop">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Water Softener  <button class="btn btn-secondary btn-sm" id="drop-announce-btn" onclick="announceDrop()" title="Speak current water softener status via TTS">📢 Announce</button></h2>
-<div class="resource-graphs">
-<div class="resource-graph-wrap" style="flex:1">
-<div class="resource-graph-label" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-<span class="resource-pct" id="stat-drop-flow">—</span>
-<span style="font-size:11px;color:var(--muted)">gpm</span>
-<span id="stat-drop-used" style="font-size:11px;color:var(--muted)"></span>
-<span id="stat-drop-capacity" style="font-size:11px;color:var(--muted)"></span>
-<span class="pill" id="stat-drop-status" style="font-size:11px;margin-left:4px">—</span>
-<span id="stat-drop-salt" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
-</div>
-<canvas class="resource-canvas" height="60" id="drop-flow-graph" width="400"></canvas>
-<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;padding:0 4px">
-<span>60 min ago</span>
-<span>Flow rate (gpm)</span>
-<span>now</span>
-</div>
-</div>
-</div>
-<div id="drop-detail" style="font-size:11px;color:var(--muted);margin-top:6px;display:flex;gap:16px;flex-wrap:wrap"></div>
-</section>
 </div>
 <!-- ══ TAB: CONTROLS ════════════════════════════════════════ -->
 <div class="tab-pane" id="tab-controls">
