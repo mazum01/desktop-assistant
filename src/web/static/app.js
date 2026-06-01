@@ -346,10 +346,25 @@ function updateDashboard(data) {
 
 // Sparkline history buffers per IoT device id
 const _iotHistories = {};
+// Track which IoT cards were rendered from the registry (vs. hard-wired)
+const _iotRegisteredCards = new Set();
 
 function renderIoTDevices(iot) {
   const pane = el("tab-smart-home");
   if (!pane) return;
+
+  const activeIds = new Set(Object.keys(iot));
+
+  // Remove cards for devices that were unregistered
+  for (const cardId of [..._iotRegisteredCards]) {
+    const devId = cardId.replace(/^iot-card-/, "");
+    if (!activeIds.has(devId)) {
+      const card = el(cardId);
+      if (card) card.remove();
+      _iotRegisteredCards.delete(cardId);
+      delete _iotHistories[devId];
+    }
+  }
 
   for (const [deviceId, snap] of Object.entries(iot)) {
     const cardId = `iot-card-${deviceId}`;
@@ -366,7 +381,11 @@ function renderIoTDevices(iot) {
           <span class="drag-handle" title="Drag to reorder">⠿</span>
           <span class="iot-card-icon">${snap.device_icon || "🔌"}</span>
           <span class="iot-card-name">${snap.device_name || deviceId}</span>
-          <button class="btn btn-secondary btn-sm" onclick="announceIotDevice('${deviceId}')" title="Speak status via TTS">📢 Announce</button>
+          <span style="margin-left:auto;display:flex;gap:6px">
+            <button class="btn btn-secondary btn-sm" onclick="announceIotDevice('${deviceId}')" title="Speak status via TTS">📢</button>
+            <button class="btn btn-secondary btn-sm" onclick="openIoTConfigModal('${deviceId}')" title="Configure device">⚙️</button>
+            <button class="btn btn-sm" style="background:rgba(248,81,73,0.15);border-color:#f8514966;color:#f85149" onclick="removeIoTDevice('${deviceId}')" title="Remove device">🗑</button>
+          </span>
         </h2>
         <div class="iot-primary-row">
           <span class="resource-pct iot-primary-value">—</span>
@@ -379,6 +398,7 @@ function renderIoTDevices(iot) {
       `;
       pane.appendChild(card);
       _iotHistories[deviceId] = [];
+      _iotRegisteredCards.add(cardId);
     }
 
     // Update card content
@@ -389,10 +409,10 @@ function renderIoTDevices(iot) {
     const metrics   = disp.metrics   || [];
     const detail    = disp.detail    || "";
 
-    const valueEl  = card.querySelector(".iot-primary-value");
-    const unitEl   = card.querySelector(".iot-primary-unit");
-    const badgeEl  = card.querySelector(".iot-badge-row");
-    const detailEl = card.querySelector(".iot-detail");
+    const valueEl   = card.querySelector(".iot-primary-value");
+    const unitEl    = card.querySelector(".iot-primary-unit");
+    const badgeEl   = card.querySelector(".iot-badge-row");
+    const detailEl  = card.querySelector(".iot-detail");
     const metricsEl = card.querySelector(".iot-metrics");
 
     if (!available) {
@@ -449,7 +469,149 @@ async function announceIotDevice(deviceId) {
   } catch (e) { console.error("IoT announce request failed:", e); }
 }
 
-// ── Room detection visualisation ──────────────────────────────────
+// ── IoT CRUD modals ───────────────────────────────────────────────
+
+let _iotConfigTargetId = null;
+
+async function openIoTAddModal() {
+  const sel = document.getElementById("iot-add-type-select");
+  const errEl = document.getElementById("iot-add-error");
+  const cfgEl = document.getElementById("iot-add-config");
+  if (errEl) { errEl.style.display = "none"; errEl.textContent = ""; }
+  if (cfgEl) cfgEl.value = "{}";
+  if (sel) {
+    sel.innerHTML = "<option value=''>— loading… —</option>";
+    try {
+      const resp = await fetch("/api/iot/types");
+      const data = await resp.json();
+      if (data.types && data.types.length > 0) {
+        sel.innerHTML = data.types
+          .map(t => `<option value="${t.type_id}">${t.icon || "🔌"} ${t.name} (${t.type_id})</option>`)
+          .join("");
+      } else {
+        sel.innerHTML = "<option value=''>No plugin types found</option>";
+      }
+    } catch (e) {
+      sel.innerHTML = "<option value=''>Error loading types</option>";
+    }
+  }
+  const modal = document.getElementById("iot-add-modal");
+  if (modal) modal.style.display = "flex";
+}
+
+function closeIoTAddModal() {
+  const modal = document.getElementById("iot-add-modal");
+  if (modal) modal.style.display = "none";
+}
+
+async function submitIoTAdd() {
+  const sel   = document.getElementById("iot-add-type-select");
+  const cfgEl = document.getElementById("iot-add-config");
+  const errEl = document.getElementById("iot-add-error");
+  const btn   = document.getElementById("iot-add-submit-btn");
+  if (!sel || !sel.value) {
+    if (errEl) { errEl.textContent = "Please select a plugin type."; errEl.style.display = "block"; }
+    return;
+  }
+  let cfg = {};
+  try { cfg = JSON.parse(cfgEl ? cfgEl.value || "{}" : "{}"); }
+  catch (e) {
+    if (errEl) { errEl.textContent = "Invalid JSON config: " + e.message; errEl.style.display = "block"; }
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await fetch("/api/iot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type_id: sel.value, config: cfg })
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) {
+      const msg = (data.detail || data.error || "Unknown error");
+      if (errEl) { errEl.textContent = msg; errEl.style.display = "block"; }
+    } else {
+      closeIoTAddModal();
+    }
+  } catch (e) {
+    if (errEl) { errEl.textContent = "Request failed: " + e.message; errEl.style.display = "block"; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function openIoTConfigModal(deviceId) {
+  _iotConfigTargetId = deviceId;
+  const titleEl = document.getElementById("iot-config-modal-title");
+  const cfgEl   = document.getElementById("iot-config-textarea");
+  const errEl   = document.getElementById("iot-config-error");
+  if (errEl) { errEl.style.display = "none"; errEl.textContent = ""; }
+  if (titleEl) titleEl.textContent = `⚙️ Configure: ${deviceId}`;
+  if (cfgEl) cfgEl.value = "{}";
+  try {
+    const resp = await fetch(`/api/iot/${deviceId}`);
+    const data = await resp.json();
+    if (data.device && data.device.config) {
+      if (cfgEl) cfgEl.value = JSON.stringify(data.device.config, null, 2);
+    }
+  } catch (e) { /* leave default */ }
+  const modal = document.getElementById("iot-config-modal");
+  if (modal) modal.style.display = "flex";
+}
+
+function closeIoTConfigModal() {
+  const modal = document.getElementById("iot-config-modal");
+  if (modal) modal.style.display = "none";
+  _iotConfigTargetId = null;
+}
+
+async function submitIoTConfig() {
+  const cfgEl = document.getElementById("iot-config-textarea");
+  const errEl = document.getElementById("iot-config-error");
+  const btn   = document.getElementById("iot-config-submit-btn");
+  if (!_iotConfigTargetId) return;
+  let cfg = {};
+  try { cfg = JSON.parse(cfgEl ? cfgEl.value || "{}" : "{}"); }
+  catch (e) {
+    if (errEl) { errEl.textContent = "Invalid JSON: " + e.message; errEl.style.display = "block"; }
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await fetch(`/api/iot/${_iotConfigTargetId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: cfg })
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) {
+      const msg = data.detail || data.error || "Unknown error";
+      if (errEl) { errEl.textContent = msg; errEl.style.display = "block"; }
+    } else {
+      closeIoTConfigModal();
+    }
+  } catch (e) {
+    if (errEl) { errEl.textContent = "Request failed: " + e.message; errEl.style.display = "block"; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function removeIoTDevice(deviceId) {
+  if (!confirm(`Remove IoT device "${deviceId}"? This stops the device and removes it from the registry.`)) return;
+  try {
+    const resp = await fetch(`/api/iot/${deviceId}`, { method: "DELETE" });
+    const data = await resp.json();
+    if (!resp.ok || !data.ok) {
+      alert(`Remove failed: ${data.detail || data.error || "Unknown error"}`);
+    }
+    // Card removal happens automatically on next renderIoTDevices() call
+  } catch (e) {
+    alert("Request failed: " + e.message);
+  }
+}
+
+
 
 // Ring buffer storing the last 20 similarity readings for the history sparkline.
 const _roomSimHistory = [];

@@ -42,6 +42,7 @@ from src.services.room_service import RoomService
 from src.services.radon_service import RadonService
 from src.services.drop_service import DropService
 from src.iot.registry import IoTRegistry
+from src.iot.loader import load_persisted as _iot_load_persisted
 
 # The thermal service runs in a separate process. Its IPCBridge PUBs on
 # this endpoint; we SUBscribe to it from the core IPCBridge and re-emit
@@ -440,7 +441,8 @@ def main() -> int:
     services.append(drop_svc)
 
     iot_registry = IoTRegistry()
-    # To add a new IoT device plugin:
+    _iot_load_persisted(iot_registry, bus=bus)
+    # To hard-wire a new IoT device plugin at startup:
     #   from src.iot.devices.my_device import MyDevice
     #   iot_registry.register(MyDevice(bus=bus, cfg=_cfg.get("my_device", {})))
 

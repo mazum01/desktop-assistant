@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.37.0] - 2026-06-01
+### Added
+- **IoT Plugin CRUD across all interfaces** — add, configure, and remove IoT device plugins without editing any files.
+  - `src/iot/devices/` — auto-discovery package; drop any `IoTDevice` subclass here and it becomes a registerable type.
+  - `src/iot/loader.py` — `discover_types()`, `get_type_list()`, `create_device()`, `load_persisted()`, `save_persisted()`.
+  - `config/iot_devices.json` — persistence file; devices are automatically reloaded on daemon restart.
+  - REST CRUD: `GET /api/iot/types`, `POST /api/iot`, `PUT /api/iot/{id}`, `DELETE /api/iot/{id}`.
+  - CLI: `vera iot list | types | status <id> | add <type> [--config JSON] | config <id> [k=v …] | remove <id> | announce <id>`.
+  - Web GUI: **Add IoT Device** toolbar button + modal (type dropdown + JSON config textarea) on the Smart Home tab; ⚙️ Configure and 🗑 Remove buttons on each dynamically-rendered IoT card.
+  - IoT cards are removed from the UI automatically when a device is unregistered.
+- Tests: `tests/test_iot_loader.py` — 16 tests covering `discover_types`, `create_device`, `load_persisted`, `save_persisted`.
+
 ## [1.36.0] - 2026-06-01
 ### Added
 - **Modular IoT plugin system** (`src/iot/`): `IoTDevice` abstract base class and `IoTRegistry` for wiring new IoT devices into VERA with minimal boilerplate.

@@ -64,7 +64,11 @@ POST /api/radon/announce      Speak current radon level aloud via TTS
 GET  /api/drop                Current DROP water softener reading (MQTT)
 POST /api/drop/announce       Speak current DROP status aloud via TTS
 GET  /api/iot               List all registered IoT plugin devices
+GET  /api/iot/types         List all discoverable IoT plugin types (from src/iot/devices/)
+POST /api/iot               Register + start a new IoT device  body: {"type_id": str, "config": {}}
 GET  /api/iot/{id}          Latest snapshot for a specific IoT device
+PUT  /api/iot/{id}          Reconfigure a device (stop/update/start)  body: {"config": {}}
+DELETE /api/iot/{id}        Stop and unregister an IoT device
 POST /api/iot/{id}/announce Speak status of a specific IoT device via TTS
 GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
@@ -111,6 +115,15 @@ class _SayBody(BaseModel):
 
 class _PanBody(BaseModel):
     angle: float
+
+
+class _IoTCreateBody(BaseModel):
+    type_id: str
+    config: dict = {}
+
+
+class _IoTUpdateBody(BaseModel):
+    config: dict
 
 
 class _RecordBody(BaseModel):
@@ -1742,8 +1755,9 @@ class WebService:
             return {"ok": True, "text": text}
 
         # ── IoT plugin endpoints ──────────────────────────────────────────
-        # These routes are always registered; when no iot_registry is set
-        # they return an empty list / 404.
+        # Routes are registered in specificity order (static paths before
+        # parameterised paths) to avoid FastAPI routing conflicts.
+        # GET /api/iot/types MUST come before GET /api/iot/{device_id}.
 
         @app.get("/api/iot")
         async def api_iot_list():
@@ -1751,6 +1765,34 @@ class WebService:
             if self._iot_registry is None:
                 return {"devices": []}
             return {"devices": self._iot_registry.get_device_list()}
+
+        @app.get("/api/iot/types")
+        async def api_iot_types():
+            """Return all discoverable IoT plugin types from src/iot/devices/."""
+            from src.iot.loader import get_type_list
+            return {"types": get_type_list()}
+
+        @app.post("/api/iot")
+        async def api_iot_create(body: _IoTCreateBody):
+            """Register and start a new IoT device plugin by type_id."""
+            if self._iot_registry is None:
+                raise HTTPException(status_code=503, detail="IoT registry not available")
+            from src.iot.loader import create_device, save_persisted
+            try:
+                dev = create_device(body.type_id, body.config or {}, bus=self.bus)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
+            try:
+                self._iot_registry.register(dev)
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc))
+            try:
+                dev.start()
+            except Exception as exc:
+                self._iot_registry.unregister(dev.device_id)
+                raise HTTPException(status_code=503, detail=f"Device start failed: {exc}")
+            save_persisted(self._iot_registry)
+            return {"ok": True, "device_id": dev.device_id, "device_name": dev.device_name}
 
         @app.get("/api/iot/{device_id}")
         async def api_iot_snapshot(device_id: str):
@@ -1768,6 +1810,37 @@ class WebService:
             snap["device_name"] = dev.device_name
             snap["device_icon"] = dev.device_icon
             return JSONResponse(snap)
+
+        @app.put("/api/iot/{device_id}")
+        async def api_iot_update(device_id: str, body: _IoTUpdateBody):
+            """Update the config of a registered IoT device (stop → reconfigure → start)."""
+            if self._iot_registry is None:
+                raise HTTPException(status_code=404, detail="IoT registry not available")
+            dev = self._iot_registry.get(device_id)
+            if dev is None:
+                raise HTTPException(status_code=404, detail=f"IoT device '{device_id}' not found")
+            try:
+                dev.stop()
+                dev._cfg = dict(body.config)
+                dev.start()
+            except Exception as exc:
+                raise HTTPException(status_code=503, detail=f"Device reconfigure failed: {exc}")
+            from src.iot.loader import save_persisted
+            save_persisted(self._iot_registry)
+            return {"ok": True, "device_id": device_id}
+
+        @app.delete("/api/iot/{device_id}")
+        async def api_iot_delete(device_id: str):
+            """Stop and unregister an IoT device plugin."""
+            if self._iot_registry is None:
+                raise HTTPException(status_code=404, detail="IoT registry not available")
+            dev = self._iot_registry.get(device_id)
+            if dev is None:
+                raise HTTPException(status_code=404, detail=f"IoT device '{device_id}' not found")
+            self._iot_registry.unregister(device_id)  # calls dev.stop() internally
+            from src.iot.loader import save_persisted
+            save_persisted(self._iot_registry)
+            return {"ok": True, "device_id": device_id}
 
         @app.post("/api/iot/{device_id}/announce")
         async def api_iot_announce(device_id: str):

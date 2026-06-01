@@ -76,6 +76,13 @@ def _http_post(path: str, data: dict, timeout: int = 5) -> dict:
         return json.loads(r.read())
 
 
+def _http_delete(path: str) -> dict:
+    url = _http_base() + path
+    req = _urllib_request.Request(url, method="DELETE")
+    with _urllib_request.urlopen(req, timeout=5) as r:
+        return json.loads(r.read())
+
+
 PUB_ENDPOINT = os.environ.get("DA_BUS_PUB_ENDPOINT", "ipc:///tmp/desktop-assistant.pub")
 REP_ENDPOINT = os.environ.get("DA_BUS_REP_ENDPOINT", "ipc:///tmp/desktop-assistant.rep")
 _ANNOUNCE_OVERLAP_SEC = 0.22
@@ -1140,6 +1147,15 @@ def cmd_help(args) -> int:
         "drop":             "DROP water softener system (local MQTT). Sub-commands:\n"
                             "                  drop status                   Show flow, usage, capacity, pressure, salt, TDS.\n"
                             "                  drop announce                 Speak the current softener status via TTS.",
+        "iot":              "IoT plugin device management (CRUD). Sub-commands:\n"
+                            "                  iot list                      List all registered IoT plugin devices.\n"
+                            "                  iot types                     List all discoverable plugin types.\n"
+                            "                  iot status <id>               Show snapshot for a specific device.\n"
+                            "                  iot add <type_id>             Register + start a plugin device.\n"
+                            "                    [--config '{\"key\": \"val\"}']   Optional JSON config for the device.\n"
+                            "                  iot config <id> [k=v ...]     Show or update device config.\n"
+                            "                  iot remove <id>               Stop and unregister a device.\n"
+                            "                  iot announce <id>             Speak device status via TTS.",
         "help":             "Show this command reference, or help for a specific command.\n"
                             "                  Usage: help [command]",
     }
@@ -1485,6 +1501,167 @@ def cmd_drop(args) -> int:
             if len(devices) > 1:
                 print(f"  Devices   : {', '.join(d['name'] for d in devices)}")
             print()
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_iot(args) -> int:
+    """CRUD management for IoT plugin devices via REST API."""
+    subcmd = getattr(args, "iot_cmd", "list")
+    BOLD  = "\033[1m"
+    GREEN = "\033[32m"
+    RED   = "\033[31m"
+    YELLOW = "\033[33m"
+    RESET = "\033[0m"
+
+    try:
+        if subcmd == "list":
+            d = _http_get("/api/iot")
+            devices = d.get("devices", [])
+            if not devices:
+                print("No IoT plugin devices registered.")
+                print("Use 'vera iot types' to see available types.")
+                return 0
+            print(f"\n{BOLD}IoT Plugin Devices{RESET}")
+            print("─" * 50)
+            for dev in devices:
+                avail = dev.get("available", False)
+                status_str = f"{GREEN}● available{RESET}" if avail else f"{RED}○ unavailable{RESET}"
+                icon = dev.get("device_icon", "🔌")
+                print(f"  {icon}  {BOLD}{dev['device_id']:<20}{RESET}  {dev['device_name']:<24}  {status_str}")
+            print()
+
+        elif subcmd == "types":
+            d = _http_get("/api/iot/types")
+            types = d.get("types", [])
+            if not types:
+                print("No discoverable IoT plugin types found in src/iot/devices/.")
+                return 0
+            print(f"\n{BOLD}Available IoT Plugin Types{RESET}")
+            print("─" * 50)
+            for t in types:
+                icon = t.get("device_icon", "🔌")
+                print(f"  {icon}  {BOLD}{t['type_id']:<20}{RESET}  {t['device_name']}")
+            print()
+
+        elif subcmd == "status":
+            device_id = getattr(args, "device_id", None)
+            if not device_id:
+                print("Usage: vera iot status <device_id>", file=sys.stderr)
+                return 1
+            d = _http_get(f"/api/iot/{device_id}")
+            available = d.get("available", False)
+            icon = d.get("device_icon", "🔌")
+            print(f"\n{icon}  {BOLD}{d.get('device_name', device_id)}{RESET}  (id: {device_id})")
+            print("─" * 50)
+            if not available:
+                print(f"  Status  : {RED}unavailable{RESET}  {d.get('error', '')}")
+            else:
+                disp    = d.get("display") or {}
+                primary = disp.get("primary") or {}
+                badges  = disp.get("badges") or []
+                metrics = disp.get("metrics") or []
+                detail  = disp.get("detail") or ""
+                value   = primary.get("value", "—")
+                unit    = primary.get("unit", "")
+                print(f"  Status  : {GREEN}available{RESET}")
+                print(f"  Value   : {BOLD}{value}{RESET}{(' ' + unit) if unit else ''}")
+                for badge in badges:
+                    print(f"  Badge   : {badge.get('text', '')}")
+                for m in metrics:
+                    print(f"  {m.get('label', ''):<12}: {m.get('value', '')}")
+                if detail:
+                    print(f"  Detail  : {detail}")
+            print()
+
+        elif subcmd == "add":
+            type_id = getattr(args, "type_id", None)
+            if not type_id:
+                print("Usage: vera iot add <type_id> [--config '{\"key\": \"val\"}']", file=sys.stderr)
+                return 1
+            cfg_str = getattr(args, "config", None) or "{}"
+            try:
+                cfg = json.loads(cfg_str)
+            except json.JSONDecodeError as exc:
+                print(f"Invalid JSON config: {exc}", file=sys.stderr)
+                return 1
+            d = _http_post("/api/iot", {"type_id": type_id, "config": cfg})
+            if d.get("ok"):
+                print(f"Registered: {d.get('device_icon', '🔌')}  {d.get('device_name', type_id)}  (id: {d.get('device_id', type_id)})")
+            else:
+                print(f"Error: {d.get('detail', d.get('error', 'unknown error'))}", file=sys.stderr)
+                return 1
+
+        elif subcmd == "config":
+            device_id = getattr(args, "device_id", None)
+            if not device_id:
+                print("Usage: vera iot config <device_id> [key=val ...]", file=sys.stderr)
+                return 1
+            settings = getattr(args, "settings", []) or []
+            if not settings:
+                # Read mode — show snapshot config
+                d = _http_get(f"/api/iot/{device_id}")
+                print(f"\nConfig for {BOLD}{device_id}{RESET}:")
+                print(f"  (device config is not exposed directly — showing snapshot)")
+                print(json.dumps(d, indent=2))
+            else:
+                # Write mode — parse key=value pairs
+                cfg: dict = {}
+                for kv in settings:
+                    if "=" not in kv:
+                        print(f"Invalid setting {kv!r} — must be key=value", file=sys.stderr)
+                        return 1
+                    k, _, v = kv.partition("=")
+                    # Try int/float/bool coercion
+                    if v.lower() in ("true", "false"):
+                        cfg[k] = v.lower() == "true"
+                    else:
+                        try:
+                            cfg[k] = int(v)
+                        except ValueError:
+                            try:
+                                cfg[k] = float(v)
+                            except ValueError:
+                                cfg[k] = v
+                d = _http_put(f"/api/iot/{device_id}", {"config": cfg})
+                if d.get("ok"):
+                    print(f"Config updated for {device_id}.")
+                else:
+                    print(f"Error: {d.get('detail', d.get('error', 'unknown'))}", file=sys.stderr)
+                    return 1
+
+        elif subcmd == "remove":
+            device_id = getattr(args, "device_id", None)
+            if not device_id:
+                print("Usage: vera iot remove <device_id>", file=sys.stderr)
+                return 1
+            d = _http_delete(f"/api/iot/{device_id}")
+            if d.get("ok"):
+                print(f"Removed IoT device: {device_id}")
+            else:
+                print(f"Error: {d.get('detail', d.get('error', 'unknown'))}", file=sys.stderr)
+                return 1
+
+        elif subcmd == "announce":
+            device_id = getattr(args, "device_id", None)
+            if not device_id:
+                print("Usage: vera iot announce <device_id>", file=sys.stderr)
+                return 1
+            d = _http_post(f"/api/iot/{device_id}/announce", {})
+            if d.get("ok"):
+                print("Announced via TTS.")
+                if d.get("text"):
+                    print(f"  \"{d['text']}\"")
+            else:
+                print(f"Error: {d.get('detail', d.get('error', 'unknown'))}", file=sys.stderr)
+                return 1
+
+        else:
+            print(f"Unknown iot subcommand: {subcmd!r}", file=sys.stderr)
+            return 1
+
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
@@ -2081,6 +2258,39 @@ def main() -> int:
     drop_sub = drop_sp.add_subparsers(dest="drop_cmd")
     drop_sub.add_parser("status",   help="Show current water softener status").set_defaults(func=cmd_drop)
     drop_sub.add_parser("announce", help="Speak softener status via TTS").set_defaults(func=cmd_drop)
+
+    # ── IoT plugin CRUD subcommand group ─────────────────────────────
+    iot_sp = sub.add_parser("iot", help="IoT plugin device management (list/types/status/add/config/remove/announce)")
+    iot_sp.set_defaults(func=lambda _a: (print("Usage: vera iot <subcommand>  (try 'vera iot list')"), 1)[1])
+    iot_sub = iot_sp.add_subparsers(dest="iot_cmd", metavar="<subcommand>")
+    iot_sub.required = True
+
+    iot_sub.add_parser("list",  help="List all registered IoT plugin devices").set_defaults(func=cmd_iot)
+    iot_sub.add_parser("types", help="List all discoverable plugin types (from src/iot/devices/)").set_defaults(func=cmd_iot)
+
+    ssp = iot_sub.add_parser("status", help="Show snapshot for a specific device")
+    ssp.add_argument("device_id", metavar="<device_id>")
+    ssp.set_defaults(func=cmd_iot)
+
+    ssp = iot_sub.add_parser("add", help="Register and start a new IoT device plugin")
+    ssp.add_argument("type_id", metavar="<type_id>", help="Plugin type_id (see 'vera iot types')")
+    ssp.add_argument("--config", "-c", default=None, metavar="JSON",
+                     help="JSON config string, e.g. '{\"host\": \"192.168.1.50\"}'")
+    ssp.set_defaults(func=cmd_iot)
+
+    ssp = iot_sub.add_parser("config", help="Show or update config for a registered device")
+    ssp.add_argument("device_id", metavar="<device_id>")
+    ssp.add_argument("settings", nargs="*", metavar="key=value",
+                     help="Config fields to set (omit to show current state)")
+    ssp.set_defaults(func=cmd_iot)
+
+    ssp = iot_sub.add_parser("remove", help="Stop and unregister an IoT device")
+    ssp.add_argument("device_id", metavar="<device_id>")
+    ssp.set_defaults(func=cmd_iot)
+
+    ssp = iot_sub.add_parser("announce", help="Speak device status via TTS")
+    ssp.add_argument("device_id", metavar="<device_id>")
+    ssp.set_defaults(func=cmd_iot)
 
     args = p.parse_args()
     if args.cmd is None:

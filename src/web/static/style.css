@@ -938,3 +938,81 @@ main {
 .iot-metrics span { white-space: nowrap; }
 .iot-card-icon { margin-right: 4px; }
 .iot-detail { font-size: 11px; }
+
+/* ── IoT toolbar (Smart Home tab header) ────────────────── */
+.iot-toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px 4px;
+  margin-bottom: 4px;
+}
+.iot-toolbar-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+/* ── IoT Add / Configure modal ──────────────────────────── */
+.iot-modal-inner {
+  position: relative;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 520px;
+  width: 95vw;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.7);
+}
+.iot-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+.iot-modal-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin-top: -8px;
+}
+.iot-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.iot-modal-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.iot-modal-field select,
+.iot-modal-field textarea {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: monospace;
+  resize: vertical;
+}
+.iot-modal-field select { font-family: inherit; }
+.iot-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.iot-modal-error {
+  font-size: 12px;
+  color: var(--red);
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid rgba(248, 81, 73, 0.3);
+  border-radius: 4px;
+  padding: 8px 12px;
+}
