@@ -196,6 +196,13 @@ telegram:
   enabled: true
   bot_token: ""
   chat_id: "REDACTED_CHAT_ID"
+  # Forward every TTS utterance (av.spoke) to Telegram in addition to face greetings.
+  # Face greetings are deduplicated so they are not sent twice.
+  forward_tts: true
+  # Utterances matching any of these substrings (case-insensitive) are suppressed.
+  tts_skip_patterns:
+    - "It is now"     # clock hour-announcements
+    - "The time is"
   # Emoji prefix per event type (optional)
   emoji_new_face: "👋"
   emoji_returning: "👤"

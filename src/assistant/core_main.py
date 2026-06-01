@@ -427,6 +427,8 @@ def main() -> int:
             "returning": _tg_cfg.get("emoji_returning", "👤"),
             "named":     _tg_cfg.get("emoji_named", "🏷️"),
         },
+        forward_tts=bool(_tg_cfg.get("forward_tts", True)),
+        tts_skip_patterns=list(_tg_cfg.get("tts_skip_patterns", [])),
     )
     services.append(tg_svc)
     room_svc = RoomService(bus=bus, vision_service=vis, cfg=_cfg.get("room_detection", {}))

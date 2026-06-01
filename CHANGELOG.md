@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.34.0] - 2026-06-01
+### Added
+- All VERA TTS utterances now forwarded to Telegram/OpenClaw via `av.spoke`
+  subscription in `TelegramService`.
+- Face greeting texts are deduplicated (15 s window) so they are not sent twice
+  when both `face.greeted` and `av.spoke` fire for the same utterance.
+- New config options under `telegram:` in `assistant.yaml`:
+  - `forward_tts: true/false` — enable/disable full TTS forwarding (default `true`)
+  - `tts_skip_patterns:` — list of case-insensitive substrings to suppress (default
+    suppresses clock hour-announcements)
+- Forwarded TTS messages are prefixed with 🔊 to distinguish them from face events.
+
 ## [1.33.0] - 2026-06-01
 ### Added
 - DROP water softener card in the web dashboard: live flow rate, daily usage,
