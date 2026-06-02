@@ -178,6 +178,41 @@ def _face_color(face_id: str | None, index: int) -> tuple:
     return _FACE_COLORS[index % len(_FACE_COLORS)]
 
 
+# ── Face overlay size smoothing ──────────────────────────────────────────────
+# Detection bboxes jitter frame-to-frame; smoothing the *size* (not the centre)
+# keeps the overlay shapes stable while still tracking head movement responsively.
+# Keyed by face_id → {"w": float, "h": float, "ts": float}.
+_face_size_cache: dict = {}
+_FACE_SIZE_ALPHA = 0.25      # EMA weight for new measurements (lower = smoother)
+_FACE_SIZE_TTL_S = 2.0       # drop cached sizes not refreshed within this window
+
+
+def _smoothed_face_size(face_id: str | None, w: float, h: float,
+                        now: float) -> tuple:
+    """Return EMA-smoothed (width, height) for a face to reduce size jitter.
+
+    The centre position is intentionally NOT smoothed so the overlay still
+    follows head motion immediately; only the shape dimensions are stabilised.
+    Faces without a stable id are returned unsmoothed.
+    """
+    if not face_id:
+        return w, h
+    # Opportunistically prune stale entries
+    if len(_face_size_cache) > 32:
+        for k in [k for k, v in _face_size_cache.items()
+                  if now - v["ts"] > _FACE_SIZE_TTL_S]:
+            _face_size_cache.pop(k, None)
+    prev = _face_size_cache.get(face_id)
+    if prev is None or (now - prev["ts"]) > _FACE_SIZE_TTL_S:
+        sw, sh = w, h
+    else:
+        a = _FACE_SIZE_ALPHA
+        sw = prev["w"] * (1 - a) + w * a
+        sh = prev["h"] * (1 - a) + h * a
+    _face_size_cache[face_id] = {"w": sw, "h": sh, "ts": now}
+    return sw, sh
+
+
 # ── PIL ROI-patch text (degree symbol support, no full-frame conversion) ─────
 _PIL_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 _pil_font_cache: dict = {}
@@ -278,64 +313,53 @@ def _scale_bboxes(detections: list, sx: float, sy: float) -> list:
     return out
 
 
-def _draw_hud_face(frame: np.ndarray, x1: int, y1: int, x2: int, y2: int,
+def _draw_hud_face(frame: np.ndarray, cx: int, cy: int, half_w: int, half_h: int,
                    color: tuple, scale: float) -> None:
     """Draw a HUD-style sci-fi face detection overlay.
 
     Renders:
-      - Corner bracket markers at each corner of the padded bounding box
-      - A circular ring centred on the face
+      - Two parenthesis-style curved brackets ``( )`` embracing the face
+      - A semi-transparent circular ring centred on the face (33% opacity)
       - Thin tick marks at cardinal points on the ring
-    Pixel dimensions scale with *scale* (1.0 = 640×480 baseline).
+    *(cx, cy)* is the face centre; *half_w/half_h* the half-extents of the
+    padded box.  Pixel dimensions scale with *scale* (1.0 = 640×480 baseline).
     """
-    pw = max(2, int((x2 - x1) * 0.18))
-    ph = max(2, int((y2 - y1) * 0.22))
-    bx1 = x1 - pw
-    by1 = y1 - ph
-    bx2 = x2 + pw
-    by2 = y2 + ph
-
-    cx = (bx1 + bx2) // 2
-    cy = (by1 + by2) // 2
+    bx1 = cx - half_w
+    bx2 = cx + half_w
 
     thick = max(1, round(2 * scale))
-    # Corner bracket length — ~20% of box dimension
-    arm = max(6, int((bx2 - bx1) * 0.20))
 
-    # Corner brackets (⌐ style at each corner)
-    corners = [
-        (bx1, by1, +1, +1),   # top-left
-        (bx2, by1, -1, +1),   # top-right
-        (bx1, by2, +1, -1),   # bottom-left
-        (bx2, by2, -1, -1),   # bottom-right
-    ]
-    for cx_c, cy_c, sx, sy in corners:
-        # Horizontal arm
-        cv2.line(frame, (cx_c, cy_c), (cx_c + sx * arm, cy_c), color, thick, cv2.LINE_AA)
-        # Vertical arm
-        cv2.line(frame, (cx_c, cy_c), (cx_c, cy_c + sy * arm), color, thick, cv2.LINE_AA)
-        # Small dot at corner apex
-        cv2.circle(frame, (cx_c, cy_c), max(2, thick), color, -1, cv2.LINE_AA)
+    # ── Parenthesis brackets: a curved arc on each side embracing the face ──
+    # Left bracket "(" and right bracket ")" rendered as vertical ellipse arcs.
+    # The arc bulges outward (away from the face) like a real parenthesis.
+    arc_ry = max(8, int(half_h * 0.95))     # vertical extent of the arc
+    arc_rx = max(6, int(half_w * 0.55))     # how far the arc bulges sideways
+    span   = 70                              # degrees of arc swept (top+bottom of 90)
+    # Left "(": centred to the right of the left edge so it opens toward the face
+    cv2.ellipse(frame, (bx1 + arc_rx, cy), (arc_rx, arc_ry), 0,
+                180 - span, 180 + span, color, thick, cv2.LINE_AA)
+    # Right ")": centred to the left of the right edge, mirrored
+    cv2.ellipse(frame, (bx2 - arc_rx, cy), (arc_rx, arc_ry), 0,
+                -span, span, color, thick, cv2.LINE_AA)
 
-    # Circular ring around the face (slightly inside the bracket box)
-    rx = max(1, (bx2 - bx1) // 2 - max(2, int(4 * scale)))
-    ry = max(1, (by2 - by1) // 2 - max(2, int(4 * scale)))
-    ring_cx = (bx1 + bx2) // 2
-    ring_cy = (by1 + by2) // 2
-    ring_r  = (rx + ry) // 2   # use average for a circle
-    cv2.circle(frame, (ring_cx, ring_cy), ring_r, color,
-               max(1, round(1 * scale)), cv2.LINE_AA)
-
-    # Cardinal tick marks on the ring
+    # ── Semi-transparent circular ring (33% opacity) ──
+    ring_r = max(1, (half_w + half_h) // 2 - max(2, int(4 * scale)))
+    ring_thick = max(1, round(1 * scale))
+    overlay = frame.copy()
+    cv2.circle(overlay, (cx, cy), ring_r, color, ring_thick, cv2.LINE_AA)
+    # Cardinal tick marks on the ring (also drawn on the overlay so they blend)
     tick_len = max(4, int(8 * scale))
     tick_thick = max(1, round(1.5 * scale))
     for angle_deg in (0, 90, 180, 270):
         angle_rad = math.radians(angle_deg)
-        ix = int(ring_cx + ring_r * math.cos(angle_rad))
-        iy = int(ring_cy + ring_r * math.sin(angle_rad))
-        ox = int(ring_cx + (ring_r + tick_len) * math.cos(angle_rad))
-        oy = int(ring_cy + (ring_r + tick_len) * math.sin(angle_rad))
-        cv2.line(frame, (ix, iy), (ox, oy), color, tick_thick, cv2.LINE_AA)
+        ix = int(cx + ring_r * math.cos(angle_rad))
+        iy = int(cy + ring_r * math.sin(angle_rad))
+        ox = int(cx + (ring_r + tick_len) * math.cos(angle_rad))
+        oy = int(cy + (ring_r + tick_len) * math.sin(angle_rad))
+        cv2.line(overlay, (ix, iy), (ox, oy), color, tick_thick, cv2.LINE_AA)
+    # Blend the ring+ticks at 33% opacity over the original frame, in-place.
+    _alpha = 0.33
+    cv2.addWeighted(overlay, _alpha, frame, 1 - _alpha, 0, dst=frame)
 
 
 def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
@@ -350,26 +374,34 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
     scale = min(w / 640.0, h / 480.0)
     if face_depths is None:
         face_depths = {}
+    now = time.time()
 
     for idx, face in enumerate(faces):
         bbox = face.get("bbox")
         if not bbox or len(bbox) < 4:
             continue
-        color = _face_color(face.get("face_id"), idx)
+        face_id = face.get("face_id")
+        color = _face_color(face_id, idx)
         x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
 
-        _draw_hud_face(frame_bgr, x1, y1, x2, y2, color, scale)
+        # Padded box dimensions, then smooth the SIZE (not the centre) to
+        # eliminate frame-to-frame jitter while still tracking head movement.
+        raw_w = (x2 - x1) * 1.36   # 1 + 2*0.18 padding
+        raw_h = (y2 - y1) * 1.44   # 1 + 2*0.22 padding
+        sw, sh = _smoothed_face_size(face_id, raw_w, raw_h, now)
+        cx_l = (x1 + x2) // 2
+        cy_l = (y1 + y2) // 2
+        half_w = max(2, int(sw / 2))
+        half_h = max(2, int(sh / 2))
 
-        label = face.get("name") or (face.get("face_id") and "unknown")
-        depth_m = face_depths.get(face.get("face_id"))
+        _draw_hud_face(frame_bgr, cx_l, cy_l, half_w, half_h, color, scale)
+
+        label = face.get("name") or (face_id and "unknown")
+        depth_m = face_depths.get(face_id)
         if depth_m is not None:
             label = f"{label}  {depth_m:.2f}m" if label else f"{depth_m:.2f}m"
         if label:
-            pw = max(2, int((x2 - x1) * 0.18))
-            ph = max(2, int((y2 - y1) * 0.22))
-            ring_r = ((x2 - x1) // 2 + pw + (y2 - y1) // 2 + ph) // 2
-            cx_l = (x1 + x2) // 2
-            cy_l = (y1 + y2) // 2
+            ring_r = (half_w + half_h) // 2
             font_scale = max(0.8, 1.1 * scale)
             font_thick = max(1, round(scale))
             lx = max(0, cx_l - 20)

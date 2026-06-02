@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.3] - 2026-06-02
+### Changed
+- **Face overlay refinements** (`vision_service.py`):
+  - Replaced corner brackets with **parenthesis-style curved arcs** `( )` that embrace the face.
+  - The circular ring + cardinal tick marks now render at **33% opacity** (alpha-blended).
+  - Added **per-face size smoothing** (`_smoothed_face_size()`, EMA α=0.25, keyed by `face_id`)
+    so the overlay shapes no longer jitter with detection-box noise. The centre position is
+    intentionally left unsmoothed so the overlay still tracks head movement immediately.
+
 ## [1.39.2] - 2026-06-02
 ### Changed
 - **HUD-style face detection overlay** — replaced plain ellipse with a sci-fi corner-bracket +
