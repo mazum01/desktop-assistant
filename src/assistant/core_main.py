@@ -423,7 +423,10 @@ def main() -> int:
         bus=bus,
         enabled=bool(_tg_cfg.get("enabled", False)),
         bot_token=str(_tg_token),
-        chat_id=str(_tg_cfg.get("chat_id", "")),
+        chat_id=str(
+            os.environ.get("VERA_TELEGRAM_CHAT_ID")
+            or _tg_cfg.get("chat_id", "")
+        ),
         emoji_map={
             "new_face":  _tg_cfg.get("emoji_new_face", "👋"),
             "returning": _tg_cfg.get("emoji_returning", "👤"),

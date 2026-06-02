@@ -35,6 +35,7 @@ Config keys (all optional):
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from typing import Optional
@@ -100,7 +101,11 @@ class DropService:
         self._mqtt_host: str  = str(self._cfg.get("mqtt_host", "localhost"))
         self._mqtt_port: int  = int(self._cfg.get("mqtt_port", 1883))
         self._mqtt_user: str  = str(self._cfg.get("mqtt_user", "") or "")
-        self._mqtt_pass: str  = str(self._cfg.get("mqtt_pass", "") or "")
+        self._mqtt_pass: str  = str(
+            os.environ.get("VERA_DROP_MQTT_PASS")
+            or self._cfg.get("mqtt_pass", "")
+            or ""
+        )
 
         self._alert_on_leak:   bool  = bool(self._cfg.get("alert_on_leak",   True))
         self._alert_on_salt:   bool  = bool(self._cfg.get("alert_on_salt_low", True))

@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.1] - 2026-06-01
+### Security
+- **Removed personal data from public git history (tracked files)**:
+  - `config/assistant.yaml`: blanked `telegram.chat_id` and `drop.mqtt_pass`; both now read from
+    env vars `VERA_TELEGRAM_CHAT_ID` and `VERA_DROP_MQTT_PASS` in `/etc/desktop-assistant/secrets.env`.
+  - `config/room_state.json`, `config/quiet_hours.json`, `config/runtime_state.yaml`: removed from
+    git tracking (`git rm --cached`) — these runtime-generated files contain personal environment
+    data (room name, visual embedding, personal schedule, servo overrides).
+- **`.gitignore` expanded** — added `config/room_state.json`, `config/quiet_hours.json`,
+  `config/runtime_state.yaml`, `config/iot_devices.json`, `config/face_gallery/`, `config/secrets.yaml`
+  to prevent future accidental commits of personal or credential data.
+- **Code updated** — `core_main.py` reads `VERA_TELEGRAM_CHAT_ID` env var (falls back to yaml);
+  `drop_service.py` reads `VERA_DROP_MQTT_PASS` env var (falls back to yaml).
+
 ## [1.39.0] - 2026-06-01
 ### Added
 - **Yale WiFi lock integration** — full IoT plugin for Yale smart locks via the August/Yale cloud API.

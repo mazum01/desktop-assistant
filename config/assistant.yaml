@@ -193,9 +193,11 @@ telegram:
   # bot_token is read from the VERA_TELEGRAM_BOT_TOKEN environment variable
   # (set in /etc/desktop-assistant/secrets.env).  The value here is ignored
   # when the env var is present — leave it blank.
+  # chat_id is read from the VERA_TELEGRAM_CHAT_ID environment variable
+  # (set in /etc/desktop-assistant/secrets.env).  Leave blank here.
   enabled: true
   bot_token: ""
-  chat_id: "REDACTED_CHAT_ID"
+  chat_id: ""
   # Forward every TTS utterance (av.spoke) to Telegram in addition to face greetings.
   # Face greetings are deduplicated so they are not sent twice.
   forward_tts: true
@@ -267,7 +269,8 @@ drop:
   mqtt_port: 1883
   # Broker credentials for the DROP Hub connection.
   mqtt_user: "drop"
-  mqtt_pass: "REDACTED_MQTT_PASS"
+  # mqtt_pass is read from VERA_DROP_MQTT_PASS env var (secrets.env). Leave blank here.
+  mqtt_pass: ""
   # Speak a TTS alert when a leak is detected.
   alert_on_leak: true
   # Speak a TTS alert when salt is low.

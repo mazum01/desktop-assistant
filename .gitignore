@@ -21,3 +21,13 @@ config/hailo/*.hef
 src/perception/scrfd_decode/build/
 src/perception/scrfd_decode/*.so
 src/perception/scrfd_decode/*.egg-info/
+
+# Runtime state and personal config — not for public repo
+# These files are generated at runtime and may contain personal information.
+# See /etc/desktop-assistant/secrets.env for credential management.
+config/room_state.json
+config/quiet_hours.json
+config/runtime_state.yaml
+config/iot_devices.json
+config/secrets.yaml
+config/face_gallery/
