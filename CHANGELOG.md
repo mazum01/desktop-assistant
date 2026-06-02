@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.2] - 2026-06-02
+### Changed
+- **HUD-style face detection overlay** — replaced plain ellipse with a sci-fi corner-bracket +
+  circular ring design (`_draw_hud_face()` in `vision_service.py`).  Each detected face now shows:
+  - Four corner bracket markers (⌐ style) with apex dots on the padded bounding box
+  - A circular ring centred on the face
+  - Tick marks at 0°/90°/180°/270° on the ring
+  - Name/depth label above the ring as before
+  All dimensions scale with frame resolution (640×480 baseline).
+
 ## [1.39.1] - 2026-06-01
 ### Security
 - **Removed personal data from public git history (tracked files)**:

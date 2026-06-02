@@ -278,9 +278,69 @@ def _scale_bboxes(detections: list, sx: float, sy: float) -> list:
     return out
 
 
+def _draw_hud_face(frame: np.ndarray, x1: int, y1: int, x2: int, y2: int,
+                   color: tuple, scale: float) -> None:
+    """Draw a HUD-style sci-fi face detection overlay.
+
+    Renders:
+      - Corner bracket markers at each corner of the padded bounding box
+      - A circular ring centred on the face
+      - Thin tick marks at cardinal points on the ring
+    Pixel dimensions scale with *scale* (1.0 = 640×480 baseline).
+    """
+    pw = max(2, int((x2 - x1) * 0.18))
+    ph = max(2, int((y2 - y1) * 0.22))
+    bx1 = x1 - pw
+    by1 = y1 - ph
+    bx2 = x2 + pw
+    by2 = y2 + ph
+
+    cx = (bx1 + bx2) // 2
+    cy = (by1 + by2) // 2
+
+    thick = max(1, round(2 * scale))
+    # Corner bracket length — ~20% of box dimension
+    arm = max(6, int((bx2 - bx1) * 0.20))
+
+    # Corner brackets (⌐ style at each corner)
+    corners = [
+        (bx1, by1, +1, +1),   # top-left
+        (bx2, by1, -1, +1),   # top-right
+        (bx1, by2, +1, -1),   # bottom-left
+        (bx2, by2, -1, -1),   # bottom-right
+    ]
+    for cx_c, cy_c, sx, sy in corners:
+        # Horizontal arm
+        cv2.line(frame, (cx_c, cy_c), (cx_c + sx * arm, cy_c), color, thick, cv2.LINE_AA)
+        # Vertical arm
+        cv2.line(frame, (cx_c, cy_c), (cx_c, cy_c + sy * arm), color, thick, cv2.LINE_AA)
+        # Small dot at corner apex
+        cv2.circle(frame, (cx_c, cy_c), max(2, thick), color, -1, cv2.LINE_AA)
+
+    # Circular ring around the face (slightly inside the bracket box)
+    rx = max(1, (bx2 - bx1) // 2 - max(2, int(4 * scale)))
+    ry = max(1, (by2 - by1) // 2 - max(2, int(4 * scale)))
+    ring_cx = (bx1 + bx2) // 2
+    ring_cy = (by1 + by2) // 2
+    ring_r  = (rx + ry) // 2   # use average for a circle
+    cv2.circle(frame, (ring_cx, ring_cy), ring_r, color,
+               max(1, round(1 * scale)), cv2.LINE_AA)
+
+    # Cardinal tick marks on the ring
+    tick_len = max(4, int(8 * scale))
+    tick_thick = max(1, round(1.5 * scale))
+    for angle_deg in (0, 90, 180, 270):
+        angle_rad = math.radians(angle_deg)
+        ix = int(ring_cx + ring_r * math.cos(angle_rad))
+        iy = int(ring_cy + ring_r * math.sin(angle_rad))
+        ox = int(ring_cx + (ring_r + tick_len) * math.cos(angle_rad))
+        oy = int(ring_cy + (ring_r + tick_len) * math.sin(angle_rad))
+        cv2.line(frame, (ix, iy), (ox, oy), color, tick_thick, cv2.LINE_AA)
+
+
 def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
                    face_depths: dict | None = None) -> None:
-    """Draw face ovals and object rectangles in-place on a BGR frame.
+    """Draw HUD-style face overlays and object rectangles in-place on a BGR frame.
 
     All pixel dimensions scale with the frame resolution relative to a 640×480
     baseline so overlays look the same physical size regardless of capture res.
@@ -297,23 +357,23 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
             continue
         color = _face_color(face.get("face_id"), idx)
         x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
-        # Padded oval to fully surround the face
-        pw = max(2, int((x2 - x1) * 0.15))
-        ph = max(2, int((y2 - y1) * 0.20))
-        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-        rx = max(1, (x2 - x1) // 2 + pw)
-        ry = max(1, (y2 - y1) // 2 + ph)
-        ellipse_thickness = max(1, round(2 * scale))
-        cv2.ellipse(frame_bgr, (cx, cy), (rx, ry), 0, 0, 360, color, ellipse_thickness, cv2.LINE_AA)
+
+        _draw_hud_face(frame_bgr, x1, y1, x2, y2, color, scale)
+
         label = face.get("name") or (face.get("face_id") and "unknown")
         depth_m = face_depths.get(face.get("face_id"))
         if depth_m is not None:
             label = f"{label}  {depth_m:.2f}m" if label else f"{depth_m:.2f}m"
         if label:
+            pw = max(2, int((x2 - x1) * 0.18))
+            ph = max(2, int((y2 - y1) * 0.22))
+            ring_r = ((x2 - x1) // 2 + pw + (y2 - y1) // 2 + ph) // 2
+            cx_l = (x1 + x2) // 2
+            cy_l = (y1 + y2) // 2
             font_scale = max(0.8, 1.1 * scale)
-            font_thick = max(1, round(scale))   # 1 at 640×480, 2 at 1280×960
-            lx = max(0, cx - 20)
-            ly = max(10, cy - ry - 4)
+            font_thick = max(1, round(scale))
+            lx = max(0, cx_l - 20)
+            ly = max(10, cy_l - ring_r - 4)
             _put_text_outlined(frame_bgr, label, (lx, ly),
                                cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, font_thick)
 
