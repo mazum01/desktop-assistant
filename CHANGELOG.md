@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.4] - 2026-06-02
+### Changed
+- **Face overlay brackets redesigned to match reference** (`vision_service.py`):
+  - Replaced curved parenthesis arcs with **angular `[ ]` brackets** (vertical spine + inward
+    tabs at top and bottom), standing outside the face like a target-acquisition reticle.
+  - The translucent ring is now sized from the smaller half-extent and the brackets are placed
+    a fixed gap *outside* it, so the **circle always sits fully inside the brackets**.
+  - Label repositioned to sit just above the bracket top.
+
 ## [1.39.3] - 2026-06-02
 ### Changed
 - **Face overlay refinements** (`vision_service.py`):

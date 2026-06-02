@@ -317,37 +317,44 @@ def _draw_hud_face(frame: np.ndarray, cx: int, cy: int, half_w: int, half_h: int
                    color: tuple, scale: float) -> None:
     """Draw a HUD-style sci-fi face detection overlay.
 
-    Renders:
-      - Two parenthesis-style curved brackets ``( )`` embracing the face
-      - A semi-transparent circular ring centred on the face (33% opacity)
-      - Thin tick marks at cardinal points on the ring
+    Renders (matching the reference target-acquisition look):
+      - Two angular ``[ ]`` brackets standing well outside the face, with
+        short tabs turning inward at top and bottom.
+      - A semi-transparent circular ring centred on the face (33% opacity),
+        sized to sit *fully inside* the brackets.
+      - Thin tick marks at cardinal points on the ring.
     *(cx, cy)* is the face centre; *half_w/half_h* the half-extents of the
     padded box.  Pixel dimensions scale with *scale* (1.0 = 640×480 baseline).
     """
-    bx1 = cx - half_w
-    bx2 = cx + half_w
+    thick = max(2, round(2 * scale))
 
-    thick = max(1, round(2 * scale))
+    # ── Circular ring (sized from the smaller half-extent so it's a true circle) ──
+    ring_r = max(6, int(min(half_w, half_h) * 0.92))
 
-    # ── Parenthesis brackets: a curved arc on each side embracing the face ──
-    # Left bracket "(" and right bracket ")" rendered as vertical ellipse arcs.
-    # The arc bulges outward (away from the face) like a real parenthesis.
-    arc_ry = max(8, int(half_h * 0.95))     # vertical extent of the arc
-    arc_rx = max(6, int(half_w * 0.55))     # how far the arc bulges sideways
-    span   = 70                              # degrees of arc swept (top+bottom of 90)
-    # Left "(": centred to the right of the left edge so it opens toward the face
-    cv2.ellipse(frame, (bx1 + arc_rx, cy), (arc_rx, arc_ry), 0,
-                180 - span, 180 + span, color, thick, cv2.LINE_AA)
-    # Right ")": centred to the left of the right edge, mirrored
-    cv2.ellipse(frame, (bx2 - arc_rx, cy), (arc_rx, arc_ry), 0,
-                -span, span, color, thick, cv2.LINE_AA)
+    # ── Angular [ ] brackets, placed OUTSIDE the ring so it sits fully inside ──
+    gap = max(6, int(10 * scale))           # clearance between ring edge and bracket
+    bracket_x = ring_r + gap                 # horizontal distance from centre
+    bh = int(ring_r * 1.15)                  # bracket half-height (taller than ring)
+    tab = max(6, int(ring_r * 0.32))         # inward tab length at top/bottom
 
-    # ── Semi-transparent circular ring (33% opacity) ──
-    ring_r = max(1, (half_w + half_h) // 2 - max(2, int(4 * scale)))
+    lx = cx - bracket_x
+    rx = cx + bracket_x
+    ty = cy - bh
+    by = cy + bh
+
+    # Left bracket "[" — vertical spine + inward tabs (tabs point toward face, +x)
+    cv2.line(frame, (lx, ty), (lx, by), color, thick, cv2.LINE_AA)
+    cv2.line(frame, (lx, ty), (lx + tab, ty), color, thick, cv2.LINE_AA)
+    cv2.line(frame, (lx, by), (lx + tab, by), color, thick, cv2.LINE_AA)
+    # Right bracket "]" — vertical spine + inward tabs (tabs point toward face, -x)
+    cv2.line(frame, (rx, ty), (rx, by), color, thick, cv2.LINE_AA)
+    cv2.line(frame, (rx, ty), (rx - tab, ty), color, thick, cv2.LINE_AA)
+    cv2.line(frame, (rx, by), (rx - tab, by), color, thick, cv2.LINE_AA)
+
+    # ── Semi-transparent ring + ticks (33% opacity) on a copy, then blend ──
     ring_thick = max(1, round(1 * scale))
     overlay = frame.copy()
     cv2.circle(overlay, (cx, cy), ring_r, color, ring_thick, cv2.LINE_AA)
-    # Cardinal tick marks on the ring (also drawn on the overlay so they blend)
     tick_len = max(4, int(8 * scale))
     tick_thick = max(1, round(1.5 * scale))
     for angle_deg in (0, 90, 180, 270):
@@ -357,7 +364,6 @@ def _draw_hud_face(frame: np.ndarray, cx: int, cy: int, half_w: int, half_h: int
         ox = int(cx + (ring_r + tick_len) * math.cos(angle_rad))
         oy = int(cy + (ring_r + tick_len) * math.sin(angle_rad))
         cv2.line(overlay, (ix, iy), (ox, oy), color, tick_thick, cv2.LINE_AA)
-    # Blend the ring+ticks at 33% opacity over the original frame, in-place.
     _alpha = 0.33
     cv2.addWeighted(overlay, _alpha, frame, 1 - _alpha, 0, dst=frame)
 
@@ -401,11 +407,14 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
         if depth_m is not None:
             label = f"{label}  {depth_m:.2f}m" if label else f"{depth_m:.2f}m"
         if label:
-            ring_r = (half_w + half_h) // 2
+            # Mirror the geometry used inside _draw_hud_face so the label sits
+            # just above the bracket top.
+            ring_r = max(6, int(min(half_w, half_h) * 0.92))
+            bracket_top = int(ring_r * 1.15)
             font_scale = max(0.8, 1.1 * scale)
             font_thick = max(1, round(scale))
             lx = max(0, cx_l - 20)
-            ly = max(10, cy_l - ring_r - 4)
+            ly = max(10, cy_l - bracket_top - 6)
             _put_text_outlined(frame_bgr, label, (lx, ly),
                                cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, font_thick)
 
