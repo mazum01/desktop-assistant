@@ -317,9 +317,9 @@ function renderIoTDevices(iot) {
           <span class="iot-card-icon">${snap.device_icon || "🔌"}</span>
           <span class="iot-card-name">${snap.device_name || deviceId}</span>
           <span style="margin-left:auto;display:flex;gap:6px">
-            <button class="btn btn-secondary btn-sm" onclick="announceIotDevice('${deviceId}')" title="Speak status via TTS">📢</button>
-            <button class="btn btn-secondary btn-sm" onclick="openIoTConfigModal('${deviceId}')" title="Configure device">⚙️</button>
-            <button class="btn btn-sm" style="background:rgba(248,81,73,0.15);border-color:#f8514966;color:#f85149" onclick="removeIoTDevice('${deviceId}')" title="Remove device">🗑</button>
+            <button class="btn btn-secondary btn-sm" data-iot-action="announce" data-device-id="${deviceId}" title="Speak status via TTS">📢</button>
+            <button class="btn btn-secondary btn-sm" data-iot-action="config"   data-device-id="${deviceId}" title="Configure device">⚙️</button>
+            <button class="btn btn-sm" style="background:rgba(248,81,73,0.15);border-color:#f8514966;color:#f85149" data-iot-action="remove" data-device-id="${deviceId}" title="Remove device">🗑</button>
           </span>
         </h2>
         <div class="iot-primary-row">
@@ -394,7 +394,7 @@ function renderIoTDevices(iot) {
           actionsEl.innerHTML = actions.map(a => {
             const btnColor = a.color || "#58a6ff";
             return `<button class="btn btn-sm" style="background:${btnColor}22;border:1px solid ${btnColor}66;color:${btnColor}"
-              onclick="doIotAction('${deviceId}', '${a.id}', ${!!a.requires_pin})"
+              data-iot-action="do-action" data-device-id="${deviceId}" data-action-id="${a.id}" data-requires-pin="${!!a.requires_pin}"
               title="${a.label}">
               ${a.icon || ""} ${a.label}
             </button>`;
@@ -1956,6 +1956,25 @@ document.addEventListener("DOMContentLoaded", () => {
   initFpsCounters();
   loadTrackingParams();
   initCardDragDrop();
+
+  // IoT button event delegation — handles Add, Config, Remove, Announce, and
+  // device-action buttons. Avoids inline onclick attributes which can be
+  // silently blocked by certain browser security policies or extension conflicts.
+  document.body.addEventListener('click', e => {
+    const btn = e.target.closest('[data-iot-action]');
+    if (!btn) return;
+    const action   = btn.dataset.iotAction;
+    const deviceId = btn.dataset.deviceId;
+    switch (action) {
+      case 'add':      openIoTAddModal(); break;
+      case 'config':   openIoTConfigModal(deviceId); break;
+      case 'announce': announceIotDevice(deviceId); break;
+      case 'remove':   removeIoTDevice(deviceId); break;
+      case 'do-action':
+        doIotAction(deviceId, btn.dataset.actionId, btn.dataset.requiresPin === 'true');
+        break;
+    }
+  });
   // Refresh face registry every 30s; music status every 2s; depth maps every 3s
   setInterval(loadFaces, 30000);
   setInterval(loadMusicStatus, 2000);

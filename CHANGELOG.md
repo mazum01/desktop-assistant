@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.12] - 2026-06-03
+### Fixed
+- Replaced ALL inline `onclick=` attribute handlers on IoT buttons with
+  event delegation (`data-iot-action` + single `document.body` click
+  listener). Inline handlers can be silently blocked by browser security
+  policies or extension conflicts; event delegation is immune to this.
+  Affects: Add IoT Device button, gear/config button, remove button,
+  announce button, and device-action buttons inside IoT cards.
+- Updated `?v=` cache-buster in index.html to `1.39.12`.
+
 ## [1.39.11] - 2026-06-03
 ### Fixed
 - IoT modal open-on-click: moved `modal.style.display = "flex"` to execute
