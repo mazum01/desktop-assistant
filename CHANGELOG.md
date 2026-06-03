@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.8] - 2026-06-03
+### Changed
+- **Cam 1 snapshot includes overlays** (`web_service.py`):
+  - `/api/snapshot` now returns the pre-encoded annotated JPEG (`latest_jpeg()`) — the same frame shown in the MJPEG stream, complete with face-detection overlays, corner markers, and confidence rings.
+  - Falls back to the raw frame only if the annotated JPEG is not yet available (e.g., first frame before the encoder loop runs).
+
 ## [1.39.7] - 2026-06-03
 ### Added
 - **Save Frame buttons on Cam 1 and Cam 2 panels** (`index.html`, `app.js`, `style.css`):

@@ -1122,18 +1122,22 @@ class WebService:
 
         @app.get("/api/snapshot")
         async def api_snapshot():
-            """Return the current camera 1 frame as a full-resolution JPEG."""
-            import cv2
+            """Return the current camera 1 frame as a JPEG with overlays applied."""
+            from fastapi.responses import Response
             svc = self._vision_svc
             if svc is None:
                 raise HTTPException(503, "vision service unavailable")
+            jpeg = svc.latest_jpeg()
+            if jpeg is not None:
+                return Response(content=jpeg, media_type="image/jpeg")
+            # Fallback: raw frame (no overlay yet) encoded at high quality
+            import cv2
             frame = svc.latest_frame()
             if frame is None:
                 raise HTTPException(503, "no frame available")
             ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
             if not ok:
                 raise HTTPException(500, "JPEG encode failed")
-            from fastapi.responses import Response
             return Response(content=bytes(buf), media_type="image/jpeg")
 
         @app.get("/api/snapshot2")
