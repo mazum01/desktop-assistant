@@ -2673,3 +2673,45 @@ async function refreshDepthStats() {
     el("depth-farthest").textContent = d.farthest_m != null ? `${d.farthest_m.toFixed(2)} m` : "—";
   } catch (e) { /* ignore */ }
 }
+
+async function saveSnapshot(cam) {
+  const endpoint = cam === 2 ? "/api/snapshot2" : "/api/snapshot";
+  const btnId    = `snap${cam}-btn`;
+  const statusId = `snap${cam}-status`;
+  const btn    = el(btnId);
+  const status = el(statusId);
+
+  btn.disabled = true;
+  status.textContent = "Saving…";
+  status.style.opacity = "1";
+
+  try {
+    const resp = await fetch(endpoint);
+    if (!resp.ok) {
+      const err = await resp.text().catch(() => resp.statusText);
+      status.textContent = `Error: ${err}`;
+      status.style.color = "var(--red, #e05)";
+      return;
+    }
+    const blob = await resp.blob();
+    const ts   = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const filename = `vera-cam${cam}-${ts}.jpg`;
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    status.textContent = `✓ ${filename}`;
+    status.style.color = "var(--green)";
+    setTimeout(() => { status.style.opacity = "0"; }, 3000);
+    setTimeout(() => { status.textContent = ""; status.style.opacity = "1"; }, 3400);
+  } catch (e) {
+    status.textContent = `Error: ${e.message}`;
+    status.style.color = "var(--red, #e05)";
+  } finally {
+    btn.disabled = false;
+  }
+}

@@ -193,6 +193,18 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
+.camera-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.snap-status {
+  font-size: 12px;
+  color: var(--green);
+  transition: opacity 0.4s;
+}
+
 /* ── Telemetry grid ──────────────────────────────────────────── */
 .grid-4 {
   display: grid;

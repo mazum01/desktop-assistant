@@ -39,12 +39,20 @@
 <span class="face-overlay" id="face-overlay">0 faces</span>
 <span class="fps-overlay" id="fps-overlay-1">– fps</span>
 </div>
+<div class="camera-actions">
+<button class="btn btn-sm btn-secondary" id="snap1-btn" onclick="saveSnapshot(1)">📷 Save Frame</button>
+<span class="snap-status" id="snap1-status"></span>
+</div>
 </div>
 <div class="camera-feed-wrap" id="cam2-wrap">
 <div class="camera-label">Cam 2 — Raw</div>
 <div class="camera-wrap">
 <img alt="camera 2 stream" id="camera-stream2" src=""/>
 <span class="fps-overlay" id="fps-overlay-2">– fps</span>
+</div>
+<div class="camera-actions">
+<button class="btn btn-sm btn-secondary" id="snap2-btn" onclick="saveSnapshot(2)">📷 Save Frame</button>
+<span class="snap-status" id="snap2-status"></span>
 </div>
 </div>
 </div>

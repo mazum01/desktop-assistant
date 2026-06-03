@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.7] - 2026-06-03
+### Added
+- **Save Frame buttons on Cam 1 and Cam 2 panels** (`index.html`, `app.js`, `style.css`):
+  - 📷 Save Frame button appears below each camera feed.
+  - Clicking fetches `/api/snapshot` (cam 1) or `/api/snapshot2` (cam 2) and triggers a browser download with a timestamped filename (`vera-cam1-YYYY-MM-DDTHH-MM-SS.jpg`).
+  - Button disables during fetch; shows `✓ filename` confirmation or an error message inline.
+
 ## [1.39.6] - 2026-06-03
 ### Changed
 - **Face overlay refinements** (`vision_service.py`):
