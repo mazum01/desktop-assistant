@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.11] - 2026-06-03
+### Fixed
+- IoT modal open-on-click: moved `modal.style.display = "flex"` to execute
+  immediately when a button is clicked rather than waiting for the async API
+  fetch to complete, guaranteeing the modal appears regardless of network
+  timing or fetch errors.
+- Added `?v=1.39.11` cache-buster to `/static/app.js` and `/static/style.css`
+  script/link tags so browsers always load the latest JS and CSS after an
+  update rather than serving a stale cached copy.
+
 ## [1.39.10] - 2026-06-03
 ### Fixed
 - **IoT card gear (⚙️) and Add Device buttons** — Four bugs that prevented the Smart Home modal dialogs from working:

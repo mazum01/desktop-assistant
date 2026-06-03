@@ -451,13 +451,16 @@ async function doIotAction(deviceId, action, requiresPin) {
 let _iotConfigTargetId = null;
 
 async function openIoTAddModal() {
-  const sel = document.getElementById("iot-add-type-select");
+  const sel   = document.getElementById("iot-add-type-select");
   const errEl = document.getElementById("iot-add-error");
   const cfgEl = document.getElementById("iot-add-config");
+  const modal = document.getElementById("iot-add-modal");
   if (errEl) { errEl.style.display = "none"; errEl.textContent = ""; }
   if (cfgEl) cfgEl.value = "{}";
+  if (sel) sel.innerHTML = "<option value=''>— loading… —</option>";
+  // Show the modal immediately — don't wait for the API fetch
+  if (modal) modal.style.display = "flex";
   if (sel) {
-    sel.innerHTML = "<option value=''>— loading… —</option>";
     try {
       const resp = await fetch("/api/iot/types");
       const data = await resp.json();
@@ -472,8 +475,6 @@ async function openIoTAddModal() {
       sel.innerHTML = "<option value=''>Error loading types</option>";
     }
   }
-  const modal = document.getElementById("iot-add-modal");
-  if (modal) modal.style.display = "flex";
 }
 
 function closeIoTAddModal() {
@@ -522,9 +523,12 @@ async function openIoTConfigModal(deviceId) {
   const titleEl = document.getElementById("iot-config-modal-title");
   const cfgEl   = document.getElementById("iot-config-textarea");
   const errEl   = document.getElementById("iot-config-error");
+  const modal   = document.getElementById("iot-config-modal");
   if (errEl) { errEl.style.display = "none"; errEl.textContent = ""; }
   if (titleEl) titleEl.textContent = `⚙️ Configure: ${deviceId}`;
   if (cfgEl) cfgEl.value = "{}";
+  // Show the modal immediately — don't wait for the API fetch
+  if (modal) modal.style.display = "flex";
   try {
     const resp = await fetch(`/api/iot/${deviceId}`);
     const data = await resp.json();
@@ -532,8 +536,6 @@ async function openIoTConfigModal(deviceId) {
       if (cfgEl) cfgEl.value = JSON.stringify(data.config, null, 2);
     }
   } catch (e) { /* leave default */ }
-  const modal = document.getElementById("iot-config-modal");
-  if (modal) modal.style.display = "flex";
 }
 
 function closeIoTConfigModal() {
