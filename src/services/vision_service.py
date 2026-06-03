@@ -313,48 +313,82 @@ def _scale_bboxes(detections: list, sx: float, sy: float) -> list:
     return out
 
 
+def _confidence_ring_color(match_score: float, face_id: str | None) -> tuple:
+    """Return BGR ring colour based on face-match confidence.
+
+    Green  → high confidence (named face, score ≥ 0.70)
+    Yellow → medium confidence (tentative match, 0.45 ≤ score < 0.70)
+    Red    → low confidence / unknown face (score < 0.45 or no face_id)
+    """
+    if not face_id or match_score < 0.45:
+        return (0, 0, 220)       # red
+    if match_score < 0.70:
+        return (0, 200, 220)     # yellow
+    return (0, 200, 60)          # green
+
+
 def _draw_hud_face(frame: np.ndarray, cx: int, cy: int, half_w: int, half_h: int,
-                   color: tuple, scale: float) -> None:
+                   bracket_color: tuple, ring_color: tuple, scale: float) -> None:
     """Draw a HUD-style sci-fi face detection overlay.
 
-    Renders (matching the reference target-acquisition look):
-      - Two angular ``[ ]`` brackets standing well outside the face, with
-        short tabs turning inward at top and bottom.
-      - A semi-transparent circular ring centred on the face (33% opacity),
-        sized to sit *fully inside* the brackets.
+    Renders:
+      - Four rounded corner markers at the corners of the padded bounding box.
+        Each marker is a short arc (quarter-circle) with the curve on the inside
+        corner — like the focus brackets on a camera viewfinder.
+      - A fully-opaque circular ring centred on the face, coloured by confidence
+        (green / yellow / red).
       - Thin tick marks at cardinal points on the ring.
-    *(cx, cy)* is the face centre; *half_w/half_h* the half-extents of the
-    padded box.  Pixel dimensions scale with *scale* (1.0 = 640×480 baseline).
+    *(cx, cy)* is the face centre; *half_w/half_h* the half-extents of the padded
+    box.  Pixel dimensions scale with *scale* (1.0 = 640×480 baseline).
     """
     thick = max(2, round(2 * scale))
-
-    # ── Circular ring (sized from the smaller half-extent so it's a true circle) ──
     ring_r = max(6, int(min(half_w, half_h) * 0.92))
 
-    # ── Angular [ ] brackets, placed OUTSIDE the ring so it sits fully inside ──
-    gap = max(6, int(10 * scale))           # clearance between ring edge and bracket
-    bracket_x = ring_r + gap                 # horizontal distance from centre
-    bh = int(ring_r * 1.15)                  # bracket half-height (taller than ring)
-    tab = max(6, int(ring_r * 0.32))         # inward tab length at top/bottom
+    # ── Rounded corner markers ────────────────────────────────────────────────
+    # Place the 4 corners just outside the ring so the circle fits inside.
+    gap = max(6, int(10 * scale))
+    m = ring_r + gap            # half-width / half-height of the marker box
+    corner_r = max(8, int(m * 0.32))   # radius of each rounded corner arc
+    arm = max(8, int(m * 0.45))        # length of the straight arm extending from arc
 
-    lx = cx - bracket_x
-    rx = cx + bracket_x
-    ty = cy - bh
-    by = cy + bh
+    # For each corner the arc spans 90° in the quadrant *facing inward*.
+    # (angle_start, angle_end, corner_x, corner_y)
+    # Arcs are drawn centred at the arc centre, offset corner_r inward.
+    corners_cfg = [
+        # (corner_cx, corner_cy, arc_start_deg, x_sign, y_sign)
+        (cx - m, cy - m,  90, +1, +1),   # top-left  → arc in Q3 (180°–270°)
+        (cx + m, cy - m,   0, -1, +1),   # top-right → arc in Q4 (270°–360°)
+        (cx - m, cy + m, 180, +1, -1),   # bot-left  → arc in Q2 (90°–180°)
+        (cx + m, cy + m, 270, -1, -1),   # bot-right → arc in Q1 (0°–90°)
+    ]
+    for (bx, by, arc_start, sx, sy) in corners_cfg:
+        # Arc centre is inset from the box corner by corner_r in both axes
+        arc_cx = bx + sx * corner_r
+        arc_cy = by + sy * corner_r
+        cv2.ellipse(frame, (arc_cx, arc_cy), (corner_r, corner_r),
+                    0, arc_start, arc_start + 90,
+                    bracket_color, thick, cv2.LINE_AA)
+        # Straight arms extending outward from the arc endpoints along each axis
+        # Arm endpoints along horizontal axis
+        ex1 = int(arc_cx + corner_r * math.cos(math.radians(arc_start)))
+        ey1 = int(arc_cy + corner_r * math.sin(math.radians(arc_start)))
+        ex2 = int(arc_cx + corner_r * math.cos(math.radians(arc_start + 90)))
+        ey2 = int(arc_cy + corner_r * math.sin(math.radians(arc_start + 90)))
+        # Draw arm from each arc endpoint outward (away from the face centre)
+        cv2.line(frame,
+                 (ex1, ey1),
+                 (ex1 + int(-sx * arm * abs(math.cos(math.radians(arc_start)))),
+                  ey1 + int(-sy * arm * abs(math.sin(math.radians(arc_start))))),
+                 bracket_color, thick, cv2.LINE_AA)
+        cv2.line(frame,
+                 (ex2, ey2),
+                 (ex2 + int(-sx * arm * abs(math.cos(math.radians(arc_start + 90)))),
+                  ey2 + int(-sy * arm * abs(math.sin(math.radians(arc_start + 90))))),
+                 bracket_color, thick, cv2.LINE_AA)
 
-    # Left bracket "[" — vertical spine + inward tabs (tabs point toward face, +x)
-    cv2.line(frame, (lx, ty), (lx, by), color, thick, cv2.LINE_AA)
-    cv2.line(frame, (lx, ty), (lx + tab, ty), color, thick, cv2.LINE_AA)
-    cv2.line(frame, (lx, by), (lx + tab, by), color, thick, cv2.LINE_AA)
-    # Right bracket "]" — vertical spine + inward tabs (tabs point toward face, -x)
-    cv2.line(frame, (rx, ty), (rx, by), color, thick, cv2.LINE_AA)
-    cv2.line(frame, (rx, ty), (rx - tab, ty), color, thick, cv2.LINE_AA)
-    cv2.line(frame, (rx, by), (rx - tab, by), color, thick, cv2.LINE_AA)
-
-    # ── Semi-transparent ring + ticks (33% opacity) on a copy, then blend ──
-    ring_thick = max(1, round(1 * scale))
-    overlay = frame.copy()
-    cv2.circle(overlay, (cx, cy), ring_r, color, ring_thick, cv2.LINE_AA)
+    # ── Opaque circular ring (confidence-coloured) + tick marks ──────────────
+    ring_thick = max(2, round(2 * scale))
+    cv2.circle(frame, (cx, cy), ring_r, ring_color, ring_thick, cv2.LINE_AA)
     tick_len = max(4, int(8 * scale))
     tick_thick = max(1, round(1.5 * scale))
     for angle_deg in (0, 90, 180, 270):
@@ -363,9 +397,7 @@ def _draw_hud_face(frame: np.ndarray, cx: int, cy: int, half_w: int, half_h: int
         iy = int(cy + ring_r * math.sin(angle_rad))
         ox = int(cx + (ring_r + tick_len) * math.cos(angle_rad))
         oy = int(cy + (ring_r + tick_len) * math.sin(angle_rad))
-        cv2.line(overlay, (ix, iy), (ox, oy), color, tick_thick, cv2.LINE_AA)
-    _alpha = 0.33
-    cv2.addWeighted(overlay, _alpha, frame, 1 - _alpha, 0, dst=frame)
+        cv2.line(frame, (ix, iy), (ox, oy), ring_color, tick_thick, cv2.LINE_AA)
 
 
 def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
@@ -400,7 +432,9 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
         half_w = max(2, int(sw / 2))
         half_h = max(2, int(sh / 2))
 
-        _draw_hud_face(frame_bgr, cx_l, cy_l, half_w, half_h, color, scale)
+        _draw_hud_face(frame_bgr, cx_l, cy_l, half_w, half_h, color,
+                       _confidence_ring_color(face.get("match_score", 0.0), face_id),
+                       scale)
 
         label = face.get("name") or (face_id and "unknown")
         depth_m = face_depths.get(face_id)

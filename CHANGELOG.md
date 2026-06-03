@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.5] - 2026-06-03
+### Changed
+- **Face overlay: confidence-colored ring + rounded corner markers** (`vision_service.py`):
+  - Removed ring transparency — circle is now fully opaque.
+  - Ring color is now driven by `match_score` (ArcFace cosine similarity):
+    - 🟢 Green   — score ≥ 0.60 (known face, reliable match)
+    - 🟡 Yellow  — 0.40 ≤ score < 0.60 (tentative match)
+    - 🔴 Red     — score < 0.40 or `face_id` is None (unknown / unmatched)
+  - Replaced angular `[ ]` brackets with **rounded corner markers** — each corner
+    is a small quarter-circle arc with two short straight arms extending outward,
+    giving a camera-viewfinder focus-bracket aesthetic.
+  - Added `_confidence_ring_color()` helper; updated `_draw_hud_face()` signature
+    to accept separate `bracket_color` and `ring_color`.
+
 ## [1.39.4] - 2026-06-02
 ### Changed
 - **Face overlay brackets redesigned to match reference** (`vision_service.py`):
