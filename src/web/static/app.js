@@ -463,7 +463,7 @@ async function openIoTAddModal() {
       const data = await resp.json();
       if (data.types && data.types.length > 0) {
         sel.innerHTML = data.types
-          .map(t => `<option value="${t.type_id}">${t.icon || "🔌"} ${t.name} (${t.type_id})</option>`)
+          .map(t => `<option value="${t.type_id}">${t.device_icon || "🔌"} ${t.device_name} (${t.type_id})</option>`)
           .join("");
       } else {
         sel.innerHTML = "<option value=''>No plugin types found</option>";
@@ -528,8 +528,8 @@ async function openIoTConfigModal(deviceId) {
   try {
     const resp = await fetch(`/api/iot/${deviceId}`);
     const data = await resp.json();
-    if (data.device && data.device.config) {
-      if (cfgEl) cfgEl.value = JSON.stringify(data.device.config, null, 2);
+    if (data.config && typeof data.config === "object") {
+      if (cfgEl) cfgEl.value = JSON.stringify(data.config, null, 2);
     }
   } catch (e) { /* leave default */ }
   const modal = document.getElementById("iot-config-modal");

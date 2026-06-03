@@ -1717,6 +1717,7 @@ class WebService:
             snap["device_id"]   = dev.device_id
             snap["device_name"] = dev.device_name
             snap["device_icon"] = dev.device_icon
+            snap["config"]      = dict(dev._cfg)
             return JSONResponse(snap)
 
         @app.put("/api/iot/{device_id}")

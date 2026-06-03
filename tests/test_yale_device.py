@@ -44,7 +44,7 @@ from src.iot.devices.yale_device import YaleDevice  # noqa: E402
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _make_device(svc=None):
-    dev = YaleDevice(bus=None, config={"username": "u", "password": "p"})
+    dev = YaleDevice(bus=None, cfg={"username": "u", "password": "p"})
     if svc is not None:
         dev._svc = svc
     return dev
@@ -215,7 +215,7 @@ def test_announce_when_degraded():
 
 def test_announce_publishes_to_bus():
     bus = MagicMock()
-    dev = YaleDevice(bus=bus, config={})
+    dev = YaleDevice(bus=bus, cfg={})
     dev._svc = _mock_svc("locked")
     dev.announce()
     bus.publish.assert_called_once()
@@ -238,7 +238,7 @@ def test_get_actions_returns_lock_and_unlock():
 
 
 def test_start_creates_service():
-    dev = YaleDevice(bus=None, config={"username": "u", "password": "p"})
+    dev = YaleDevice(bus=None, cfg={"username": "u", "password": "p"})
     with patch("src.iot.devices.yale_device.YaleDevice.start") as mock_start:
         mock_start.return_value = None
         dev.start()  # calls through to mock

@@ -47,16 +47,16 @@ class YaleDevice(IoTDevice):
     device_icon = "🔒"
     _hardwired = False
 
-    def __init__(self, bus: Any = None, config: dict | None = None) -> None:
+    def __init__(self, bus: Any = None, cfg: dict | None = None) -> None:
         self.bus = bus
-        self._config = config or {}
+        self._cfg = cfg or {}
         self._svc: Any = None
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def start(self) -> None:
         from ...services.yale_service import YaleService
-        self._svc = YaleService(bus=self.bus, cfg=self._config)
+        self._svc = YaleService(bus=self.bus, cfg=self._cfg)
         self._svc.start()
         log.info("YaleDevice: started")
 

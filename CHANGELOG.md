@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.10] - 2026-06-03
+### Fixed
+- **IoT card gear (⚙️) and Add Device buttons** — Four bugs that prevented the Smart Home modal dialogs from working:
+  1. `YaleDevice.__init__` used `config:` parameter instead of `cfg:`, causing `loader.create_device()` to throw `TypeError` (500 Internal Server Error) on every POST /api/iot request. Renamed to `cfg:` and changed `self._config` → `self._cfg` so config is saved/restored correctly.
+  2. `GET /api/iot/{device_id}` did not include the device's current config in the response. Added `snap["config"] = dict(dev._cfg)` so the Configure modal pre-populates with the saved config.
+  3. `openIoTConfigModal()` checked `data.device.config` (wrong path) — fixed to `data.config` to match the API response shape.
+  4. `openIoTAddModal()` used `t.icon` / `t.name` but the types API returns `t.device_icon` / `t.device_name` — fixed field names so the plugin-type dropdown shows correct labels.
+
 ## [1.39.9] - 2026-06-03
 ### Fixed
 - **Face overlay corner markers geometry** (`vision_service.py`):
