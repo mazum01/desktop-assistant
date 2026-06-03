@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.6] - 2026-06-03
+### Changed
+- **Face overlay refinements** (`vision_service.py`):
+  - Circle is fully opaque (no transparency).
+  - Ring colour indicates match confidence: 🟢 green (≥ 0.70) / 🟡 yellow (≥ 0.45) / 🔴 red (< 0.45 or unknown).
+  - Replaced `[ ]` bracket markers with four rounded corner markers (arc + arms at each corner) that frame the face with a camera-viewfinder look.
+
 ## [1.39.5] - 2026-06-03
 ### Changed
 - **Face overlay: confidence-colored ring + rounded corner markers** (`vision_service.py`):

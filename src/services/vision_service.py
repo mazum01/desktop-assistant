@@ -419,7 +419,9 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
         if not bbox or len(bbox) < 4:
             continue
         face_id = face.get("face_id")
-        color = _face_color(face_id, idx)
+        match_score = float(face.get("match_score", 0.0))
+        bracket_color = _face_color(face_id, idx)
+        ring_color = _confidence_ring_color(match_score, face_id)
         x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
 
         # Padded box dimensions, then smooth the SIZE (not the centre) to
@@ -432,9 +434,8 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
         half_w = max(2, int(sw / 2))
         half_h = max(2, int(sh / 2))
 
-        _draw_hud_face(frame_bgr, cx_l, cy_l, half_w, half_h, color,
-                       _confidence_ring_color(face.get("match_score", 0.0), face_id),
-                       scale)
+        _draw_hud_face(frame_bgr, cx_l, cy_l, half_w, half_h,
+                       bracket_color, ring_color, scale)
 
         label = face.get("name") or (face_id and "unknown")
         depth_m = face_depths.get(face_id)
@@ -442,15 +443,16 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
             label = f"{label}  {depth_m:.2f}m" if label else f"{depth_m:.2f}m"
         if label:
             # Mirror the geometry used inside _draw_hud_face so the label sits
-            # just above the bracket top.
+            # just above the corner markers.
             ring_r = max(6, int(min(half_w, half_h) * 0.92))
-            bracket_top = int(ring_r * 1.15)
+            gap = max(6, int(10 * scale))
+            marker_top = ring_r + gap
             font_scale = max(0.8, 1.1 * scale)
             font_thick = max(1, round(scale))
             lx = max(0, cx_l - 20)
-            ly = max(10, cy_l - bracket_top - 6)
+            ly = max(10, cy_l - marker_top - 6)
             _put_text_outlined(frame_bgr, label, (lx, ly),
-                               cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, font_thick)
+                               cv2.FONT_HERSHEY_SIMPLEX, font_scale, bracket_color, font_thick)
 
     for obj in objects:
         bbox = obj.get("bbox")
