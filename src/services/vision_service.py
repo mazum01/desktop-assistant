@@ -348,43 +348,42 @@ def _draw_hud_face(frame: np.ndarray, cx: int, cy: int, half_w: int, half_h: int
     # Place the 4 corners just outside the ring so the circle fits inside.
     gap = max(6, int(10 * scale))
     m = ring_r + gap            # half-width / half-height of the marker box
-    corner_r = max(8, int(m * 0.32))   # radius of each rounded corner arc
-    arm = max(8, int(m * 0.45))        # length of the straight arm extending from arc
+    r = max(8, int(m * 0.32))   # radius of each rounded corner arc
+    arm = max(8, int(m * 0.50)) # length of each straight arm extending from arc
 
-    # For each corner the arc spans 90° in the quadrant *facing inward*.
-    # (angle_start, angle_end, corner_x, corner_y)
-    # Arcs are drawn centred at the arc centre, offset corner_r inward.
-    corners_cfg = [
-        # (corner_cx, corner_cy, arc_start_deg, x_sign, y_sign)
-        (cx - m, cy - m,  90, +1, +1),   # top-left  → arc in Q3 (180°–270°)
-        (cx + m, cy - m,   0, -1, +1),   # top-right → arc in Q4 (270°–360°)
-        (cx - m, cy + m, 180, +1, -1),   # bot-left  → arc in Q2 (90°–180°)
-        (cx + m, cy + m, 270, -1, -1),   # bot-right → arc in Q1 (0°–90°)
+    left   = cx - m
+    right  = cx + m
+    top    = cy - m
+    bottom = cy + m
+
+    # Each corner = a quarter-circle arc (curve on the inside) + two straight
+    # arms running along the box edges away from the corner toward the centre.
+    # (arc_center, arc_start_deg, arc_end_deg, arm1_pts, arm2_pts)
+    corners = [
+        # top-left  "⌐"
+        ((left + r,  top + r),    180, 270,
+         ((left + r, top), (left + r + arm, top)),
+         ((left, top + r), (left, top + r + arm))),
+        # top-right "¬"
+        ((right - r, top + r),    270, 360,
+         ((right - r, top), (right - r - arm, top)),
+         ((right, top + r), (right, top + r + arm))),
+        # bottom-left "L"
+        ((left + r,  bottom - r),  90, 180,
+         ((left + r, bottom), (left + r + arm, bottom)),
+         ((left, bottom - r), (left, bottom - r - arm))),
+        # bottom-right "⌐ mirrored"
+        ((right - r, bottom - r),   0,  90,
+         ((right - r, bottom), (right - r - arm, bottom)),
+         ((right, bottom - r), (right, bottom - r - arm))),
     ]
-    for (bx, by, arc_start, sx, sy) in corners_cfg:
-        # Arc centre is inset from the box corner by corner_r in both axes
-        arc_cx = bx + sx * corner_r
-        arc_cy = by + sy * corner_r
-        cv2.ellipse(frame, (arc_cx, arc_cy), (corner_r, corner_r),
-                    0, arc_start, arc_start + 90,
-                    bracket_color, thick, cv2.LINE_AA)
-        # Straight arms extending outward from the arc endpoints along each axis
-        # Arm endpoints along horizontal axis
-        ex1 = int(arc_cx + corner_r * math.cos(math.radians(arc_start)))
-        ey1 = int(arc_cy + corner_r * math.sin(math.radians(arc_start)))
-        ex2 = int(arc_cx + corner_r * math.cos(math.radians(arc_start + 90)))
-        ey2 = int(arc_cy + corner_r * math.sin(math.radians(arc_start + 90)))
-        # Draw arm from each arc endpoint outward (away from the face centre)
-        cv2.line(frame,
-                 (ex1, ey1),
-                 (ex1 + int(-sx * arm * abs(math.cos(math.radians(arc_start)))),
-                  ey1 + int(-sy * arm * abs(math.sin(math.radians(arc_start))))),
-                 bracket_color, thick, cv2.LINE_AA)
-        cv2.line(frame,
-                 (ex2, ey2),
-                 (ex2 + int(-sx * arm * abs(math.cos(math.radians(arc_start + 90)))),
-                  ey2 + int(-sy * arm * abs(math.sin(math.radians(arc_start + 90))))),
-                 bracket_color, thick, cv2.LINE_AA)
+    for (center, a0, a1, arm1, arm2) in corners:
+        cv2.ellipse(frame, (int(center[0]), int(center[1])), (r, r),
+                    0, a0, a1, bracket_color, thick, cv2.LINE_AA)
+        cv2.line(frame, (int(arm1[0][0]), int(arm1[0][1])),
+                 (int(arm1[1][0]), int(arm1[1][1])), bracket_color, thick, cv2.LINE_AA)
+        cv2.line(frame, (int(arm2[0][0]), int(arm2[0][1])),
+                 (int(arm2[1][0]), int(arm2[1][1])), bracket_color, thick, cv2.LINE_AA)
 
     # ── Opaque circular ring (confidence-coloured) + tick marks ──────────────
     ring_thick = max(2, round(2 * scale))

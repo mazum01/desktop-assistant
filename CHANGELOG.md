@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.9] - 2026-06-03
+### Fixed
+- **Face overlay corner markers geometry** (`vision_service.py`):
+  - Rewrote the rounded corner markers with explicit per-corner coordinates. Previously the arcs/arms were computed with buggy sign math, producing disconnected hooks pointing the wrong way.
+  - Each corner is now a clean quarter-circle arc with two straight arms running along the box edges toward the centre — a proper camera-viewfinder "L" bracket. The confidence ring sits fully inside.
+
 ## [1.39.8] - 2026-06-03
 ### Changed
 - **Cam 1 snapshot includes overlays** (`web_service.py`):
