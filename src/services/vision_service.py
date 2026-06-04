@@ -349,7 +349,7 @@ def _draw_hud_face(frame: np.ndarray, cx: int, cy: int, half_w: int, half_h: int
     gap = max(6, int(10 * scale))
     m = ring_r + gap            # half-width / half-height of the marker box
     r = max(8, int(m * 0.32))   # radius of each rounded corner arc
-    arm = max(8, int(m * 0.50)) # length of each straight arm extending from arc
+    arm = max(5, int(m * 0.30)) # length of each straight arm extending from arc
 
     left   = cx - m
     right  = cx + m
@@ -386,7 +386,7 @@ def _draw_hud_face(frame: np.ndarray, cx: int, cy: int, half_w: int, half_h: int
                  (int(arm2[1][0]), int(arm2[1][1])), bracket_color, thick, cv2.LINE_AA)
 
     # ── Opaque circular ring (confidence-coloured) + tick marks ──────────────
-    ring_thick = max(2, round(2 * scale))
+    ring_thick = 1
     cv2.circle(frame, (cx, cy), ring_r, ring_color, ring_thick, cv2.LINE_AA)
     tick_len = max(4, int(8 * scale))
     tick_thick = max(1, round(1.5 * scale))

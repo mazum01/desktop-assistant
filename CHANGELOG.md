@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.13] - 2026-06-04
+### Changed
+- Face overlay: confidence ring is now always 1 px wide (was scaled 2 px).
+- Face overlay: corner arm length reduced from 50% to 30% of marker radius
+  so the arms are noticeably shorter while the corner arc stays the same size.
+
 ## [1.39.12] - 2026-06-03
 ### Fixed
 - Replaced ALL inline `onclick=` attribute handlers on IoT buttons with
