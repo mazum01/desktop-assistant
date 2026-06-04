@@ -328,13 +328,13 @@ class PerceptionService(Service):
                     if stab is None or stab["done"]:
                         fresh = self._find_cached_face(cx, cy, max_age=self._reuse_ttl)
                         if fresh:
-                            face_id, name = fresh
+                            face_id, name, cached_score = fresh
                             self._registry.update_seen(face_id)
-                            self._update_pos_cache(face_id, name, cx, cy)
+                            self._update_pos_cache(face_id, name, cx, cy, cached_score)
                             entry["face_id"] = face_id
                             entry["name"] = name
                             entry["is_new"] = False
-                            entry["match_score"] = 0.0
+                            entry["match_score"] = cached_score
                             face_list.append(entry)
                             continue
 
@@ -370,7 +370,7 @@ class PerceptionService(Service):
                                 else:
                                     cached = self._find_cached_face(cx, cy)
                                     if cached:
-                                        face_id, name = cached
+                                        face_id, name, score = cached
                                         self._registry.update_seen(face_id)
                                     else:
                                         face_id, name = self._identify_or_register(frame, f, emb)
@@ -380,7 +380,7 @@ class PerceptionService(Service):
                             # Wait for a sharp frame before anchoring the identity.
                             cached = self._find_cached_face(cx, cy)
                             if cached:
-                                face_id, name = cached
+                                face_id, name, score = cached
                                 self._registry.update_seen(face_id)
                             else:
                                 # Skip this detection — no reliable embedding available.
@@ -431,7 +431,7 @@ class PerceptionService(Service):
                             else:
                                 is_stabilizing = True
 
-                        self._update_pos_cache(face_id, name, cx, cy)
+                        self._update_pos_cache(face_id, name, cx, cy, score)
                         entry["face_id"]              = face_id
                         entry["name"]                 = name
                         entry["is_new"]               = name.startswith("Guest ") and not is_stabilizing
@@ -497,7 +497,7 @@ class PerceptionService(Service):
         return f"{int(cx / _STAB_GRID_PX)},{int(cy / _STAB_GRID_PX)}"
 
     def _find_cached_face(self, cx: float, cy: float, max_age: Optional[float] = None):
-        """Return (face_id, name) from position cache if a nearby face was seen recently.
+        """Return (face_id, name, match_score) from position cache if a nearby face was seen recently.
 
         ``max_age`` overrides the default ``_cache_ttl`` when provided — used for
         the embed-skip fast path which needs a much tighter time window.
@@ -515,17 +515,19 @@ class PerceptionService(Service):
                 if dist < self._cache_dist and dist < best_dist:
                     best_dist = dist
                     best = entry
-            return (best["face_id"], best["name"]) if best else None
+            if best is None:
+                return None
+            return (best["face_id"], best["name"], best.get("match_score", 0.0))
 
-    def _update_pos_cache(self, face_id: str, name: str, cx: float, cy: float) -> None:
+    def _update_pos_cache(self, face_id: str, name: str, cx: float, cy: float, match_score: float = 0.0) -> None:
         """Add or refresh a face entry in the position cache."""
         now = time.monotonic()
         with self._pos_cache_lock:
             for entry in self._pos_cache:
                 if entry["face_id"] == face_id:
-                    entry.update({"cx": cx, "cy": cy, "name": name, "ts": now})
+                    entry.update({"cx": cx, "cy": cy, "name": name, "match_score": match_score, "ts": now})
                     return
-            self._pos_cache.append({"face_id": face_id, "name": name, "cx": cx, "cy": cy, "ts": now})
+            self._pos_cache.append({"face_id": face_id, "name": name, "cx": cx, "cy": cy, "match_score": match_score, "ts": now})
 
     def _get_frame(self):
         if self._vision_svc is not None:

@@ -463,27 +463,29 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
             gap = max(6, int(10 * scale))
             m = ring_r + gap   # marker box half-extents
             font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = max(0.50, 0.88 * scale)
+            name_scale = max(0.50, 0.88 * scale)
+            small_scale = max(0.25, name_scale * 0.50)   # 50% for distance + confidence
             font_thick = max(1, round(scale))
 
-            # Build lines: name / distance (m + ft) / confidence
-            lines: list[str] = []
+            # Build lines: [name] / [distance] / [confidence]
+            # Each entry: (text, font_scale)
+            lines: list[tuple[str, float]] = []
             if name_label:
-                lines.append(name_label)
+                lines.append((name_label, name_scale))
             if depth_m is not None:
                 depth_ft = depth_m * 3.28084
-                lines.append(f"{depth_m:.2f}m ({depth_ft:.1f}ft)")
-            lines.append(f"{int(match_score * 100)}%")
+                lines.append((f"{depth_m:.2f}m ({depth_ft:.1f}ft)", small_scale))
+            lines.append((f"{int(match_score * 100)}%", small_scale))
 
             # Measure each line; find widest for overflow check
-            sizes = [cv2.getTextSize(ln, font, font_scale, font_thick) for ln in lines]
+            sizes = [cv2.getTextSize(ln, font, fs, font_thick) for ln, fs in lines]
             max_tw = max(s[0][0] for s in sizes)
-            # Line height from first line; spacing = 140% of that
+            # Line height from first line; spacing = 140% of name line height
             first_th = sizes[0][0][1]
             line_spacing = max(1, int(first_th * 1.45))
 
             # Align TOP of first line with top of corner arm (cy_l - m).
-            # cv2 baseline is *bottom* of text, so baseline = top + th
+            # cv2 baseline is *bottom* of text, so add th to get baseline y
             ly_first = (cy_l - m) + first_th
 
             # Default: just right of the marker box
@@ -491,13 +493,12 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
             if lx + max_tw > w:
                 lx = max(0, cx_l - m - max_tw - 2)
 
-            for i, (ln, (sz, _)) in enumerate(zip(lines, sizes)):
+            for i, ((ln, fs), (sz, _)) in enumerate(zip(lines, sizes)):
                 th_i = sz[1]
-                # keep each subsequent line's baseline below the previous
                 ly = ly_first + i * line_spacing
                 ly = max(th_i, min(h - 2, ly))
                 _put_text_outlined(frame_bgr, ln, (lx, ly),
-                                   font, font_scale, bracket_color, font_thick,
+                                   font, fs, bracket_color, font_thick,
                                    force_accent=True)
 
     for obj in objects:

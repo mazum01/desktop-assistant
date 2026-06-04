@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.16] - 2026-06-04
+### Fixed
+- Confidence always showing 0%: pos-cache fast path was not storing or
+  propagating match_score. `_find_cached_face` now returns a 3-tuple
+  (face_id, name, match_score) and `_update_pos_cache` accepts+stores
+  match_score so cached frames display the real confidence value.
+### Changed
+- Distance and confidence label lines rendered at 50% of the name font
+  scale for visual hierarchy (small_scale = name_scale × 0.50).
+
 ## [1.39.15] - 2026-06-04
 ### Changed
 - Face overlay labels always render in bracket/arm color (force_accent=True),
