@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.15] - 2026-06-04
+### Changed
+- Face overlay labels always render in bracket/arm color (force_accent=True),
+  fixing the black-text-on-bright-background issue.
+- Label top edge now aligns exactly with the top of the corner arm (was offset
+  a few pixels above the box, now `ly_first = (cy_l - m) + th`).
+- Distance split to its own line below the name, formatted as `1.23m (4.04ft)`.
+- Confidence percentage added as a third line below the distance.
+- `_put_text_outlined` accepts optional `force_accent` parameter (dark pill +
+  accent color always, bypassing contrast-detection logic).
+
 ## [1.39.14] - 2026-06-04
 ### Changed
 - Face overlay: corner arc radius reduced from 32% to 20% of marker half-size

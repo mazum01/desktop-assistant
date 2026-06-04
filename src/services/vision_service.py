@@ -139,6 +139,7 @@ def _put_text_outlined(
     font_scale: float,
     accent: tuple,
     thickness: int,
+    force_accent: bool = False,
 ) -> None:
     """Draw *text* with high contrast on any background.
 
@@ -148,8 +149,25 @@ def _put_text_outlined(
         outline, and avoids the O(thickness²) cv2.putText cost.
       - Bright background: draws near-black text directly — no background
         treatment needed since the text already has natural contrast.
+
+    When *force_accent* is True the accent colour is always used (with a dark
+    background pill so it remains readable on any background).
     """
     (tw, th), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+
+    if force_accent:
+        # Always darken a pill and draw in accent colour regardless of background
+        pad = max(1, round(2 * font_scale))
+        rx1 = max(0, org[0] - pad)
+        ry1 = max(0, org[1] - th - pad)
+        rx2 = min(frame.shape[1], org[0] + tw + pad)
+        ry2 = min(frame.shape[0], org[1] + baseline + pad)
+        roi = frame[ry1:ry2, rx1:rx2]
+        if roi.size > 0:
+            roi[:] = (roi >> 1)
+        cv2.putText(frame, text, org, font, font_scale, accent, thickness, cv2.LINE_AA)
+        return
+
     luma = _bg_luminance(frame, org[0], org[1], tw, th)
     color = _contrast_color(luma, accent)
 
@@ -436,27 +454,51 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
         _draw_hud_face(frame_bgr, cx_l, cy_l, half_w, half_h,
                        bracket_color, ring_color, scale)
 
-        label = face.get("name") or (face_id and "unknown")
+        name_label = face.get("name") or (face_id and "unknown") or None
         depth_m = face_depths.get(face_id)
-        if depth_m is not None:
-            label = f"{label}  {depth_m:.2f}m" if label else f"{depth_m:.2f}m"
-        if label:
-            # Mirror the geometry used inside _draw_hud_face so the label sits
-            # just outside the top-right corner of the marker box.
+
+        if name_label or depth_m is not None:
+            # Mirror marker-box geometry from _draw_hud_face
             ring_r = max(6, int(min(half_w, half_h) * 0.92))
             gap = max(6, int(10 * scale))
-            m = ring_r + gap   # half-extents of marker box
+            m = ring_r + gap   # marker box half-extents
+            font = cv2.FONT_HERSHEY_SIMPLEX
             font_scale = max(0.50, 0.88 * scale)
             font_thick = max(1, round(scale))
-            (tw, _), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thick)
-            # Default: top-right, just outside the right edge of the marker box
+
+            # Build lines: name / distance (m + ft) / confidence
+            lines: list[str] = []
+            if name_label:
+                lines.append(name_label)
+            if depth_m is not None:
+                depth_ft = depth_m * 3.28084
+                lines.append(f"{depth_m:.2f}m ({depth_ft:.1f}ft)")
+            lines.append(f"{int(match_score * 100)}%")
+
+            # Measure each line; find widest for overflow check
+            sizes = [cv2.getTextSize(ln, font, font_scale, font_thick) for ln in lines]
+            max_tw = max(s[0][0] for s in sizes)
+            # Line height from first line; spacing = 140% of that
+            first_th = sizes[0][0][1]
+            line_spacing = max(1, int(first_th * 1.45))
+
+            # Align TOP of first line with top of corner arm (cy_l - m).
+            # cv2 baseline is *bottom* of text, so baseline = top + th
+            ly_first = (cy_l - m) + first_th
+
+            # Default: just right of the marker box
             lx = cx_l + m + 2
-            ly = max(10, cy_l - m - 4)
-            # Shift to left side if text would overflow the right edge of the frame
-            if lx + tw > w:
-                lx = max(0, cx_l - m - tw - 2)
-            _put_text_outlined(frame_bgr, label, (lx, ly),
-                               cv2.FONT_HERSHEY_SIMPLEX, font_scale, bracket_color, font_thick)
+            if lx + max_tw > w:
+                lx = max(0, cx_l - m - max_tw - 2)
+
+            for i, (ln, (sz, _)) in enumerate(zip(lines, sizes)):
+                th_i = sz[1]
+                # keep each subsequent line's baseline below the previous
+                ly = ly_first + i * line_spacing
+                ly = max(th_i, min(h - 2, ly))
+                _put_text_outlined(frame_bgr, ln, (lx, ly),
+                                   font, font_scale, bracket_color, font_thick,
+                                   force_accent=True)
 
     for obj in objects:
         bbox = obj.get("bbox")
