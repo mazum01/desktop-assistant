@@ -437,7 +437,7 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
             continue
         face_id = face.get("face_id")
         match_score = float(face.get("match_score", 0.0))
-        bracket_color = _face_color(face_id, idx)
+        bracket_color = (0, 200, 0)   # always green
         ring_color = _confidence_ring_color(match_score, face_id)
         x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
 

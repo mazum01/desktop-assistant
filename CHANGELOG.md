@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.18] - 2026-06-04
+### Changed
+- Face overlay: corner markers and label text are always green (0,200,0)
+  instead of the per-face-id palette color that changed on every restart.
+
 ## [1.39.17] - 2026-06-04
 ### Changed
 - Face overlay: distance and confidence label font increased from 50% to 80%
