@@ -6,7 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.20] - 2026-06-04
+## [1.39.21] - 2026-06-04
+### Added
+- `scripts/nest_oauth.py`: interactive OAuth2 setup helper for the Google Nest
+  SDM integration.  Guides through the browser auth flow, exchanges the
+  authorization code for a refresh_token, stores all credentials via
+  `vera iot config`, and restarts the daemon automatically.
+
+
 ### Added
 - `src/services/nest_service.py`: Google SDM API polling service for Nest
   thermostats.  Handles OAuth2 token refresh, device auto-discovery, set_heat /
