@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.17] - 2026-06-04
+### Changed
+- Face overlay: distance and confidence label font increased from 50% to 80%
+  of the name font size.
+
 ## [1.39.16] - 2026-06-04
 ### Fixed
 - Confidence always showing 0%: pos-cache fast path was not storing or

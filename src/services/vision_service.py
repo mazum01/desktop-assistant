@@ -464,7 +464,7 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
             m = ring_r + gap   # marker box half-extents
             font = cv2.FONT_HERSHEY_SIMPLEX
             name_scale = max(0.50, 0.88 * scale)
-            small_scale = max(0.25, name_scale * 0.50)   # 50% for distance + confidence
+            small_scale = max(0.25, name_scale * 0.80)   # 80% for distance + confidence
             font_thick = max(1, round(scale))
 
             # Build lines: [name] / [distance] / [confidence]
