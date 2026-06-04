@@ -6,6 +6,25 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.20] - 2026-06-04
+### Added
+- `src/services/nest_service.py`: Google SDM API polling service for Nest
+  thermostats.  Handles OAuth2 token refresh, device auto-discovery, set_heat /
+  set_cool / set_mode actions, and `_parse_traits()` to normalize SDM trait
+  responses.
+- `src/iot/devices/nest_device.py`: IoTDevice plugin wrapping NestService.
+  Presents a live thermostat card with temperature, HVAC status, mode badges,
+  and 7 action buttons (set_heat, set_cool, mode_heat, mode_cool, mode_range,
+  mode_eco, mode_off).
+- `app.js` / `index.html`: Extended IoT action button rendering to support
+  `requires_input` actions.  Buttons emit `data-requires-input`,
+  `data-action-prompt`, and `data-action-param` attributes; `doIotAction()`
+  now prompts the user when `requiresInput=true` and sends the value under the
+  correct param key (e.g. `temperature`).
+- `tests/test_nest_service.py` + `tests/test_nest_device.py`: 28 new test cases
+  covering temperature conversions, degraded-mode behaviour, trait parsing, token
+  caching/refresh, action presence, and lifecycle methods.
+
 ## [1.39.19] - 2026-06-04
 ### Changed
 - Face overlay: name text rendered with stroke thickness+1 for a bold

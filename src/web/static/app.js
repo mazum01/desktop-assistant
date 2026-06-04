@@ -394,7 +394,11 @@ function renderIoTDevices(iot) {
           actionsEl.innerHTML = actions.map(a => {
             const btnColor = a.color || "#58a6ff";
             return `<button class="btn btn-sm" style="background:${btnColor}22;border:1px solid ${btnColor}66;color:${btnColor}"
-              data-iot-action="do-action" data-device-id="${deviceId}" data-action-id="${a.id}" data-requires-pin="${!!a.requires_pin}"
+              data-iot-action="do-action" data-device-id="${deviceId}" data-action-id="${a.id}"
+              data-requires-pin="${!!a.requires_pin}"
+              data-requires-input="${!!a.requires_input}"
+              data-action-prompt="${a.input_prompt ? a.input_prompt.replace(/"/g, '&quot;') : ''}"
+              data-action-param="${a.input_param || 'value'}"
               title="${a.label}">
               ${a.icon || ""} ${a.label}
             </button>`;
@@ -426,12 +430,17 @@ async function announceIotDevice(deviceId) {
   } catch (e) { console.error("IoT announce request failed:", e); }
 }
 
-async function doIotAction(deviceId, action, requiresPin) {
+async function doIotAction(deviceId, action, requiresPin, requiresInput, inputPrompt, inputParam) {
   let params = {};
   if (requiresPin) {
     const pin = window.prompt(`Enter PIN to ${action} ${deviceId}:`);
     if (pin === null) return; // user cancelled
     params.pin = pin;
+  }
+  if (requiresInput) {
+    const val = window.prompt(inputPrompt || `Enter value for ${action}:`);
+    if (val === null) return; // user cancelled
+    params[inputParam || "value"] = val;
   }
   try {
     const resp = await fetch(`/api/iot/${deviceId}/action`, {
@@ -1971,7 +1980,14 @@ document.addEventListener("DOMContentLoaded", () => {
       case 'announce': announceIotDevice(deviceId); break;
       case 'remove':   removeIoTDevice(deviceId); break;
       case 'do-action':
-        doIotAction(deviceId, btn.dataset.actionId, btn.dataset.requiresPin === 'true');
+        doIotAction(
+          deviceId,
+          btn.dataset.actionId,
+          btn.dataset.requiresPin === 'true',
+          btn.dataset.requiresInput === 'true',
+          btn.dataset.actionPrompt || '',
+          btn.dataset.actionParam  || 'value'
+        );
         break;
     }
   });
