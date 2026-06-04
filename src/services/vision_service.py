@@ -348,7 +348,7 @@ def _draw_hud_face(frame: np.ndarray, cx: int, cy: int, half_w: int, half_h: int
     # Place the 4 corners just outside the ring so the circle fits inside.
     gap = max(6, int(10 * scale))
     m = ring_r + gap            # half-width / half-height of the marker box
-    r = max(8, int(m * 0.32))   # radius of each rounded corner arc
+    r = max(5, int(m * 0.20))   # radius of each rounded corner arc
     arm = max(5, int(m * 0.30)) # length of each straight arm extending from arc
 
     left   = cx - m
@@ -442,14 +442,19 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
             label = f"{label}  {depth_m:.2f}m" if label else f"{depth_m:.2f}m"
         if label:
             # Mirror the geometry used inside _draw_hud_face so the label sits
-            # just above the corner markers.
+            # just outside the top-right corner of the marker box.
             ring_r = max(6, int(min(half_w, half_h) * 0.92))
             gap = max(6, int(10 * scale))
-            marker_top = ring_r + gap
-            font_scale = max(0.8, 1.1 * scale)
+            m = ring_r + gap   # half-extents of marker box
+            font_scale = max(0.50, 0.88 * scale)
             font_thick = max(1, round(scale))
-            lx = max(0, cx_l - 20)
-            ly = max(10, cy_l - marker_top - 6)
+            (tw, _), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thick)
+            # Default: top-right, just outside the right edge of the marker box
+            lx = cx_l + m + 2
+            ly = max(10, cy_l - m - 4)
+            # Shift to left side if text would overflow the right edge of the frame
+            if lx + tw > w:
+                lx = max(0, cx_l - m - tw - 2)
             _put_text_outlined(frame_bgr, label, (lx, ly),
                                cv2.FONT_HERSHEY_SIMPLEX, font_scale, bracket_color, font_thick)
 

@@ -6,6 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.14] - 2026-06-04
+### Changed
+- Face overlay: corner arc radius reduced from 32% to 20% of marker half-size
+  (smaller arcs, arms and gap unchanged).
+- Face overlay: name label moved to top-right, just outside the right edge of
+  the corner marker box; automatically shifts to the left side when the label
+  would overflow the right edge of the frame.
+- Face overlay: label font scaled to ~80% of previous size (1.1→0.88×scale).
+- Face overlay: label color now matches the corner arm color (was already
+  bracket_color but previously positioned differently).
+
 ## [1.39.13] - 2026-06-04
 ### Changed
 - Face overlay: confidence ring is now always 1 px wide (was scaled 2 px).
