@@ -466,19 +466,20 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
             name_scale = max(0.50, 0.88 * scale)
             small_scale = max(0.25, name_scale * 0.80)   # 80% for distance + confidence
             font_thick = max(1, round(scale))
+            name_thick = font_thick + 1   # heavier stroke = bold effect on name
 
             # Build lines: [name] / [distance] / [confidence]
-            # Each entry: (text, font_scale)
-            lines: list[tuple[str, float]] = []
+            # Each entry: (text, font_scale, thickness)
+            lines: list[tuple[str, float, int]] = []
             if name_label:
-                lines.append((name_label, name_scale))
+                lines.append((name_label, name_scale, name_thick))
             if depth_m is not None:
                 depth_ft = depth_m * 3.28084
-                lines.append((f"{depth_m:.2f}m ({depth_ft:.1f}ft)", small_scale))
-            lines.append((f"{int(match_score * 100)}%", small_scale))
+                lines.append((f"{depth_m:.2f}m ({depth_ft:.1f}ft)", small_scale, font_thick))
+            lines.append((f"{int(match_score * 100)}%", small_scale, font_thick))
 
             # Measure each line; find widest for overflow check
-            sizes = [cv2.getTextSize(ln, font, fs, font_thick) for ln, fs in lines]
+            sizes = [cv2.getTextSize(ln, font, fs, th) for ln, fs, th in lines]
             max_tw = max(s[0][0] for s in sizes)
             # Line height from first line; spacing = 140% of name line height
             first_th = sizes[0][0][1]
@@ -493,12 +494,12 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
             if lx + max_tw > w:
                 lx = max(0, cx_l - m - max_tw - 2)
 
-            for i, ((ln, fs), (sz, _)) in enumerate(zip(lines, sizes)):
+            for i, ((ln, fs, th), (sz, _)) in enumerate(zip(lines, sizes)):
                 th_i = sz[1]
                 ly = ly_first + i * line_spacing
                 ly = max(th_i, min(h - 2, ly))
                 _put_text_outlined(frame_bgr, ln, (lx, ly),
-                                   font, fs, bracket_color, font_thick,
+                                   font, fs, bracket_color, th,
                                    force_accent=True)
 
     for obj in objects:

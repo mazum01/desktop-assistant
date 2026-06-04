@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.19] - 2026-06-04
+### Changed
+- Face overlay: name text rendered with stroke thickness+1 for a bold
+  appearance; distance and confidence lines remain normal weight.
+
 ## [1.39.18] - 2026-06-04
 ### Changed
 - Face overlay: corner markers and label text are always green (0,200,0)
