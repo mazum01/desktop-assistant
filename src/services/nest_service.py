@@ -163,7 +163,14 @@ class NestService:
             return
         traits = data.get("traits", {})
         reading = self._parse_traits(traits)
-        reading["device_name"] = data.get("displayName") or data.get("name", "Thermostat")
+        raw_name = data.get("displayName") or data.get("name", "")
+        # SDM resource paths look like "enterprises/.../devices/..."; use custom
+        # name from traits if available, otherwise fall back to "Thermostat".
+        if raw_name and "/" not in raw_name:
+            display = raw_name
+        else:
+            display = reading.get("custom_name") or "Thermostat"
+        reading["device_name"] = display
         with self._reading_lock:
             self._reading = reading
         log.debug("NestService: poll ok — %s", reading)

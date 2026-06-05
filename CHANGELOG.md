@@ -6,6 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.23] - 2026-06-05
+### Fixed
+- Nest thermostat card subtitle no longer shows the raw SDM resource path
+  (`enterprises/.../devices/...`).  Now shows the Google Home custom name
+  if set, otherwise "Thermostat".
+
 ## [1.39.22] - 2026-06-04
 ### Added
 - Nest thermostat card now surfaces all available SDM traits:
