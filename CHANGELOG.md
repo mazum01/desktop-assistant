@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.25] - 2026-06-05
+### Fixed
+- IoT sparkline charts were always flat — history buffer was replaced with the
+  latest single value on every poll instead of accumulating over time.
+  JS now maintains a 60-point ring buffer per device; backends that already
+  send a full deque (Radon, DROP) are used directly; single-point backends
+  (Nest, Yale) accumulate across polls.
+
 ## [1.39.24] - 2026-06-05
 ### Fixed
 - Nest "Could not determine Nest device ID" error when executing actions
