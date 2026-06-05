@@ -81,18 +81,49 @@ def test_parse_traits_full():
     traits = {
         "sdm.devices.traits.Temperature":             {"ambientTemperatureCelsius": 21.0},
         "sdm.devices.traits.Humidity":                {"ambientHumidityPercent": 45},
-        "sdm.devices.traits.ThermostatMode":          {"mode": "HEAT"},
+        "sdm.devices.traits.ThermostatMode":          {"mode": "HEAT", "availableModes": ["HEAT", "COOL", "OFF"]},
         "sdm.devices.traits.ThermostatHvac":          {"status": "HEATING"},
         "sdm.devices.traits.ThermostatTemperatureSetpoint": {"heatCelsius": 22.0},
+        "sdm.devices.traits.Connectivity":            {"status": "ONLINE"},
+        "sdm.devices.traits.Fan":                     {"timerMode": "OFF"},
+        "sdm.devices.traits.Info":                    {"customName": "Upstairs"},
     }
     r = svc._parse_traits(traits)
     assert r["temp_c"] == 21.0
     assert r["temp_f"] == pytest.approx(69.8, abs=0.1)
     assert r["humidity"] == 45
     assert r["mode"] == "HEAT"
+    assert r["available_modes"] == ["HEAT", "COOL", "OFF"]
     assert r["hvac_status"] == "HEATING"
     assert r["heat_c"] == 22.0
     assert r["heat_f"] == pytest.approx(71.6, abs=0.1)
+    assert r["connectivity"] == "ONLINE"
+    assert r["fan_mode"] == "OFF"
+    assert r["custom_name"] == "Upstairs"
+
+
+def test_parse_traits_connectivity_offline():
+    svc = NestService(cfg={
+        "project_id": "p", "client_id": "c",
+        "client_secret": "s", "refresh_token": "r",
+    })
+    traits = {
+        "sdm.devices.traits.Connectivity": {"status": "OFFLINE"},
+    }
+    r = svc._parse_traits(traits)
+    assert r["connectivity"] == "OFFLINE"
+
+
+def test_parse_traits_fan_running():
+    svc = NestService(cfg={
+        "project_id": "p", "client_id": "c",
+        "client_secret": "s", "refresh_token": "r",
+    })
+    traits = {
+        "sdm.devices.traits.Fan": {"timerMode": "ON"},
+    }
+    r = svc._parse_traits(traits)
+    assert r["fan_mode"] == "ON"
 
 
 def test_parse_traits_eco():
@@ -161,3 +192,31 @@ def test_ensure_access_token_refreshes_expired():
 
     assert result is True
     assert svc._access_token == "new-tok"
+
+
+# ── run_fan ───────────────────────────────────────────────────────────────────
+
+def test_run_fan_clamps_minutes():
+    cfg = {
+        "project_id": "p", "client_id": "c",
+        "client_secret": "s", "refresh_token": "r",
+    }
+    svc = NestService(cfg=cfg)
+    svc._access_token = "tok"
+    svc._token_expires_at = time.time() + 3600
+    svc._target_device_id = "enterprises/proj/devices/dev1"
+
+    response_data = json.dumps({}).encode()
+    mock_resp = MagicMock()
+    mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.read = MagicMock(return_value=response_data)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp) as mu:
+        ok, _ = svc.run_fan(30)
+    assert ok is True
+    # First call is the executeCommand POST; verify duration string
+    import json as _json
+    call_req = mu.call_args_list[0][0][0]   # first call, first positional arg = Request
+    payload = _json.loads(call_req.data.decode())
+    assert payload["params"]["duration"] == "1800s"

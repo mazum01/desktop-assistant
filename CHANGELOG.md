@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.22] - 2026-06-04
+### Added
+- Nest thermostat card now surfaces all available SDM traits:
+  - `Connectivity` → ⚠️ Offline badge when thermostat goes offline
+  - `Fan.timerMode` → 💨 Fan badge when fan timer is active
+  - `Info.customName` → used as card title if set in Google Home
+  - `ThermostatMode.availableModes` → mode buttons filtered to only show
+    modes the specific thermostat supports (avoids showing HEATCOOL on
+    units that don't support it)
+- New **Run Fan** action: prompts for minutes, sends `Fan.SetTimer` command
+- `NestService.run_fan(minutes)` public method; clamps to 1–43200 min
+- 6 new tests covering connectivity, fan, custom name, available_modes
+  filtering, and run_fan command payload
+
 ## [1.39.21] - 2026-06-04
 ### Added
 - `scripts/nest_oauth.py`: interactive OAuth2 setup helper for the Google Nest

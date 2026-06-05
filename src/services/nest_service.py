@@ -136,6 +136,14 @@ class NestService:
             {"mode": mode},
         )
 
+    def run_fan(self, minutes: int) -> tuple[bool, str]:
+        """Run the fan for a given number of minutes (1–43200)."""
+        minutes = max(1, min(43200, int(minutes)))
+        return self._execute_command(
+            "sdm.devices.commands.Fan.SetTimer",
+            {"timerMode": "ON", "duration": f"{minutes * 60}s"},
+        )
+
     # ── Internal polling ──────────────────────────────────────────────────────
 
     def _poll_loop(self) -> None:
@@ -164,12 +172,16 @@ class NestService:
         temp_c = None
         humidity = None
         mode = "UNKNOWN"
+        available_modes: list[str] = []
         hvac_status = "OFF"
         heat_c: float | None = None
         cool_c: float | None = None
         eco_mode = "OFF"
         eco_heat_c: float | None = None
         eco_cool_c: float | None = None
+        connectivity = "ONLINE"
+        fan_mode = "OFF"
+        custom_name = ""
 
         t = traits.get("sdm.devices.traits.Temperature", {})
         if "ambientTemperatureCelsius" in t:
@@ -181,6 +193,7 @@ class NestService:
 
         m = traits.get("sdm.devices.traits.ThermostatMode", {})
         mode = m.get("mode", "UNKNOWN")
+        available_modes = m.get("availableModes", [])
 
         hv = traits.get("sdm.devices.traits.ThermostatHvac", {})
         hvac_status = hv.get("status", "OFF")
@@ -198,11 +211,21 @@ class NestService:
         if "coolCelsius" in eco:
             eco_cool_c = float(eco["coolCelsius"])
 
+        conn = traits.get("sdm.devices.traits.Connectivity", {})
+        connectivity = conn.get("status", "ONLINE")
+
+        fan = traits.get("sdm.devices.traits.Fan", {})
+        fan_mode = fan.get("timerMode", "OFF")
+
+        info = traits.get("sdm.devices.traits.Info", {})
+        custom_name = info.get("customName", "")
+
         return {
             "temp_c": temp_c,
             "temp_f": _c_to_f(temp_c) if temp_c is not None else None,
             "humidity": humidity,
             "mode": mode,
+            "available_modes": available_modes,
             "hvac_status": hvac_status,
             "heat_c": heat_c,
             "heat_f": _c_to_f(heat_c) if heat_c is not None else None,
@@ -211,6 +234,9 @@ class NestService:
             "eco_mode": eco_mode,
             "eco_heat_f": _c_to_f(eco_heat_c) if eco_heat_c is not None else None,
             "eco_cool_f": _c_to_f(eco_cool_c) if eco_cool_c is not None else None,
+            "connectivity": connectivity,
+            "fan_mode": fan_mode,
+            "custom_name": custom_name,
         }
 
     # ── SDM helpers ───────────────────────────────────────────────────────────

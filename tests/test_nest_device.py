@@ -54,6 +54,28 @@ def test_mode_actions_present():
         assert expected in ids, f"Missing action: {expected}"
 
 
+def test_run_fan_action_present():
+    dev = NestDevice(cfg={})
+    ids = [a["id"] for a in dev.get_actions()]
+    assert "run_fan" in ids
+
+
+def test_run_fan_requires_input():
+    dev = NestDevice(cfg={})
+    action = next(a for a in dev.get_actions() if a["id"] == "run_fan")
+    assert action.get("requires_input") is True
+    assert action.get("input_param") == "minutes"
+
+
+def test_get_actions_filters_by_available_modes():
+    dev = NestDevice(cfg={})
+    ids = [a["id"] for a in dev.get_actions(available_modes=["HEAT", "OFF"])]
+    assert "mode_heat" in ids
+    assert "mode_cool" not in ids
+    assert "mode_range" not in ids
+    assert "mode_off" in ids
+
+
 def test_set_heat_requires_input():
     dev = NestDevice(cfg={})
     action = next(a for a in dev.get_actions() if a["id"] == "set_heat")

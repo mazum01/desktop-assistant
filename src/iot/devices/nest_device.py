@@ -106,13 +106,17 @@ class NestDevice(IoTDevice):
         temp_f    = reading.get("temp_f")
         humidity  = reading.get("humidity")
         mode      = reading.get("mode", "UNKNOWN")
+        avail     = reading.get("available_modes", [])
         hvac      = reading.get("hvac_status", "OFF")
         heat_f    = reading.get("heat_f")
         cool_f    = reading.get("cool_f")
         eco_mode  = reading.get("eco_mode", "OFF")
         eco_heat  = reading.get("eco_heat_f")
         eco_cool  = reading.get("eco_cool_f")
-        dev_name  = reading.get("device_name", "Thermostat")
+        conn      = reading.get("connectivity", "ONLINE")
+        fan_mode  = reading.get("fan_mode", "OFF")
+        custom_nm = reading.get("custom_name", "")
+        dev_name  = custom_nm or reading.get("device_name", "Thermostat")
 
         primary_value = f"{temp_f:.1f}°F" if temp_f is not None else "—"
         primary_color = _HVAC_COLORS.get(hvac, "#9e9e9e")
@@ -121,12 +125,15 @@ class NestDevice(IoTDevice):
         hvac_color  = _HVAC_COLORS.get(hvac, "#9e9e9e")
         mode_icon   = _MODE_ICONS.get(mode, "❓")
         mode_label  = mode.replace("_", " ").title()
-        badges = [
-            {"text": f"{_HVAC_ICONS.get(hvac, '')} {hvac_label}", "color": hvac_color},
-            {"text": f"{mode_icon} {mode_label}",                   "color": "#9e9e9e"},
-        ]
+        badges = []
+        if conn != "ONLINE":
+            badges.append({"text": "⚠️ Offline", "color": "#ff5722"})
+        badges.append({"text": f"{_HVAC_ICONS.get(hvac, '')} {hvac_label}", "color": hvac_color})
+        badges.append({"text": f"{mode_icon} {mode_label}", "color": "#9e9e9e"})
         if eco_mode == "MANUAL_ECO":
             badges.append({"text": "🌿 Eco", "color": "#4caf50"})
+        if fan_mode not in ("OFF", "", None):
+            badges.append({"text": "💨 Fan", "color": "#00bcd4"})
 
         metrics: list[dict] = []
         if mode in ("HEAT", "HEATCOOL") and heat_f is not None:
@@ -157,7 +164,7 @@ class NestDevice(IoTDevice):
             },
             "history":       [hist_val],
             "history_label": "Temperature (°F)",
-            "actions":       self.get_actions(),
+            "actions":       self.get_actions(avail),
         }
 
     def _detail_line(self, r: dict) -> str:
@@ -175,57 +182,46 @@ class NestDevice(IoTDevice):
             parts.append(f"mode: {mode.replace('_', ' ').lower()}")
         return ", ".join(parts) if parts else ""
 
-    def get_actions(self) -> list[dict]:
-        return [
+    def get_actions(self, available_modes: list | None = None) -> list[dict]:
+        avail = set(available_modes or ["HEAT", "COOL", "HEATCOOL", "OFF"])
+        actions = [
             {
-                "id":            "set_heat",
-                "label":         "Set Heat",
-                "icon":          "🔆",
-                "color":         "#f44336",
+                "id":             "set_heat",
+                "label":          "Set Heat",
+                "icon":           "🔆",
+                "color":          "#f44336",
                 "requires_input": True,
-                "input_prompt":  "Heat to (°F):",
-                "input_param":   "temperature",
+                "input_prompt":   "Heat to (°F):",
+                "input_param":    "temperature",
             },
             {
-                "id":            "set_cool",
-                "label":         "Set Cool",
-                "icon":          "🧊",
-                "color":         "#2196f3",
+                "id":             "set_cool",
+                "label":          "Set Cool",
+                "icon":           "🧊",
+                "color":          "#2196f3",
                 "requires_input": True,
-                "input_prompt":  "Cool to (°F):",
-                "input_param":   "temperature",
-            },
-            {
-                "id":    "mode_heat",
-                "label": "Heat",
-                "icon":  "🔆",
-                "color": "#f44336",
-            },
-            {
-                "id":    "mode_cool",
-                "label": "Cool",
-                "icon":  "🧊",
-                "color": "#2196f3",
-            },
-            {
-                "id":    "mode_range",
-                "label": "Heat+Cool",
-                "icon":  "↕️",
-                "color": "#9c27b0",
-            },
-            {
-                "id":    "mode_eco",
-                "label": "Eco",
-                "icon":  "🌿",
-                "color": "#4caf50",
-            },
-            {
-                "id":    "mode_off",
-                "label": "Off",
-                "icon":  "⏹️",
-                "color": "#9e9e9e",
+                "input_prompt":   "Cool to (°F):",
+                "input_param":    "temperature",
             },
         ]
+        if "HEAT" in avail:
+            actions.append({"id": "mode_heat", "label": "Heat", "icon": "🔆", "color": "#f44336"})
+        if "COOL" in avail:
+            actions.append({"id": "mode_cool", "label": "Cool", "icon": "🧊", "color": "#2196f3"})
+        if "HEATCOOL" in avail:
+            actions.append({"id": "mode_range", "label": "Heat+Cool", "icon": "↕️", "color": "#9c27b0"})
+        actions.append({"id": "mode_eco", "label": "Eco", "icon": "🌿", "color": "#4caf50"})
+        actions.append({"id": "mode_off",  "label": "Off",  "icon": "⏹️",  "color": "#9e9e9e"})
+        actions.append({
+            "id":             "run_fan",
+            "label":          "Run Fan",
+            "icon":           "💨",
+            "color":          "#00bcd4",
+            "requires_input": True,
+            "input_prompt":   "Run fan for how many minutes?",
+            "input_param":    "minutes",
+        })
+        return actions
 
     def execute_action(self, action: str, params: dict | None = None) -> dict:
         if self._svc is None or self._svc.degraded:
@@ -249,6 +245,14 @@ class NestDevice(IoTDevice):
                 return {"ok": False, "message": "Invalid temperature"}
             ok, msg = self._svc.set_cool(temp_f)
             return {"ok": ok, "message": msg if not ok else f"Cool set to {temp_f:.0f}°F"}
+
+        if action == "run_fan":
+            try:
+                minutes = int(float(p.get("minutes", 30)))
+            except (ValueError, TypeError):
+                return {"ok": False, "message": "Invalid minutes"}
+            ok, msg = self._svc.run_fan(minutes)
+            return {"ok": ok, "message": msg if not ok else f"Fan running for {minutes} min"}
 
         _MODE_MAP = {
             "mode_heat":  "HEAT",
