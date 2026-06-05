@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.24] - 2026-06-05
+### Fixed
+- Nest "Could not determine Nest device ID" error when executing actions
+  (set_heat, set_cool, mode changes).  Root cause: `_discover_device_name()`
+  returned None once `_reading` was populated.  Fix: `_execute_command` now
+  calls `_get_device_name()` directly, which caches the discovered device ID
+  on first use so subsequent commands don't re-list devices.
+
 ## [1.39.23] - 2026-06-05
 ### Fixed
 - Nest thermostat card subtitle no longer shows the raw SDM resource path

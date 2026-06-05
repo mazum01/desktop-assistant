@@ -261,12 +261,13 @@ class NestService:
             if "sdm.devices.traits.ThermostatMode" in traits:
                 name = dev.get("name", "")
                 log.info("NestService: auto-selected thermostat %s", name)
+                self._target_device_id = name   # cache so commands don't re-list
                 return name
         log.warning("NestService: no thermostat found in device list")
         return None
 
     def _execute_command(self, command: str, params: dict) -> tuple[bool, str]:
-        device_name = self._target_device_id or self._discover_device_name()
+        device_name = self._get_device_name()
         if not device_name:
             return False, "Could not determine Nest device ID"
         url = f"{_SDM_BASE}/{device_name}:executeCommand"
@@ -277,11 +278,6 @@ class NestService:
         self._stop_event.clear()  # trigger immediate repoll on next cycle
         threading.Thread(target=self._do_poll, daemon=True, name="nest-repoll").start()
         return True, "OK"
-
-    def _discover_device_name(self) -> str | None:
-        if self._reading:
-            return None  # can't derive name from reading; require explicit device_id
-        return self._get_device_name()
 
     # ── OAuth2 / HTTP ─────────────────────────────────────────────────────────
 
