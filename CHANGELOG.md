@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.27] - 2026-06-05
+### Fixed
+- IoT sparklines were visually flat even with accumulated history because the
+  Y-axis was hardcoded 0–100 and all readings clustered in a narrow range
+  (e.g. Nest ~47.8, Radon 7.6–10.0).  Y-axis now auto-scales to the
+  data's min/max with 10% padding so any variation is visible.
+  Truly flat data (all identical values) centres the line at mid-height.
+
 ## [1.39.26] - 2026-06-05
 ### Added
 - `src/iot/history_store.py` — `IoTHistoryStore`: persistent per-device

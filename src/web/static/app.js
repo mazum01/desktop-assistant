@@ -774,13 +774,29 @@ function drawSparkline(canvasId, values, color) {
   const graphH = h - pad * 2;
   const step = graphW / (values.length - 1);
 
+  // Auto-scale Y axis to the data range so small variations are visible.
+  // Apply a 10% padding around the range; when all values are identical
+  // (truly flat) centre the line at 50% height.
+  let minVal = Math.min(...values);
+  let maxVal = Math.max(...values);
+  const range = maxVal - minVal;
+  if (range < 1e-9) {
+    // Flat data — draw a centred line
+    minVal = minVal - 1;
+    maxVal = maxVal + 1;
+  } else {
+    const pad10 = range * 0.10;
+    minVal -= pad10;
+    maxVal += pad10;
+  }
+  const scale = maxVal - minVal;
+  const toY = v => pad + graphH - ((v - minVal) / scale) * graphH;
+
   // Fill area under the line
   ctx.beginPath();
   ctx.moveTo(pad, pad + graphH);
   for (let i = 0; i < values.length; i++) {
-    const x = pad + i * step;
-    const y = pad + graphH - (Math.min(values[i], 100) / 100) * graphH;
-    i === 0 ? ctx.lineTo(x, y) : ctx.lineTo(x, y);
+    ctx.lineTo(pad + i * step, toY(values[i]));
   }
   ctx.lineTo(pad + (values.length - 1) * step, pad + graphH);
   ctx.closePath();
@@ -791,7 +807,7 @@ function drawSparkline(canvasId, values, color) {
   ctx.beginPath();
   for (let i = 0; i < values.length; i++) {
     const x = pad + i * step;
-    const y = pad + graphH - (Math.min(values[i], 100) / 100) * graphH;
+    const y = toY(values[i]);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
   ctx.strokeStyle = color;
@@ -799,17 +815,15 @@ function drawSparkline(canvasId, values, color) {
   ctx.lineJoin = "round";
   ctx.stroke();
 
-  // Draw 50% and 100% reference lines
+  // Draw mid-range reference line (50% of data range)
   ctx.setLineDash([2, 4]);
   ctx.strokeStyle = "rgba(139,148,158,0.25)";
   ctx.lineWidth = 1;
-  [50, 100].forEach(pct => {
-    const y = pad + graphH - (pct / 100) * graphH;
-    ctx.beginPath();
-    ctx.moveTo(pad, y);
-    ctx.lineTo(pad + graphW, y);
-    ctx.stroke();
-  });
+  const midY = toY(minVal + scale * 0.5);
+  ctx.beginPath();
+  ctx.moveTo(pad, midY);
+  ctx.lineTo(pad + graphW, midY);
+  ctx.stroke();
   ctx.setLineDash([]);
 }
 
