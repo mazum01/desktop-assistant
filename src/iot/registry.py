@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterator
+from typing import TYPE_CHECKING, Iterator
 
 from src.iot.base import IoTDevice
 
+if TYPE_CHECKING:
+    from src.iot.history_store import IoTHistoryStore
+
 log = logging.getLogger(__name__)
+
+# Save history to disk every N snapshots to avoid excessive I/O
+_SAVE_EVERY_N = 5
 
 
 class IoTRegistry:
@@ -23,8 +29,10 @@ class IoTRegistry:
         all_snapshots = registry.get_all_snapshots()
     """
 
-    def __init__(self) -> None:
+    def __init__(self, history_store: "IoTHistoryStore | None" = None) -> None:
         self._devices: dict[str, IoTDevice] = {}
+        self._history_store = history_store
+        self._snapshot_count = 0
 
     # ── Registration ─────────────────────────────────────────────────────────
 
@@ -78,10 +86,26 @@ class IoTRegistry:
                 snap["device_id"]   = device.device_id
                 snap["device_name"] = device.device_name
                 snap["device_icon"] = device.device_icon
+
+                # Persist and expand history through the store
+                if self._history_store is not None:
+                    incoming = snap.get("history") or []
+                    if incoming:
+                        self._history_store.push(device_id, incoming)
+                    snap["history"] = self._history_store.get(device_id)
+
                 result[device_id] = snap
             except Exception:
                 log.exception("IoTRegistry: error fetching snapshot for %r", device_id)
                 result[device_id] = IoTDevice._snapshot_unavailable("snapshot error")
+
+        # Periodically flush store to disk
+        if self._history_store is not None:
+            self._snapshot_count += 1
+            if self._snapshot_count >= _SAVE_EVERY_N:
+                self._snapshot_count = 0
+                self._history_store.save()
+
         return result
 
     def get_device_list(self) -> list[dict]:

@@ -279,9 +279,8 @@ function updateDashboard(data) {
 
 // ── IoT plugin device cards ────────────────────────────────────────
 
-// Sparkline history buffers per IoT device id (ring buffer, max 60 points)
+// Sparkline history buffers per IoT device id
 const _iotHistories = {};
-const _IOT_HISTORY_MAX = 60;
 // Track which IoT cards were rendered from the registry (vs. hard-wired)
 const _iotRegisteredCards = new Set();
 
@@ -411,18 +410,9 @@ function renderIoTDevices(iot) {
       }
     }
 
-    // Sparkline — accumulate history client-side (backend may send 1 point or many)
+    // Sparkline — server now sends full accumulated history; just render it
     if (snap.history && snap.history.length) {
-      if (!_iotHistories[deviceId]) _iotHistories[deviceId] = [];
-      const buf = _iotHistories[deviceId];
-      // If backend sent a full buffer (e.g. radon/drop deque), use it directly
-      // otherwise append the latest value(s) and trim to max length
-      if (snap.history.length >= 10) {
-        _iotHistories[deviceId] = snap.history.slice(-_IOT_HISTORY_MAX);
-      } else {
-        buf.push(...snap.history);
-        if (buf.length > _IOT_HISTORY_MAX) buf.splice(0, buf.length - _IOT_HISTORY_MAX);
-      }
+      _iotHistories[deviceId] = snap.history;
     }
     const hist = _iotHistories[deviceId];
     if (hist && hist.length >= 2) {

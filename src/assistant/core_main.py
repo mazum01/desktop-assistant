@@ -41,6 +41,7 @@ from src.services.telegram_service import TelegramService
 from src.services.room_service import RoomService
 from src.iot.registry import IoTRegistry
 from src.iot.loader import load_persisted as _iot_load_persisted
+from src.iot.history_store import IoTHistoryStore
 from src.iot.devices.radon_device import RadonDevice
 from src.iot.devices.drop_device import DropDevice
 
@@ -439,7 +440,7 @@ def main() -> int:
     room_svc = RoomService(bus=bus, vision_service=vis, cfg=_cfg.get("room_detection", {}))
     services.append(room_svc)
 
-    iot_registry = IoTRegistry()
+    iot_registry = IoTRegistry(history_store=IoTHistoryStore())
     _iot_load_persisted(iot_registry, bus=bus)
 
     # ── Hardwired IoT devices (always on, never user-removable) ──────────────
@@ -467,7 +468,11 @@ def main() -> int:
         services.append(web_svc)
         web_svc._all_services = services  # seed service registry at startup
 
-    return run_services(services=services, unit_name="core")
+    try:
+        return run_services(services=services, unit_name="core")
+    finally:
+        if iot_registry._history_store is not None:
+            iot_registry._history_store.save()
 
 
 if __name__ == "__main__":

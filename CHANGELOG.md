@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.26] - 2026-06-05
+### Added
+- `src/iot/history_store.py` — `IoTHistoryStore`: persistent per-device
+  sparkline ring buffer (120 points, ~2 h at 60 s polling).  Saves to
+  `~/.local/share/desktop-assistant/iot_history.json` on every 5th snapshot
+  and at daemon shutdown.  Survives daemon restarts and browser refreshes.
+- 10 unit tests for `IoTHistoryStore`.
+### Changed
+- `IoTRegistry` accepts optional `history_store`; `get_all_snapshots()` now
+  pushes each device's latest reading into the store and returns the full
+  accumulated history instead of the single-point list devices returned.
+- JS sparkline code simplified — no longer accumulates client-side since the
+  server now delivers the full history buffer on every poll.
+
 ## [1.39.25] - 2026-06-05
 ### Fixed
 - IoT sparkline charts were always flat — history buffer was replaced with the
