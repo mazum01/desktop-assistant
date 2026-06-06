@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.30] - 2026-06-06
+### Changed
+- Fan reaches 100% duty at 50°C (was 75°C).  `critical_c` lowered from
+  75→50, `safe_max_c` lowered from 50→40, `warn_max_c` from 65→47.
+  Fan now ramps 30%→100% across a tighter 40–50°C window for more
+  aggressive cooling.
+
 ## [1.39.29] - 2026-06-06
 ### Fixed
 - Fan stuck at 100% even at idle temperature.  `config/thermal.yaml` had
