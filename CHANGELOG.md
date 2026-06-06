@@ -6,6 +6,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.32] - 2026-06-06
+### Added
+- Fan speed override: `da fan set <pct>` pins the fan at a fixed duty %
+  bypassing the thermal loop.  `da fan auto` releases the override.
+  Override is re-asserted every thermal tick (prevents failsafe stealing
+  control).  The `thermal.fan` bus payload now includes `"override": bool`
+  and `"override_duty": float|null`.
+- `da fan` command group merges existing tach controls with new override
+  subcommands: `fan status`, `fan set <pct>`, `fan auto`, `fan tach-status`,
+  `fan tach-enable`, `fan tach-disable`.  `fan-tach` kept as legacy alias.
+- Web GUI fan stat shows `⚡override` badge (yellow) when override is active.
+- `ThermalService` subscribes to `thermal.fan.set_override` /
+  `thermal.fan.clear_override` bus topics via the thermal IPC REP socket.
+
 ## [1.39.31] - 2026-06-06
 ### Added
 - Fan tach soft toggle — `tach.enabled` flag in `config/thermal.yaml`

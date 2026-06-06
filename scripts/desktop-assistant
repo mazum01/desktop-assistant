@@ -85,7 +85,26 @@ def _http_delete(path: str) -> dict:
 
 PUB_ENDPOINT = os.environ.get("DA_BUS_PUB_ENDPOINT", "ipc:///tmp/desktop-assistant.pub")
 REP_ENDPOINT = os.environ.get("DA_BUS_REP_ENDPOINT", "ipc:///tmp/desktop-assistant.rep")
+THERMAL_REP  = "ipc:///tmp/desktop-assistant-thermal.rep"
 _ANNOUNCE_OVERLAP_SEC = 0.22
+
+
+def _thermal_request(req: dict, timeout_ms: int = 2000) -> dict:
+    """Send a request to the thermal process IPC socket."""
+    import zmq as _zmq
+    ctx = _zmq.Context.instance()
+    sock = ctx.socket(_zmq.REQ)
+    sock.setsockopt(_zmq.LINGER, 0)
+    sock.setsockopt(_zmq.RCVTIMEO, timeout_ms)
+    sock.setsockopt(_zmq.SNDTIMEO, timeout_ms)
+    try:
+        sock.connect(THERMAL_REP)
+        sock.send_string(json.dumps(req))
+        return json.loads(sock.recv_string())
+    except _zmq.error.Again:
+        return {"ok": False, "error": "timeout — is thermal service running?"}
+    finally:
+        sock.close(linger=0)
 
 
 def _request(req: dict, timeout_ms: int = 2000) -> dict:
@@ -965,6 +984,75 @@ def cmd_object_detection(args) -> int:
     return 0 if ok else 1
 
 
+# ── Fan subcommands (override + tach) ────────────────────────────────────────
+
+def cmd_fan(args) -> int:
+    """Fan speed override and tach controls."""
+    action = getattr(args, "fan_action", "status")
+
+    GRN = "\033[32m"; YLW = "\033[33m"; RED = "\033[31m"; RST = "\033[0m"
+
+    if action == "status":
+        # Read from the core bus (core forwards thermal.* via IPCBridge)
+        fan_r  = _request({"cmd": "last", "topic": "thermal.fan"})
+        rpm_r  = _request({"cmd": "last", "topic": "thermal.rpm"})
+        fan    = (fan_r.get("payload") or {})
+        rpm    = (rpm_r.get("payload") or {})
+
+        duty     = fan.get("duty")
+        backend  = fan.get("backend", "?")
+        override = fan.get("override", False)
+        ovr_duty = fan.get("override_duty")
+        tach_on  = rpm.get("enabled", True)
+        rpm_val  = rpm.get("rpm")
+
+        duty_str = f"{duty:.0f}%" if duty is not None else "—"
+        ovr_str  = (f"{YLW}OVERRIDE pinned at {ovr_duty:.0f}%{RST}" if override
+                    else f"{GRN}auto (thermal){RST}")
+        rpm_str  = (str(rpm_val) if (rpm_val is not None and tach_on) else
+                    ("—" if tach_on else f"{YLW}tach disabled{RST}"))
+
+        print()
+        print("  Fan")
+        print(f"    Duty    : {duty_str}   backend={backend}")
+        print(f"    Control : {ovr_str}")
+        print(f"    RPM     : {rpm_str}")
+        print()
+        return 0
+
+    if action == "set":
+        duty = args.duty
+        if duty is None:
+            print("Error: missing duty value (e.g. da fan set 50)", file=sys.stderr)
+            return 1
+        duty = max(0.0, min(100.0, float(duty)))
+        r = _thermal_request({
+            "cmd": "publish",
+            "topic": "thermal.fan.set_override",
+            "payload": {"duty": duty},
+        })
+        if not r.get("ok"):
+            print(f"Error: {r.get('error', r)}", file=sys.stderr)
+            return 1
+        print(f"Fan pinned at {duty:.0f}%  (run 'da fan auto' to release)")
+        return 0
+
+    if action == "auto":
+        r = _thermal_request({
+            "cmd": "publish",
+            "topic": "thermal.fan.clear_override",
+            "payload": {},
+        })
+        if not r.get("ok"):
+            print(f"Error: {r.get('error', r)}", file=sys.stderr)
+            return 1
+        print("Fan override cleared — returned to thermal auto mode.")
+        return 0
+
+    # tach sub-actions delegated to cmd_fan_tach logic inline
+    return cmd_fan_tach(args)
+
+
 # ── Fan Tach subcommands ──────────────────────────────────────────────────────
 
 def cmd_fan_tach(args) -> int:
@@ -972,7 +1060,10 @@ def cmd_fan_tach(args) -> int:
     import subprocess
     from pathlib import Path as _P
 
-    action = getattr(args, "ft_action", "status")
+    # Supports both 'fan-tach <status|enable|disable>' (ft_action)
+    # and 'fan tach-<status|enable|disable>' (fan_action with tach- prefix).
+    raw = getattr(args, "ft_action", None) or getattr(args, "fan_action", "tach-status")
+    action = raw.replace("tach-", "") if raw.startswith("tach-") else raw
     _CONFIG = _P(__file__).resolve().parent.parent / "config" / "thermal.yaml"
 
     GRN = "\033[32m"; YLW = "\033[33m"; RST = "\033[0m"
@@ -1231,10 +1322,17 @@ def cmd_help(args) -> int:
                             "                  lock status                   Show Yale lock state.\n"
                             "                  lock lock                     Lock the door now.\n"
                             "                  lock unlock [--pin XXXX]      Unlock the door (prompts for PIN if omitted).",
-        "fan-tach":         "Fan tachometer RPM reading. Sub-commands:\n"
+        "fan-tach":         "Fan tachometer RPM reading (alias for 'fan tach-*'). Sub-commands:\n"
                             "                  fan-tach status               Show tach enabled state and current RPM.\n"
                             "                  fan-tach enable               Enable GPIO edge-callback tach; restart thermal.\n"
                             "                  fan-tach disable              Disable GPIO edge-callback tach; restart thermal.",
+        "fan":              "Fan speed override and tachometer control. Sub-commands:\n"
+                            "                  fan status                    Show duty, backend, RPM, and override state.\n"
+                            "                  fan set <pct>                 Pin fan to a fixed duty % (0–100), bypasses thermal loop.\n"
+                            "                  fan auto                      Release override — return to thermal auto control.\n"
+                            "                  fan tach-status               Show tach enabled state and current RPM.\n"
+                            "                  fan tach-enable               Enable GPIO edge-callback tach; restart thermal.\n"
+                            "                  fan tach-disable              Disable GPIO edge-callback tach; restart thermal.",
         "help":             "Show this command reference, or help for a specific command.\n"
                             "                  Usage: help [command]",
     }
@@ -2358,7 +2456,20 @@ def main() -> int:
     ssp.add_argument("--end",   default=None, help="End time HH:MM   (e.g. 07:00)")
     ssp.set_defaults(func=cmd_quiet_hours)
 
-    # ── Fan tach subcommand group ─────────────────────────────────────
+    # ── Fan subcommand group (override + tach) ───────────────────────
+    fan_sp = sub.add_parser("fan", help="Fan speed override and tachometer (set/auto/status/tach-enable/tach-disable)")
+    fan_sub = fan_sp.add_subparsers(dest="fan_action", metavar="<subcommand>")
+    fan_sub.required = True
+    fan_sub.add_parser("status",       help="Show duty, backend, RPM, and override state").set_defaults(func=cmd_fan)
+    fan_sub.add_parser("auto",         help="Release override — return to thermal auto control").set_defaults(func=cmd_fan)
+    fan_set_sp = fan_sub.add_parser("set", help="Pin fan to a fixed duty % (0–100), bypassing thermal loop")
+    fan_set_sp.add_argument("duty", type=float, metavar="<pct>", help="Fan duty cycle 0–100")
+    fan_set_sp.set_defaults(func=cmd_fan)
+    fan_sub.add_parser("tach-status",  help="Show tach enabled state and current RPM").set_defaults(func=cmd_fan_tach)
+    fan_sub.add_parser("tach-enable",  help="Enable fan tach GPIO edge-callback, restart thermal").set_defaults(func=cmd_fan_tach)
+    fan_sub.add_parser("tach-disable", help="Disable fan tach GPIO edge-callback, restart thermal").set_defaults(func=cmd_fan_tach)
+
+    # ── Fan tach (legacy alias) ───────────────────────────────────────
     ft_sp = sub.add_parser("fan-tach", help="Fan tachometer RPM reading (enable/disable/status)")
     ft_sub2 = ft_sp.add_subparsers(dest="ft_action", metavar="<subcommand>")
     ft_sub2.required = True

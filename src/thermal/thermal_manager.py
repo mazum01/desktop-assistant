@@ -95,6 +95,7 @@ class ThermalManager:
         self._stop_event = threading.Event()
         self._last_temp_c: Optional[float] = None
         self._sensor_ok: bool = True
+        self._override_duty: Optional[float] = None  # None = thermal auto mode
 
     # ------------------------------------------------------------------
     # Public API
@@ -141,6 +142,26 @@ class ThermalManager:
     def sensor_ok(self) -> bool:
         return self._sensor_ok
 
+    @property
+    def override_active(self) -> bool:
+        return self._override_duty is not None
+
+    @property
+    def override_duty(self) -> Optional[float]:
+        return self._override_duty
+
+    def set_override(self, duty_percent: float) -> None:
+        """Pin fan at a fixed duty, bypassing the thermal loop."""
+        duty_percent = max(0.0, min(100.0, duty_percent))
+        self._override_duty = duty_percent
+        self._fan.set_duty(duty_percent)
+        log.info("Fan override set to %.1f%%", duty_percent)
+
+    def clear_override(self) -> None:
+        """Return fan control to the thermal loop."""
+        self._override_duty = None
+        log.info("Fan override cleared — returning to thermal auto mode")
+
     # ------------------------------------------------------------------
     # Internal control loop
     # ------------------------------------------------------------------
@@ -151,8 +172,13 @@ class ThermalManager:
                 temp = self._sensor.read_temperature_c()
                 self._last_temp_c = temp
                 self._sensor_ok = True
-                duty = self._compute_duty(temp)
-                self._fan.set_duty(duty)
+                if self._override_duty is None:
+                    duty = self._compute_duty(temp)
+                    self._fan.set_duty(duty)
+                else:
+                    # Override active — re-assert the pinned duty each tick so
+                    # any transient failsafe can't silently steal control.
+                    self._fan.set_duty(self._override_duty)
                 self._check_critical(temp)
             except TMP117Error:
                 if self._sensor_ok:
