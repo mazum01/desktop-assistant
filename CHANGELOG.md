@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.28] - 2026-06-06
+### Fixed
+- Fan speed was stuck at 100% regardless of temperature.  Root cause:
+  `lgpio.tx_pwm()` requires `gpio_claim_output()` to be called first;
+  the init code was skipping this, causing every duty-cycle write to
+  raise `'GPIO not set as an output'`, which triggered the fail-safe
+  (100%) on every thermal loop iteration.  Added `gpio_claim_output()`
+  before `tx_pwm()` in `FanController._try_init_lgpio()`.
+
 ## [1.39.27] - 2026-06-05
 ### Fixed
 - IoT sparklines were visually flat even with accumulated history because the

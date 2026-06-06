@@ -182,6 +182,7 @@ class FanController:
             return
         try:
             self._lgpio_handle = lgpio.gpiochip_open(0)
+            lgpio.gpio_claim_output(self._lgpio_handle, self._fallback_pin)
             lgpio.tx_pwm(
                 self._lgpio_handle, self._fallback_pin,
                 self._fallback_freq, 100.0,
