@@ -23,11 +23,13 @@ def main():
     last = data.get("last", {})
     thermal_temp = last.get("thermal.temp") or {}
     thermal_fan  = last.get("thermal.fan")  or {}
+    thermal_rpm  = last.get("thermal.rpm")  or {}
     faces        = last.get("perception.faces") or {}
     objects      = last.get("perception.objects") or {}
 
-    temp_c = thermal_temp.get("temp_c")
-    fan_pct = thermal_fan.get("duty_pct")
+    temp_c  = thermal_temp.get("celsius")
+    fan_pct = thermal_fan.get("duty")
+    fan_rpm = thermal_rpm.get("rpm")
 
     result = {
         "ok":           True,
@@ -44,6 +46,8 @@ def main():
         result["temp_c"] = round(temp_c, 1)
     if fan_pct is not None:
         result["fan_pct"] = round(fan_pct, 1)
+    if fan_rpm is not None:
+        result["fan_rpm"] = fan_rpm
 
     detected_objs = objects.get("objects", [])
     if detected_objs:

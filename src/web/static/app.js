@@ -177,9 +177,10 @@ function updateDashboard(data) {
   const rpm = last["thermal.rpm"];
   if (fan) {
     const duty = Math.round(fan.duty ?? 0);
-    const rpmVal = rpm ? rpm.rpm : "—";
-    el("stat-fan").textContent = `${duty}%`;
-    el("stat-fan").title = `${rpmVal} RPM · backend: ${fan.backend ?? "?"}`;
+    const tachOn = rpm ? rpm.enabled !== false : true;
+    const rpmVal = (tachOn && rpm && rpm.rpm != null) ? `${rpm.rpm} RPM` : (tachOn ? "— RPM" : "tach off");
+    el("stat-fan").textContent = `${duty}%  ·  ${rpmVal}`;
+    el("stat-fan").title = `backend: ${fan.backend ?? "?"}`;
   }
 
   const motion = last["motion.position"];

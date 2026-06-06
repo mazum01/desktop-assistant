@@ -965,6 +965,75 @@ def cmd_object_detection(args) -> int:
     return 0 if ok else 1
 
 
+# ── Fan Tach subcommands ──────────────────────────────────────────────────────
+
+def cmd_fan_tach(args) -> int:
+    """Enable, disable, or check the fan tachometer."""
+    import subprocess
+    from pathlib import Path as _P
+
+    action = getattr(args, "ft_action", "status")
+    _CONFIG = _P(__file__).resolve().parent.parent / "config" / "thermal.yaml"
+
+    GRN = "\033[32m"; YLW = "\033[33m"; RST = "\033[0m"
+
+    if action == "status":
+        r = _request({"cmd": "last", "topic": "thermal.rpm"})
+        rpm_data = r.get("payload") or {}
+        enabled  = rpm_data.get("enabled", True)
+        rpm      = rpm_data.get("rpm")
+
+        # Also check config on disk if daemon is unreachable
+        if not r.get("ok") or not rpm_data:
+            try:
+                import yaml as _yaml
+                with open(_CONFIG) as _f:
+                    _cfg = _yaml.safe_load(_f) or {}
+                enabled = _cfg.get("tach", {}).get("enabled", True)
+                rpm = None
+            except Exception:
+                pass
+
+        state = f"{GRN}enabled{RST}" if enabled else f"{YLW}disabled{RST}"
+        rpm_str = str(rpm) if (rpm is not None and enabled) else "—"
+        print()
+        print("  Fan Tach")
+        print(f"    State   : {state}")
+        print(f"    RPM     : {rpm_str}")
+        print()
+        return 0
+
+    if action in ("enable", "disable"):
+        try:
+            from ruamel.yaml import YAML as _YAML
+            _yaml = _YAML()
+            _yaml.preserve_quotes = True
+            with open(_CONFIG) as _f:
+                _cfg = _yaml.load(_f)
+            if "tach" not in _cfg:
+                _cfg["tach"] = {}
+            _cfg["tach"]["enabled"] = (action == "enable")
+            with open(_CONFIG, "w") as _f:
+                _yaml.dump(_cfg, _f)
+        except Exception as exc:
+            print(f"Error updating config: {exc}", file=sys.stderr)
+            return 1
+
+        ret = subprocess.run(
+            ["sudo", "-n", "systemctl", "restart", "desktop-assistant-thermal.service"],
+            capture_output=True,
+        )
+        if ret.returncode != 0:
+            print(f"Config updated but thermal service restart failed: {ret.stderr.decode().strip()}",
+                  file=sys.stderr)
+            return 1
+
+        print(f"Fan tach {'enabled' if action == 'enable' else 'disabled'}.  Thermal service restarted.")
+        return 0
+
+    return 1
+
+
 # ── Quiet Hours subcommands ───────────────────────────────────────────────────
 
 def cmd_quiet_hours(args) -> int:
@@ -1162,6 +1231,10 @@ def cmd_help(args) -> int:
                             "                  lock status                   Show Yale lock state.\n"
                             "                  lock lock                     Lock the door now.\n"
                             "                  lock unlock [--pin XXXX]      Unlock the door (prompts for PIN if omitted).",
+        "fan-tach":         "Fan tachometer RPM reading. Sub-commands:\n"
+                            "                  fan-tach status               Show tach enabled state and current RPM.\n"
+                            "                  fan-tach enable               Enable GPIO edge-callback tach; restart thermal.\n"
+                            "                  fan-tach disable              Disable GPIO edge-callback tach; restart thermal.",
         "help":             "Show this command reference, or help for a specific command.\n"
                             "                  Usage: help [command]",
     }
@@ -2284,6 +2357,14 @@ def main() -> int:
     ssp.add_argument("--start", default=None, help="Start time HH:MM (e.g. 22:00)")
     ssp.add_argument("--end",   default=None, help="End time HH:MM   (e.g. 07:00)")
     ssp.set_defaults(func=cmd_quiet_hours)
+
+    # ── Fan tach subcommand group ─────────────────────────────────────
+    ft_sp = sub.add_parser("fan-tach", help="Fan tachometer RPM reading (enable/disable/status)")
+    ft_sub2 = ft_sp.add_subparsers(dest="ft_action", metavar="<subcommand>")
+    ft_sub2.required = True
+    ft_sub2.add_parser("status",  help="Show tach enabled state and current RPM").set_defaults(func=cmd_fan_tach)
+    ft_sub2.add_parser("enable",  help="Enable fan tach GPIO edge-callback, restart thermal").set_defaults(func=cmd_fan_tach)
+    ft_sub2.add_parser("disable", help="Disable fan tach GPIO edge-callback, restart thermal").set_defaults(func=cmd_fan_tach)
 
     # ── Skills subcommand group ───────────────────────────────────────
     sk_sp = sub.add_parser("skills", help="Voice skills management")

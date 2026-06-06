@@ -38,8 +38,9 @@ On success prints JSON with fields:
 - `version` — firmware version string
 - `cpu_percent` — CPU load (%)
 - `mem_percent` — RAM usage (%)
-- `temp_c` — CPU/board temperature (°C) if TMP117 available
+- `temp_c` — board temperature (°C) if TMP117 available
 - `fan_pct` — fan duty cycle (%)
+- `fan_rpm` — fan speed in RPM (omitted if tach disabled or no signal)
 - `servo_angle` — current camera pan angle (°)
 - `cam1_fps` / `cam2_fps` — camera frame rates
 - `faces_visible` — number of faces currently detected

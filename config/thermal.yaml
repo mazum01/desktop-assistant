@@ -17,6 +17,7 @@ fan:
 tach:
   # Noctua NF-A6x25 has an open-collector tach line; needs a 10 kΩ
   # pull-up to 3.3 V (or use the internal pull-up on the Pi).
+  enabled:            true      # set false to skip GPIO edge-callback (saves an lgpio handle)
   gpio:               6
   pulses_per_rev:     2
   publish_interval_s: 1.0

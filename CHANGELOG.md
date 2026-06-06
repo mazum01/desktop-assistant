@@ -6,6 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.31] - 2026-06-06
+### Added
+- Fan tach soft toggle — `tach.enabled` flag in `config/thermal.yaml`
+  (default `true`).  When `false`, `FanTach` GPIO edge-callback is skipped
+  entirely (saves an lgpio handle).  `ThermalThresholds.tach_enabled` carries
+  the setting; `ThermalManager` conditionally creates `FanTach`.
+- `da fan-tach status|enable|disable` CLI command — edits config yaml with
+  ruamel.yaml (preserves comments) then restarts the thermal service.
+- `thermal.rpm` bus payload now includes `"enabled": bool` alongside `"rpm"`.
+- Web GUI fan telemetry stat now shows `<duty>%  ·  <N> RPM` inline
+  (or `tach off` when disabled).
+### Fixed
+- `system-status` OpenClaw skill: wrong field names (`temp_c` / `duty_pct`)
+  replaced with correct `celsius` / `duty`; `fan_rpm` added to output.
+
 ## [1.39.30] - 2026-06-06
 ### Changed
 - Fan reaches 100% duty at 50°C (was 75°C).  `critical_c` lowered from

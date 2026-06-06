@@ -68,7 +68,8 @@ class ThermalService(Service):
             "thermal.fan",
             {"duty": duty, "backend": getattr(m, "fan_backend", "unknown")},
         )
-        self.bus.publish("thermal.rpm", {"rpm": getattr(m, "fan_rpm", None)})
+        tach_on = getattr(m, "tach_enabled", True)
+        self.bus.publish("thermal.rpm", {"rpm": getattr(m, "fan_rpm", None), "enabled": tach_on})
 
         critical_c = getattr(m, "_thresholds", None)
         if critical_c is not None:

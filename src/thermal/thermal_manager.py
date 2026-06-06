@@ -37,6 +37,7 @@ class ThermalThresholds:
     fan_min_duty: float  = 30.0   # % at or below safe_max
     fan_max_duty: float  = 100.0
     poll_interval_s: float = 1.0
+    tach_enabled: bool   = True   # False → skip GPIO edge-callback entirely
 
     @classmethod
     def from_yaml(cls, path: Path = _THERMAL_CONFIG) -> "ThermalThresholds":
@@ -46,6 +47,7 @@ class ThermalThresholds:
             with open(path) as f:
                 cfg = yaml.safe_load(f) or {}
             t = cfg.get("thresholds", {})
+            tach_enabled = bool(cfg.get("tach", {}).get("enabled", True))
             return cls(
                 safe_max_c=float(t.get("safe_max_c", 50.0)),
                 warn_max_c=float(t.get("warn_max_c", 65.0)),
@@ -53,6 +55,7 @@ class ThermalThresholds:
                 fan_min_duty=float(t.get("fan_min_duty", 30.0)),
                 fan_max_duty=float(t.get("fan_max_duty", 100.0)),
                 poll_interval_s=float(t.get("poll_interval_s", 1.0)),
+                tach_enabled=tach_enabled,
             )
         except Exception as exc:
             log.warning("Could not load %s (%s) — using defaults", path, exc)
@@ -83,7 +86,11 @@ class ThermalManager:
         self._on_critical = on_critical
         self._sensor = TMP117(bus=i2c_bus)
         self._fan = FanController(gpio_pin=gpio_pin)
-        self._tach = FanTach(gpio=tach_gpio, pulses_per_rev=tach_pulses_per_rev)
+        if self._thresh.tach_enabled:
+            self._tach: Optional[FanTach] = FanTach(gpio=tach_gpio, pulses_per_rev=tach_pulses_per_rev)
+        else:
+            self._tach = None
+            log.info("FanTach disabled via config")
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._last_temp_c: Optional[float] = None
@@ -105,7 +112,8 @@ class ThermalManager:
         if self._thread:
             self._thread.join(timeout=5)
         self._fan.close()
-        self._tach.close()
+        if self._tach is not None:
+            self._tach.close()
         self._sensor.close()
         log.info("ThermalManager stopped")
 
@@ -119,7 +127,11 @@ class ThermalManager:
 
     @property
     def fan_rpm(self) -> Optional[int]:
-        return self._tach.rpm
+        return self._tach.rpm if self._tach is not None else None
+
+    @property
+    def tach_enabled(self) -> bool:
+        return self._tach is not None
 
     @property
     def fan_backend(self) -> str:
