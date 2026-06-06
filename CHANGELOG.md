@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.29] - 2026-06-06
+### Fixed
+- Fan stuck at 100% even at idle temperature.  `config/thermal.yaml` had
+  `fan_min_duty: 100.0` and `fan_max_duty: 100.0` (both 100%), meaning the
+  thermal control loop correctly computed 100% at every temperature.  Set
+  `fan_min_duty` to 30% so the fan scales properly: 30% below 50°C, linear
+  up to 100% at 75°C.
+
 ## [1.39.28] - 2026-06-06
 ### Fixed
 - Fan speed was stuck at 100% regardless of temperature.  Root cause:
