@@ -23,7 +23,7 @@ tach:
   publish_interval_s: 1.0
 
 thresholds:
-  safe_max_c:      40.0
+  safe_max_c:      25.0
   warn_max_c:      47.0
   critical_c:      50.0
   fan_min_duty:     0.0

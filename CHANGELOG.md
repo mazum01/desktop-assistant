@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.37] - 2026-06-08
+### Changed
+- Fan ramp starts at 25°C (was 40°C); still reaches 100% at 50°C.
+
 ## [1.39.36] - 2026-06-08
 ### Changed
 - Set `fan_min_duty` to 0% — fan stops completely at idle; thermal
