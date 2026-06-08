@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.36] - 2026-06-08
+### Changed
+- Set `fan_min_duty` to 0% — fan stops completely at idle; thermal
+  control ramps it from 0→100% between 40–50°C.
+
 ## [1.39.35] - 2026-06-08
 ### Fixed
 - Fan tach RPM under-reading at high speed: Noctua tach LOW pulse is

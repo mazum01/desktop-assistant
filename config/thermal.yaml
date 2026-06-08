@@ -26,6 +26,6 @@ thresholds:
   safe_max_c:      40.0
   warn_max_c:      47.0
   critical_c:      50.0
-  fan_min_duty:    30.0
+  fan_min_duty:     0.0
   fan_max_duty:   100.0
   poll_interval_s: 1.0
