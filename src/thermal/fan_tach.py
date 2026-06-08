@@ -2,15 +2,15 @@
 Fan tachometer reader.
 
 The Noctua NF-A6x25 tach line is open-collector and pulses **2 times per
-revolution**. We attach an lgpio edge callback on falling edges, count
-pulses over a sliding 1-second window, and expose:
+revolution**.  We use a polling thread that samples the GPIO at 5 ms intervals
+and detects falling edges by state comparison.  This approach works reliably on
+the Pi 5 (RP1 chip) where lgpio edge callbacks are not delivered.
 
     rpm              -> int | None    (None if we have no recent pulses)
     pulses_per_sec   -> float
 
 Wiring:
     Fan tach (yellow)  ->  GPIO6 (pin 31)  with 10 kΩ pull-up to 3.3 V
-                          (or use the internal pull-up enabled below)
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 _DEFAULT_GPIO            = 6
 _DEFAULT_PULSES_PER_REV  = 2
 _WINDOW_S                = 1.0   # rolling pulse window for RPM
+_POLL_INTERVAL_S         = 0.005  # 5 ms — well within one pulse at any expected RPM
 
 
 class FanTach:
@@ -46,9 +47,10 @@ class FanTach:
         self._gpio        = gpio
         self._ppr         = max(1, pulses_per_rev)
         self._handle: Optional[int] = None
-        self._cb_handle = None
         self._timestamps: Deque[float] = deque()
         self._lock        = threading.Lock()
+        self._stop_event  = threading.Event()
+        self._thread: Optional[threading.Thread] = None
 
         if not _LGPIO_AVAILABLE:
             log.warning("lgpio not available — FanTach running in simulation mode")
@@ -56,13 +58,13 @@ class FanTach:
 
         try:
             self._handle = lgpio.gpiochip_open(0)
-            # Input with internal pull-up. Falling edge = one pulse.
             lgpio.gpio_claim_input(self._handle, self._gpio, lgpio.SET_PULL_UP)
-            self._cb_handle = lgpio.callback(
-                self._handle, self._gpio, lgpio.FALLING_EDGE, self._on_edge,
+            self._thread = threading.Thread(
+                target=self._poll_loop, name="fan-tach-poll", daemon=True
             )
+            self._thread.start()
             atexit.register(self.close)
-            log.info("FanTach watching GPIO%d (%d ppr)", self._gpio, self._ppr)
+            log.info("FanTach watching GPIO%d (%d ppr) via poll", self._gpio, self._ppr)
         except Exception:
             log.exception("Failed to initialise FanTach — RPM will be None")
             self._handle = None
@@ -93,12 +95,10 @@ class FanTach:
             self._timestamps.append(t if t is not None else time.monotonic())
 
     def close(self) -> None:
-        if self._cb_handle is not None:
-            try:
-                self._cb_handle.cancel()
-            except Exception:
-                pass
-            self._cb_handle = None
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+            self._thread = None
         if self._handle is not None:
             try:
                 lgpio.gpio_free(self._handle, self._gpio)
@@ -108,9 +108,20 @@ class FanTach:
             self._handle = None
 
     # ------------------------------------------------------------------
-    # Internal — lgpio edge callback signature: (chip, gpio, level, tick)
+    # Internal — polling thread detects falling edges via state comparison
     # ------------------------------------------------------------------
 
-    def _on_edge(self, _chip, _gpio, _level, _tick) -> None:
-        with self._lock:
-            self._timestamps.append(time.monotonic())
+    def _poll_loop(self) -> None:
+        prev = 1  # line starts HIGH (pull-up)
+        while not self._stop_event.is_set():
+            try:
+                level = lgpio.gpio_read(self._handle, self._gpio)
+                # Falling edge: HIGH → LOW
+                if prev == 1 and level == 0:
+                    with self._lock:
+                        self._timestamps.append(time.monotonic())
+                prev = level
+            except Exception:
+                break
+            time.sleep(_POLL_INTERVAL_S)
+

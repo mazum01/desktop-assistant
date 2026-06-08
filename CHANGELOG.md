@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.34] - 2026-06-08
+### Fixed
+- Fan tach RPM still None on Pi 5: lgpio edge callbacks are silently not
+  delivered on the RP1 GPIO controller (Pi 5). Replaced the callback
+  approach in `FanTach` with a 5 ms polling thread that detects falling
+  edges via state comparison. Polling is reliable on RP1 and has
+  negligible CPU cost at typical fan speeds.
+
 ## [1.39.33] - 2026-06-07
 ### Fixed
 - Fan tach RPM always None: `ProtectHome=read-only` in the thermal
