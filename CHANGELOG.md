@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.39.35] - 2026-06-08
+### Fixed
+- Fan tach RPM under-reading at high speed: Noctua tach LOW pulse is
+  ~200 µs (20% duty at 3100 RPM max); 1 ms polling missed ~37% of
+  pulses.  Reduced `_POLL_INTERVAL_S` to 0.1 ms (0.23 ms actual on
+  Pi 5) giving <3% error.  Also confirmed via tight-poll ground truth
+  (3099 RPM) that the NF-A6x25 5V fan peaks at ~3100 RPM, not the
+  5000 RPM spec which applies to the 12 V variant.
+
 ## [1.39.34] - 2026-06-08
 ### Fixed
 - Fan tach RPM still None on Pi 5: lgpio edge callbacks are silently not

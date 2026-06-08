@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 _DEFAULT_GPIO            = 6
 _DEFAULT_PULSES_PER_REV  = 2
 _WINDOW_S                = 1.0   # rolling pulse window for RPM
-_POLL_INTERVAL_S         = 0.005  # 5 ms — well within one pulse at any expected RPM
+_POLL_INTERVAL_S         = 0.0001  # 0.1 ms → 0.23 ms actual on Pi 5; ~99% detection at 5000 RPM
 
 
 class FanTach:
