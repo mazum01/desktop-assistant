@@ -260,7 +260,36 @@ def main() -> int:
 
     tracking_svc: "TrackingService | None" = None  # forward-ref for rotation callback
 
-    av = AVService(bus=bus)
+    # ── Audio backend selection ───────────────────────────────────────────────
+    from src.audio.factory import (
+        create_audio_input, create_audio_output,
+        BACKEND_DEFAULT, BACKEND_RESPEAKER_FLEX,
+    )
+    _audio_cfg = _cfg.get("audio", {})
+    _audio_backend = str(_audio_cfg.get("backend", BACKEND_DEFAULT))
+    _audio_backend_cfg = _audio_cfg.get(_audio_backend, {})
+    _audio_out = create_audio_output(_audio_backend, _audio_backend_cfg)
+    _audio_in  = create_audio_input(_audio_backend, _audio_backend_cfg)
+
+    # Optional LED ring — only instantiated for respeaker_flex backend
+    _led: "object | None" = None
+    if _audio_backend == BACKEND_RESPEAKER_FLEX and _audio_backend_cfg.get("led_enabled", True):
+        from src.audio.respeaker_flex import ReSpeakerFlexLED
+        _led = ReSpeakerFlexLED(bus=bus, enabled=True)
+
+    av = AVService(bus=bus, audio_output=_audio_out)
+
+    # Wire LED ring to speech activity if respeaker_flex backend is active
+    if _led is not None:
+        from src.audio.respeaker_flex import (
+            LED_STATE_IDLE, LED_STATE_SPEAKING, ReSpeakerFlexLED,
+        )
+        def _on_av_say(_topic, _payload, _led=_led):
+            _led.set_state(LED_STATE_SPEAKING)
+        def _on_av_spoke(_topic, _payload, _led=_led):
+            _led.set_state(LED_STATE_IDLE)
+        bus.subscribe("av.say",   _on_av_say)
+        bus.subscribe("av.spoke", _on_av_spoke)
     vis = VisionService(bus=bus, camera_config=_camera_cfg,
                         servo_min_deg=_soft_min_deg, servo_max_deg=_soft_max_deg)
     ipc = IPCBridge(
@@ -312,7 +341,7 @@ def main() -> int:
     services = [
         motion_svc,
         vis,
-        AudioCaptureService(bus=bus),
+        AudioCaptureService(bus=bus, mic=_audio_in),
         av,
         perc_svc,
         obj_svc,

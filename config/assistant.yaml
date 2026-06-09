@@ -289,3 +289,49 @@ tts:
   piper_voice_name: en_US-lessac-medium
   # TTS speech rate (1.0 = natural speed; 1.15 = slightly slower / computer-like).
   piper_length_scale: 1.15
+
+
+# ── Audio hardware backend ─────────────────────────────────────────────────
+# Select which physical audio device VERA uses for input (microphone) and
+# output (speaker/TTS).
+#
+# Supported values:
+#   default        — built-in PortAudio mic + aplay → PipeWire pipeline
+#   respeaker_flex — Seeed ReSpeaker Flex Linear USB array (multi-mic AEC,
+#                    16 kHz native capture, built-in speaker)
+#
+# To activate the ReSpeaker Flex Linear:
+#   1. Plug in the USB device.
+#   2. Confirm ALSA sees it: arecord -l  (look for "ReSpeaker")
+#   3. Change backend below to respeaker_flex and restart the service.
+#   4. Optional LED ring: pip install usb-pixel-ring-v2
+
+audio:
+  backend: default        # default | respeaker_flex
+
+  # ── Default backend settings ──────────────────────────────────────────
+  # Used when backend: default (the original audio pipeline).
+  default:
+    input_device_name: ""         # empty → use OS default microphone
+    input_sample_rate: 44100      # CM108 USB audio native rate
+    output_alsa_device: pulse     # "pulse" → PipeWire PulseAudio sink
+    output_sample_rate: 44100
+    loudness_boost: 2.0           # soft-clip waveshaper drive (1.0 = off)
+    eq_preset: flat               # flat | bass_boost | treble_boost | vocal | loudness | warm | custom
+
+  # ── ReSpeaker Flex Linear settings ───────────────────────────────────
+  # Used when backend: respeaker_flex.
+  respeaker_flex:
+    # Input (microphone array)
+    input_device_name: "ReSpeaker"   # ALSA name substring (case-insensitive)
+    input_sample_rate: 16000         # native capture rate of the USB device
+    input_raw_channels: 6            # total USB channels (4 mic + 2 reference)
+    input_processed_channel: 0       # channel index for AEC/beamformed output
+    # Output (built-in speaker)
+    output_alsa_device: pulse        # "pulse" for mixing, or "plughw:ReSpeaker,0" for direct
+    output_sample_rate: 44100
+    loudness_boost: 2.0
+    eq_preset: flat
+    # LED ring (requires: pip install usb-pixel-ring-v2)
+    led_enabled: true
+

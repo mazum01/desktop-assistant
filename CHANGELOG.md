@@ -6,6 +6,29 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.0] - 2026-06-09
+### Added
+- **Swappable audio backend** — a new factory layer (`src/audio/factory.py`)
+  lets `config/assistant.yaml` select the audio hardware at startup with zero
+  code changes.  Set `audio.backend: respeaker_flex` to switch; `default`
+  preserves existing behaviour.
+- **ReSpeaker Flex Linear backend** (`src/audio/respeaker_flex.py`):
+  - `ReSpeakerFlexInput` — multi-channel sounddevice capture from the USB
+    array; extracts the AEC/beamformed channel (default ch 0) as mono
+    float32 at 16 000 Hz native rate.
+  - `ReSpeakerFlexOutput` — delegates to the existing aplay pipeline with
+    ReSpeaker-targeted ALSA device defaults.
+  - `ReSpeakerFlexLED` — optional LED ring controller; publishes state
+    changes on `respeaker.led` bus topic for observability; gracefully
+    degrades to no-op if `pixel-ring` / `usb-pixel-ring-v2` are absent.
+- `config/assistant.yaml` — new `audio:` section with explicit config blocks
+  for both `default` and `respeaker_flex` backends (device names, sample
+  rates, channel layout, LED toggle).
+- 16 new unit tests in `tests/test_audio_factory.py` covering factory
+  dispatch, sim-mode behaviour, LED bus publishing, and config passthrough.
+- LED ring is wired to VERA's speech activity: LED shows `speaking` while
+  TTS is enqueued and returns to `idle` after each utterance.
+
 ## [1.40.4] - 2026-06-09
 ### Fixed
 - Guest face registration now respects `guest_intro_delay_min`: unrecognised
