@@ -1,9 +1,6 @@
 temp_blend:
-  # Weighted average of case ambient (TMP117) and CPU die temperature.
-  # Weights are normalised to sum to 1.0 at runtime.
-  case_weight: 0.2   # TMP117 sensor on I²C (ambient / case temp)
-  cpu_weight:  0.8   # Pi SoC die (/sys/class/thermal/thermal_zone0/temp)
-
+  case_weight: 0.2
+  cpu_weight: 0.8
 fan:
   pwm_chip: 0
   pwm_channel: 1
@@ -24,7 +21,7 @@ thresholds:
   control_points:
   - temp_c: 50.0
     duty: 0.0
-  - temp_c: 55.0
+  - temp_c: 51.0
     duty: 20.0
   - temp_c: 65.0
     duty: 70.0

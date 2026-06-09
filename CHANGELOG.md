@@ -6,7 +6,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.40.0] - 2026-06-09
+## [1.40.1] - 2026-06-09
+### Fixed
+- Fan tach RPM showing `—` after any service restart: `_poll_loop()` was using `except Exception: break` which silently killed the polling thread on any transient lgpio error; changed to log-and-continue so the thread survives glitches.
+- Control curve floor adjusted: linear ramp from 50°C/0% to 51°C/20% (instead of 50→55) so the fan jumps directly to the minimum spin threshold (~20%) rather than running at sub-threshold duty where the fan stalls and tach reads null.
+
+
 ### Added
 - **Weighted temperature blend for fan control**: Fan now uses a configurable weighted average of the TMP117 case sensor (default 20%) and the Pi SoC CPU die temperature (default 80%) rather than TMP117 alone. This prevents the fan from running at full speed unnecessarily due to CPU heat while still responding to CPU load. Both weights are tunable live.
 - `temp_blend: {case_weight, cpu_weight}` section in `config/thermal.yaml` as the persisted source of truth.

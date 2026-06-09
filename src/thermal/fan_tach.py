@@ -2,7 +2,7 @@
 Fan tachometer reader.
 
 The Noctua NF-A6x25 tach line is open-collector and pulses **2 times per
-revolution**.  We use a polling thread that samples the GPIO at 5 ms intervals
+revolution**.  We use a polling thread that samples the GPIO at 0.1 ms intervals
 and detects falling edges by state comparison.  This approach works reliably on
 the Pi 5 (RP1 chip) where lgpio edge callbacks are not delivered.
 
@@ -121,7 +121,9 @@ class FanTach:
                     with self._lock:
                         self._timestamps.append(time.monotonic())
                 prev = level
-            except Exception:
-                break
+            except Exception as exc:
+                log.warning("FanTach poll error (retrying): %s", exc)
+                time.sleep(0.1)  # brief pause before retrying
+                continue
             time.sleep(_POLL_INTERVAL_S)
 
