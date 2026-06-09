@@ -149,6 +149,7 @@ def main() -> int:
         known_face_width_m=float(_depth_cfg_raw.get("known_face_width_m", 0.145)),
         min_depth_m=float(_depth_cfg_raw.get("min_depth_m", 0.25)),
         max_depth_m=float(_depth_cfg_raw.get("max_depth_m", 6.0)),
+        guest_intro_delay_s=_guest_intro_delay_min * 60.0,
     )
 
     _obj_cfg_raw = _cfg.get("object_detection", {})
@@ -326,7 +327,7 @@ def main() -> int:
             min_absence_s=_min_absence_s,
             confidence_threshold=_confidence_threshold,
             quiet_hours=_qh,
-            guest_intro_delay_min=_guest_intro_delay_min,
+            guest_intro_delay_min=0.0,  # gate is now in PerceptionService
         ),
         music_svc,
     ]

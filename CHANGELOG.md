@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.40.4] - 2026-06-09
+### Fixed
+- Guest face registration now respects `guest_intro_delay_min`: unrecognised
+  faces are buffered in `PerceptionService._pending_guests` and **not written
+  to the DB / shown in the UI** until the delay elapses.  Previously only the
+  spoken greeting was delayed; the registry entry was created immediately.
+- `FaceService` greeting delay set to 0 — the gate has moved upstream to
+  `PerceptionService`, so the spoken welcome fires right after registration
+  (no double-delay).
+- `PerceptionConfig` gains `guest_intro_delay_s` field wired from
+  `config/assistant.yaml face_recognition.guest_intro_delay_min`.
+
 ## [1.40.3] - 2026-06-09
 ### Added
 - **Guest intro delay**: VERA no longer immediately greets an unrecognized face. The face must be continuously present for `guest_intro_delay_min` (default: **2 minutes**, configurable in `config/assistant.yaml` under `face_recognition`) before the "I don't think we've met" intro fires. If the face disappears before the delay expires the timer resets. If the face is later successfully recognized before the delay, the timer is cleared and no intro fires.

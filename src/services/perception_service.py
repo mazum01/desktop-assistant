@@ -87,6 +87,9 @@ class PerceptionConfig:
     known_face_width_m: float = 0.145
     min_depth_m: float = 0.25
     max_depth_m: float = 6.0
+    # How long an unrecognized face must be continuously visible before being
+    # registered in the DB and shown in the UI (seconds; 0 = register immediately)
+    guest_intro_delay_s: float = 120.0
 
 
 class PerceptionService(Service):
@@ -117,6 +120,9 @@ class PerceptionService(Service):
         self._reuse_ttl: float = 1.0
         # Stabilisation buffer: pos_key → {name_votes, id_map, frames, done, initial_name, last_seen}
         self._stab_buffer: dict = {}
+        # Pending guest buffer: tracks unknown faces silently until the registration
+        # delay elapses.  Key: pos_key of first sighting; value: metadata dict.
+        self._pending_guests: dict[str, dict] = {}
         # Compute focal length once (lazy — resolved at first detection)
         self._focal_px: Optional[float] = self._cfg.focal_px if self._cfg.focal_px > 0 else None
         # Detection runs in its own thread so it never blocks the VisionService tick.
@@ -243,6 +249,7 @@ class PerceptionService(Service):
             with self._pos_cache_lock:
                 self._pos_cache.clear()
             self._stab_buffer.clear()
+            self._pending_guests.clear()
         log.debug("PerceptionService: pos_cache purged on bulk face delete")
 
     def _on_face_refresh(self, _topic, _payload) -> None:
@@ -255,6 +262,7 @@ class PerceptionService(Service):
         with self._pos_cache_lock:
             self._pos_cache.clear()
         self._stab_buffer.clear()
+        self._pending_guests.clear()
         if self._registry is not None:
             self._registry.reload()
         log.info("PerceptionService: pos_cache + stab_buffer cleared and embedding cache reloaded on face.refresh")
@@ -286,6 +294,14 @@ class PerceptionService(Service):
                 continue
 
             face_list = []
+
+            # Expire stale pending-guest entries (not seen in > _STAB_TTL_S seconds)
+            _now_pg = time.monotonic()
+            for _pk in [k for k, v in self._pending_guests.items()
+                        if _now_pg - v["last_seen"] > _STAB_TTL_S]:
+                log.debug("Pending guest %s expired (not seen for %.0fs)", _pk, _STAB_TTL_S)
+                del self._pending_guests[_pk]
+
             for f in faces:
                 entry = {
                     "bbox": list(f.bbox),
@@ -373,7 +389,12 @@ class PerceptionService(Service):
                                         face_id, name, score = cached
                                         self._registry.update_seen(face_id)
                                     else:
-                                        face_id, name = self._identify_or_register(frame, f, emb)
+                                        result = self._check_pending_or_register(
+                                            pos_key, frame, f, emb, cx, cy
+                                        )
+                                        if result is None:
+                                            continue  # still in delay window; skip
+                                        face_id, name = result
                         else:
                             # ── Sim mode / blurry frame — position-cache only ──────
                             # Do NOT create a new Guest from a blurry/zero embedding.
@@ -545,6 +566,74 @@ class PerceptionService(Service):
             return crop if crop.size > 0 else None
         except Exception:
             return None
+
+    def _check_pending_or_register(
+        self, pos_key: str, frame, detection, emb, cx: float, cy: float
+    ) -> Optional[tuple]:
+        """Gate new-face registration behind the configured guest_intro_delay.
+
+        Tracks unrecognized faces in ``_pending_guests`` (keyed by pos_key) and
+        returns None while the delay has not yet elapsed, causing the caller to
+        skip publishing this face entirely.  Once the delay expires the face is
+        promoted via ``_identify_or_register`` and its real (face_id, name) tuple
+        is returned.
+
+        If ``guest_intro_delay_s <= 0`` the check is bypassed and registration
+        happens immediately (backward-compat / test mode).
+        """
+        delay_s = self._cfg.guest_intro_delay_s
+        if delay_s <= 0:
+            return self._identify_or_register(frame, detection, emb)
+
+        now = time.monotonic()
+
+        # Find an existing pending entry near this centroid
+        pending_key: Optional[str] = None
+        for pk, info in self._pending_guests.items():
+            if (abs(info["cx"] - cx) <= _STAB_GRID_PX * 2
+                    and abs(info["cy"] - cy) <= _STAB_GRID_PX * 2):
+                pending_key = pk
+                break
+
+        if pending_key is None:
+            # Brand-new unknown face — start the delay timer
+            crop = self._extract_crop(frame, detection.bbox)
+            self._pending_guests[pos_key] = {
+                "first_seen": now,
+                "last_seen": now,
+                "best_emb": emb,
+                "cx": cx,
+                "cy": cy,
+                "crop": crop,
+            }
+            log.debug(
+                "Pending guest at %s — starting %.1f-min registration delay",
+                pos_key, delay_s / 60.0,
+            )
+            return None
+
+        info = self._pending_guests[pending_key]
+        info["last_seen"] = now
+        info["cx"] = cx
+        info["cy"] = cy
+        if (emb is not None and emb.any()
+                and (info["best_emb"] is None or not info["best_emb"].any())):
+            info["best_emb"] = emb
+
+        elapsed = now - info["first_seen"]
+        if elapsed < delay_s:
+            return None
+
+        # Delay elapsed — promote to real registration
+        best_emb = info["best_emb"]
+        if best_emb is None or not best_emb.any():
+            best_emb = emb
+        del self._pending_guests[pending_key]
+        log.info(
+            "Pending guest at %s promoted after %.0fs — registering now",
+            pending_key, elapsed,
+        )
+        return self._identify_or_register(frame, detection, best_emb)
 
     def _identify_or_register(self, frame, detection, emb) -> tuple:
         """Identify a face when position cache and embedding matching both missed.
