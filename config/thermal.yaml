@@ -28,3 +28,7 @@ thresholds:
   - temp_c: 75.0
     duty: 100.0
   poll_interval_s: 1.0
+  # When the fan turns on from stopped, kick to spin_up_duty for spin_up_duration_s
+  # to ensure the fan can start from rest (fan stalls below ~30% duty from cold).
+  spin_up_duty: 60.0
+  spin_up_duration_s: 3.0

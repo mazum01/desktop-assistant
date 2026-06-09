@@ -6,6 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.2] - 2026-06-09
+### Fixed
+- **Fan tach always None after service restart** — two root causes fixed:
+  1. `FanTach._start_poll_thread()` now always starts the poll thread even if the
+     initial `gpio_claim_input()` fails (GPIO busy from stale previous instance).
+     The existing retry loop in `_poll_loop()` recovers the handle automatically
+     within `_REINIT_BACKOFF_S` (2s) without requiring a manual service restart.
+  2. Fan cold-start failure: when the thermal controller transitions the fan from
+     0% to a low duty cycle (e.g. 20%), the fan cannot start from rest.
+     `ThermalManager` now applies a configurable **kick-start** (`spin_up_duty`,
+     default 60%) for `spin_up_duration_s` (default 3s) on every 0→nonzero duty
+     transition, ensuring the fan starts reliably.
+- Added `spin_up_duty` and `spin_up_duration_s` to `ThermalThresholds` (loaded
+  from `config/thermal.yaml`) and to `ThermalManager._loop()` logic.
+
 ## [1.41.1] - 2026-06-09
 ### Added
 - **Audio config exposed on all UI surfaces** — REST API (`GET/PUT /api/settings/audio`),

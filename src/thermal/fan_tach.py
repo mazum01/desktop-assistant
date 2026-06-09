@@ -78,14 +78,22 @@ class FanTach:
             return False
 
     def _start_poll_thread(self) -> None:
-        if not self._open_handle():
-            return
+        # Always start the thread even if the initial claim fails.
+        # The poll loop retries every _REINIT_BACKOFF_S seconds, so a stale
+        # handle left by a previous instance (GPIO busy) resolves automatically.
+        self._open_handle()  # best-effort — poll loop retries if None
         self._thread = threading.Thread(
             target=self._poll_loop, name="fan-tach-poll", daemon=True
         )
         self._thread.start()
         atexit.register(self.close)
-        log.info("FanTach watching GPIO%d (%d ppr) via poll", self._gpio, self._ppr)
+        if self._handle is not None:
+            log.info("FanTach watching GPIO%d (%d ppr) via poll", self._gpio, self._ppr)
+        else:
+            log.warning(
+                "FanTach: GPIO%d claim failed at startup; poll thread will retry every %.0fs",
+                self._gpio, _REINIT_BACKOFF_S,
+            )
 
     # ------------------------------------------------------------------
     # Public API

@@ -44,6 +44,8 @@ class ThermalThresholds:
     tach_enabled: bool   = True
     case_weight: float   = 0.2
     cpu_weight: float    = 0.8
+    spin_up_duty: float  = 60.0   # kick duty when starting fan from rest
+    spin_up_duration_s: float = 3.0  # how long to hold kick duty
 
     @classmethod
     def from_yaml(cls, path: Path = _THERMAL_CONFIG) -> "ThermalThresholds":
@@ -68,6 +70,8 @@ class ThermalThresholds:
                 tach_enabled=tach_enabled,
                 case_weight=case_w,
                 cpu_weight=cpu_w,
+                spin_up_duty=float(t.get("spin_up_duty", 60.0)),
+                spin_up_duration_s=float(t.get("spin_up_duration_s", 3.0)),
             )
         except Exception as exc:
             log.warning("Could not load %s (%s) — using defaults", path, exc)
@@ -116,6 +120,8 @@ class ThermalManager:
             self._thresh.control_points or _legacy_control_points(self._thresh)
         )
         self._lock = threading.Lock()
+        self._prev_computed_duty: float = 0.0  # tracks last thermal-computed duty for kick-start
+        self._kick_until: float = 0.0          # monotonic time until kick-start expires
 
     # ------------------------------------------------------------------
     # Public API
@@ -250,7 +256,21 @@ class ThermalManager:
             if self._override_duty is None:
                 with self._lock:
                     duty = self._compute_duty(blended)
-                self._fan.set_duty(duty)
+                # Kick-start: when transitioning from stopped to running, briefly
+                # apply a higher duty so the fan can start from rest.
+                now = time.monotonic()
+                if self._prev_computed_duty == 0.0 and duty > 0.0:
+                    self._kick_until = now + self._thresh.spin_up_duration_s
+                    log.info(
+                        "Fan kick-start: %.1f°C → %.1f%% duty (kicking to %.1f%% for %.0fs)",
+                        blended, duty, self._thresh.spin_up_duty, self._thresh.spin_up_duration_s,
+                    )
+                effective_duty = (
+                    max(duty, self._thresh.spin_up_duty)
+                    if now < self._kick_until else duty
+                )
+                self._prev_computed_duty = duty
+                self._fan.set_duty(effective_duty)
             else:
                 self._fan.set_duty(self._override_duty)
 
