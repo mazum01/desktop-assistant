@@ -1562,6 +1562,119 @@ async function saveGreetingSettings() {
 }
 
 
+// ── Audio backend settings ─────────────────────────────────────────────────
+
+function onAudioBackendChange() {
+  const backend = el("audio-backend-select").value;
+  document.querySelectorAll(".audio-backend-section").forEach(sec => {
+    sec.style.display = sec.id === `audio-section-${backend}` ? "" : "none";
+  });
+}
+
+async function loadAudioSettings() {
+  const st = el("audio-status");
+  try {
+    const d = await fetch("/api/settings/audio").then(r => r.json());
+
+    // Backend selector
+    const sel = el("audio-backend-select");
+    if (sel) sel.value = d.backend ?? "default";
+    onAudioBackendChange();
+
+    // Default backend fields
+    const def = d.default ?? {};
+    _setVal("audio-default-input-device", def.input_device_name ?? "");
+    _setVal("audio-default-input-rate",   def.input_sample_rate ?? 44100);
+    _setVal("audio-default-output-alsa",  def.output_alsa_device ?? "pulse");
+    _setVal("audio-default-output-rate",  def.output_sample_rate ?? 44100);
+    _setVal("audio-default-loudness",     def.loudness_boost ?? 2.0);
+    _setVal("audio-default-eq",           def.eq_preset ?? "flat");
+
+    // ReSpeaker Flex fields
+    const rs = d.respeaker_flex ?? {};
+    _setVal("audio-rs-input-device", rs.input_device_name ?? "ReSpeaker");
+    _setVal("audio-rs-input-rate",   rs.input_sample_rate ?? 16000);
+    _setVal("audio-rs-raw-ch",       rs.input_raw_channels ?? 6);
+    _setVal("audio-rs-proc-ch",      rs.input_processed_channel ?? 0);
+    _setVal("audio-rs-output-alsa",  rs.output_alsa_device ?? "pulse");
+    _setVal("audio-rs-output-rate",  rs.output_sample_rate ?? 44100);
+    _setVal("audio-rs-loudness",     rs.loudness_boost ?? 2.0);
+    _setVal("audio-rs-eq",           rs.eq_preset ?? "flat");
+    const ledEl = el("audio-rs-led");
+    if (ledEl) ledEl.checked = rs.led_enabled !== false;
+
+    // Device list
+    const listEl = el("audio-devices-list");
+    if (listEl && Array.isArray(d.available_input_devices)) {
+      if (d.available_input_devices.length === 0) {
+        listEl.innerHTML = "<li>No input devices found</li>";
+      } else {
+        listEl.innerHTML = d.available_input_devices
+          .map(dev => `<li>[${dev.index}] ${dev.name} &mdash; ${dev.channels} ch</li>`)
+          .join("");
+      }
+    }
+
+    if (st) st.textContent = "";
+  } catch (e) {
+    if (st) { st.className = "qh-status error"; st.textContent = e.message || "Load failed"; }
+  }
+}
+
+function _setVal(id, val) {
+  const e = el(id);
+  if (!e) return;
+  if (e.tagName === "SELECT") e.value = String(val);
+  else e.value = val;
+}
+
+async function saveAudioSettings() {
+  const st = el("audio-status");
+  const backend = el("audio-backend-select").value;
+  const body = { backend };
+
+  if (backend === "default") {
+    body.default = {
+      input_device_name: el("audio-default-input-device").value,
+      input_sample_rate: parseInt(el("audio-default-input-rate").value, 10),
+      output_alsa_device: el("audio-default-output-alsa").value,
+      output_sample_rate: parseInt(el("audio-default-output-rate").value, 10),
+      loudness_boost: parseFloat(el("audio-default-loudness").value),
+      eq_preset: el("audio-default-eq").value,
+    };
+  } else if (backend === "respeaker_flex") {
+    body.respeaker_flex = {
+      input_device_name: el("audio-rs-input-device").value,
+      input_sample_rate: parseInt(el("audio-rs-input-rate").value, 10),
+      input_raw_channels: parseInt(el("audio-rs-raw-ch").value, 10),
+      input_processed_channel: parseInt(el("audio-rs-proc-ch").value, 10),
+      output_alsa_device: el("audio-rs-output-alsa").value,
+      output_sample_rate: parseInt(el("audio-rs-output-rate").value, 10),
+      loudness_boost: parseFloat(el("audio-rs-loudness").value),
+      eq_preset: el("audio-rs-eq").value,
+      led_enabled: el("audio-rs-led").checked,
+    };
+  }
+
+  try {
+    const r = await fetch("/api/settings/audio", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || "Save failed");
+    if (st) {
+      st.className = "qh-status";
+      st.textContent = "Saved ✓ — restart required to apply";
+    }
+  } catch (e) {
+    if (st) { st.className = "qh-status error"; st.textContent = e.message || "Error"; }
+  }
+  setTimeout(() => { if (st) st.textContent = ""; }, 5000);
+}
+
+
 async function doSay() {
   const text = el("say-input").value.trim();
   if (!text) return;
@@ -2175,6 +2288,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadFaces();
   loadQuietHours();
   loadFanControlPoints();
+  loadAudioSettings();
   loadServoEnabled();
   loadServoLimits();
   loadFaceTrackingEnabled();

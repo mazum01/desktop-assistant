@@ -65,6 +65,8 @@ GET  /api/depth/mono         Colorized mono depth map JPEG (TURBO colormap) — 
 GET  /api/depth/query        Depth statistics: nearest/farthest/mean + per-face depths
 GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
+GET  /api/settings/audio   Get audio backend + all per-backend settings + available devices
+PUT  /api/settings/audio   Set audio backend and/or per-backend settings  body: {"backend": str, "default"?: {...}, "respeaker_flex"?: {...}}
 """
 
 import asyncio
@@ -90,6 +92,7 @@ log = logging.getLogger(__name__)
 _STATIC_DIR = Path(__file__).parent.parent / "web" / "static"
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _THERMAL_CONFIG_PATH = _PROJECT_ROOT / "config" / "thermal.yaml"
+_ASSISTANT_CONFIG_PATH = _PROJECT_ROOT / "config" / "assistant.yaml"
 _THERMAL_REP_ENDPOINT = "ipc:///tmp/desktop-assistant-thermal.rep"
 
 
@@ -204,6 +207,35 @@ class _TempBlendBody(BaseModel):
     cpu_weight: float
 
 
+# ── Audio backend settings body ───────────────────────────────────────────────
+
+class _AudioDefaultSettings(BaseModel):
+    input_device_name: str = ""
+    input_sample_rate: int = 44100
+    output_alsa_device: str = "pulse"
+    output_sample_rate: int = 44100
+    loudness_boost: float = 2.0
+    eq_preset: str = "flat"
+
+
+class _AudioReSpeakerSettings(BaseModel):
+    input_device_name: str = "ReSpeaker"
+    input_sample_rate: int = 16000
+    input_raw_channels: int = 6
+    input_processed_channel: int = 0
+    output_alsa_device: str = "pulse"
+    output_sample_rate: int = 44100
+    loudness_boost: float = 2.0
+    eq_preset: str = "flat"
+    led_enabled: bool = True
+
+
+class _AudioSettingsBody(BaseModel):
+    backend: str = "default"
+    default: Optional[_AudioDefaultSettings] = None
+    respeaker_flex: Optional[_AudioReSpeakerSettings] = None
+
+
 def _normalise_fan_control_points(points: list[dict]) -> list[dict[str, float]]:
     if len(points) < 2:
         raise ValueError("At least two control points are required")
@@ -312,6 +344,88 @@ def _write_temp_blend_to_config(case_weight: float, cpu_weight: float) -> None:
     blend["cpu_weight"]  = round(cpu_weight, 4)
     with open(_THERMAL_CONFIG_PATH, "w") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
+
+
+# ── Audio config helpers ──────────────────────────────────────────────────────
+
+_AUDIO_BACKEND_DEFAULT       = "default"
+_AUDIO_BACKEND_RESPEAKER     = "respeaker_flex"
+_AUDIO_VALID_BACKENDS        = (_AUDIO_BACKEND_DEFAULT, _AUDIO_BACKEND_RESPEAKER)
+_AUDIO_VALID_EQ_PRESETS      = ("flat", "bass_boost", "treble_boost", "vocal", "loudness", "warm", "custom")
+
+
+def _read_audio_config() -> dict:
+    """Return the full ``audio:`` section from assistant.yaml with defaults filled in."""
+    import yaml
+
+    try:
+        with open(_ASSISTANT_CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception:
+        cfg = {}
+
+    audio = cfg.get("audio", {})
+
+    default_defaults = {
+        "input_device_name": "",
+        "input_sample_rate": 44100,
+        "output_alsa_device": "pulse",
+        "output_sample_rate": 44100,
+        "loudness_boost": 2.0,
+        "eq_preset": "flat",
+    }
+    respeaker_defaults = {
+        "input_device_name": "ReSpeaker",
+        "input_sample_rate": 16000,
+        "input_raw_channels": 6,
+        "input_processed_channel": 0,
+        "output_alsa_device": "pulse",
+        "output_sample_rate": 44100,
+        "loudness_boost": 2.0,
+        "eq_preset": "flat",
+        "led_enabled": True,
+    }
+
+    return {
+        "backend": audio.get("backend", _AUDIO_BACKEND_DEFAULT),
+        "default": {**default_defaults, **audio.get("default", {})},
+        "respeaker_flex": {**respeaker_defaults, **audio.get("respeaker_flex", {})},
+    }
+
+
+def _write_audio_config(body: dict) -> None:
+    """Merge *body* into the ``audio:`` section of assistant.yaml."""
+    import yaml
+
+    with open(_ASSISTANT_CONFIG_PATH) as f:
+        cfg = yaml.safe_load(f) or {}
+
+    audio = cfg.setdefault("audio", {})
+
+    if "backend" in body:
+        audio["backend"] = str(body["backend"])
+
+    for backend_key in ("default", "respeaker_flex"):
+        if backend_key in body and isinstance(body[backend_key], dict):
+            section = audio.setdefault(backend_key, {})
+            section.update(body[backend_key])
+
+    with open(_ASSISTANT_CONFIG_PATH, "w") as f:
+        yaml.safe_dump(cfg, f, sort_keys=False)
+
+
+def _list_audio_input_devices() -> list[dict]:
+    """Return a list of available sounddevice input devices (best-effort)."""
+    try:
+        import sounddevice as sd
+        devices = sd.query_devices()
+        return [
+            {"index": i, "name": d["name"], "channels": d.get("max_input_channels", 0)}
+            for i, d in enumerate(devices)
+            if d.get("max_input_channels", 0) > 0
+        ]
+    except Exception:
+        return []
 
 
 class WebService:
@@ -1154,6 +1268,52 @@ class WebService:
                         "cpu_weight": thermal["cpu_weight"], "runtime_applied": True}
             return {"ok": True, "case_weight": cw, "cpu_weight": pw,
                     "runtime_applied": False, "runtime_error": thermal.get("error")}
+
+        # ── REST: audio backend settings ─────────────────────────────
+
+        @app.get("/api/settings/audio")
+        async def api_get_audio():
+            try:
+                audio = _read_audio_config()
+            except Exception as exc:
+                raise HTTPException(500, f"Unable to read audio config: {exc}")
+            devices = _list_audio_input_devices()
+            return {
+                "ok": True,
+                "backend": audio["backend"],
+                "default": audio["default"],
+                "respeaker_flex": audio["respeaker_flex"],
+                "available_backends": list(_AUDIO_VALID_BACKENDS),
+                "available_eq_presets": list(_AUDIO_VALID_EQ_PRESETS),
+                "available_input_devices": devices,
+            }
+
+        @app.put("/api/settings/audio")
+        async def api_put_audio(body: _AudioSettingsBody):
+            if body.backend not in _AUDIO_VALID_BACKENDS:
+                raise HTTPException(
+                    422,
+                    f"Unknown backend {body.backend!r}. "
+                    f"Valid: {list(_AUDIO_VALID_BACKENDS)}",
+                )
+            patch: dict = {"backend": body.backend}
+            if body.default is not None:
+                patch["default"] = body.default.model_dump()
+            if body.respeaker_flex is not None:
+                patch["respeaker_flex"] = body.respeaker_flex.model_dump()
+            try:
+                _write_audio_config(patch)
+            except Exception as exc:
+                raise HTTPException(500, f"Unable to save audio config: {exc}")
+            updated = _read_audio_config()
+            return {
+                "ok": True,
+                "backend": updated["backend"],
+                "default": updated["default"],
+                "respeaker_flex": updated["respeaker_flex"],
+                "restart_required": True,
+                "message": "Audio backend change takes effect after service restart.",
+            }
 
         # ── REST: greeting settings ───────────────────────────────────
 

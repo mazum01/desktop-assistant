@@ -1245,6 +1245,159 @@ def cmd_quiet_hours(args) -> int:
     return 1
 
 
+def cmd_audio(args) -> int:
+    """Show or change audio backend configuration."""
+    import json as _json
+    from pathlib import Path as _P
+
+    _BASE_URL = "http://localhost:8080"
+    GRN = "\033[32m"; YLW = "\033[33m"; CYN = "\033[36m"; RST = "\033[0m"; BLD = "\033[1m"
+    action = getattr(args, "audio_action", "status") or "status"
+
+    def _api_get():
+        import urllib.request
+        with urllib.request.urlopen(f"{_BASE_URL}/api/settings/audio", timeout=5) as resp:
+            return _json.loads(resp.read())
+
+    def _api_put(payload):
+        import urllib.request
+        data = _json.dumps(payload).encode()
+        req = urllib.request.Request(
+            f"{_BASE_URL}/api/settings/audio",
+            data=data,
+            method="PUT",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return _json.loads(resp.read())
+
+    if action == "status":
+        try:
+            d = _api_get()
+        except Exception as exc:
+            # Fall back to reading config directly
+            try:
+                import yaml as _yaml
+                _cfg_path = _P(__file__).resolve().parent.parent / "config" / "assistant.yaml"
+                with open(_cfg_path) as _f:
+                    _cfg = _yaml.safe_load(_f) or {}
+                d = {"backend": _cfg.get("audio", {}).get("backend", "default")}
+                d.update(_cfg.get("audio", {}))
+            except Exception:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+
+        backend = d.get("backend", "default")
+        print()
+        print(f"  {BLD}Audio Backend{RST}")
+        print(f"    Active backend : {GRN}{backend}{RST}")
+        backend_cfg = d.get(backend, {})
+        for k, v in backend_cfg.items():
+            print(f"    {k:<30}: {v}")
+        devices = d.get("available_input_devices", [])
+        if devices:
+            print()
+            print(f"  {BLD}Available Input Devices{RST}")
+            for dev in devices:
+                print(f"    [{dev['index']}] {dev['name']}  ({dev['channels']} ch)")
+        print()
+        return 0
+
+    if action == "set-backend":
+        backend = getattr(args, "backend_name", None)
+        if not backend:
+            print("Usage: vera audio set-backend <default|respeaker_flex>", file=sys.stderr)
+            return 1
+        try:
+            d = _api_put({"backend": backend})
+            if not d.get("ok"):
+                print(f"Error: {d.get('message', d)}", file=sys.stderr)
+                return 1
+            print(f"Backend set to {GRN}{backend}{RST}.")
+            print(f"{YLW}Restart the service to apply: sudo systemctl restart desktop-assistant-core{RST}")
+            return 0
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+    if action == "set":
+        # Expect: vera audio set [--backend <b>] key=value [key=value ...]
+        pairs = getattr(args, "settings", []) or []
+        target_backend = getattr(args, "backend", None)
+        if not pairs:
+            print("Usage: vera audio set [--backend default|respeaker_flex] key=value ...", file=sys.stderr)
+            return 1
+        try:
+            current = _api_get()
+        except Exception as exc:
+            print(f"Error fetching current config: {exc}", file=sys.stderr)
+            return 1
+
+        active_backend = target_backend or current.get("backend", "default")
+        section = dict(current.get(active_backend, {}))
+
+        for pair in pairs:
+            if "=" not in pair:
+                print(f"Bad key=value pair: {pair!r}  (expected key=value)", file=sys.stderr)
+                return 1
+            k, _, v = pair.partition("=")
+            k = k.strip()
+            # Coerce value type
+            if v.lower() in ("true", "false"):
+                section[k] = v.lower() == "true"
+            else:
+                try:
+                    section[k] = int(v)
+                except ValueError:
+                    try:
+                        section[k] = float(v)
+                    except ValueError:
+                        section[k] = v
+
+        payload = {"backend": active_backend, active_backend: section}
+        try:
+            d = _api_put(payload)
+            if not d.get("ok"):
+                print(f"Error: {d}", file=sys.stderr)
+                return 1
+            print(f"Audio settings updated for {GRN}{active_backend}{RST}.")
+            print(f"{YLW}Restart the service to apply: sudo systemctl restart desktop-assistant-core{RST}")
+            return 0
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+    if action == "devices":
+        try:
+            d = _api_get()
+            devices = d.get("available_input_devices", [])
+        except Exception:
+            # Try direct sounddevice query
+            try:
+                import sounddevice as _sd
+                all_devs = _sd.query_devices()
+                devices = [
+                    {"index": i, "name": dev["name"], "channels": dev.get("max_input_channels", 0)}
+                    for i, dev in enumerate(all_devs)
+                    if dev.get("max_input_channels", 0) > 0
+                ]
+            except Exception as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+
+        if not devices:
+            print("No input devices found.")
+            return 0
+        print()
+        print(f"  {BLD}Available Input Devices{RST}")
+        for dev in devices:
+            print(f"    [{dev['index']}] {dev['name']}  ({dev['channels']} ch)")
+        print()
+        return 0
+
+    return 1
+
+
 def cmd_help(args) -> int:
     """Print a formatted command reference, or detailed help for one command."""
     commands = {
@@ -1382,6 +1535,12 @@ def cmd_help(args) -> int:
                             "                  fan-tach status               Show tach enabled state and current RPM.\n"
                             "                  fan-tach enable               Enable GPIO edge-callback tach; restart thermal.\n"
                             "                  fan-tach disable              Disable GPIO edge-callback tach; restart thermal.",
+        "audio":            "Audio backend configuration. Sub-commands:\n"
+                            "                  audio status                  Show active backend and all settings.\n"
+                            "                  audio set-backend <name>      Switch to a different backend (default|respeaker_flex).\n"
+                            "                  audio set [--backend <b>] k=v ...  Update one or more settings for a backend.\n"
+                            "                  audio devices                 List available sounddevice input devices.\n"
+                            "                  Note: backend changes require a service restart to take effect.",
         "fan":              "Fan speed override and tachometer control. Sub-commands:\n"
                             "                  fan status                    Show duty, backend, RPM, and override state.\n"
                             "                  fan set <pct>                 Pin fan to a fixed duty % (0–100), bypasses thermal loop.\n"
@@ -2538,6 +2697,25 @@ def main() -> int:
     ft_sub2.add_parser("status",  help="Show tach enabled state and current RPM").set_defaults(func=cmd_fan_tach)
     ft_sub2.add_parser("enable",  help="Enable fan tach GPIO edge-callback, restart thermal").set_defaults(func=cmd_fan_tach)
     ft_sub2.add_parser("disable", help="Disable fan tach GPIO edge-callback, restart thermal").set_defaults(func=cmd_fan_tach)
+
+    # ── Audio backend subcommand group ────────────────────────────────
+    audio_sp = sub.add_parser("audio", help="Audio backend configuration (default or respeaker_flex)")
+    audio_sub = audio_sp.add_subparsers(dest="audio_action", metavar="<subcommand>")
+    audio_sp.set_defaults(func=cmd_audio)
+
+    audio_sub.add_parser("status",  help="Show active backend and all settings").set_defaults(func=cmd_audio)
+    audio_sub.add_parser("devices", help="List available sounddevice input devices").set_defaults(func=cmd_audio)
+
+    ssp = audio_sub.add_parser("set-backend", help="Switch to a different backend (default|respeaker_flex)")
+    ssp.add_argument("backend_name", metavar="<backend>", choices=["default", "respeaker_flex"])
+    ssp.set_defaults(func=cmd_audio)
+
+    ssp = audio_sub.add_parser("set", help="Update settings for a backend  (key=value ...)")
+    ssp.add_argument("--backend", default=None, metavar="<backend>",
+                     help="Target backend (default: active backend)")
+    ssp.add_argument("settings", nargs="+", metavar="key=value",
+                     help="Settings to update, e.g. loudness_boost=3.0 output_alsa_device=pulse")
+    ssp.set_defaults(func=cmd_audio)
 
     # ── Skills subcommand group ───────────────────────────────────────
     sk_sp = sub.add_parser("skills", help="Voice skills management")

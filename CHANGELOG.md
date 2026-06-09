@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.1] - 2026-06-09
+### Added
+- **Audio config exposed on all UI surfaces** — REST API (`GET/PUT /api/settings/audio`),
+  web GUI (`card-audio` in System tab with per-backend settings forms and device list),
+  and CLI (`vera audio status|set-backend|set|devices`) all allow inspecting and
+  updating audio backend configuration without editing `assistant.yaml` by hand.
+- Fixed missing `async def api_get_greeting():` function definition that caused an
+  `IndentationError` in `web_service.py`.
+
 ## [1.41.0] - 2026-06-09
 ### Added
 - **Swappable audio backend** — a new factory layer (`src/audio/factory.py`)
