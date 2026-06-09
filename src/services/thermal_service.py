@@ -54,7 +54,7 @@ class ThermalService(Service):
         m = self._manager
         if m is None:
             return
-        temp_c = m.temperature_c
+        temp_c = m.temperature_c  # blended
         ok = m.sensor_ok
         duty = m.fan_duty
 
@@ -64,16 +64,25 @@ class ThermalService(Service):
 
         self.bus.publish(
             "thermal.temp",
-            {"celsius": temp_c, "fahrenheit": temp_c * 9 / 5 + 32, "ok": ok},
+            {
+                "celsius":          temp_c,
+                "fahrenheit":       temp_c * 9 / 5 + 32,
+                "ok":               ok,
+                "case_celsius":     getattr(m, "case_temp_c", None),
+                "cpu_celsius":      getattr(m, "cpu_temp_c",  None),
+                "blended_celsius":  temp_c,
+                "case_weight":      getattr(m, "case_weight", 0.2),
+                "cpu_weight":       getattr(m, "cpu_weight",  0.8),
+            },
         )
         override_on   = getattr(m, "override_active", False)
         override_duty = getattr(m, "override_duty", None)
         self.bus.publish(
             "thermal.fan",
             {
-                "duty":         duty,
-                "backend":      getattr(m, "fan_backend", "unknown"),
-                "override":     override_on,
+                "duty":          duty,
+                "backend":       getattr(m, "fan_backend", "unknown"),
+                "override":      override_on,
                 "override_duty": override_duty,
             },
         )

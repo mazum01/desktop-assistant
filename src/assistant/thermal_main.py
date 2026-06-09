@@ -30,14 +30,70 @@ THERMAL_REP = "ipc:///tmp/desktop-assistant-thermal.rep"
 
 def main() -> int:
     bus = MessageBus()  # local bus — published events also fan out via IPCBridge
+    thermal = ThermalService(bus=bus)
+    ipc = IPCBridge(
+        bus=bus,
+        pub_endpoint=THERMAL_PUB,
+        rep_endpoint=THERMAL_REP,
+    )
+
+    def _get_manager():
+        return getattr(thermal, "_manager", None)
+
+    def _rpc_get_fan_control_points(_msg):
+        manager = _get_manager()
+        if manager is None:
+            return {"ok": False, "error": "thermal manager unavailable"}
+        return {"ok": True, "control_points": manager.get_control_points()}
+
+    def _rpc_set_fan_control_points(msg):
+        manager = _get_manager()
+        if manager is None:
+            return {"ok": False, "error": "thermal manager unavailable"}
+        points = msg.get("points")
+        if not isinstance(points, list) or len(points) < 2:
+            return {"ok": False, "error": "points must contain at least two entries"}
+        tuples: list[tuple[float, float]] = []
+        for item in points:
+            if isinstance(item, dict):
+                if "temp_c" not in item or "duty" not in item:
+                    return {"ok": False, "error": "each point must include temp_c and duty"}
+                tuples.append((float(item["temp_c"]), float(item["duty"])))
+                continue
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                tuples.append((float(item[0]), float(item[1])))
+                continue
+            return {"ok": False, "error": "invalid point format"}
+        manager.set_control_points(tuples)
+        return {"ok": True, "control_points": manager.get_control_points()}
+
+    def _rpc_get_temp_blend(_msg):
+        manager = _get_manager()
+        if manager is None:
+            return {"ok": False, "error": "thermal manager unavailable"}
+        return {"ok": True, **manager.get_temp_blend()}
+
+    def _rpc_set_temp_blend(msg):
+        manager = _get_manager()
+        if manager is None:
+            return {"ok": False, "error": "thermal manager unavailable"}
+        try:
+            cw = float(msg.get("case_weight", 0.2))
+            pw = float(msg.get("cpu_weight",  0.8))
+            manager.set_temp_blend(cw, pw)
+        except (TypeError, ValueError) as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, **manager.get_temp_blend()}
+
+    ipc.register_rpc("fan_control_points.get", _rpc_get_fan_control_points)
+    ipc.register_rpc("fan_control_points.set", _rpc_set_fan_control_points)
+    ipc.register_rpc("temp_blend.get",         _rpc_get_temp_blend)
+    ipc.register_rpc("temp_blend.set",         _rpc_set_temp_blend)
+
     return run_services(
         services=[
-            ThermalService(bus=bus),
-            IPCBridge(
-                bus=bus,
-                pub_endpoint=THERMAL_PUB,
-                rep_endpoint=THERMAL_REP,
-            ),
+            thermal,
+            ipc,
         ],
         unit_name="thermal",
     )

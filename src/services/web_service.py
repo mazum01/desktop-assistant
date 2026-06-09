@@ -39,6 +39,10 @@ GET  /api/settings/random-motion  Get random motion enabled state
 PUT  /api/settings/random-motion  Set random motion  body: {"enabled": bool}
 GET  /api/settings/object-detection  Get object detection enabled state
 PUT  /api/settings/object-detection  Set object detection  body: {"enabled": bool}
+GET  /api/settings/fan/control-points  Get fan control points
+PUT  /api/settings/fan/control-points  Set fan control points body: {"points": [{"temp_c": float, "duty": float}]}
+GET  /api/settings/fan/temp-blend      Get temp blend weights
+PUT  /api/settings/fan/temp-blend      Set temp blend weights  body: {"case_weight": float, "cpu_weight": float}
 GET  /api/settings/greeting  Get greeting config
 PUT  /api/settings/greeting  Update greeting cooldown  body: {"cooldown_min": float}
 POST /api/vision/describe    Speak natural-language description of current scene
@@ -59,18 +63,6 @@ PUT  /api/settings/depth     Toggle depth at runtime  body: {"dense_enabled": bo
 GET  /api/depth/map          Colorized depth map JPEG (TURBO colormap) — requires dense_enabled
 GET  /api/depth/mono         Colorized mono depth map JPEG (TURBO colormap) — requires mono_enabled
 GET  /api/depth/query        Depth statistics: nearest/farthest/mean + per-face depths
-GET  /api/radon               Current radon reading (cached from EcoSense cloud)
-POST /api/radon/announce      Speak current radon level aloud via TTS
-GET  /api/drop                Current DROP water softener reading (MQTT)
-POST /api/drop/announce       Speak current DROP status aloud via TTS
-GET  /api/iot               List all registered IoT plugin devices
-GET  /api/iot/types         List all discoverable IoT plugin types (from src/iot/devices/)
-POST /api/iot               Register + start a new IoT device  body: {"type_id": str, "config": {}}
-GET  /api/iot/{id}          Latest snapshot for a specific IoT device
-PUT  /api/iot/{id}          Reconfigure a device (stop/update/start)  body: {"config": {}}
-DELETE /api/iot/{id}        Stop and unregister an IoT device
-POST /api/iot/{id}/announce Speak status of a specific IoT device via TTS
-POST /api/iot/{id}/action   Execute device action  body: {"action": str, "params": {}}
 GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
 """
@@ -86,14 +78,19 @@ from pathlib import Path
 from typing import Optional
 
 import psutil
+import zmq
 
 from src.core.quiet_hours import QuietHours
+from src.services.object_service import _build_scene_description
 
 from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
 
 _STATIC_DIR = Path(__file__).parent.parent / "web" / "static"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_THERMAL_CONFIG_PATH = _PROJECT_ROOT / "config" / "thermal.yaml"
+_THERMAL_REP_ENDPOINT = "ipc:///tmp/desktop-assistant-thermal.rep"
 
 
 class _RenameBody(BaseModel):
@@ -116,20 +113,6 @@ class _SayBody(BaseModel):
 
 class _PanBody(BaseModel):
     angle: float
-
-
-class _IoTCreateBody(BaseModel):
-    type_id: str
-    config: dict = {}
-
-
-class _IoTUpdateBody(BaseModel):
-    config: dict
-
-
-class _IoTActionBody(BaseModel):
-    action: str
-    params: Optional[dict] = None
 
 
 class _RecordBody(BaseModel):
@@ -205,6 +188,130 @@ class _TrackingParamBody(BaseModel):
 
 class _TrackingPresetBody(BaseModel):
     name: str
+
+
+class _FanControlPoint(BaseModel):
+    temp_c: float
+    duty: float
+
+
+class _FanControlPointsBody(BaseModel):
+    points: list[_FanControlPoint]
+
+
+class _TempBlendBody(BaseModel):
+    case_weight: float
+    cpu_weight: float
+
+
+def _normalise_fan_control_points(points: list[dict]) -> list[dict[str, float]]:
+    if len(points) < 2:
+        raise ValueError("At least two control points are required")
+    cleaned: list[tuple[float, float]] = []
+    for point in points:
+        temp_c = float(point["temp_c"])
+        duty = max(0.0, min(100.0, float(point["duty"])))
+        cleaned.append((temp_c, duty))
+    cleaned.sort(key=lambda p: p[0])
+    dedup: dict[float, float] = {}
+    for temp_c, duty in cleaned:
+        dedup[temp_c] = duty
+    output = [{"temp_c": float(t), "duty": float(d)} for t, d in sorted(dedup.items(), key=lambda p: p[0])]
+    if len(output) < 2:
+        raise ValueError("At least two unique temperature points are required")
+    return output
+
+
+def _thermal_request(req: dict, timeout_ms: int = 1500) -> dict:
+    ctx = zmq.Context.instance()
+    sock = ctx.socket(zmq.REQ)
+    sock.setsockopt(zmq.LINGER, 0)
+    sock.setsockopt(zmq.RCVTIMEO, timeout_ms)
+    sock.setsockopt(zmq.SNDTIMEO, timeout_ms)
+    try:
+        sock.connect(_THERMAL_REP_ENDPOINT)
+        sock.send_string(json.dumps(req))
+        return json.loads(sock.recv_string())
+    except zmq.error.Again:
+        return {"ok": False, "error": "timeout — thermal service unavailable"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    finally:
+        sock.close(linger=0)
+
+
+def _read_fan_control_points_from_config() -> list[dict[str, float]]:
+    import yaml
+
+    with open(_THERMAL_CONFIG_PATH) as f:
+        cfg = yaml.safe_load(f) or {}
+    thresholds = cfg.get("thresholds", {})
+    raw = thresholds.get("control_points")
+    if isinstance(raw, list):
+        parsed = []
+        for item in raw:
+            if isinstance(item, dict) and "temp_c" in item and "duty" in item:
+                parsed.append({"temp_c": item["temp_c"], "duty": item["duty"]})
+            elif isinstance(item, (list, tuple)) and len(item) == 2:
+                parsed.append({"temp_c": item[0], "duty": item[1]})
+        if len(parsed) >= 2:
+            return _normalise_fan_control_points(parsed)
+
+    safe_max_c = float(thresholds.get("safe_max_c", 50.0))
+    warn_max_c = float(thresholds.get("warn_max_c", 65.0))
+    critical_c = float(thresholds.get("critical_c", 75.0))
+    fan_min_duty = float(thresholds.get("fan_min_duty", 30.0))
+    fan_max_duty = float(thresholds.get("fan_max_duty", 100.0))
+    if critical_c <= safe_max_c:
+        return _normalise_fan_control_points([
+            {"temp_c": safe_max_c, "duty": fan_min_duty},
+            {"temp_c": safe_max_c + 1.0, "duty": fan_max_duty},
+        ])
+    warn_ratio = max(0.0, min(1.0, (warn_max_c - safe_max_c) / (critical_c - safe_max_c)))
+    warn_duty = fan_min_duty + warn_ratio * (fan_max_duty - fan_min_duty)
+    return _normalise_fan_control_points([
+        {"temp_c": safe_max_c, "duty": fan_min_duty},
+        {"temp_c": warn_max_c, "duty": warn_duty},
+        {"temp_c": critical_c, "duty": fan_max_duty},
+    ])
+
+
+def _write_fan_control_points_to_config(points: list[dict[str, float]]) -> None:
+    import yaml
+
+    with open(_THERMAL_CONFIG_PATH) as f:
+        cfg = yaml.safe_load(f) or {}
+    thresholds = cfg.setdefault("thresholds", {})
+    thresholds["control_points"] = [{"temp_c": p["temp_c"], "duty": p["duty"]} for p in points]
+    with open(_THERMAL_CONFIG_PATH, "w") as f:
+        yaml.safe_dump(cfg, f, sort_keys=False)
+
+
+def _read_temp_blend_from_config() -> dict[str, float]:
+    import yaml
+
+    try:
+        with open(_THERMAL_CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+        blend = cfg.get("temp_blend", {})
+        cw = float(blend.get("case_weight", 0.2))
+        pw = float(blend.get("cpu_weight",  0.8))
+        total = cw + pw
+        return {"case_weight": cw / total, "cpu_weight": pw / total}
+    except Exception:
+        return {"case_weight": 0.2, "cpu_weight": 0.8}
+
+
+def _write_temp_blend_to_config(case_weight: float, cpu_weight: float) -> None:
+    import yaml
+
+    with open(_THERMAL_CONFIG_PATH) as f:
+        cfg = yaml.safe_load(f) or {}
+    blend = cfg.setdefault("temp_blend", {})
+    blend["case_weight"] = round(case_weight, 4)
+    blend["cpu_weight"]  = round(cpu_weight, 4)
+    with open(_THERMAL_CONFIG_PATH, "w") as f:
+        yaml.safe_dump(cfg, f, sort_keys=False)
 
 
 class WebService:
@@ -965,6 +1072,89 @@ class WebService:
                 self.bus.publish("object.set_enabled", {"enabled": body.enabled})
             return {"ok": True, "enabled": body.enabled}
 
+        @app.get("/api/settings/fan/control-points")
+        async def api_get_fan_control_points():
+            thermal = _thermal_request({"cmd": "fan_control_points.get"})
+            if thermal.get("ok") and isinstance(thermal.get("control_points"), list):
+                try:
+                    runtime_points = _normalise_fan_control_points(thermal["control_points"])
+                    return {
+                        "ok": True,
+                        "control_points": runtime_points,
+                        "runtime_source": "thermal",
+                    }
+                except ValueError:
+                    pass
+            try:
+                points = _read_fan_control_points_from_config()
+            except Exception as exc:
+                raise HTTPException(500, f"Unable to read fan control points: {exc}")
+            return {
+                "ok": True,
+                "control_points": points,
+                "runtime_source": "config",
+                "runtime_error": thermal.get("error"),
+            }
+
+        @app.put("/api/settings/fan/control-points")
+        async def api_put_fan_control_points(body: _FanControlPointsBody):
+            try:
+                raw_points = [p.model_dump() if hasattr(p, "model_dump") else p.dict() for p in body.points]
+                points = _normalise_fan_control_points(raw_points)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc))
+            try:
+                _write_fan_control_points_to_config(points)
+            except Exception as exc:
+                raise HTTPException(500, f"Unable to save fan control points: {exc}")
+
+            thermal = _thermal_request({"cmd": "fan_control_points.set", "points": points})
+            if thermal.get("ok"):
+                return {
+                    "ok": True,
+                    "control_points": _normalise_fan_control_points(thermal.get("control_points") or points),
+                    "runtime_applied": True,
+                }
+            return {
+                "ok": True,
+                "control_points": points,
+                "runtime_applied": False,
+                "runtime_error": thermal.get("error"),
+            }
+
+        @app.get("/api/settings/fan/temp-blend")
+        async def api_get_temp_blend():
+            thermal = _thermal_request({"cmd": "temp_blend.get"})
+            if thermal.get("ok"):
+                return {
+                    "ok": True,
+                    "case_weight": thermal["case_weight"],
+                    "cpu_weight":  thermal["cpu_weight"],
+                    "runtime_source": "runtime",
+                }
+            cfg_blend = _read_temp_blend_from_config()
+            return {"ok": True, **cfg_blend, "runtime_source": "config",
+                    "runtime_error": thermal.get("error")}
+
+        @app.put("/api/settings/fan/temp-blend")
+        async def api_put_temp_blend(body: _TempBlendBody):
+            total = body.case_weight + body.cpu_weight
+            if total <= 0:
+                raise HTTPException(422, "case_weight + cpu_weight must be > 0")
+            cw = body.case_weight / total
+            pw = body.cpu_weight  / total
+            try:
+                _write_temp_blend_to_config(cw, pw)
+            except Exception as exc:
+                raise HTTPException(500, f"Unable to save temp blend: {exc}")
+            thermal = _thermal_request({"cmd": "temp_blend.set",
+                                        "case_weight": cw, "cpu_weight": pw})
+            if thermal.get("ok"):
+                return {"ok": True, "case_weight": thermal["case_weight"],
+                        "cpu_weight": thermal["cpu_weight"], "runtime_applied": True}
+            return {"ok": True, "case_weight": cw, "cpu_weight": pw,
+                    "runtime_applied": False, "runtime_error": thermal.get("error")}
+
         # ── REST: greeting settings ───────────────────────────────────
 
         @app.get("/api/settings/greeting")
@@ -1122,22 +1312,18 @@ class WebService:
 
         @app.get("/api/snapshot")
         async def api_snapshot():
-            """Return the current camera 1 frame as a JPEG with overlays applied."""
-            from fastapi.responses import Response
+            """Return the current camera 1 frame as a full-resolution JPEG."""
+            import cv2
             svc = self._vision_svc
             if svc is None:
                 raise HTTPException(503, "vision service unavailable")
-            jpeg = svc.latest_jpeg()
-            if jpeg is not None:
-                return Response(content=jpeg, media_type="image/jpeg")
-            # Fallback: raw frame (no overlay yet) encoded at high quality
-            import cv2
             frame = svc.latest_frame()
             if frame is None:
                 raise HTTPException(503, "no frame available")
             ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
             if not ok:
                 raise HTTPException(500, "JPEG encode failed")
+            from fastapi.responses import Response
             return Response(content=bytes(buf), media_type="image/jpeg")
 
         @app.get("/api/snapshot2")
@@ -1226,8 +1412,11 @@ class WebService:
         async def api_vision_describe():
             if not self.bus:
                 raise HTTPException(503, "bus unavailable")
-            self.bus.publish("vision.describe", {})
-            return {"ok": True}
+            faces_payload = self.bus.last("perception.faces")
+            objs_payload = self.bus.last("perception.objects")
+            description = _build_scene_description(faces_payload, objs_payload)
+            self.bus.publish("av.say", {"text": description})
+            return {"ok": True, "description": description}
 
         # ── Camera rotation ────────────────────────────────────────────
 
@@ -1607,178 +1796,5 @@ class WebService:
             if self.bus:
                 self.bus.publish("music.set_station", {"station_id": body.station_id})
             return {"ok": True}
-
-        # ── Radon monitor ─────────────────────────────────────────────────────
-
-        @app.get("/api/radon")
-        async def api_radon_reading():
-            """Return the latest cached radon reading (delegates to IoT registry)."""
-            dev = self._iot_registry.get("radon") if self._iot_registry else None
-            if dev is None:
-                return {"available": False, "error": "Radon device not registered"}
-            snap = dev.get_snapshot()
-            if not snap.get("available"):
-                return {"available": False, "error": snap.get("error"), "degraded": True}
-            svc = getattr(dev, "_svc", None)
-            reading = svc.get_reading() if svc else None
-            return {"available": True, "reading": reading}
-
-        @app.post("/api/radon/announce")
-        async def api_radon_announce():
-            """Speak the current radon level aloud via TTS (delegates to IoT registry)."""
-            dev = self._iot_registry.get("radon") if self._iot_registry else None
-            if dev is None:
-                return {"ok": False, "error": "Radon device not registered"}
-            text = dev.announce()
-            if self.bus:
-                self.bus.publish("av.say", {"text": text})
-            return {"ok": True, "text": text}
-
-        # ── DROP water softener ────────────────────────────────────────────────
-
-        @app.get("/api/drop")
-        async def api_drop_reading():
-            """Return the latest cached DROP water system reading (delegates to IoT registry)."""
-            dev = self._iot_registry.get("drop") if self._iot_registry else None
-            if dev is None:
-                return {"available": False, "error": "DROP device not registered"}
-            snap = dev.get_snapshot()
-            if not snap.get("available"):
-                return {"available": False, "error": snap.get("error"), "degraded": True,
-                        "devices": []}
-            svc = getattr(dev, "_svc", None)
-            reading = svc.get_reading() if svc else None
-            devices = svc.get_devices() if svc else []
-            return {"available": True, "reading": reading or {}, "devices": devices}
-
-        @app.post("/api/drop/announce")
-        async def api_drop_announce():
-            """Speak the current DROP status aloud via TTS (delegates to IoT registry)."""
-            dev = self._iot_registry.get("drop") if self._iot_registry else None
-            if dev is None:
-                return {"ok": False, "error": "DROP device not registered"}
-            text = dev.announce()
-            if self.bus:
-                self.bus.publish("av.say", {"text": text})
-            return {"ok": True, "text": text}
-
-        # ── IoT plugin endpoints ──────────────────────────────────────────
-        # Routes are registered in specificity order (static paths before
-        # parameterised paths) to avoid FastAPI routing conflicts.
-        # GET /api/iot/types MUST come before GET /api/iot/{device_id}.
-
-        @app.get("/api/iot")
-        async def api_iot_list():
-            """Return summary of all registered IoT plugin devices."""
-            if self._iot_registry is None:
-                return {"devices": []}
-            return {"devices": self._iot_registry.get_device_list()}
-
-        @app.get("/api/iot/types")
-        async def api_iot_types():
-            """Return all discoverable IoT plugin types from src/iot/devices/."""
-            from src.iot.loader import get_type_list
-            return {"types": get_type_list()}
-
-        @app.post("/api/iot")
-        async def api_iot_create(body: _IoTCreateBody):
-            """Register and start a new IoT device plugin by type_id."""
-            if self._iot_registry is None:
-                raise HTTPException(status_code=503, detail="IoT registry not available")
-            from src.iot.loader import create_device, save_persisted
-            try:
-                dev = create_device(body.type_id, body.config or {}, bus=self.bus)
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail=str(exc))
-            try:
-                self._iot_registry.register(dev)
-            except ValueError as exc:
-                raise HTTPException(status_code=409, detail=str(exc))
-            try:
-                dev.start()
-            except Exception as exc:
-                self._iot_registry.unregister(dev.device_id)
-                raise HTTPException(status_code=503, detail=f"Device start failed: {exc}")
-            save_persisted(self._iot_registry)
-            return {"ok": True, "device_id": dev.device_id, "device_name": dev.device_name}
-
-        @app.get("/api/iot/{device_id}")
-        async def api_iot_snapshot(device_id: str):
-            """Return the latest snapshot for a specific IoT device."""
-            if self._iot_registry is None:
-                raise HTTPException(status_code=404, detail="IoT registry not available")
-            dev = self._iot_registry.get(device_id)
-            if dev is None:
-                raise HTTPException(status_code=404, detail=f"IoT device '{device_id}' not found")
-            try:
-                snap = dev.get_snapshot()
-            except Exception as exc:
-                raise HTTPException(status_code=503, detail=str(exc))
-            snap["device_id"]   = dev.device_id
-            snap["device_name"] = dev.device_name
-            snap["device_icon"] = dev.device_icon
-            snap["config"]      = dict(dev._cfg)
-            return JSONResponse(snap)
-
-        @app.put("/api/iot/{device_id}")
-        async def api_iot_update(device_id: str, body: _IoTUpdateBody):
-            """Update the config of a registered IoT device (stop → reconfigure → start)."""
-            if self._iot_registry is None:
-                raise HTTPException(status_code=404, detail="IoT registry not available")
-            dev = self._iot_registry.get(device_id)
-            if dev is None:
-                raise HTTPException(status_code=404, detail=f"IoT device '{device_id}' not found")
-            try:
-                dev.stop()
-                dev._cfg = dict(body.config)
-                dev.start()
-            except Exception as exc:
-                raise HTTPException(status_code=503, detail=f"Device reconfigure failed: {exc}")
-            from src.iot.loader import save_persisted
-            save_persisted(self._iot_registry)
-            return {"ok": True, "device_id": device_id}
-
-        @app.delete("/api/iot/{device_id}")
-        async def api_iot_delete(device_id: str):
-            """Stop and unregister an IoT device plugin."""
-            if self._iot_registry is None:
-                raise HTTPException(status_code=404, detail="IoT registry not available")
-            dev = self._iot_registry.get(device_id)
-            if dev is None:
-                raise HTTPException(status_code=404, detail=f"IoT device '{device_id}' not found")
-            self._iot_registry.unregister(device_id)  # calls dev.stop() internally
-            from src.iot.loader import save_persisted
-            save_persisted(self._iot_registry)
-            return {"ok": True, "device_id": device_id}
-
-        @app.post("/api/iot/{device_id}/announce")
-        async def api_iot_announce(device_id: str):
-            """Speak the status of a specific IoT device aloud via TTS."""
-            if self._iot_registry is None:
-                raise HTTPException(status_code=404, detail="IoT registry not available")
-            dev = self._iot_registry.get(device_id)
-            if dev is None:
-                raise HTTPException(status_code=404, detail=f"IoT device '{device_id}' not found")
-            try:
-                text = dev.announce()
-            except Exception as exc:
-                raise HTTPException(status_code=503, detail=str(exc))
-            if self.bus and text:
-                self.bus.publish("av.say", {"text": text})
-            return {"ok": True, "text": text}
-
-        @app.post("/api/iot/{device_id}/action")
-        async def api_iot_action(device_id: str, body: _IoTActionBody):
-            """Execute a device-specific action (e.g. lock, unlock)."""
-            if self._iot_registry is None:
-                raise HTTPException(status_code=404, detail="IoT registry not available")
-            dev = self._iot_registry.get(device_id)
-            if dev is None:
-                raise HTTPException(status_code=404, detail=f"IoT device '{device_id}' not found")
-            try:
-                result = dev.execute_action(body.action, body.params)
-            except Exception as exc:
-                raise HTTPException(status_code=503, detail=str(exc))
-            return result
 
         return app

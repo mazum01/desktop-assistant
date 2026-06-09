@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from src.services.web_service import WebService
+import src.services.web_service as web_service
 from src.core.bus import MessageBus
 from src.core.quiet_hours import QuietHours
 
@@ -194,6 +195,24 @@ def test_version_publishes_to_bus(app_client):
     assert events
 
 
+def test_vision_describe_returns_text_and_speaks(app_client):
+    client, bus, svc = app_client
+    events = []
+    bus.subscribe("av.say", lambda t, p: events.append(p))
+    bus.publish("perception.faces", {"faces": [{"name": "Alice"}]})
+    bus.publish("perception.objects", {"objects": [{"label": "laptop"}]})
+
+    r = client.post("/api/vision/describe")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert "description" in data
+    assert "Alice" in data["description"]
+    assert "laptop" in data["description"]
+    assert events
+    assert events[0]["text"] == data["description"]
+
+
 def test_audio_record_endpoint_calls_av_service(app_client):
     client, bus, svc = app_client
 
@@ -244,6 +263,31 @@ def test_status_returns_version(app_client):
     data = r.json()
     assert "version" in data
     assert "last" in data
+
+
+def test_status_includes_iot_snapshots(app_client):
+    client, bus, svc = app_client
+
+    class _FakeIoTRegistry:
+        def get_all_snapshots(self):
+            return {
+                "radon": {
+                    "available": True,
+                    "device_id": "radon",
+                    "device_name": "Radon Monitor",
+                    "device_icon": "☢️",
+                    "display": {"primary": {"value": "1.2", "unit": "pCi/L", "color": "#3fb950"}},
+                    "history": [12.0, 14.0],
+                }
+            }
+
+    svc._iot_registry = _FakeIoTRegistry()
+    r = client.get("/api/status")
+    assert r.status_code == 200
+    data = r.json()
+    assert "iot" in data
+    assert "radon" in data["iot"]
+    assert data["iot"]["radon"]["device_name"] == "Radon Monitor"
 
 
 # ── Dashboard HTML ────────────────────────────────────────────────────────────
@@ -303,3 +347,86 @@ def test_get_servo_no_motion_svc_defaults_true():
     r = client.get("/api/settings/servo")
     assert r.status_code == 200
     assert r.json()["enabled"] is True
+
+
+def test_get_fan_control_points_from_thermal_runtime(tmp_path, monkeypatch):
+    cfg = tmp_path / "thermal.yaml"
+    cfg.write_text(
+        """
+thresholds:
+  safe_max_c: 25.0
+  warn_max_c: 47.0
+  critical_c: 50.0
+  fan_min_duty: 0.0
+  fan_max_duty: 100.0
+""".strip()
+    )
+    monkeypatch.setattr(web_service, "_THERMAL_CONFIG_PATH", cfg)
+    monkeypatch.setattr(
+        web_service,
+        "_thermal_request",
+        lambda req, timeout_ms=1500: {
+            "ok": True,
+            "control_points": [
+                {"temp_c": 26.0, "duty": 10.0},
+                {"temp_c": 49.0, "duty": 100.0},
+            ],
+        },
+    )
+
+    bus = MessageBus()
+    svc = WebService(bus=bus, port=18080, registry=_mock_registry())
+    client = TestClient(svc._build_app())
+
+    r = client.get("/api/settings/fan/control-points")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["runtime_source"] == "thermal"
+    assert data["control_points"][0]["temp_c"] == 26.0
+
+
+def test_put_fan_control_points_persists_and_applies(tmp_path, monkeypatch):
+    cfg = tmp_path / "thermal.yaml"
+    cfg.write_text(
+        """
+thresholds:
+  safe_max_c: 25.0
+  warn_max_c: 47.0
+  critical_c: 50.0
+  fan_min_duty: 0.0
+  fan_max_duty: 100.0
+""".strip()
+    )
+    monkeypatch.setattr(web_service, "_THERMAL_CONFIG_PATH", cfg)
+
+    calls = []
+
+    def _fake_thermal_request(req, timeout_ms=1500):
+        calls.append(req)
+        return {"ok": True, "control_points": req.get("points", [])}
+
+    monkeypatch.setattr(web_service, "_thermal_request", _fake_thermal_request)
+
+    bus = MessageBus()
+    svc = WebService(bus=bus, port=18080, registry=_mock_registry())
+    client = TestClient(svc._build_app())
+
+    payload = {
+        "points": [
+            {"temp_c": 24.0, "duty": 0.0},
+            {"temp_c": 44.0, "duty": 70.0},
+            {"temp_c": 50.0, "duty": 100.0},
+        ]
+    }
+    r = client.put("/api/settings/fan/control-points", json=payload)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["runtime_applied"] is True
+    assert calls and calls[0]["cmd"] == "fan_control_points.set"
+
+    r2 = client.get("/api/settings/fan/control-points")
+    assert r2.status_code == 200
+    points = r2.json()["control_points"]
+    assert points[0]["temp_c"] == 24.0
+    assert points[-1]["duty"] == 100.0

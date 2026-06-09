@@ -986,6 +986,24 @@ def cmd_object_detection(args) -> int:
 
 # ── Fan subcommands (override + tach) ────────────────────────────────────────
 
+def _parse_fan_curve_specs(specs: list[str]) -> list[dict[str, float]]:
+    points: list[dict[str, float]] = []
+    for spec in specs:
+        token = spec.strip()
+        if not token:
+            continue
+        if ":" not in token:
+            raise ValueError(f"Invalid point '{spec}'. Use temp:duty")
+        temp_s, duty_s = token.split(":", 1)
+        points.append({"temp_c": float(temp_s), "duty": float(duty_s)})
+    if len(points) < 2:
+        raise ValueError("At least two control points are required")
+    return points
+
+
+def _format_fan_curve_points(points: list[dict]) -> str:
+    return ", ".join(f"{float(p['temp_c']):g}:{float(p['duty']):g}" for p in points)
+
 def cmd_fan(args) -> int:
     """Fan speed override and tach controls."""
     action = getattr(args, "fan_action", "status")
@@ -1047,6 +1065,44 @@ def cmd_fan(args) -> int:
             print(f"Error: {r.get('error', r)}", file=sys.stderr)
             return 1
         print("Fan override cleared — returned to thermal auto mode.")
+        return 0
+
+    if action == "curve-status":
+        try:
+            data = _http_get("/api/settings/fan/control-points")
+        except Exception as exc:
+            print(f"Error reading fan control points: {exc}", file=sys.stderr)
+            return 1
+        points = data.get("control_points") or []
+        if not points:
+            print("No fan control points configured.")
+            return 1
+        print("Fan control points:")
+        for point in points:
+            print(f"  - {float(point.get('temp_c', 0.0)):g} C -> {float(point.get('duty', 0.0)):g}%")
+        runtime_source = data.get("runtime_source")
+        runtime_error = data.get("runtime_error")
+        if runtime_source:
+            print(f"Runtime source: {runtime_source}")
+        if runtime_error:
+            print(f"Runtime note: {runtime_error}")
+        return 0
+
+    if action == "curve-set":
+        try:
+            points = _parse_fan_curve_specs(getattr(args, "points", []))
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        try:
+            data = _http_put("/api/settings/fan/control-points", {"points": points})
+        except Exception as exc:
+            print(f"Error setting fan control points: {exc}", file=sys.stderr)
+            return 1
+        final_points = data.get("control_points") or points
+        print(f"Fan control points set: {_format_fan_curve_points(final_points)}")
+        if not data.get("runtime_applied", False):
+            print(f"Saved to config; thermal runtime update pending ({data.get('runtime_error', 'thermal unavailable')}).")
         return 0
 
     # tach sub-actions delegated to cmd_fan_tach logic inline
@@ -1330,6 +1386,8 @@ def cmd_help(args) -> int:
                             "                  fan status                    Show duty, backend, RPM, and override state.\n"
                             "                  fan set <pct>                 Pin fan to a fixed duty % (0–100), bypasses thermal loop.\n"
                             "                  fan auto                      Release override — return to thermal auto control.\n"
+                            "                  fan curve-status              Show current fan control points (temperature -> duty).\n"
+                            "                  fan curve-set <t:d> ...       Set fan control points (example: fan curve-set 25:0 47:80 50:100).\n"
                             "                  fan tach-status               Show tach enabled state and current RPM.\n"
                             "                  fan tach-enable               Enable GPIO edge-callback tach; restart thermal.\n"
                             "                  fan tach-disable              Disable GPIO edge-callback tach; restart thermal.",
@@ -2457,7 +2515,7 @@ def main() -> int:
     ssp.set_defaults(func=cmd_quiet_hours)
 
     # ── Fan subcommand group (override + tach) ───────────────────────
-    fan_sp = sub.add_parser("fan", help="Fan speed override and tachometer (set/auto/status/tach-enable/tach-disable)")
+    fan_sp = sub.add_parser("fan", help="Fan speed override, curve settings, and tachometer controls")
     fan_sub = fan_sp.add_subparsers(dest="fan_action", metavar="<subcommand>")
     fan_sub.required = True
     fan_sub.add_parser("status",       help="Show duty, backend, RPM, and override state").set_defaults(func=cmd_fan)
@@ -2465,6 +2523,10 @@ def main() -> int:
     fan_set_sp = fan_sub.add_parser("set", help="Pin fan to a fixed duty % (0–100), bypassing thermal loop")
     fan_set_sp.add_argument("duty", type=float, metavar="<pct>", help="Fan duty cycle 0–100")
     fan_set_sp.set_defaults(func=cmd_fan)
+    fan_sub.add_parser("curve-status", help="Show fan control points (temperature-to-duty curve)").set_defaults(func=cmd_fan)
+    fan_curve_set_sp = fan_sub.add_parser("curve-set", help="Set fan control points using temp:duty pairs")
+    fan_curve_set_sp.add_argument("points", nargs="+", metavar="<temp:duty>", help="Examples: 25:0 47:80 50:100")
+    fan_curve_set_sp.set_defaults(func=cmd_fan)
     fan_sub.add_parser("tach-status",  help="Show tach enabled state and current RPM").set_defaults(func=cmd_fan_tach)
     fan_sub.add_parser("tach-enable",  help="Enable fan tach GPIO edge-callback, restart thermal").set_defaults(func=cmd_fan_tach)
     fan_sub.add_parser("tach-disable", help="Disable fan tach GPIO edge-callback, restart thermal").set_defaults(func=cmd_fan_tach)

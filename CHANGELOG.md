@@ -6,6 +6,45 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.40.0] - 2026-06-09
+### Added
+- **Weighted temperature blend for fan control**: Fan now uses a configurable weighted average of the TMP117 case sensor (default 20%) and the Pi SoC CPU die temperature (default 80%) rather than TMP117 alone. This prevents the fan from running at full speed unnecessarily due to CPU heat while still responding to CPU load. Both weights are tunable live.
+- `temp_blend: {case_weight, cpu_weight}` section in `config/thermal.yaml` as the persisted source of truth.
+- `ThermalManager.set_temp_blend()` / `get_temp_blend()` runtime methods; `case_temp_c`, `cpu_temp_c`, `case_weight`, `cpu_weight` properties.
+- `thermal.temp` bus payload now includes `case_celsius`, `cpu_celsius`, `blended_celsius`, `case_weight`, `cpu_weight`.
+- IPC RPCs `temp_blend.get` and `temp_blend.set` on the thermal ZMQ socket.
+- REST endpoints `GET /api/settings/fan/temp-blend` and `PUT /api/settings/fan/temp-blend`.
+- **Editable control-points table in the web GUI**: replaced the text-input fan curve with a proper table editor. Add arbitrary intermediate rows with "+ Add Point"; delete any non-floor/non-ceiling row with ✕. Floor and ceiling rows are locked (cannot be deleted).
+- Blend weight slider in the Fan Control Points card: drag to adjust case % (CPU = complement); saved alongside control points.
+
+## [1.39.44] - 2026-06-09
+### Added
+- Added configurable fan control points across the thermal backend, System-tab web dashboard, CLI, and OpenClaw skills so the fan curve can be inspected and updated as temperature-to-duty pairs without editing code.
+
+## [1.39.43] - 2026-06-09
+### Fixed
+- Restored room detection service wiring in core startup: `RoomService` now starts with `room_detection` config and is passed to `WebService`, re-enabling room monitoring and `room_detail` status in the web dashboard.
+
+## [1.39.42] - 2026-06-09
+### Fixed
+- DROP water-softener card MQTT auth regression: hardwired IoT devices now receive `assistant.yaml` config when started, so DropService uses configured `drop.mqtt_user` and `VERA_DROP_MQTT_PASS` instead of attempting anonymous broker login.
+
+## [1.39.41] - 2026-06-08
+### Fixed
+- Restored Smart Home dashboard cards: reconnected IoT registry lifecycle to core startup and added IoT snapshots back into WebService status payloads, so Smart Home cards (DROP, Radon, Nest, and persisted plugins) render again in the web GUI.
+
+## [1.39.40] - 2026-06-08
+### Fixed
+- Restored AV/TTS runtime compatibility by adding `TextToSpeech.render()` and `TextToSpeech.prewarm()` methods expected by `AVService`; this prevents `AttributeError` crashes on speech requests and restores spoken output for actions including Web GUI scene description.
+
+## [1.39.39] - 2026-06-08
+### Fixed
+- Web GUI scene description now always speaks: `/api/vision/describe` publishes `av.say` with the generated description text directly, ensuring audible output when the dashboard button is clicked.
+
+## [1.39.38] - 2026-06-08
+### Fixed
+- Web GUI Describe What I See action now returns and displays the generated scene description text instead of only showing a transient button state; `/api/vision/describe` now includes a `description` field while still triggering spoken output.
+
 ## [1.39.37] - 2026-06-08
 ### Changed
 - Fan ramp starts at 25°C (was 40°C); still reaches 100% at 50°C.

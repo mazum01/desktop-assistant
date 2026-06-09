@@ -573,12 +573,55 @@
 <button class="btn btn-secondary" onclick="doDescribe()">Describe What I See</button>
 </div>
 <div class="row-input" style="margin-top:6px">
+<span class="qh-status" id="vision-describe-status"></span>
+</div>
+<div class="row-input" style="margin-top:6px">
 <label class="qh-toggle" style="margin:0">
 <input id="object-detection-enabled" onchange="saveObjectDetectionEnabled(this.checked)" type="checkbox"/>
 <span>Object classification (detects COCO objects via Hailo-8)</span>
 </label>
 </div>
 </div>
+</div>
+</section>
+
+<section class="card" id="card-fan-curve">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Fan Control Points</h2>
+
+<div class="control-group" style="margin-bottom:12px">
+  <label>Temperature Blend</label>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <label style="min-width:110px">Case (TMP117):
+      <span id="blend-case-pct" style="font-weight:bold">20%</span>
+    </label>
+    <input id="blend-slider" max="100" min="0" step="1" type="range" value="20"
+           style="flex:1;min-width:160px" oninput="updateBlendLabels()"/>
+    <label style="min-width:110px">CPU die:
+      <span id="blend-cpu-pct" style="font-weight:bold">80%</span>
+    </label>
+  </div>
+</div>
+
+<div class="control-group">
+  <label>Control Points <small style="color:var(--text-muted)">(floor &amp; ceiling rows are always kept)</small></label>
+  <table id="fan-curve-table" style="width:100%;border-collapse:collapse;margin-bottom:8px">
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:4px 8px">Temp (°C)</th>
+        <th style="text-align:left;padding:4px 8px">Duty (%)</th>
+        <th style="width:48px"></th>
+      </tr>
+    </thead>
+    <tbody id="fan-curve-tbody">
+      <!-- rows injected by JS -->
+    </tbody>
+  </table>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-secondary btn-sm" onclick="addFanCurveRow()">+ Add Point</button>
+    <button class="btn btn-primary btn-sm" onclick="saveFanControlPoints()">Save</button>
+    <button class="btn btn-secondary btn-sm" onclick="loadFanControlPoints()">Reload</button>
+    <span class="qh-status" id="fan-curve-status"></span>
+  </div>
 </div>
 </section>
 

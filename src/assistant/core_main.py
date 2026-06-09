@@ -7,7 +7,7 @@ do NOT affect the thermal-safety unit.
 Run:
     python3 -m src.assistant.core_main
 
-Or via systemd: services/systemd/vera-core.service
+Or via systemd: services/systemd/desktop-assistant-core.service
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from src.services.av_service import AVService
 from src.services.clock_service import ClockService
 from src.services.face_service import FaceService
 from src.services.ipc_bridge import IPCBridge
+from src.services.iot_service import IoTService
 from src.services.motion_service import MotionService
 from src.services.music_service import MusicService
 from src.services.object_service import ObjectService, ObjectConfig
@@ -37,13 +38,8 @@ from src.core.quiet_hours import QuietHours
 from src.services.web_service import WebService
 from src.core.runtime_state import load as _load_runtime, save as _save_runtime
 from src.services.notification_service import NotificationService
-from src.services.telegram_service import TelegramService
 from src.services.room_service import RoomService
-from src.iot.registry import IoTRegistry
-from src.iot.loader import load_persisted as _iot_load_persisted
-from src.iot.history_store import IoTHistoryStore
-from src.iot.devices.radon_device import RadonDevice
-from src.iot.devices.drop_device import DropDevice
+from src.services.telegram_service import TelegramService
 
 # The thermal service runs in a separate process. Its IPCBridge PUBs on
 # this endpoint; we SUBscribe to it from the core IPCBridge and re-emit
@@ -52,7 +48,6 @@ _THERMAL_PUB = "ipc:///tmp/desktop-assistant-thermal.pub"
 
 
 def main() -> int:
-    import os
     import yaml
     from pathlib import Path
     _cfg_path = Path(__file__).parents[2] / "config" / "assistant.yaml"
@@ -145,7 +140,6 @@ def main() -> int:
     )
     _depth_cfg_raw = _cfg.get("depth", {})
     _perc_cfg = PerceptionConfig(
-        max_fps=float(_fr_cfg.get("max_fps", 10.0)),
         recognition_enabled=_recognition_enabled,
         match_threshold=float(_fr_cfg.get("match_threshold", 0.50)),
         min_face_px=int(_fr_cfg.get("min_face_px", 80)),
@@ -167,12 +161,8 @@ def main() -> int:
     _notif_cfg = _cfg.get("notifications", {})
     _notif_thermal_cfg = _notif_cfg.get("thermal_alerts", {})
     _notif_absence_cfg = _notif_cfg.get("absence_alerts", {})
+    _room_cfg = _cfg.get("room_detection", {})
     _tg_cfg = _cfg.get("telegram", {})
-    _tg_token = (
-        os.environ.get("VERA_TELEGRAM_BOT_TOKEN")
-        or _tg_cfg.get("bot_token", "")
-    )
-    _api_key = os.environ.get("VERA_API_KEY", "")
 
     _web_cfg = _cfg.get("web_dashboard", {})
     _web_enabled = _web_cfg.get("enabled", True)
@@ -268,13 +258,7 @@ def main() -> int:
 
     tracking_svc: "TrackingService | None" = None  # forward-ref for rotation callback
 
-    _tts_cfg = _cfg.get("tts", {})
-    from src.audio.tts import TextToSpeech, TTSConfig as _TTSConfig
-    _tts = TextToSpeech(_TTSConfig(
-        piper_voice_name=str(_tts_cfg.get("piper_voice_name", "en_US-amy-medium")),
-        piper_length_scale=float(_tts_cfg.get("piper_length_scale", 1.15)),
-    ))
-    av = AVService(bus=bus, tts=_tts)
+    av = AVService(bus=bus)
     vis = VisionService(bus=bus, camera_config=_camera_cfg,
                         servo_min_deg=_soft_min_deg, servo_max_deg=_soft_max_deg)
     ipc = IPCBridge(
@@ -323,17 +307,17 @@ def main() -> int:
 
     obj_svc = ObjectService(bus=bus, vision_service=vis, config=_obj_cfg)
     perc_svc = PerceptionService(bus=bus, vision_service=vis, config=_perc_cfg)
-    audio_capture_svc = AudioCaptureService(bus=bus)
-    av.set_capture_service(audio_capture_svc)  # avoid competing PortAudio streams
     services = [
         motion_svc,
         vis,
-        audio_capture_svc,
+        AudioCaptureService(bus=bus),
         av,
         perc_svc,
         obj_svc,
         TelemetryService(bus=bus),
         ClockService(bus=bus, enabled=_clock_enabled, quiet_hours=_qh),
+        IoTService(bus=bus, cfg=_cfg),
+        RoomService(bus=bus, vision_service=vis, cfg=_room_cfg),
         FaceService(
             bus=bus,
             greeting_cooldown_min=_greeting_cooldown_min,
@@ -365,9 +349,8 @@ def main() -> int:
             ),
         )
         services.append(stereo_svc)
-    # Dense stereo depth service — StereoSGBM per-pixel depth map (always started;
-    # enabled/disabled at runtime via depth.set_dense_enabled bus event)
-    if cam2_svc is not None:
+    # Dense stereo depth service — StereoSGBM per-pixel depth map
+    if cam2_svc is not None and _depth_cfg_raw.get("dense_enabled", False):
         dense_stereo_svc = DenseStereoService(
             bus=bus,
             vision_service=vis,
@@ -382,20 +365,21 @@ def main() -> int:
                 max_depth_m=float(_depth_cfg_raw.get("max_depth_m", 6.0)),
                 baseline_mm=float(_depth_cfg_raw.get("baseline_mm", 56.0)),
                 fov_degrees=float(_ht_cfg_raw.get("fov_degrees", 100.0)),
-                enabled=bool(_depth_cfg_raw.get("dense_enabled", False)),
             ),
         )
         services.append(dense_stereo_svc)
     else:
         dense_stereo_svc = None
     # Monocular depth service — Hailo-8 scdepthv3 single-camera depth
-    # (always started; enabled/disabled at runtime via depth.set_mono_enabled bus event)
-    mono_depth_svc = MonoDepthService(
-        bus=bus,
-        vision_service=vis,
-        config={"depth": _depth_cfg_raw},
-    )
-    services.append(mono_depth_svc)
+    if _depth_cfg_raw.get("mono_enabled", False):
+        mono_depth_svc = MonoDepthService(
+            bus=bus,
+            vision_service=vis,
+            config={"depth": _depth_cfg_raw},
+        )
+        services.append(mono_depth_svc)
+    else:
+        mono_depth_svc = None
     tracking_svc = TrackingService(
         bus=bus, config=_tracker_cfg, enabled=_tracking_enabled,
         face_tracking_enabled=_face_tracking_enabled,
@@ -423,38 +407,20 @@ def main() -> int:
     tg_svc = TelegramService(
         bus=bus,
         enabled=bool(_tg_cfg.get("enabled", False)),
-        bot_token=str(_tg_token),
-        chat_id=str(
-            os.environ.get("VERA_TELEGRAM_CHAT_ID")
-            or _tg_cfg.get("chat_id", "")
-        ),
+        bot_token=str(_tg_cfg.get("bot_token", "")),
+        chat_id=str(_tg_cfg.get("chat_id", "")),
         emoji_map={
             "new_face":  _tg_cfg.get("emoji_new_face", "👋"),
             "returning": _tg_cfg.get("emoji_returning", "👤"),
             "named":     _tg_cfg.get("emoji_named", "🏷️"),
         },
-        forward_tts=bool(_tg_cfg.get("forward_tts", True)),
-        tts_skip_patterns=list(_tg_cfg.get("tts_skip_patterns", [])),
     )
     services.append(tg_svc)
-    room_svc = RoomService(bus=bus, vision_service=vis, cfg=_cfg.get("room_detection", {}))
-    services.append(room_svc)
-
-    iot_registry = IoTRegistry(history_store=IoTHistoryStore())
-    _iot_load_persisted(iot_registry, bus=bus)
-
-    # ── Hardwired IoT devices (always on, never user-removable) ──────────────
-    radon_dev = RadonDevice(bus=bus, cfg=_cfg.get("radon", {}))
-    iot_registry.register(radon_dev)
-    radon_dev.start()
-
-    drop_dev = DropDevice(bus=bus, cfg=_cfg.get("drop", {}))
-    iot_registry.register(drop_dev)
-    drop_dev.start()
-
     services.append(ipc)
     ipc._all_services = services  # seed service registry at startup
     if _web_enabled:
+        iot_svc = next((s for s in services if getattr(s, "name", "") == "iot"), None)
+        room_svc = next((s for s in services if getattr(s, "name", "") == "room"), None)
         web_svc = WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
                              quiet_hours=_qh, motion_service=motion_svc,
                              tracking_service=tracking_svc, music_service=music_svc,
@@ -463,16 +429,11 @@ def main() -> int:
                              dense_stereo_service=dense_stereo_svc,
                              mono_depth_service=mono_depth_svc,
                              room_service=room_svc,
-                             iot_registry=iot_registry,
-                             api_key=_api_key)
+                             iot_registry=(iot_svc.registry if iot_svc else None))
         services.append(web_svc)
         web_svc._all_services = services  # seed service registry at startup
 
-    try:
-        return run_services(services=services, unit_name="core")
-    finally:
-        if iot_registry._history_store is not None:
-            iot_registry._history_store.save()
+    return run_services(services=services, unit_name="core")
 
 
 if __name__ == "__main__":

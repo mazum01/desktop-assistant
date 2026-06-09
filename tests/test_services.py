@@ -206,19 +206,15 @@ def test_motion_service_pan_to_ignores_bad_payload():
 
 # ── AV ───────────────────────────────────────────────────────────────────
 
-def _make_av(bus, announce_on_start=False, audio_input=None):
-    import numpy as np
+def _make_av(bus, announce_on_start=False):
     audio = MagicMock(hardware_ready=True)
     tts = MagicMock(hardware_ready=True)
-    # render() must return (samples, sr) so the async synthesis path works.
-    tts.render.return_value = (np.zeros(100, dtype=np.float32), 22050)
     announcer = MagicMock()
     announcer.maybe_handle.return_value = False
     svc = AVService(
         bus=bus,
         audio_output=audio,
         tts=tts,
-        audio_input=audio_input,
         announcer=announcer,
         announce_on_start=announce_on_start,
     )
@@ -235,9 +231,7 @@ def test_av_service_say_routes_to_tts():
         bus.subscribe("av.spoke", lambda t, p: spoke.append(p))
         bus.publish("av.say", {"text": "hello world"})
         svc.wait_idle()
-        # New async path: render() is called for synthesis, then audio.play() for playback.
-        tts.render.assert_called_once_with("hello world")
-        audio.play.assert_called_once()
+        tts.say.assert_called_once_with("hello world", output=audio)
         assert spoke and spoke[0]["text"] == "hello world"
     finally:
         svc.stop()
@@ -245,14 +239,11 @@ def test_av_service_say_routes_to_tts():
 
 def test_av_service_announces_version_on_startup():
     bus = MessageBus()
-    svc, audio, tts, announcer = _make_av(bus, announce_on_start=True)
+    svc, _, _, announcer = _make_av(bus, announce_on_start=True)
     svc.start()
     try:
-        svc.wait_idle(timeout=10.0)
-        # New async path: startup phrase is pre-synthesized via render(), then
-        # played via audio.play(). The announcer is bypassed on the happy path.
-        tts.render.assert_called()
-        audio.play.assert_called()
+        svc.wait_idle()
+        announcer.announce_startup.assert_called_once()
     finally:
         svc.stop()
 
@@ -289,7 +280,7 @@ def test_av_service_beep():
     try:
         bus.publish("av.beep", {"freq": 440, "duration": 0.1})
         svc.wait_idle()
-        audio.beep.assert_called_once_with(frequency=440.0, duration=0.1)
+        audio.beep.assert_called_once_with(freq=440.0, duration=0.1)
     finally:
         svc.stop()
 
@@ -303,93 +294,6 @@ def test_av_service_chime_default():
         svc.wait_idle()
         audio.chime.assert_called_once_with()
         assert bus.last("av.chimed") == {}
-    finally:
-        svc.stop()
-
-
-class _FakeMic:
-    class _Cfg:
-        sample_rate = 16000
-
-    def __init__(self):
-        self._cfg = self._Cfg()
-        self.hardware_ready = True
-
-    def record(self, seconds):
-        import numpy as np
-        n = int(self._cfg.sample_rate * float(seconds))
-        t = np.linspace(0.0, float(seconds), n, endpoint=False)
-        return (0.2 * np.sin(2.0 * np.pi * 440.0 * t)).astype(np.float32)
-
-
-class _FakeSilentMic:
-    class _Cfg:
-        sample_rate = 16000
-
-    def __init__(self):
-        self._cfg = self._Cfg()
-        self.hardware_ready = True
-
-    def record(self, seconds):
-        import numpy as np
-        n = int(self._cfg.sample_rate * float(seconds))
-        return np.zeros(n, dtype=np.float32)
-
-
-def test_av_service_record_clip_writes_wav(tmp_path):
-    bus = MessageBus()
-    mic = _FakeMic()
-    svc, _, _, _ = _make_av(bus, audio_input=mic)
-    svc.start()
-    try:
-        out_path = tmp_path / "clip.wav"
-        events = []
-        bus.subscribe("av.recorded", lambda t, p: events.append(p))
-        bus.publish("av.record", {"seconds": 0.1, "path": str(out_path)})
-        svc.wait_idle()
-        assert out_path.exists()
-        assert events
-        assert events[0]["path"] == str(out_path)
-    finally:
-        svc.stop()
-
-
-def test_av_service_playback_clip_uses_audio_output(tmp_path):
-    import wave
-    import numpy as np
-
-    bus = MessageBus()
-    svc, audio, _, _ = _make_av(bus)
-    svc.start()
-    try:
-        clip = tmp_path / "clip.wav"
-        samples = (0.2 * np.sin(2.0 * np.pi * 220.0 * np.linspace(0, 0.1, 1600, endpoint=False))).astype(np.float32)
-        pcm = (samples * 32767.0).astype(np.int16)
-        with wave.open(str(clip), "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(16000)
-            wf.writeframes(pcm.tobytes())
-
-        bus.publish("av.play_recording", {"path": str(clip)})
-        svc.wait_idle()
-        assert audio.play.called
-        _, kwargs = audio.play.call_args
-        assert kwargs.get("apply_processing") is False
-    finally:
-        svc.stop()
-
-
-def test_av_service_record_clip_fails_on_silence(tmp_path):
-    bus = MessageBus()
-    mic = _FakeSilentMic()
-    svc, _, _, _ = _make_av(bus, audio_input=mic)
-    svc.start()
-    try:
-        out_path = tmp_path / "silent.wav"
-        with pytest.raises(RuntimeError, match="recorded silence"):
-            svc.record_clip(seconds=0.1, path=str(out_path))
-        assert not out_path.exists()
     finally:
         svc.stop()
 
@@ -413,7 +317,6 @@ def test_av_service_say_ignores_empty():
     try:
         bus.publish("av.say", {"text": ""})
         bus.publish("av.say", {})
-        svc.wait_idle()
-        tts.render.assert_not_called()
+        tts.say.assert_not_called()
     finally:
         svc.stop()

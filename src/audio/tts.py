@@ -21,7 +21,6 @@ import logging
 import shutil
 import subprocess
 import tempfile
-import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -38,7 +37,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 @dataclass
 class TTSConfig:
     # ── Piper settings ──────────────────────────────────────────────────
-    piper_voice_name: str = "en_US-lessac-medium"
+    piper_voice_name: str = "en_US-lessac-high"
     piper_model: Optional[str] = None   # override with explicit .onnx path
     piper_length_scale: float = 1.15    # slightly slower — TNG-computer pacing
     piper_noise_scale: float = 0.3      # flatter prosody — measured computer delivery
@@ -60,7 +59,6 @@ class TextToSpeech:
     def __init__(self, config: Optional[TTSConfig] = None) -> None:
         self._cfg = config or TTSConfig()
         self._voice = None          # loaded PiperVoice (lazy)
-        self._voice_lock = threading.Lock()
         self._piper_model_path: Optional[Path] = None
         self._espeak_binary: Optional[str] = None
         self._backend = self._detect_backend()
@@ -101,21 +99,14 @@ class TextToSpeech:
         return None
 
     def _load_voice(self):
-        with self._voice_lock:
-            if self._voice is None:
-                from piper.voice import PiperVoice
-                self._voice = PiperVoice.load(
-                    str(self._piper_model_path),
-                    config_path=str(self._piper_model_path.with_suffix(".onnx.json")),
-                    use_cuda=False,
-                )
+        if self._voice is None:
+            from piper.voice import PiperVoice
+            self._voice = PiperVoice.load(
+                str(self._piper_model_path),
+                config_path=str(self._piper_model_path.with_suffix(".onnx.json")),
+                use_cuda=False,
+            )
         return self._voice
-
-    def prewarm(self) -> None:
-        """Load the TTS model now (blocks). Call from a background thread to
-        avoid blocking the audio worker on first speech."""
-        if self._backend == "piper":
-            self._load_voice()
 
     # ── Properties ───────────────────────────────────────────────────────
 
@@ -128,17 +119,6 @@ class TextToSpeech:
         return self._espeak_binary
 
     # ── Public API ───────────────────────────────────────────────────────
-
-    def render(self, text: str) -> "tuple[np.ndarray, int]":
-        """Synthesize *text* to (samples, sample_rate) without playing.
-
-        Thread-safe. Use this to pre-synthesize in a background thread so the
-        audio worker only needs to call output.play() — avoiding 17+ second
-        synthesis blocks on the single-threaded audio worker.
-        """
-        if self._backend == "sim":
-            return np.zeros(1, dtype=np.float32), 22050
-        return self._render_to_array(text)
 
     def say(self, text: str, output=None) -> None:
         """
@@ -182,6 +162,15 @@ class TextToSpeech:
             wf.setsampwidth(2)
             wf.setframerate(sr)
             wf.writeframes(int16.tobytes())
+
+    def prewarm(self) -> None:
+        """Eagerly initialize the active TTS backend for lower first-utterance latency."""
+        if self._backend == "piper":
+            self._load_voice()
+
+    def render(self, text: str) -> tuple[np.ndarray, int]:
+        """Return rendered audio samples and sample rate for *text* (no playback)."""
+        return self._render_to_array(text)
 
     # ── Internal ─────────────────────────────────────────────────────────
 

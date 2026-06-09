@@ -11,7 +11,7 @@ Type=simple
 User=starter
 Group=starter
 SupplementaryGroups=i2c gpio
-WorkingDirectory=/home/starter/Code/Desktop Assistant
+WorkingDirectory=/tmp
 Environment=PYTHONUNBUFFERED=1
 Environment="PYTHONPATH=/home/starter/Code/Desktop Assistant"
 # On Pi 5 / RP1, the standard dtoverlay cannot mux GPIO pins at boot.
@@ -42,8 +42,7 @@ PrivateTmp=false
 # WorkingDirectory              — lgpio creates .lgd-nfy0 notification pipe here;
 #                                 needs chmod permission so callbacks (tach) work
 ReadWritePaths=/tmp \
-    /sys/devices/platform/axi/1000120000.pcie/1f00098000.pwm \
-    /home/starter/Code/Desktop Assistant
+    /sys/devices/platform/axi/1000120000.pcie/1f00098000.pwm
 
 [Install]
 WantedBy=multi-user.target
