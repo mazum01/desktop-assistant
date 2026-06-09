@@ -34,6 +34,7 @@ _DEFAULT_GPIO            = 6
 _DEFAULT_PULSES_PER_REV  = 2
 _WINDOW_S                = 1.0   # rolling pulse window for RPM
 _POLL_INTERVAL_S         = 0.0001  # 0.1 ms → 0.23 ms actual on Pi 5; ~99% detection at 5000 RPM
+_REINIT_BACKOFF_S        = 2.0   # wait before retrying a failed handle reinit
 
 
 class FanTach:
@@ -56,18 +57,35 @@ class FanTach:
             log.warning("lgpio not available — FanTach running in simulation mode")
             return
 
+        self._start_poll_thread()
+
+    def _open_handle(self) -> bool:
+        """Open gpiochip0 and claim the GPIO. Returns True on success."""
         try:
+            if self._handle is not None:
+                try:
+                    lgpio.gpio_free(self._handle, self._gpio)
+                    lgpio.gpiochip_close(self._handle)
+                except Exception:
+                    pass
+                self._handle = None
             self._handle = lgpio.gpiochip_open(0)
             lgpio.gpio_claim_input(self._handle, self._gpio, lgpio.SET_PULL_UP)
-            self._thread = threading.Thread(
-                target=self._poll_loop, name="fan-tach-poll", daemon=True
-            )
-            self._thread.start()
-            atexit.register(self.close)
-            log.info("FanTach watching GPIO%d (%d ppr) via poll", self._gpio, self._ppr)
-        except Exception:
-            log.exception("Failed to initialise FanTach — RPM will be None")
+            return True
+        except Exception as exc:
+            log.warning("FanTach: could not open GPIO%d: %s", self._gpio, exc)
             self._handle = None
+            return False
+
+    def _start_poll_thread(self) -> None:
+        if not self._open_handle():
+            return
+        self._thread = threading.Thread(
+            target=self._poll_loop, name="fan-tach-poll", daemon=True
+        )
+        self._thread.start()
+        atexit.register(self.close)
+        log.info("FanTach watching GPIO%d (%d ppr) via poll", self._gpio, self._ppr)
 
     # ------------------------------------------------------------------
     # Public API
@@ -113,7 +131,16 @@ class FanTach:
 
     def _poll_loop(self) -> None:
         prev = 1  # line starts HIGH (pull-up)
+        consecutive_errors = 0
         while not self._stop_event.is_set():
+            if self._handle is None:
+                # Handle lost — try to reclaim
+                time.sleep(_REINIT_BACKOFF_S)
+                if self._open_handle():
+                    log.info("FanTach: GPIO%d handle recovered", self._gpio)
+                    prev = 1
+                    consecutive_errors = 0
+                continue
             try:
                 level = lgpio.gpio_read(self._handle, self._gpio)
                 # Falling edge: HIGH → LOW
@@ -121,9 +148,16 @@ class FanTach:
                     with self._lock:
                         self._timestamps.append(time.monotonic())
                 prev = level
+                consecutive_errors = 0
             except Exception as exc:
-                log.warning("FanTach poll error (retrying): %s", exc)
-                time.sleep(0.1)  # brief pause before retrying
+                consecutive_errors += 1
+                log.warning("FanTach poll error #%d: %s", consecutive_errors, exc)
+                if consecutive_errors >= 5:
+                    log.warning("FanTach: too many errors — reinitialising handle")
+                    self._handle = None
+                    consecutive_errors = 0
+                else:
+                    time.sleep(0.1)
                 continue
             time.sleep(_POLL_INTERVAL_S)
 

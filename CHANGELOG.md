@@ -6,7 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.40.1] - 2026-06-09
+## [1.40.2] - 2026-06-09
+### Fixed
+- FanTach poll thread now self-heals: if 5+ consecutive `gpio_read` errors occur, the thread automatically closes and re-opens the gpiochip0 handle (with a 2-second backoff) instead of dying or spinning. Prevents the RPM reading from going permanently silent after a transient GPIO error.
+
+
 ### Fixed
 - Fan tach RPM showing `—` after any service restart: `_poll_loop()` was using `except Exception: break` which silently killed the polling thread on any transient lgpio error; changed to log-and-continue so the thread survives glitches.
 - Control curve floor adjusted: linear ramp from 50°C/0% to 51°C/20% (instead of 50→55) so the fan jumps directly to the minimum spin threshold (~20%) rather than running at sub-threshold duty where the fan stalls and tach reads null.
