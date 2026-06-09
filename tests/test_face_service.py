@@ -65,6 +65,7 @@ def svc(bus):
         greeting_cooldown_jitter_pct=25.0,
         min_absence_s=5.0,
         confidence_threshold=0.5,
+        guest_intro_delay_min=0.0,   # instant for tests — cooldown tested separately
     )
     service.start()
     yield service
@@ -307,3 +308,92 @@ def test_faces_without_face_id_do_not_crash(bus, svc):
     bus.publish("perception.faces", _faces_payload(face))
     _wait()
 
+
+# ── Guest intro delay ────────────────────────────────────────────────────────
+
+def test_guest_intro_delay_suppresses_immediate_greeting(bus):
+    """With a non-zero delay, a new face seen once should NOT trigger greeting."""
+    reg = _mock_registry()
+    service = FaceService(
+        bus=bus, registry=reg,
+        guest_intro_delay_min=1.0 / 60.0,  # 1 second delay
+    )
+    service.start()
+    spoken = []
+    bus.subscribe("av.say", lambda t, p: spoken.append(p.get("text", "")))
+
+    bus.publish("perception.faces", _faces_payload(_make_face(face_id="g1", is_new=True)))
+    _wait()
+
+    service.stop()
+    assert not spoken, f"Expected no greeting before delay, got: {spoken}"
+
+
+def test_guest_intro_delay_fires_after_elapsed(bus):
+    """After the delay elapses, the next frame with is_new=True fires the greeting."""
+    reg = _mock_registry()
+    service = FaceService(
+        bus=bus, registry=reg,
+        guest_intro_delay_min=1.0 / 60.0,  # 1 second delay
+    )
+    service.start()
+    spoken = []
+    bus.subscribe("av.say", lambda t, p: spoken.append(p.get("text", "")))
+
+    # Force a first-seen timestamp far in the past (5 s ago, past the 1s delay)
+    service._guest_first_seen["g2"] = time.monotonic() - 5.0
+
+    bus.publish("perception.faces", _faces_payload(_make_face(face_id="g2", is_new=True)))
+    _wait()
+
+    service.stop()
+    assert any(spoken), "Expected greeting after delay elapsed"
+
+
+def test_guest_intro_timer_resets_on_absence(bus):
+    """If a guest disappears before delay, timer is cleared."""
+    reg = _mock_registry()
+    service = FaceService(
+        bus=bus, registry=reg,
+        guest_intro_delay_min=60.0,  # very long delay
+    )
+    service.start()
+
+    # Simulate face appearing — starts timer
+    bus.publish("perception.faces", _faces_payload(_make_face(face_id="g3", is_new=True)))
+    _wait()
+    assert "g3" in service._guest_first_seen
+
+    # Face disappears
+    bus.publish("perception.faces", {"faces": []})
+    _wait()
+    time.sleep(0.05)  # let absence handler process
+
+    assert "g3" not in service._guest_first_seen, "Timer should have been cleared on absence"
+    service.stop()
+
+
+def test_guest_timer_cleared_when_face_recognized(bus):
+    """If a Guest face is later recognized (is_new becomes False), timer is cleared."""
+    reg = _mock_registry()
+    service = FaceService(
+        bus=bus, registry=reg,
+        guest_intro_delay_min=60.0,  # very long delay
+    )
+    service.start()
+    spoken = []
+    bus.subscribe("av.say", lambda t, p: spoken.append(p.get("text", "")))
+
+    # First: unrecognized
+    bus.publish("perception.faces", _faces_payload(_make_face(face_id="g4", name="Guest 4", is_new=True)))
+    _wait()
+    assert "g4" in service._guest_first_seen
+
+    # Later: recognized as known person
+    known = _make_face(face_id="g4", name="Alice", is_new=False, score=0.9)
+    reg.needs_greeting.return_value = False
+    bus.publish("perception.faces", _faces_payload(known))
+    _wait()
+
+    assert "g4" not in service._guest_first_seen, "Timer should be cleared when face recognized"
+    service.stop()

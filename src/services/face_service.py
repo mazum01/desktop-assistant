@@ -9,7 +9,10 @@ Greeting rules
 --------------
 * **Known face** (is_new=False): re-greet only if ``needs_greeting()`` is True —
   face was absent ≥ *min_absence_s*, cooldown (±jitter) has elapsed since last greet.
-* **New face** (is_new=True): introduce once per session (in-memory guard).
+* **New/guest face** (is_new=True): intro only after the face has been continuously
+  present for *guest_intro_delay_min* minutes (default 2). If it disappears before
+  the delay expires the timer resets. This prevents VERA from greeting someone who
+  just walked past. Once the delay elapses VERA introduces herself once per session.
 * **Name assignment** (``face.meet``): names the most-recently-seen face,
   speaks a "Nice to meet you, <name>!" confirmation.
 
@@ -100,10 +103,11 @@ _NEW_FACE_PHRASES = [
 ]
 
 # Default cooldown: 30 minutes base, ±25% jitter
-_DEFAULT_COOLDOWN_MIN  = 30.0
-_DEFAULT_JITTER_PCT    = 25.0
-_DEFAULT_MIN_ABSENCE_S = 30.0
-_DEFAULT_CONFIDENCE    = 0.5
+_DEFAULT_COOLDOWN_MIN       = 30.0
+_DEFAULT_JITTER_PCT         = 25.0
+_DEFAULT_MIN_ABSENCE_S      = 30.0
+_DEFAULT_CONFIDENCE         = 0.5
+_DEFAULT_GUEST_INTRO_DELAY  = 2.0  # minutes before greeting an unrecognized face
 
 # Absence debounce: face must be missing this many consecutive frames
 _ABSENCE_DEBOUNCE_FRAMES = 3
@@ -152,6 +156,7 @@ class FaceService(Service):
         min_absence_s: float = _DEFAULT_MIN_ABSENCE_S,
         confidence_threshold: float = _DEFAULT_CONFIDENCE,
         quiet_hours: Optional[QuietHours] = None,
+        guest_intro_delay_min: float = _DEFAULT_GUEST_INTRO_DELAY,
     ) -> None:
         super().__init__(bus=bus)
         self._registry = registry
@@ -160,11 +165,14 @@ class FaceService(Service):
         self._min_absence_s = min_absence_s
         self._confidence_threshold = confidence_threshold
         self._quiet_hours = quiet_hours
+        self._guest_intro_delay_s = guest_intro_delay_min * 60.0
         self._unsubs: list = []
         self._last_phrase: Optional[str] = None
         self._greeted_new_ids: set[str] = set()   # session guard: intro each new face once
         self._prev_face_ids: set[str] = set()     # face_ids in previous frame
         self._absent_counter: dict[str, int] = {} # face_id → consecutive absent-frame count
+        # face_id → monotonic time when first seen as unrecognized (Guest)
+        self._guest_first_seen: dict[str, float] = {}
 
     def on_start(self) -> None:
         if self._registry is None:
@@ -185,8 +193,10 @@ class FaceService(Service):
         self._unsubs.append(self.bus.subscribe("face.registry_cleared", self._on_faces_cleared))
         self._unsubs.append(self.bus.subscribe("face.refresh", self._on_face_refresh))
         log.info(
-            "FaceService started (cooldown=%.0f min ±%.0f%%, min_absence=%.0f s)",
+            "FaceService started (cooldown=%.0f min ±%.0f%%, min_absence=%.0f s, "
+            "guest_intro_delay=%.1f min)",
             self._cooldown_min, self._jitter_pct, self._min_absence_s,
+            self._guest_intro_delay_s / 60.0,
         )
 
     def on_stop(self) -> None:
@@ -233,6 +243,7 @@ class FaceService(Service):
         self._greeted_new_ids.discard(face_id)
         self._prev_face_ids.discard(face_id)
         self._absent_counter.pop(face_id, None)
+        self._guest_first_seen.pop(face_id, None)
         log.debug("FaceService: purged face_id %s from in-memory state", face_id[:8])
 
     def _on_faces_cleared(self, _topic, payload) -> None:
@@ -243,10 +254,12 @@ class FaceService(Service):
             self._prev_face_ids -= ids
             for fid in ids:
                 self._absent_counter.pop(fid, None)
+                self._guest_first_seen.pop(fid, None)
         else:
             self._greeted_new_ids.clear()
             self._prev_face_ids.clear()
             self._absent_counter.clear()
+            self._guest_first_seen.clear()
         log.debug("FaceService: in-memory state purged on bulk face delete")
 
     def _on_face_refresh(self, _topic, _payload) -> None:
@@ -256,6 +269,7 @@ class FaceService(Service):
         self._greeted_new_ids.clear()
         self._prev_face_ids.clear()
         self._absent_counter.clear()
+        self._guest_first_seen.clear()
         log.info("FaceService: embedding cache reloaded and tracking state reset")
 
     def _on_faces(self, _topic, payload) -> None:
@@ -300,11 +314,14 @@ class FaceService(Service):
 
             cooldown_s = _jittered_cooldown(self._cooldown_min, self._jitter_pct)
             if is_new:
-                self._greet_new(face_id, name)
-            elif self._registry.needs_greeting(face_id, cooldown_s, self._min_absence_s):
-                self._greet_returning(face_id, name,
-                                      stabilization_changed=stabilization_changed,
-                                      initial_name=initial_name)
+                self._maybe_greet_new(face_id, name)
+            else:
+                # Face was recognized — clear any pending guest intro timer
+                self._guest_first_seen.pop(face_id, None)
+                if self._registry.needs_greeting(face_id, cooldown_s, self._min_absence_s):
+                    self._greet_returning(face_id, name,
+                                          stabilization_changed=stabilization_changed,
+                                          initial_name=initial_name)
 
         # ── Absence detection ─────────────────────────────────────────────
         # Track faces that newly disappeared this frame
@@ -312,6 +329,13 @@ class FaceService(Service):
         for face_id in newly_disappeared:
             if face_id not in self._absent_counter:
                 self._absent_counter[face_id] = 0
+            # Reset the guest intro timer — face left before the delay expired
+            if face_id in self._guest_first_seen:
+                log.debug(
+                    "FaceService: guest %s left before intro delay — resetting timer",
+                    face_id[:8],
+                )
+                del self._guest_first_seen[face_id]
 
         # Increment counter for all tracked absent faces; reset if reappeared
         for face_id in list(self._absent_counter.keys()):
@@ -359,6 +383,40 @@ class FaceService(Service):
         self.bus.publish("av.say", {"text": text})
 
     # ── Greeting helpers ─────────────────────────────────────────────────
+
+    def _maybe_greet_new(self, face_id: str, name: str) -> None:
+        """Greet a new/guest face only after it has been present for the intro delay.
+
+        - First sighting: record timestamp. If delay is 0, fire immediately.
+        - Face leaves before delay: timer reset by absence handler.
+        - Delay elapsed and still present: fire the intro greeting.
+        - Already greeted this session: no-op.
+        """
+        if face_id in self._greeted_new_ids:
+            return
+
+        now = time.monotonic()
+        if face_id not in self._guest_first_seen:
+            self._guest_first_seen[face_id] = now
+            if self._guest_intro_delay_s <= 0:
+                # Zero delay — greet immediately on first sighting
+                del self._guest_first_seen[face_id]
+                self._greet_new(face_id, name)
+            else:
+                log.debug(
+                    "FaceService: new face %s (%s) — starting %.1f-min intro delay",
+                    face_id[:8], name, self._guest_intro_delay_s / 60.0,
+                )
+            return
+
+        elapsed = now - self._guest_first_seen[face_id]
+        if elapsed < self._guest_intro_delay_s:
+            # Still within the delay window — stay silent
+            return
+
+        # Delay expired and face is still present — time to introduce
+        del self._guest_first_seen[face_id]
+        self._greet_new(face_id, name)
 
     def _greet_new(self, face_id: str, name: str) -> None:
         if face_id in self._greeted_new_ids:

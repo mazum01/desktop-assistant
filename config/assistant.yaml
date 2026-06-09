@@ -90,6 +90,7 @@ face_recognition:
   greeting_cooldown_jitter_pct: 25  # ± jitter percentage (e.g. 25 → 30 min ± 7.5 min)
   min_absence_s: 30               # face must have been absent this long before re-greeting
   confidence_threshold: 0.5       # minimum detection confidence to trigger a greeting
+  guest_intro_delay_min: 2.0      # minutes an unrecognized face must be present before guest intro
   # max_fps: SCRFD face-detection rate on the Hailo-8.
   #   Higher = lower detection latency but more Hailo contention with object detection
   #   and more Python GIL pressure (each inference cycle briefly holds the GIL for

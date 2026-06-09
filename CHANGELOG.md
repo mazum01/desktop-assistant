@@ -6,7 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.40.2] - 2026-06-09
+## [1.40.3] - 2026-06-09
+### Added
+- **Guest intro delay**: VERA no longer immediately greets an unrecognized face. The face must be continuously present for `guest_intro_delay_min` (default: **2 minutes**, configurable in `config/assistant.yaml` under `face_recognition`) before the "I don't think we've met" intro fires. If the face disappears before the delay expires the timer resets. If the face is later successfully recognized before the delay, the timer is cleared and no intro fires.
+
+
 ### Fixed
 - FanTach poll thread now self-heals: if 5+ consecutive `gpio_read` errors occur, the thread automatically closes and re-opens the gpiochip0 handle (with a 2-second backoff) instead of dying or spinning. Prevents the RPM reading from going permanently silent after a transient GPIO error.
 

@@ -73,6 +73,7 @@ def main() -> int:
     _greeting_jitter_pct   = float(_fr_cfg.get("greeting_cooldown_jitter_pct", 25.0))
     _min_absence_s         = float(_fr_cfg.get("min_absence_s", 30.0))
     _confidence_threshold  = float(_fr_cfg.get("confidence_threshold", 0.5))
+    _guest_intro_delay_min = float(_fr_cfg.get("guest_intro_delay_min", 2.0))
     _servo_enabled = _rt.get("servo", {}).get(
         "enabled",
         _cfg.get("servo", {}).get("enabled", True),
@@ -325,6 +326,7 @@ def main() -> int:
             min_absence_s=_min_absence_s,
             confidence_threshold=_confidence_threshold,
             quiet_hours=_qh,
+            guest_intro_delay_min=_guest_intro_delay_min,
         ),
         music_svc,
     ]
