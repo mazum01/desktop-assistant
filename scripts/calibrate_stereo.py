@@ -55,6 +55,8 @@ def parse_args() -> argparse.Namespace:
                    help="Physical square size in mm (default 18)")
     p.add_argument("--captures", type=int, default=20,
                    help="Number of valid frame pairs to collect (default 20)")
+    p.add_argument("--min-captures", type=int, default=8,
+                   help="Calibrate early with this many pairs if Ctrl-C is pressed (default 8)")
     p.add_argument("--interval-s", type=float, default=2.0,
                    help="Seconds between auto-capture attempts (default 2.0)")
     p.add_argument("--output", type=Path, default=_DEFAULT_OUTPUT,
@@ -243,10 +245,25 @@ def main() -> int:
             time.sleep(args.interval_s)
 
     except KeyboardInterrupt:
-        print("\nAborted — no output saved.")
-        cap1.stop(); cap1.close()
-        cap2.stop(); cap2.close()
-        return 1
+        n = len(obj_points)
+        if n >= args.min_captures and img_size is not None:
+            print(f"\nCtrl-C — calibrating with {n} pairs collected so far …")
+            cap1.stop(); cap1.close()
+            cap2.stop(); cap2.close()
+            rms = run_calibration(obj_points, img_points1, img_points2,
+                                  img_size, square_m, args.output)
+            if rms <= 1.0:
+                print("\nCalibration SUCCESSFUL ✓")
+            else:
+                print(f"\nCalibration done but RMS={rms:.3f} px is high — consider recapturing.")
+            if not args.no_preview:
+                print(f"\nInspect captures: scp pi@vera:{_PREVIEW_DIR}/*.jpg /tmp/")
+            return 0
+        else:
+            print(f"\nAborted — only {n} valid pairs (need ≥ {args.min_captures}). No output saved.")
+            cap1.stop(); cap1.close()
+            cap2.stop(); cap2.close()
+            return 1
 
     cap1.stop(); cap1.close()
     cap2.stop(); cap2.close()

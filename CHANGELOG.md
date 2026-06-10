@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.43.0] - 2026-06-10
+### Fixed
+- **Stereo calibration never saved** — script required exactly `--captures` (20)
+  valid pairs before calibrating. If Ctrl-C was pressed early (e.g. after 16/20
+  pairs), no output was saved. Now Ctrl-C triggers calibration with collected
+  pairs if count ≥ `--min-captures` (default 8). Also added `--min-captures`
+  flag for explicit control.
+
 ## [1.42.9] - 2026-06-10
 ### Fixed
 - **calibrate_stereo.py crashes with "Camera read failed"** — Pi cameras use
