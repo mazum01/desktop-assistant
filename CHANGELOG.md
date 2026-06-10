@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.42.8] - 2026-06-10
+### Fixed
+- **calibrate_stereo.py crashes on headless Pi** — OpenCV was built without
+  GUI support so `imshow`/`waitKey`/`destroyAllWindows` all raised errors.
+  Rewrote script to be fully headless: auto-captures every N seconds when
+  corners are detected in both cameras, saves annotated side-by-side JPEG
+  previews to `/tmp/stereo_cal_previews/` (inspectable via scp), no display
+  required. Also added `--interval-s` and `--no-preview` flags.
+- Added note to stop the core daemon before running (cameras must be free).
+
 ## [1.42.7] - 2026-06-09
 ### Fixed
 - **Face tracking suppressed during quiet hours** — tracking `motion.pan_to` commands
