@@ -1529,20 +1529,33 @@ class WebService:
         async def api_restart():
             import asyncio
             import subprocess
+            import os
 
             async def _do_restart():
                 await asyncio.sleep(0.4)
-                # Use --no-block so systemctl sends the D-Bus restart message and
-                # exits immediately — before systemd tears down this process's cgroup.
-                # start_new_session=True detaches the child from our process group so
-                # it isn't killed by SIGHUP when the daemon stops.
+                # subprocess.Popen from within a systemd service runs in the service's
+                # cgroup.  When systemd kills the cgroup to restart the unit it also
+                # kills any child subprocess, including the `systemctl restart` command,
+                # so the restart never actually fires.
+                #
+                # Fix: use `systemd-run --user` to spawn the restart command in a
+                # transient *user* service that lives in the user slice (completely
+                # separate cgroup from desktop-assistant-core.service).  The user
+                # service then calls `sudo systemctl restart` via the NOPASSWD rule.
+                env = os.environ.copy()
+                env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
                 subprocess.Popen(
-                    ["sudo", "systemctl", "--no-block", "restart",
-                     "desktop-assistant-core.service"],
+                    [
+                        "systemd-run", "--user", "--no-block", "--collect",
+                        "/bin/sh", "-c",
+                        "sleep 0.3 && sudo /usr/bin/systemctl restart "
+                        "desktop-assistant-core.service",
+                    ],
                     close_fds=True,
                     start_new_session=True,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    env=env,
                 )
 
             asyncio.ensure_future(_do_restart())

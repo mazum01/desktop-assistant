@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.42.3] - 2026-06-09
+### Fixed
+- **Restart Daemon button still not working** — `--no-block` alone was insufficient
+  because `subprocess.Popen` children still inherit the daemon's systemd cgroup;
+  systemd kills the entire cgroup (including the `systemctl` child) when stopping
+  the unit, even before the D-Bus restart message completes. Fix: use
+  `systemd-run --user --no-block --collect` to launch the restart command in a
+  transient user-slice service (its own cgroup, completely outside the daemon's
+  cgroup). The transient service calls `sudo systemctl restart` via the existing
+  NOPASSWD sudoers rule. `XDG_RUNTIME_DIR` is set explicitly so the daemon's
+  environment has the correct user runtime path.
+
 ## [1.42.2] - 2026-06-09
 ### Fixed
 - **Restart Daemon button in web GUI never worked** — `POST /api/restart` used
