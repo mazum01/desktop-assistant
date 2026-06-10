@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.42.9] - 2026-06-10
+### Fixed
+- **calibrate_stereo.py crashes with "Camera read failed"** — Pi cameras use
+  libcamera (IMX708), not plain V4L2. Rewrote camera backend to use picamera2
+  instead of cv2.VideoCapture. Also added startup check that aborts with a
+  clear message if `desktop-assistant-core` is still running (watchdog restarts
+  it automatically). Updated stop/start instructions to include the watchdog
+  service.
+
 ## [1.42.8] - 2026-06-10
 ### Fixed
 - **calibrate_stereo.py crashes on headless Pi** — OpenCV was built without

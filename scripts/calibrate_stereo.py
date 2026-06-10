@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """Stereo camera calibration script for the Desktop Assistant.
 
-Runs fully headlessly — no display required.  Captures paired frames
-automatically whenever a checkerboard is detected in both cameras, saves
-annotated preview JPEGs to /tmp/stereo_cal_previews/ so you can inspect
-them from another machine (scp / web browser), then calibrates and saves
-the result to config/stereo_cal.npz.
+Runs fully headlessly — no display required.  Uses picamera2 (libcamera)
+to capture paired frames from both IMX708 cameras, saves annotated preview
+JPEGs to /tmp/stereo_cal_previews/ for inspection, then calibrates and
+saves the result to config/stereo_cal.npz.
 
-IMPORTANT: Stop the core daemon before running this script so both cameras
-are free.
+IMPORTANT: Stop the core daemon AND watchdog before running so cameras are free.
 
-    sudo systemctl stop desktop-assistant-core.service
+    sudo systemctl stop desktop-assistant-watchdog.service desktop-assistant-core.service
     python3 scripts/calibrate_stereo.py --square-mm 18
-    sudo systemctl start desktop-assistant-core.service
+    sudo systemctl start desktop-assistant-core.service desktop-assistant-watchdog.service
 
 Usage
 -----
@@ -21,14 +19,14 @@ Usage
 
     --interval-s   Seconds between auto-capture attempts (default 2.0)
     --no-preview   Skip saving annotated preview JPEGs (faster)
-
-The script prints progress to stdout and exits 0 on success, 1 on failure.
-Press Ctrl-C to abort (no output is saved).
+    --cam0         Picamera2 index for camera 0 (default 0)
+    --cam1         Picamera2 index for camera 1 (default 1)
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
@@ -40,10 +38,13 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_OUTPUT = _REPO_ROOT / "config" / "stereo_cal.npz"
 _PREVIEW_DIR = Path("/tmp/stereo_cal_previews")
 
+# Suppress libcamera noise
+os.environ.setdefault("LIBCAMERA_LOG_LEVELS", "ERROR")
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Headless stereo camera calibration",
+        description="Headless stereo camera calibration (picamera2/IMX708)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--board-cols", type=int, default=9,
@@ -58,10 +59,10 @@ def parse_args() -> argparse.Namespace:
                    help="Seconds between auto-capture attempts (default 2.0)")
     p.add_argument("--output", type=Path, default=_DEFAULT_OUTPUT,
                    help="Output .npz path")
-    p.add_argument("--cam1-index", type=int, default=0,
-                   help="Camera 1 v4l2 index (default 0)")
-    p.add_argument("--cam2-index", type=int, default=2,
-                   help="Camera 2 v4l2 index (default 2)")
+    p.add_argument("--cam0", type=int, default=0,
+                   help="Picamera2 index for first camera (default 0)")
+    p.add_argument("--cam1", type=int, default=1,
+                   help="Picamera2 index for second camera (default 1)")
     p.add_argument("--width", type=int, default=1280,
                    help="Capture width (default 1280)")
     p.add_argument("--height", type=int, default=720,
@@ -71,22 +72,45 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def open_cameras(cam1_idx: int, cam2_idx: int, width: int, height: int):
+def open_cameras(cam0_idx: int, cam1_idx: int, width: int, height: int):
+    """Open both cameras via picamera2 and return (cam0, cam1)."""
+    try:
+        from picamera2 import Picamera2
+    except ImportError:
+        print("ERROR: picamera2 not installed — run: pip install picamera2")
+        sys.exit(1)
+
     def _open(idx: int):
-        cap = cv2.VideoCapture(idx, cv2.CAP_V4L2)
-        if not cap.isOpened():
-            print(f"ERROR: Cannot open camera {idx}  (is the daemon still running?)")
-            sys.exit(1)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        print(f"  Camera {idx}: {actual_w}×{actual_h}")
-        return cap
+        cam = Picamera2(idx)
+        cfg = cam.create_still_configuration(
+            main={"size": (width, height), "format": "RGB888"},
+            buffer_count=2,
+        )
+        cam.configure(cfg)
+        cam.start()
+        time.sleep(1.0)  # warm-up
+        print(f"  Camera {idx}: {width}×{height} (picamera2 IMX708)")
+        return cam
 
     print("Opening cameras …")
-    return _open(cam1_idx), _open(cam2_idx)
+    try:
+        c0 = _open(cam0_idx)
+        c1 = _open(cam1_idx)
+    except Exception as exc:
+        print(f"ERROR opening cameras: {exc}")
+        print("Is the daemon still running?  sudo systemctl stop desktop-assistant-core.service")
+        sys.exit(1)
+    return c0, c1
+
+
+def grab_frames(cam0, cam1) -> tuple[np.ndarray, np.ndarray]:
+    """Capture a synchronised frame pair. Returns (frame0, frame1) as BGR."""
+    # capture_array() returns RGB888; convert to BGR for OpenCV
+    f0 = cam0.capture_array()
+    f1 = cam1.capture_array()
+    f0 = cv2.cvtColor(f0, cv2.COLOR_RGB2BGR)
+    f1 = cv2.cvtColor(f1, cv2.COLOR_RGB2BGR)
+    return f0, f1
 
 
 def find_corners(frame: np.ndarray, pattern_size: tuple[int, int]) -> tuple[bool, np.ndarray | None]:
@@ -137,8 +161,24 @@ def save_preview(
     cv2.imwrite(str(path), combined, [cv2.IMWRITE_JPEG_QUALITY, 80])
 
 
+def check_daemon_not_running() -> None:
+    """Warn and exit if the core daemon is running (holds the cameras)."""
+    import subprocess
+    result = subprocess.run(
+        ["systemctl", "is-active", "desktop-assistant-core.service"],
+        capture_output=True, text=True,
+    )
+    if result.stdout.strip() == "active":
+        print("ERROR: desktop-assistant-core.service is still running — it holds both cameras.")
+        print("\nRun:")
+        print("  sudo systemctl stop desktop-assistant-watchdog.service desktop-assistant-core.service")
+        print("\nThen retry this script.")
+        sys.exit(1)
+
+
 def main() -> int:
     args = parse_args()
+    check_daemon_not_running()
     pattern_size = (args.board_cols, args.board_rows)
     square_m = args.square_mm / 1000.0
 
@@ -156,7 +196,7 @@ def main() -> int:
     print("TIP: Hold the checkerboard so BOTH cameras can see it clearly,")
     print("     then slowly tilt/move it between captures for best calibration.\n")
 
-    cap1, cap2 = open_cameras(args.cam1_index, args.cam2_index, args.width, args.height)
+    cap1, cap2 = open_cameras(args.cam0, args.cam1, args.width, args.height)
 
     obj_points:  list = []
     img_points1: list = []
@@ -166,22 +206,10 @@ def main() -> int:
 
     try:
         while len(obj_points) < args.captures:
-            # Flush stale frames from buffer
-            for _ in range(3):
-                cap1.grab()
-                cap2.grab()
-
-            ret1, f1 = cap1.retrieve() if cap1.grab() else (False, None)
-            ret2, f2 = cap2.retrieve() if cap2.grab() else (False, None)
-
-            # Fallback: plain read()
-            if not ret1 or f1 is None:
-                ret1, f1 = cap1.read()
-            if not ret2 or f2 is None:
-                ret2, f2 = cap2.read()
-
-            if not ret1 or not ret2 or f1 is None or f2 is None:
-                print("Camera read failed — retrying …")
+            try:
+                f1, f2 = grab_frames(cap1, cap2)
+            except Exception as exc:
+                print(f"Camera read failed: {exc} — retrying …")
                 time.sleep(1.0)
                 continue
 
@@ -216,12 +244,12 @@ def main() -> int:
 
     except KeyboardInterrupt:
         print("\nAborted — no output saved.")
-        cap1.release()
-        cap2.release()
+        cap1.stop(); cap1.close()
+        cap2.stop(); cap2.close()
         return 1
 
-    cap1.release()
-    cap2.release()
+    cap1.stop(); cap1.close()
+    cap2.stop(); cap2.close()
 
     if img_size is None or len(obj_points) < 8:
         print(f"\nNot enough valid pairs ({len(obj_points)}) — need at least 8. Aborting.")
