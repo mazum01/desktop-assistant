@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.42.6] - 2026-06-09
+### Fixed
+- **Face tracking broken** — `TrackingService` was missing `get_tunable_params()` and
+  `set_tunable_param()` methods called by the web GUI's tracking panel. Every page load
+  triggered an `AttributeError` 500 error every ~15 s. Added both methods, delegating to
+  `HeadTracker.get_config()` / `update_config()`.
+- Added missing bus subscriptions for `tracking.save_params`, `tracking.apply_preset`,
+  and `tracking.reset_params` (these were published by the web GUI but never subscribed
+  in `TrackingService`, so saves/presets/resets were silently dropped).
+- Imported `PRESETS` and `TUNABLE_FIELDS` from `head_tracker.py` so tracking panel
+  correctly shows parameter ranges and preset list.
+
 ## [1.42.5] - 2026-06-09
 ### Fixed
 - **Restart Daemon button** — `asyncio.ensure_future` was silently swallowing

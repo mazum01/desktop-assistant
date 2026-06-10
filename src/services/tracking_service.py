@@ -28,6 +28,9 @@ motion.position     ``{angle: float}``  — servo position feedback
 tracking.set_face_tracking   ``{"enabled": bool}``
 tracking.set_random_motion   ``{"enabled": bool}``
 tracking.set_person_seek     ``{"enabled": bool}``
+tracking.save_params         ``{}``  — persist current config to assistant.yaml
+tracking.apply_preset        ``{"preset": str}``  — apply a named HeadTracker preset
+tracking.reset_params        ``{}``  — reset to "default" preset
 av.speaking_started ``{"text": str, "ts": float}``
 av.spoke            ``{"text": str, "ts": float}``
 
@@ -49,7 +52,7 @@ from typing import Optional
 
 from src.core.bus import MessageBus
 from src.core.service import Service
-from src.motion.head_tracker import HeadTracker, HeadTrackerConfig
+from src.motion.head_tracker import PRESETS, TUNABLE_FIELDS, HeadTracker, HeadTrackerConfig
 
 log = logging.getLogger(__name__)
 
@@ -124,6 +127,36 @@ class TrackingService(Service):
                 self._tracker._cfg.frame_width = frame_width
         log.info("TrackingService: frame_width updated to %d", frame_width)
 
+    # ── Tunable params API (called by web_service.py) ────────────────────
+
+    def get_tunable_params(self) -> dict:
+        """Return current tracker config, valid ranges, and preset names."""
+        with self._lock:
+            params = self._tracker.get_config() if self._tracker else {
+                k: float(getattr(self._tracker_cfg, k, 0.0))
+                for k in TUNABLE_FIELDS
+            }
+        return {
+            "params": params,
+            "ranges": TUNABLE_FIELDS,
+            "presets": list(PRESETS.keys()),
+        }
+
+    def set_tunable_param(self, name: str, value: float) -> bool:
+        """Update a single tracker parameter at runtime. Returns True on success."""
+        with self._lock:
+            if self._tracker is not None:
+                return self._tracker.update_config(name, value)
+            # Tracker not yet started — mutate the config directly.
+            if name not in TUNABLE_FIELDS:
+                return False
+            lo, hi = TUNABLE_FIELDS[name]
+            v = float(value)
+            if not (lo <= v <= hi):
+                return False
+            setattr(self._tracker_cfg, name, v)
+            return True
+
     def on_start(self) -> None:
         if not self._enabled:
             log.info("TrackingService disabled via config")
@@ -142,6 +175,9 @@ class TrackingService(Service):
         self._unsubs.append(self.bus.subscribe("tracking.set_person_seek", self._on_set_person_seek))
         self._unsubs.append(self.bus.subscribe("av.speaking_started", self._on_speaking_started))
         self._unsubs.append(self.bus.subscribe("av.spoke", self._on_spoke))
+        self._unsubs.append(self.bus.subscribe("tracking.save_params", self._on_save_params))
+        self._unsubs.append(self.bus.subscribe("tracking.apply_preset", self._on_apply_preset))
+        self._unsubs.append(self.bus.subscribe("tracking.reset_params", self._on_reset_params))
 
         self._stop_event.clear()
         self._thread = threading.Thread(
@@ -263,6 +299,46 @@ class TrackingService(Service):
     def _on_spoke(self, _topic, _payload) -> None:
         """Clear the speaking window as soon as TTS finishes."""
         self._speaking_until = 0.0
+
+    def _on_save_params(self, _topic, _payload) -> None:
+        """Persist current tracker config to config/assistant.yaml."""
+        import os
+        import yaml
+        cfg_path = os.path.join(os.path.dirname(__file__), "..", "..", "config", "assistant.yaml")
+        cfg_path = os.path.normpath(cfg_path)
+        try:
+            with open(cfg_path) as f:
+                full_cfg = yaml.safe_load(f) or {}
+            with self._lock:
+                params = self._tracker.get_config() if self._tracker else {}
+            ht = full_cfg.setdefault("head_tracking", {})
+            ht.update(params)
+            with open(cfg_path, "w") as f:
+                yaml.dump(full_cfg, f, default_flow_style=False, sort_keys=False)
+            log.info("TrackingService: params saved to %s", cfg_path)
+        except Exception as exc:
+            log.error("TrackingService: failed to save params: %s", exc)
+
+    def _on_apply_preset(self, _topic, payload) -> None:
+        """Apply a named preset from PRESETS."""
+        if not isinstance(payload, dict):
+            return
+        name = payload.get("preset")
+        if name not in PRESETS:
+            log.warning("TrackingService: unknown preset %r", name)
+            return
+        with self._lock:
+            for k, v in PRESETS[name].items():
+                if self._tracker is not None:
+                    self._tracker.update_config(k, v)
+                else:
+                    setattr(self._tracker_cfg, k, v)
+        log.info("TrackingService: applied preset %r", name)
+
+    def _on_reset_params(self, _topic, _payload) -> None:
+        """Reset all tunable params to the 'default' preset."""
+        self._on_apply_preset(None, {"preset": "default"})
+        log.info("TrackingService: params reset to default")
 
     # ── Tracking loop ────────────────────────────────────────────────────
 
