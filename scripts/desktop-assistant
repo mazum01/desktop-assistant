@@ -344,6 +344,44 @@ def cmd_random_motion_status(_args) -> int:
     return 0
 
 
+def cmd_person_seek_enable(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "tracking.set_person_seek",
+                  "payload": {"enabled": True}})
+    print("Person seek enabled." if r.get("ok") else f"Error: {r}")
+    return 0 if r.get("ok") else 1
+
+
+def cmd_person_seek_disable(_args) -> int:
+    r = _request({"cmd": "publish", "topic": "tracking.set_person_seek",
+                  "payload": {"enabled": False}})
+    print("Person seek disabled." if r.get("ok") else f"Error: {r}")
+    return 0 if r.get("ok") else 1
+
+
+def cmd_person_seek_status(_args) -> int:
+    from pathlib import Path
+    import yaml as _yaml
+    _base = Path(__file__).resolve().parents[1]
+    _rt = {}
+    try:
+        p = _base / "config" / "runtime_state.yaml"
+        _rt = _yaml.safe_load(p.read_text()) or {} if p.exists() else {}
+    except Exception:
+        pass
+    _cfg = {}
+    try:
+        p2 = _base / "config" / "assistant.yaml"
+        _cfg = _yaml.safe_load(p2.read_text()) or {} if p2.exists() else {}
+    except Exception:
+        pass
+    enabled = _rt.get("head_tracking", {}).get(
+        "person_seek_enabled",
+        _cfg.get("head_tracking", {}).get("person_seek_enabled", True),
+    )
+    print(f"Person seek: {'enabled' if enabled else 'disabled'}")
+    return 0
+
+
 def cmd_move_servo(args) -> int:
     timeout_ms = max(2000, int(float(args.move_time_ms)) + 3000)
 
@@ -1496,6 +1534,10 @@ def cmd_help(args) -> int:
                             "                  random-motion enable    Idle gaze drifts when no face visible.\n"
                             "                  random-motion disable   Head stays still when no face visible.\n"
                             "                  random-motion status    Show current state.",
+        "person-seek":      "Enable/disable person-following behavior when no face is detected. Sub-commands:\n"
+                            "                  person-seek enable    Pan toward detected persons (no face locked).\n"
+                            "                  person-seek disable   Ignore body detections; face tracking only.\n"
+                            "                  person-seek status    Show current state.",
         "system":           "System management. Sub-commands:\n"
                             "                  system ping             Round-trip latency check.\n"
                             "                  system restart          Restart vera-core service.\n"
@@ -2724,6 +2766,14 @@ def main() -> int:
     rm_sub.add_parser("enable",  help="Idle gaze drifts when no face visible").set_defaults(func=cmd_random_motion_enable)
     rm_sub.add_parser("disable", help="Head stays still when no face visible").set_defaults(func=cmd_random_motion_disable)
     rm_sub.add_parser("status",  help="Show current random motion state").set_defaults(func=cmd_random_motion_status)
+
+    # ── Person seek subcommands ──────────────────────────────────────
+    ps_sp = sub.add_parser("person-seek", help="Enable/disable person-following when no face is detected")
+    ps_sub = ps_sp.add_subparsers(dest="ps_cmd", metavar="<subcommand>")
+    ps_sub.required = True
+    ps_sub.add_parser("enable",  help="Pan toward detected persons (full-body) when no face locked").set_defaults(func=cmd_person_seek_enable)
+    ps_sub.add_parser("disable", help="Ignore person detections; rely on face tracking only").set_defaults(func=cmd_person_seek_disable)
+    ps_sub.add_parser("status",  help="Show current person seek state").set_defaults(func=cmd_person_seek_status)
 
     sp = sub.add_parser("watch", help="Stream all bus events")
     sp.add_argument("--topic", default="", help="Topic prefix filter (default: all)")

@@ -41,12 +41,40 @@ tests/           unit and integration tests
 Natural-language control via Telegram using the [OpenClaw](https://openclaw.dev)
 AI gateway. See [`.github/skills/README.md`](.github/skills/README.md) for installation.
 
-Available skills:
-- **pan-camera** — "look left", "pan to 90°", "face me"
-- **grab-frame** — "take a photo", "snapshot from camera 2"
+Available skills (25):
+
+| Skill | Description |
+|-------|-------------|
+| **pan-camera** | "look left", "pan to 90°", "face me" |
+| **grab-frame** | "take a photo", "snapshot from camera 2" |
+| **describe-scene** | "what do you see?", "describe your surroundings" |
+| **face-tracking** | Enable/disable servo face-following behavior |
+| **random-motion** | Enable/disable idle random head movement |
+| **person-seek** | Enable/disable body-tracking when no face is locked |
+| **object-detection** | Toggle Hailo-8 COCO object classification |
+| **depth-query** | "how far away is that?", distance scan of current view |
+| **depth-toggle** | Enable/disable dense stereo or monocular depth estimation |
+| **system-status** | CPU, temp, fan, servo, camera FPS, face count |
+| **say** | Speak any text aloud via TTS |
+| **time** | Announce the current time |
+| **version** | Speak the current software version number |
+| **joke** | Tell a random dad joke |
+| **quiet-hours** | Configure TTS silence window |
+| **music** | Pandora playback (play, skip, thumbs-up, station select…) |
+| **record** | Record microphone audio to WAV |
+| **playback** | Play back a recorded WAV clip |
+| **radon** | Read EcoQube basement radon monitor |
+| **drop** | DROP water softener system status |
+| **fan-control** | Query or set fan thermal control curve |
+| **power** | Reboot or shut down the Raspberry Pi |
+| **email-monitor** | Check Gmail for important unread messages |
+| **faces** | Face registry management |
+| **privacy** | Nudity detection look-away (enable/disable/status) |
+
+See [`docs/FEATURES.md`](docs/FEATURES.md) for the full CLI / Web / OpenClaw feature matrix.
 
 ## Status
-Phase 0 — project scaffold.
+Active development — v1.43.x. See [CHANGELOG.md](CHANGELOG.md) for history.
 
 ## License
 Apache 2.0 — see [LICENSE](LICENSE)

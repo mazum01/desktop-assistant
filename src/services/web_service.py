@@ -1099,6 +1099,17 @@ class WebService:
                 self.bus.publish("tracking.set_random_motion", {"enabled": body.enabled})
             return {"ok": True, "enabled": body.enabled}
 
+        @app.get("/api/settings/person-seek")
+        async def api_get_person_seek():
+            enabled = self._tracking_svc.person_seek_enabled if self._tracking_svc else True
+            return {"enabled": enabled}
+
+        @app.put("/api/settings/person-seek")
+        async def api_put_person_seek(body: _ServoBody):
+            if self.bus:
+                self.bus.publish("tracking.set_person_seek", {"enabled": body.enabled})
+            return {"ok": True, "enabled": body.enabled}
+
         # ── REST: head-tracking tuning ────────────────────────────────
 
         @app.get("/api/tracking/params")

@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.44.0] - 2026-06-01
+### Added
+- **Person-seek CLI** — `vera person-seek {enable,disable,status}` exposes the
+  existing TrackingService person-following behavior via CLI; added to `cmd_help()`.
+- **Person-seek REST API** — `GET/PUT /api/settings/person-seek` endpoints in
+  `web_service.py` for web GUI integration.
+- **Person-seek OpenClaw skill** — `~/.openclaw/workspace/skills/person-seek/`
+  with SKILL.md + `person_seek.py` script.
+- **SKILL.md for depth-query** — complete usage guide with example output.
+- **SKILL.md for depth-toggle** — documents dense/mono modes, calibration note.
+- **SKILL.md for email-monitor** — covers Gmail IMAP setup and filtering.
+- **Fan-control OpenClaw skill** — `~/.openclaw/workspace/skills/fan-control/`
+  with SKILL.md + `fan_control.py`; queries/sets thermal control points via REST.
+- **docs/FEATURES.md** — full CLI / Web / OpenClaw feature parity matrix covering
+  all feature areas: vision, tracking, audio, IoT, system, etc.
+- **README.md skills table** — expanded from 2 to 25 skills with descriptions.
+
 ## [1.43.0] - 2026-06-10
 ### Fixed
 - **Stereo calibration never saved** — script required exactly `--captures` (20)
