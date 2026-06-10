@@ -1532,9 +1532,17 @@ class WebService:
 
             async def _do_restart():
                 await asyncio.sleep(0.4)
+                # Use --no-block so systemctl sends the D-Bus restart message and
+                # exits immediately — before systemd tears down this process's cgroup.
+                # start_new_session=True detaches the child from our process group so
+                # it isn't killed by SIGHUP when the daemon stops.
                 subprocess.Popen(
-                    ["sudo", "systemctl", "restart", "desktop-assistant-core.service"],
+                    ["sudo", "systemctl", "--no-block", "restart",
+                     "desktop-assistant-core.service"],
                     close_fds=True,
+                    start_new_session=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
 
             asyncio.ensure_future(_do_restart())

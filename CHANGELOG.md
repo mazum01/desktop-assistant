@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.42.2] - 2026-06-09
+### Fixed
+- **Restart Daemon button in web GUI never worked** — `POST /api/restart` used
+  `subprocess.Popen(["sudo", "systemctl", "restart", ...])` without `--no-block`.
+  When systemd restarts the service it kills all processes in the service's cgroup,
+  including the spawned `systemctl` child, before it can register the restart with
+  systemd. Fix: add `--no-block` flag so systemctl fires the D-Bus restart message
+  and exits immediately (before the cgroup is torn down), plus `start_new_session=True`
+  to detach the child from the daemon's process group.
+
 ## [1.42.1] - 2026-06-09
 ### Added
 - **Privacy detection overlay on camera feed** (`src/services/vision_service.py`): when the privacy
