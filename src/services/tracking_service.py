@@ -392,10 +392,17 @@ class TrackingService(Service):
                 target = target + nod
 
             move_ms = _UPDATE_INTERVAL * 1000.0 * 2.0
-            self.bus.publish("motion.pan_to", {
+            pan_payload: dict = {
                 "angle": round(target, 2),
                 "move_time_ms": round(move_ms, 1),
-            })
+            }
+            # Face tracking and person-seek respond to human presence — they
+            # should work even during quiet hours.  Random idle motion should
+            # stay suppressed (it's the noise-making autonomous behaviour the
+            # user is silencing).
+            if effective_cx is not None:
+                pan_payload["override_quiet"] = True
+            self.bus.publish("motion.pan_to", pan_payload)
 
             elapsed = time.monotonic() - now
             sleep_t = max(0.001, _UPDATE_INTERVAL - elapsed)

@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.42.7] - 2026-06-09
+### Fixed
+- **Face tracking suppressed during quiet hours** — tracking `motion.pan_to` commands
+  were missing `override_quiet: true`, so quiet hours (21:00–05:00) silently blocked
+  all head movement. Face tracking and person-seek (responding to human presence) now
+  include `override_quiet: true`; random idle motion continues to be suppressed.
+
 ## [1.42.6] - 2026-06-09
 ### Fixed
 - **Face tracking broken** — `TrackingService` was missing `get_tunable_params()` and
