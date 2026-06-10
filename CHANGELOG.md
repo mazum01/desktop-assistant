@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.42.4] - 2026-06-09
+### Fixed
+- **Restart Daemon button** — `systemd-run --user` was silently failing because
+  `DBUS_SESSION_BUS_ADDRESS` is not set in the system service's environment (only
+  `XDG_RUNTIME_DIR` was present). Without the dbus socket address, `systemd-run`
+  cannot contact the user session bus. Fix: explicitly set
+  `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus` in the subprocess
+  environment before calling `systemd-run --user`.
+
 ## [1.42.3] - 2026-06-09
 ### Fixed
 - **Restart Daemon button still not working** — `--no-block` alone was insufficient

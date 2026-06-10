@@ -1535,15 +1535,16 @@ class WebService:
                 await asyncio.sleep(0.4)
                 # subprocess.Popen from within a systemd service runs in the service's
                 # cgroup.  When systemd kills the cgroup to restart the unit it also
-                # kills any child subprocess, including the `systemctl restart` command,
-                # so the restart never actually fires.
+                # kills any child subprocess before the restart can be registered.
                 #
                 # Fix: use `systemd-run --user` to spawn the restart command in a
-                # transient *user* service that lives in the user slice (completely
-                # separate cgroup from desktop-assistant-core.service).  The user
-                # service then calls `sudo systemctl restart` via the NOPASSWD rule.
+                # transient user service (its own cgroup, outside the daemon's cgroup).
+                # `DBUS_SESSION_BUS_ADDRESS` must be set explicitly — system services
+                # don't inherit it from the user session.
+                uid = os.getuid()
                 env = os.environ.copy()
-                env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+                env["XDG_RUNTIME_DIR"] = f"/run/user/{uid}"
+                env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path=/run/user/{uid}/bus"
                 subprocess.Popen(
                     [
                         "systemd-run", "--user", "--no-block", "--collect",
