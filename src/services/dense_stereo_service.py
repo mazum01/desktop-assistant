@@ -56,6 +56,7 @@ class DenseStereoConfig:
     max_depth_m: float = 6.0
     baseline_mm: float = 56.0
     fov_degrees: float = 100.0
+    enabled: bool = False
 
 
 class DenseStereoService(Service):
@@ -87,14 +88,17 @@ class DenseStereoService(Service):
                 max_depth_m=d.get("max_depth_m", 6.0),
                 baseline_mm=bm * 1000.0 if bm is not None else d.get("baseline_mm", 56.0),
                 fov_degrees=d.get("fov_degrees", 100.0),
+                enabled=bool(d.get("dense_enabled", False)),
             )
         else:
             self._cfg = config or DenseStereoConfig()
 
+        self._enabled: bool = self._cfg.enabled
         self._rectifier: Optional[StereoRectifier] = None
         self._matcher: Optional[DenseStereoMatcher] = None
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        self._unsubs: list = []
 
         # Latest depth map cached for API use
         self._latest_payload: Optional[dict] = None
@@ -122,22 +126,37 @@ class DenseStereoService(Service):
             max_depth_m=self._cfg.max_depth_m,
         )
 
+        if self.bus:
+            self._unsubs.append(
+                self.bus.subscribe("depth.set_dense_enabled", self._on_set_enabled)
+            )
+
         self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._run_loop, name="dense-stereo", daemon=True
         )
         self._thread.start()
         log.info(
-            "DenseStereoService started — %dx%d @ %.1fHz, calibrated=%s",
+            "DenseStereoService started — %dx%d @ %.1fHz, calibrated=%s, enabled=%s",
             self._cfg.proc_width, self._cfg.proc_height,
-            self._cfg.rate_hz, self._rectifier.calibrated,
+            self._cfg.rate_hz, self._rectifier.calibrated, self._enabled,
         )
 
     def on_stop(self) -> None:
+        for unsub in self._unsubs:
+            try:
+                unsub()
+            except Exception:
+                pass
+        self._unsubs.clear()
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=5)
             self._thread = None
+
+    def _on_set_enabled(self, _topic, payload: dict) -> None:
+        self._enabled = bool(payload.get("enabled", True))
+        log.info("DenseStereoService: enabled=%s", self._enabled)
 
     @property
     def hardware_ready(self) -> bool:
@@ -156,6 +175,9 @@ class DenseStereoService(Service):
     def _run_loop(self) -> None:
         interval = max(_MIN_INTERVAL_S, 1.0 / max(0.1, self._cfg.rate_hz))
         while not self._stop_event.is_set():
+            if not self._enabled:
+                self._stop_event.wait(timeout=0.5)
+                continue
             t0 = time.monotonic()
             try:
                 self._process_one()

@@ -6,6 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.3] - 2026-06-09
+### Fixed
+- **Depth perception always showing disabled/no-hardware** — two root causes:
+  1. `MonoDepthService` and `DenseStereoService` were only instantiated at startup
+     when their config flag (`mono_enabled` / `dense_enabled`) was `true`. Since
+     both default to `false`, runtime `depth mono-enable` / `depth dense-enable`
+     commands had no running service to receive the bus message and no effect.
+  2. `PUT /api/settings/depth` did not persist to `config/assistant.yaml`, so any
+     runtime enable/disable was lost on the next daemon restart.
+- **Fix**: Both services are now always started at startup (they idle cheaply when
+  disabled). `DenseStereoService` gained a `_enabled` flag, idle-loop check, and
+  `depth.set_dense_enabled` bus subscription (matching `MonoDepthService`).
+  `PUT /api/settings/depth` now writes `dense_enabled` / `mono_enabled` back to
+  `config/assistant.yaml` so settings persist across restarts.
+
 ## [1.41.2] - 2026-06-09
 ### Fixed
 - **Fan tach always None after service restart** — two root causes fixed:

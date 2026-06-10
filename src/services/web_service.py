@@ -1697,6 +1697,22 @@ class WebService:
                     self.bus.publish("depth.set_dense_enabled", {"enabled": bool(body["dense_enabled"])})
                 if "mono_enabled" in body:
                     self.bus.publish("depth.set_mono_enabled", {"enabled": bool(body["mono_enabled"])})
+            # Persist to config/assistant.yaml so settings survive restarts.
+            try:
+                import yaml as _yaml
+                _cfg_path = _ASSISTANT_CONFIG_PATH
+                with open(_cfg_path) as _f:
+                    _cfg = _yaml.safe_load(_f) or {}
+                if "depth" not in _cfg:
+                    _cfg["depth"] = {}
+                if "dense_enabled" in body:
+                    _cfg["depth"]["dense_enabled"] = bool(body["dense_enabled"])
+                if "mono_enabled" in body:
+                    _cfg["depth"]["mono_enabled"] = bool(body["mono_enabled"])
+                with open(_cfg_path, "w") as _f:
+                    _yaml.dump(_cfg, _f, default_flow_style=False, allow_unicode=True)
+            except Exception as _exc:
+                log.warning("depth settings: could not persist to YAML: %s", _exc)
             return {"ok": True}
 
         # ── Depth query ─────────────────────────────────────────────────

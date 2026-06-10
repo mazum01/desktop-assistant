@@ -382,7 +382,8 @@ def main() -> int:
         )
         services.append(stereo_svc)
     # Dense stereo depth service — StereoSGBM per-pixel depth map
-    if cam2_svc is not None and _depth_cfg_raw.get("dense_enabled", False):
+    # Always started when cam2 is available; enabled/disabled at runtime via bus.
+    if cam2_svc is not None:
         dense_stereo_svc = DenseStereoService(
             bus=bus,
             vision_service=vis,
@@ -397,21 +398,20 @@ def main() -> int:
                 max_depth_m=float(_depth_cfg_raw.get("max_depth_m", 6.0)),
                 baseline_mm=float(_depth_cfg_raw.get("baseline_mm", 56.0)),
                 fov_degrees=float(_ht_cfg_raw.get("fov_degrees", 100.0)),
+                enabled=bool(_depth_cfg_raw.get("dense_enabled", False)),
             ),
         )
         services.append(dense_stereo_svc)
     else:
         dense_stereo_svc = None
-    # Monocular depth service — Hailo-8 scdepthv3 single-camera depth
-    if _depth_cfg_raw.get("mono_enabled", False):
-        mono_depth_svc = MonoDepthService(
-            bus=bus,
-            vision_service=vis,
-            config={"depth": _depth_cfg_raw},
-        )
-        services.append(mono_depth_svc)
-    else:
-        mono_depth_svc = None
+    # Monocular depth service — Hailo-8 scdepthv3 single-camera depth.
+    # Always started; enabled/disabled at runtime via depth.set_mono_enabled bus topic.
+    mono_depth_svc = MonoDepthService(
+        bus=bus,
+        vision_service=vis,
+        config={"depth": _depth_cfg_raw},
+    )
+    services.append(mono_depth_svc)
     tracking_svc = TrackingService(
         bus=bus, config=_tracker_cfg, enabled=_tracking_enabled,
         face_tracking_enabled=_face_tracking_enabled,
