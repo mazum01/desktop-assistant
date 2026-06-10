@@ -40,6 +40,7 @@ from src.core.runtime_state import load as _load_runtime, save as _save_runtime
 from src.services.notification_service import NotificationService
 from src.services.room_service import RoomService
 from src.services.telegram_service import TelegramService
+from src.services.privacy_service import PrivacyService, PrivacyConfig
 
 # The thermal service runs in a separate process. Its IPCBridge PUBs on
 # this endpoint; we SUBscribe to it from the core IPCBridge and re-emit
@@ -423,6 +424,24 @@ def main() -> int:
     )
     services.append(tracking_svc)
 
+    _privacy_cfg_raw = _cfg.get("privacy", {})
+    privacy_svc = PrivacyService(
+        bus=bus,
+        vision_service=vis,
+        config=PrivacyConfig(
+            enabled=bool(_privacy_cfg_raw.get("enabled", True)),
+            rate_hz=float(_privacy_cfg_raw.get("rate_hz", 1.0)),
+            threshold=float(_privacy_cfg_raw.get("threshold", 0.6)),
+            look_away_angle_deg=float(_privacy_cfg_raw.get("look_away_angle_deg", 45.0)),
+            cooldown_s=float(_privacy_cfg_raw.get("cooldown_s", 10.0)),
+            clear_frames=int(_privacy_cfg_raw.get("clear_frames", 3)),
+            announce=bool(_privacy_cfg_raw.get("announce", True)),
+            announce_text=str(_privacy_cfg_raw.get("announce_text", "I'll give you some privacy.")),
+            resume_text=str(_privacy_cfg_raw.get("resume_text", "")),
+        ),
+    )
+    services.append(privacy_svc)
+
     notif_svc = NotificationService(
         bus=bus,
         quiet_hours=_qh,
@@ -461,6 +480,7 @@ def main() -> int:
                              dense_stereo_service=dense_stereo_svc,
                              mono_depth_service=mono_depth_svc,
                              room_service=room_svc,
+                             privacy_service=privacy_svc,
                              iot_registry=(iot_svc.registry if iot_svc else None))
         services.append(web_svc)
         web_svc._all_services = services  # seed service registry at startup

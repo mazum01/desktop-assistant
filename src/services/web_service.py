@@ -452,6 +452,7 @@ class WebService:
         mono_depth_service=None,
         room_service=None,
         iot_registry=None,
+        privacy_service=None,
         api_key: str = "",
     ) -> None:
         self.bus = bus
@@ -472,6 +473,7 @@ class WebService:
         self._mono_depth_svc = mono_depth_service
         self._room_svc = room_service
         self._iot_registry = iot_registry
+        self._privacy_svc = privacy_service
         self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
         self._thread: Optional[threading.Thread] = None
@@ -1713,6 +1715,42 @@ class WebService:
                     _yaml.dump(_cfg, _f, default_flow_style=False, allow_unicode=True)
             except Exception as _exc:
                 log.warning("depth settings: could not persist to YAML: %s", _exc)
+            return {"ok": True}
+
+        # ── Privacy settings ─────────────────────────────────────────────
+
+        @app.get("/api/settings/privacy")
+        async def api_get_privacy_settings():
+            svc = self._privacy_svc
+            return {
+                "enabled":            getattr(svc, "_enabled", True) if svc else True,
+                "hardware_ready":     getattr(svc, "hardware_ready", False) if svc else False,
+                "rate_hz":            getattr(getattr(svc, "_cfg", None), "rate_hz", 1.0),
+                "threshold":          getattr(getattr(svc, "_cfg", None), "threshold", 0.6),
+                "look_away_angle_deg":getattr(getattr(svc, "_cfg", None), "look_away_angle_deg", 45.0),
+                "cooldown_s":         getattr(getattr(svc, "_cfg", None), "cooldown_s", 10.0),
+                "announce":           getattr(getattr(svc, "_cfg", None), "announce", True),
+            }
+
+        @app.put("/api/settings/privacy")
+        async def api_put_privacy_settings(body: dict):
+            if self.bus and "enabled" in body:
+                self.bus.publish("privacy.set_enabled", {"enabled": bool(body["enabled"])})
+            try:
+                import yaml as _yaml
+                _cfg_path = _ASSISTANT_CONFIG_PATH
+                with open(_cfg_path) as _f:
+                    _cfg = _yaml.safe_load(_f) or {}
+                if "privacy" not in _cfg:
+                    _cfg["privacy"] = {}
+                for key in ("enabled", "rate_hz", "threshold", "look_away_angle_deg",
+                            "cooldown_s", "clear_frames", "announce", "announce_text", "resume_text"):
+                    if key in body:
+                        _cfg["privacy"][key] = body[key]
+                with open(_cfg_path, "w") as _f:
+                    _yaml.dump(_cfg, _f, default_flow_style=False, allow_unicode=True)
+            except Exception as _exc:
+                log.warning("privacy settings: could not persist to YAML: %s", _exc)
             return {"ok": True}
 
         # ── Depth query ─────────────────────────────────────────────────

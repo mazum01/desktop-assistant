@@ -1,337 +1,170 @@
-# VERA — core configuration.
-
-clock_announcements:
-  # Spoken time at :00 and :30 of every hour.
-  # At the top of the hour a dad joke follows the time.
-  # Set to false to silence completely.
-  enabled: true
-
-head_tracking:
-  # Natural spring-damper servo tracking following detected faces.
-  # Idle mode: slow random gaze when no face is visible.
-  enabled: true
-  face_tracking_enabled: true    # servo follows detected faces
-  random_motion_enabled: true    # idle random gaze when no face visible
-  person_seek_enabled: true      # pan toward detected person when no face locked
-  fov_degrees: 100.0        # IMX708 wide horizontal field of view estimate
-  dead_zone_frac: 0.06      # fraction of frame width ignored before tracking activates
-  tracking_gain: 0.28       # fraction of Kalman-predicted face offset applied as servo target
-  max_speed_deg_s: 120.0    # hard velocity cap (servo physical limit ~300°/s)
-  invert_pan: false          # flip pan direction (set true if servo mount reverses left/right)
-  # Kalman filter — smooths face centroid, estimates velocity, predicts ahead
-  kalman_r: 400.0            # measurement noise variance (px²); higher = more smoothing
-  kalman_q_pos: 1.0          # process noise, position
-  kalman_q_vel: 50.0         # process noise, velocity (higher = tracks fast motion better)
-  lookahead_s: 0.02          # predict face position this far ahead (seconds)
-  # Minimum-jerk trajectory — replaces spring-damper for human-like motion profiles
-  replan_threshold_deg: 2.0  # only replan trajectory when target shifts by this many degrees
-  move_base_s: 0.18          # minimum trajectory duration (s)
-  move_scale_s_per_deg: 0.012  # extra duration per degree of travel
-  move_max_s: 0.60           # cap on trajectory duration (s)
-  speaking_motion:
-    # Gentle sinusoidal head nod while DA is speaking via TTS.
-    enabled: true
-    amplitude_deg: 1.5      # peak nod offset in degrees (reduce if too distracting)
-    freq_hz: 2.5            # nod oscillation frequency
-
-servo:
-  # Enable/disable all servo motion (head pan).
-  # When disabled the servo holds its current position; the web
-  # dashboard and CLI can change this at runtime.
-  enabled: true
-  soft_min_deg: 135   # minimum logical angle the servo may travel to (1–360)
-  soft_max_deg: 215   # maximum logical angle the servo may travel to (1–360)
-  # DS3218 pulse calibration.  500–2500 µs covers the full 0°–270° physical
-  # travel; through the 360/270 gear ratio this gives 0°–360° head rotation.
-  # Narrow the range here only if the servo binds at the extremes.
-  pulse_min_us: 10
-  pulse_max_us: 2950
-
-camera:
-  # Capture resolution and frame rate for the primary (face-tracking) camera.
-  # The camera always captures at this resolution for full sensor field-of-view.
-  # Use the web GUI "Stream Resolution" to change display size without cropping.
-  width: 640
-  height: 480
-  framerate: 30
-  # MJPEG stream output resolution — encoder downscales to this before JPEG encoding.
-  # Camera captures at full width×height above; stream_width×stream_height is what
-  # the browser receives. Change live via the GUI with no camera restart needed.
-  stream_width: 640
-  stream_height: 360
-  # Software rotation applied to every frame before display and detection.
-  # Valid range: 0–359. Common values: 0 (none), 90, 180, 270.
-  # Multiples of 90 are lossless; other angles keep the same canvas size.
-  # Persisted at runtime; change live with: da vision rotation <deg>
-  rotation_deg: 0
-  # Autofocus mode: continuous | auto | manual | off
-  # continuous — camera tracks focus in real-time (recommended for desk use)
-  # auto       — single AF sweep at startup, then locks
-  # manual     — fixed lens_position in diopters (0=∞, 1.0=1m, 2.0=0.5m)
-  af_mode: continuous
-
-camera2:
-  # Secondary CSI camera — raw view only (no detection/overlays).
-  # Set enabled: false to disable the second stream entirely.
-  enabled: true
-  index: 1          # CSI slot 1
-  width: 1920
-  height: 1080
-  framerate: 30     # match primary cam — Pi 5 handles dual 30fps comfortably
-  rotation_deg: 0
-  # Must match camera.af_mode so both feeds have consistent focus behaviour.
-  af_mode: continuous
-
-face_recognition:
-  # ArcFace MobileFaceNet identity recognition on the Hailo-8.
-  # New faces are auto-assigned "Guest N"; name them with: da meet "Name"
-  enabled: true
-  greeting_cooldown_min: 30       # base re-greet cooldown in minutes
-  greeting_cooldown_jitter_pct: 25  # ± jitter percentage (e.g. 25 → 30 min ± 7.5 min)
-  min_absence_s: 30               # face must have been absent this long before re-greeting
-  confidence_threshold: 0.5       # minimum detection confidence to trigger a greeting
-  guest_intro_delay_min: 2.0      # minutes an unrecognized face must be present before guest intro
-  # max_fps: SCRFD face-detection rate on the Hailo-8.
-  #   Higher = lower detection latency but more Hailo contention with object detection
-  #   and more Python GIL pressure (each inference cycle briefly holds the GIL for
-  #   pre/postprocessing). 5 Hz gives smooth camera streaming; use 10 Hz if you need
-  #   faster reaction to new faces appearing.
-  max_fps: 5.0
-  # Matching quality controls.
-  # match_threshold: cosine similarity required to accept a recognition hit.
-  #   0.60 provides a good balance between false positives and false negatives
-  #   for ArcFace MobileFaceNet.  Scores in [0.45, 0.60) enter a tentative
-  #   zone where stabilisation accumulates more votes before deciding.
-  match_threshold: 0.60
-  # min_face_px: faces narrower or shorter than this many pixels are skipped
-  #   for embedding. Tiny/distant faces produce noisy embeddings that degrade
-  #   the identity gallery. 80px (≈ 0.5 m at normal desk-camera FOV) is a
-  #   good default; lower if you need recognition at longer range.
-  min_face_px: 80
-
-depth:
-  # Depth estimation for face localisation in 3D space.
-  # Two methods are fused: face-size (always on) + stereo (when cam2 is enabled).
-  #
-  # Face-size method: uses the known average frontal face width and the camera
-  # focal length (derived from camera.fov_degrees + camera.width) to estimate Z.
-  # Accurate to ±15% for frontal faces at 0.3–4 m. No calibration required.
-  #
-  # Stereo method: uses template matching between cam1 and cam2 to find the
-  # horizontal disparity, then Z = focal_px × baseline_m / disparity_px.
-  # Requires both cameras to be enabled and roughly horizontally aligned.
-  enabled: true
-  baseline_mm: 56               # physical horizontal separation between lenses
-  known_face_width_m: 0.145     # assumed average frontal face width in metres
-  min_depth_m: 0.25             # reject depth estimates below this threshold
-  max_depth_m: 6.0              # reject depth estimates above this threshold
-
-  # Dense stereo (StereoSGBM) — per-pixel depth map for everything in view.
-  # Enable after running: python3 scripts/calibrate_stereo.py
-  # Without calibration, depths are approximate (no epipolar rectification).
-  dense_enabled: false
-  dense_rate_hz: 3.0            # max processing rate (Pi 5 can sustain ~3 Hz at 640×480)
-  dense_width: 640              # processing resolution (downsampled from capture res)
-  dense_height: 480
-  num_disparities: 128          # must be multiple of 16; larger = farther range but slower
-  block_size: 5                 # SGBM block size (odd, 3–11); larger = smoother
-
-  # Monocular neural depth (Hailo-8 scdepthv3) — single-camera relative depth.
-  # Produces normalised depth map (not absolute metres without stereo fusion).
-  # Requires Hailo-8 accelerator.
-  mono_enabled: false
-  mono_rate_hz: 3.0             # max inference rate (SGBM + scdepthv3 share Hailo; keep ≤3)
-  mono_hef_path: /usr/local/hailo/resources/models/hailo8/scdepthv3.hef
-  # mono_scale_factor: null     # set a float to get approximate metric depth (inverse-depth units)
-
-object_detection:
-  # YOLOv8s object classification on the Hailo-8.
-  # Detects 80 COCO classes (person, laptop, cup, etc.) at ~2 fps.
-  # Can be toggled at runtime from the web dashboard or CLI.
-  enabled: true
-  max_fps: 2.0              # inference rate; lower = less Hailo contention with face detection
-  conf_threshold: 0.40      # minimum detection confidence
-  max_objects: 8            # max objects sent to overlay per frame (sorted by confidence)
-
-web_dashboard:
-  # Live browser dashboard served on the local network.
-  # Access at http://<pi-ip>:8080
-  enabled: true
-  port: 8080
-  host: "0.0.0.0"
-
-quiet_hours:
-  # Silence the assistant during these hours.
-  # start/end are 24-hour HH:MM strings; overnight ranges work (e.g. 21:00–06:00).
-  # Can also be changed live from the web dashboard.
-  enabled: true
-  start: "21:00"
-  end: "06:00"
-
-music:
-  # Pandora playback via pianobar (https://github.com/PromyLOPh/pianobar).
-  # Pre-requisite: sudo apt install pianobar
-  # Then create ~/.config/pianobar/config:
-  #   user = your@pandora.com
-  #   password = yourpassword
-  enabled: true
-  announce_song_changes: false  # if true, speaks "Now playing…" on each new track
-
-notifications:
-  # Proactive speech: thermal alerts and long-absence check-ins.
-  thermal_alerts:
-    enabled: true
-    warn_celsius: 75.0          # speak a warning at this temperature
-    critical_celsius: 85.0      # speak a critical alert at this temperature
-    min_interval_min: 10        # minimum minutes between repeated thermal notifications
-  absence_alerts:
-    enabled: true
-    absence_min: 30             # minutes with no face seen before speaking
-    min_interval_min: 60        # minimum minutes between repeated absence alerts
-
-telegram:
-  # Forward face-greeting audio outputs to a Telegram chat.
-  # bot_token is read from the VERA_TELEGRAM_BOT_TOKEN environment variable
-  # (set in /etc/desktop-assistant/secrets.env).  The value here is ignored
-  # when the env var is present — leave it blank.
-  # chat_id is read from the VERA_TELEGRAM_CHAT_ID environment variable
-  # (set in /etc/desktop-assistant/secrets.env).  Leave blank here.
-  enabled: true
-  bot_token: ""
-  chat_id: ""
-  # Forward every TTS utterance (av.spoke) to Telegram in addition to face greetings.
-  # Face greetings are deduplicated so they are not sent twice.
-  forward_tts: true
-  # Utterances matching any of these substrings (case-insensitive) are suppressed.
-  tts_skip_patterns:
-    - "It is now"     # clock hour-announcements
-    - "The time is"
-  # Emoji prefix per event type (optional)
-  emoji_new_face: "👋"
-  emoji_returning: "👤"
-  emoji_named: "🏷️"
-
-watchdog:
-  # System health watchdog — monitors all critical services and auto-restarts
-  # anything that goes down or gets stuck. Notifies via Telegram.
-  enabled: true
-  check_interval_s: 30          # how often to poll each service
-  restart_cooldown_min: 5       # minimum minutes between restarts of same service
-  telegram_notify: false        # send Telegram message on every auto-fix
-  openclaw_stuck_threshold: 10  # "Bot not initialized" lines in 60s → restart openclaw
-  openclaw_max_uptime_min: 90   # force restart after 90 min to guard against Telegram polling stall
-
-room_detection:
-  # How often VERA samples the scene to detect whether it has been moved.
-  sample_interval_s: 600        # seconds between scene comparisons (default 10 min)
-  # Number of *consecutive* diverged samples before VERA prompts for confirmation.
-  # With sample_interval_s=600, consec_diverged=3 means 30 minutes of sustained
-  # visual difference before asking.
-  consec_diverged: 3
-  # Cosine similarity threshold (0–1). Below this = "looks like a different room".
-  # Lower → more sensitive (more false alarms); higher → less sensitive (misses moves).
-  similarity_thresh: 0.85
-  # Minimum seconds between room-change prompts (prevents repeated nagging).
-  prompt_cooldown_s: 1800       # 30 minutes
-  # Mean brightness threshold (0–255). Samples taken in near-darkness are skipped.
-  # Prevents turning off the lights from triggering a false room-change alarm.
-  low_light_thresh: 15.0
-  # Skip the sample entirely when faces are visible in the frame.
-  # Prevents person edges from polluting the room embedding.
-  skip_when_faces: true
-
-radon:
-  # EcoSense EcoQube cloud polling — credentials via secrets.env.
-  # How often to poll the EcoSense cloud API (seconds). Default: 5 minutes.
-  poll_interval_s: 300
-  # Speak a TTS warning when the level exceeds the EPA action threshold (4.0 pCi/L).
-  alert_on_red: true
-  # Minimum seconds between Red-alert TTS announcements (prevents repeated nagging).
-  red_alert_cooldown_s: 3600
-  # Send a Telegram message when radon exceeds this level (pCi/L). Set to 0 to disable.
-  # This replaces the OpenClaw hourly LLM-based radon check — no Claude API call needed.
-  telegram_alert_pcil: 1.5
-  # Minimum seconds between Telegram radon alerts (default: 2 hours).
-  telegram_alert_cooldown_s: 7200
-
-drop:
-  # DROP water softener system — local MQTT integration.
-  #
-  # SETUP (one-time):
-  #   1. Install the Mosquitto broker: sudo apt-get install -y mosquitto
-  #   2. Open the DROP Connect app on your phone.
-  #   3. Go to System → Advanced → Configure MQTT.
-  #   4. Set broker address to this Pi's IP (or hostname), port 1883.
-  #   5. Leave username/password blank (or set mqtt_user/mqtt_pass below).
-  #   6. Tap Connect — the Hub will announce devices within ~60 seconds.
-  #
-  # MQTT broker address and port (default: local Mosquitto on port 1883).
-  mqtt_host: "localhost"
-  mqtt_port: 1883
-  # Broker credentials for the DROP Hub connection.
-  mqtt_user: "drop"
-  # mqtt_pass is read from VERA_DROP_MQTT_PASS env var (secrets.env). Leave blank here.
-  mqtt_pass: ""
-  # Speak a TTS alert when a leak is detected.
-  alert_on_leak: true
-  # Speak a TTS alert when salt is low.
-  alert_on_salt_low: true
-  # Minimum seconds between repeat salt-low TTS alerts.
-  salt_alert_cooldown_s: 7200
-
-
-tts:
-  # Piper voice model to use for synthesis.
-  # Available models in config/piper/:
-  #   en_US-lessac-medium  (~61 MB, ~0.6–4s synthesis) ← default, balanced quality
-  #   en_US-amy-medium     (~61 MB, ~0.7–5s synthesis) — alternate voice
-  #   en_US-lessac-high    (~109 MB, ~14–15s synthesis) — higher quality, slow
-  piper_voice_name: en_US-lessac-medium
-  # TTS speech rate (1.0 = natural speed; 1.15 = slightly slower / computer-like).
-  piper_length_scale: 1.15
-
-
-# ── Audio hardware backend ─────────────────────────────────────────────────
-# Select which physical audio device VERA uses for input (microphone) and
-# output (speaker/TTS).
-#
-# Supported values:
-#   default        — built-in PortAudio mic + aplay → PipeWire pipeline
-#   respeaker_flex — Seeed ReSpeaker Flex Linear USB array (multi-mic AEC,
-#                    16 kHz native capture, built-in speaker)
-#
-# To activate the ReSpeaker Flex Linear:
-#   1. Plug in the USB device.
-#   2. Confirm ALSA sees it: arecord -l  (look for "ReSpeaker")
-#   3. Change backend below to respeaker_flex and restart the service.
-#   4. Optional LED ring: pip install usb-pixel-ring-v2
-
 audio:
-  backend: default        # default | respeaker_flex
-
-  # ── Default backend settings ──────────────────────────────────────────
-  # Used when backend: default (the original audio pipeline).
+  backend: default
   default:
-    input_device_name: ""         # empty → use OS default microphone
-    input_sample_rate: 44100      # CM108 USB audio native rate
-    output_alsa_device: pulse     # "pulse" → PipeWire PulseAudio sink
-    output_sample_rate: 44100
-    loudness_boost: 2.0           # soft-clip waveshaper drive (1.0 = off)
-    eq_preset: flat               # flat | bass_boost | treble_boost | vocal | loudness | warm | custom
-
-  # ── ReSpeaker Flex Linear settings ───────────────────────────────────
-  # Used when backend: respeaker_flex.
-  respeaker_flex:
-    # Input (microphone array)
-    input_device_name: "ReSpeaker"   # ALSA name substring (case-insensitive)
-    input_sample_rate: 16000         # native capture rate of the USB device
-    input_raw_channels: 6            # total USB channels (4 mic + 2 reference)
-    input_processed_channel: 0       # channel index for AEC/beamformed output
-    # Output (built-in speaker)
-    output_alsa_device: pulse        # "pulse" for mixing, or "plughw:ReSpeaker,0" for direct
-    output_sample_rate: 44100
+    eq_preset: bass_boost
+    input_device_name: ''
+    input_sample_rate: 44100
     loudness_boost: 2.0
+    output_alsa_device: pulse
+    output_sample_rate: 44100
+  respeaker_flex:
     eq_preset: flat
-    # LED ring (requires: pip install usb-pixel-ring-v2)
+    input_device_name: ReSpeaker
+    input_processed_channel: 0
+    input_raw_channels: 6
+    input_sample_rate: 16000
     led_enabled: true
-
+    loudness_boost: 2.0
+    output_alsa_device: pulse
+    output_sample_rate: 44100
+camera:
+  af_mode: continuous
+  framerate: 30
+  height: 480
+  rotation_deg: 0
+  stream_height: 360
+  stream_width: 640
+  width: 640
+camera2:
+  af_mode: continuous
+  enabled: true
+  framerate: 30
+  height: 1080
+  index: 1
+  rotation_deg: 0
+  width: 1920
+clock_announcements:
+  enabled: true
+depth:
+  baseline_mm: 56
+  block_size: 5
+  dense_enabled: false
+  dense_height: 480
+  dense_rate_hz: 3.0
+  dense_width: 640
+  enabled: true
+  known_face_width_m: 0.145
+  max_depth_m: 6.0
+  min_depth_m: 0.25
+  mono_enabled: false
+  mono_hef_path: /usr/local/hailo/resources/models/hailo8/scdepthv3.hef
+  mono_rate_hz: 3.0
+  num_disparities: 128
+drop:
+  alert_on_leak: true
+  alert_on_salt_low: true
+  mqtt_host: localhost
+  mqtt_pass: ''
+  mqtt_port: 1883
+  mqtt_user: drop
+  salt_alert_cooldown_s: 7200
+face_recognition:
+  confidence_threshold: 0.5
+  enabled: true
+  greeting_cooldown_jitter_pct: 25
+  greeting_cooldown_min: 30
+  guest_intro_delay_min: 2.0
+  match_threshold: 0.6
+  max_fps: 5.0
+  min_absence_s: 30
+  min_face_px: 80
+head_tracking:
+  dead_zone_frac: 0.06
+  enabled: true
+  face_tracking_enabled: true
+  fov_degrees: 100.0
+  invert_pan: false
+  kalman_q_pos: 1.0
+  kalman_q_vel: 50.0
+  kalman_r: 400.0
+  lookahead_s: 0.02
+  max_speed_deg_s: 120.0
+  move_base_s: 0.18
+  move_max_s: 0.6
+  move_scale_s_per_deg: 0.012
+  person_seek_enabled: true
+  random_motion_enabled: true
+  replan_threshold_deg: 2.0
+  speaking_motion:
+    amplitude_deg: 1.5
+    enabled: true
+    freq_hz: 2.5
+  tracking_gain: 0.28
+music:
+  announce_song_changes: false
+  enabled: true
+notifications:
+  absence_alerts:
+    absence_min: 30
+    enabled: true
+    min_interval_min: 60
+  thermal_alerts:
+    critical_celsius: 85.0
+    enabled: true
+    min_interval_min: 10
+    warn_celsius: 75.0
+object_detection:
+  conf_threshold: 0.4
+  enabled: true
+  max_fps: 2.0
+  max_objects: 8
+quiet_hours:
+  enabled: true
+  end: 06:00
+  start: '21:00'
+radon:
+  alert_on_red: true
+  poll_interval_s: 300
+  red_alert_cooldown_s: 3600
+  telegram_alert_cooldown_s: 7200
+  telegram_alert_pcil: 1.5
+room_detection:
+  consec_diverged: 3
+  low_light_thresh: 15.0
+  prompt_cooldown_s: 1800
+  sample_interval_s: 600
+  similarity_thresh: 0.85
+  skip_when_faces: true
+servo:
+  enabled: true
+  pulse_max_us: 2950
+  pulse_min_us: 10
+  soft_max_deg: 215
+  soft_min_deg: 135
+telegram:
+  bot_token: ''
+  chat_id: ''
+  emoji_named: 🏷️
+  emoji_new_face: 👋
+  emoji_returning: 👤
+  enabled: true
+  forward_tts: true
+  tts_skip_patterns:
+  - It is now
+  - The time is
+tts:
+  piper_length_scale: 1.15
+  piper_voice_name: en_US-lessac-medium
+watchdog:
+  check_interval_s: 30
+  enabled: true
+  openclaw_max_uptime_min: 90
+  openclaw_stuck_threshold: 10
+  restart_cooldown_min: 5
+  telegram_notify: false
+web_dashboard:
+  enabled: true
+  host: 0.0.0.0
+  port: 8080
+privacy:
+  # Nudity detection — looks away when explicit content is detected.
+  # Uses NudeNet (ONNX Runtime, CPU) at low frame rate to avoid overhead.
+  enabled: true
+  rate_hz: 1.0               # frames per second to inspect (1 Hz = low CPU cost)
+  threshold: 0.6             # NudeNet confidence threshold (0–1); higher = fewer false positives
+  look_away_angle_deg: 45.0  # servo angle to pan to when looking away (45° = floor-left)
+  cooldown_s: 10.0           # seconds to wait after scene clears before resuming
+  clear_frames: 3            # consecutive clear frames required before resuming
+  announce: true             # speak "I'll give you some privacy" on first detection
+  announce_text: "I'll give you some privacy."
+  resume_text: ""            # leave blank for silent resume

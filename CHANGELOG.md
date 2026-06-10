@@ -6,6 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.42.0] - 2026-06-10
+### Added
+- **Privacy feature — nudity detection + automatic look-away** (`src/perception/nudity_detector.py`,
+  `src/services/privacy_service.py`): VERA now runs NudeNet ONNX inference at 1 Hz on camera
+  frames. When explicit content is detected the servo pans to a configurable look-away angle (default
+  45°), face tracking is disabled, and an optional TTS phrase is spoken. After `clear_frames`
+  consecutive clean frames plus a `cooldown_s` delay, tracking resumes automatically.
+  Degrades to sim-mode (no-op) if `nudenet` is not installed.
+- **`vera privacy` CLI command** (`privacy status | enable | disable`) — show hardware readiness
+  and toggle the feature at runtime without restarting the daemon.
+- **`GET/PUT /api/settings/privacy`** REST endpoints — web GUI can read and update privacy
+  settings; changes are persisted to `config/assistant.yaml`.
+- Privacy config section in `config/assistant.yaml` (`privacy.enabled`, `rate_hz`, `threshold`,
+  `look_away_angle_deg`, `cooldown_s`, `clear_frames`, `announce`, `announce_text`, `resume_text`).
+- `PrivacyService` injected into `WebService` constructor for REST introspection.
+- 12 new unit tests in `tests/test_privacy_service.py`.
+
 ## [1.41.3] - 2026-06-09
 ### Fixed
 - **Depth perception always showing disabled/no-hardware** — two root causes:

@@ -1245,6 +1245,70 @@ def cmd_quiet_hours(args) -> int:
     return 1
 
 
+def cmd_privacy(args) -> int:
+    """Enable, disable, or check the privacy (nudity look-away) service."""
+    from pathlib import Path as _P
+    action = getattr(args, "privacy_action", "status") or "status"
+    _CONFIG = _P(__file__).resolve().parent.parent / "config" / "assistant.yaml"
+    GRN = "\033[32m"; YLW = "\033[33m"; RST = "\033[0m"
+
+    if action == "status":
+        try:
+            d = _http_get("/api/settings/privacy")
+        except Exception:
+            d = {}
+        try:
+            import yaml as _yaml
+            with open(_CONFIG) as _f:
+                _c = _yaml.safe_load(_f) or {}
+            d = {**_c.get("privacy", {}), **d}
+        except Exception:
+            pass
+        enabled  = d.get("enabled", True)
+        hw       = d.get("hardware_ready", "?")
+        rate     = d.get("rate_hz", 1.0)
+        thr      = d.get("threshold", 0.6)
+        look     = d.get("look_away_angle_deg", 45.0)
+        cooldown = d.get("cooldown_s", 10.0)
+        state    = f"{GRN}enabled{RST}" if enabled else f"{YLW}disabled{RST}"
+        hw_str   = (f"{GRN}✓{RST}" if hw is True else f"{YLW}⚠ sim{RST}") if hw != "?" else "?"
+        print()
+        print("  Privacy (nudity detection)")
+        print(f"    State    : {state}")
+        print(f"    Hardware : {hw_str}")
+        print(f"    Rate     : {rate} Hz")
+        print(f"    Threshold: {thr}")
+        print(f"    Look away: {look}°")
+        print(f"    Cooldown : {cooldown}s")
+        print()
+        return 0
+
+    if action in ("enable", "disable"):
+        enabled = (action == "enable")
+        try:
+            _http_put("/api/settings/privacy", {"enabled": enabled})
+        except Exception:
+            # Fallback: write config directly
+            try:
+                from ruamel.yaml import YAML as _YAML
+                _yaml = _YAML()
+                _yaml.preserve_quotes = True
+                with open(_CONFIG) as _f:
+                    _cfg = _yaml.load(_f)
+                if "privacy" not in _cfg:
+                    _cfg["privacy"] = {}
+                _cfg["privacy"]["enabled"] = enabled
+                with open(_CONFIG, "w") as _f:
+                    _yaml.dump(_cfg, _f)
+            except Exception as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+        print(f"Privacy detection {'enabled' if enabled else 'disabled'}.")
+        return 0
+
+    return 1
+
+
 def cmd_audio(args) -> int:
     """Show or change audio backend configuration."""
     import json as _json
@@ -1541,6 +1605,10 @@ def cmd_help(args) -> int:
                             "                  audio set [--backend <b>] k=v ...  Update one or more settings for a backend.\n"
                             "                  audio devices                 List available sounddevice input devices.\n"
                             "                  Note: backend changes require a service restart to take effect.",
+        "privacy":          "Nudity detection look-away service. Sub-commands:\n"
+                            "                  privacy status                Show enabled state, hardware readiness, and settings.\n"
+                            "                  privacy enable                Enable nudity detection + look-away.\n"
+                            "                  privacy disable               Disable nudity detection (camera behaves normally).",
         "fan":              "Fan speed override and tachometer control. Sub-commands:\n"
                             "                  fan status                    Show duty, backend, RPM, and override state.\n"
                             "                  fan set <pct>                 Pin fan to a fixed duty % (0–100), bypasses thermal loop.\n"
@@ -2716,6 +2784,14 @@ def main() -> int:
     ssp.add_argument("settings", nargs="+", metavar="key=value",
                      help="Settings to update, e.g. loudness_boost=3.0 output_alsa_device=pulse")
     ssp.set_defaults(func=cmd_audio)
+
+    # ── Privacy (nudity look-away) ────────────────────────────────────
+    priv_sp = sub.add_parser("privacy", help="Nudity detection look-away service")
+    priv_sub = priv_sp.add_subparsers(dest="privacy_action", metavar="<subcommand>")
+    priv_sp.set_defaults(func=cmd_privacy)
+    priv_sub.add_parser("status",  help="Show enabled state, hardware readiness, and settings").set_defaults(func=cmd_privacy)
+    priv_sub.add_parser("enable",  help="Enable nudity detection and look-away").set_defaults(func=cmd_privacy)
+    priv_sub.add_parser("disable", help="Disable nudity detection (camera behaves normally)").set_defaults(func=cmd_privacy)
 
     # ── Skills subcommand group ───────────────────────────────────────
     sk_sp = sub.add_parser("skills", help="Voice skills management")
