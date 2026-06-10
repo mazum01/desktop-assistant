@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.42.5] - 2026-06-09
+### Fixed
+- **Restart Daemon button** — `asyncio.ensure_future` was silently swallowing
+  exceptions from the `_do_restart` coroutine. Replaced with a plain
+  `threading.Thread` so errors are logged and the restart is not dependent on
+  asyncio task scheduling. `communicate(timeout=5)` captures `systemd-run` stderr
+  and logs it if the command fails.
+
 ## [1.42.4] - 2026-06-09
 ### Fixed
 - **Restart Daemon button** — `systemd-run --user` was silently failing because

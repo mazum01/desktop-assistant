@@ -1527,39 +1527,41 @@ class WebService:
 
         @app.post("/api/restart")
         async def api_restart():
-            import asyncio
             import subprocess
             import os
+            import threading
 
-            async def _do_restart():
-                await asyncio.sleep(0.4)
-                # subprocess.Popen from within a systemd service runs in the service's
-                # cgroup.  When systemd kills the cgroup to restart the unit it also
-                # kills any child subprocess before the restart can be registered.
-                #
-                # Fix: use `systemd-run --user` to spawn the restart command in a
-                # transient user service (its own cgroup, outside the daemon's cgroup).
-                # `DBUS_SESSION_BUS_ADDRESS` must be set explicitly — system services
-                # don't inherit it from the user session.
+            def _do_restart():
+                import time
+                time.sleep(0.5)
                 uid = os.getuid()
                 env = os.environ.copy()
                 env["XDG_RUNTIME_DIR"] = f"/run/user/{uid}"
                 env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path=/run/user/{uid}/bus"
-                subprocess.Popen(
-                    [
-                        "systemd-run", "--user", "--no-block", "--collect",
-                        "/bin/sh", "-c",
-                        "sleep 0.3 && sudo /usr/bin/systemctl restart "
-                        "desktop-assistant-core.service",
-                    ],
-                    close_fds=True,
-                    start_new_session=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    env=env,
-                )
+                try:
+                    proc = subprocess.Popen(
+                        [
+                            "systemd-run", "--user", "--no-block", "--collect",
+                            "/bin/sh", "-c",
+                            "sleep 0.3 && sudo /usr/bin/systemctl restart "
+                            "desktop-assistant-core.service",
+                        ],
+                        close_fds=True,
+                        start_new_session=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.PIPE,
+                        env=env,
+                    )
+                    _, err = proc.communicate(timeout=5)
+                    if proc.returncode != 0:
+                        log.error("restart: systemd-run failed (rc=%d): %s",
+                                  proc.returncode, err.decode().strip())
+                    else:
+                        log.info("restart: systemd-run OK")
+                except Exception:
+                    log.exception("restart: Popen failed")
 
-            asyncio.ensure_future(_do_restart())
+            threading.Thread(target=_do_restart, name="daemon-restart", daemon=True).start()
             return {"ok": True, "message": "Restarting daemon…"}
 
         @app.post("/api/system/reboot")
