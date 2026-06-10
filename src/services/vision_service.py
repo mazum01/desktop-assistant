@@ -518,6 +518,80 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
                            cv2.FONT_HERSHEY_SIMPLEX, font_scale, _CYAN, font_thick)
 
 
+# Privacy overlay colours
+_PRIV_BOX  = (60,  60,  220)   # magenta-ish red for detection boxes
+_PRIV_WARN = (0,   0,   220)   # bright red for the banner
+
+def _draw_privacy_overlay(
+    frame_bgr: np.ndarray,
+    privacy_state: dict,
+    sx: float = 1.0,
+    sy: float = 1.0,
+) -> None:
+    """Draw nudity-detection debug info on the frame in-place.
+
+    Shows:
+    • Detection bounding boxes with class label + confidence score.
+    • A status banner at the top: green "PRIVACY: OK" when safe,
+      red "⚠ EXPLICIT" when looking away.
+
+    Parameters
+    ----------
+    privacy_state : dict
+        Keys: explicit (bool), detections (list[{class, score, box}]),
+              looking_away (bool, optional).
+    sx, sy : float
+        Scale factors to apply to bbox coordinates (for downscaled streams).
+    """
+    if not privacy_state:
+        return
+
+    h, w = frame_bgr.shape[:2]
+    scale = min(w / 640.0, h / 480.0)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    fs   = max(0.35, 0.52 * scale)
+    ft   = max(1, round(scale))
+
+    explicit     = privacy_state.get("explicit", False)
+    looking_away = privacy_state.get("looking_away", explicit)
+    detections   = privacy_state.get("detections") or []
+
+    # Draw detection boxes for ALL detections returned by NudeNet
+    for det in detections:
+        box = det.get("box") or det.get("bbox")
+        cls = det.get("class", "?")
+        score = float(det.get("score", 0.0))
+        if not box or len(box) < 4:
+            continue
+        x1 = int(box[0] * sx)
+        y1 = int(box[1] * sy)
+        x2 = int(box[2] * sx)
+        y2 = int(box[3] * sy)
+        # Red for explicit triggers, dim for non-explicit labels
+        from src.perception.nudity_detector import EXPLICIT_LABELS
+        color = _PRIV_BOX if cls in EXPLICIT_LABELS else (80, 80, 160)
+        cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), color, max(1, ft), cv2.LINE_AA)
+        lbl = f"{cls.replace('_', ' ')} {int(score * 100)}%"
+        ly  = max(12, y1 - 4)
+        _put_text_outlined(frame_bgr, lbl, (x1, ly), font, fs, color, ft)
+
+    # Status banner — bottom-left corner, always visible
+    if explicit or looking_away:
+        banner = "!EXPLICIT — LOOKING AWAY"
+        color  = _PRIV_WARN
+    else:
+        banner = "PRIVACY: OK"
+        color  = (0, 180, 0)
+
+    bfs   = max(0.40, 0.60 * scale)
+    bft   = max(1, round(scale))
+    (tw, th_b), _ = cv2.getTextSize(banner, font, bfs, bft)
+    margin = max(6, int(8 * scale))
+    bx = margin
+    by = h - margin
+    _put_text_outlined(frame_bgr, banner, (bx, by), font, bfs, color, bft)
+
+
 def _build_servo_bg_patch(
     w: int, h: int, servo_min: float, servo_max: float
 ) -> tuple:
@@ -752,6 +826,10 @@ class VisionService(Service):
         self._encode_queue: queue.Queue = queue.Queue(maxsize=1)
         self._encoder_running: bool = False
         self._encoder_thread: Optional[threading.Thread] = None
+        # Privacy detection state — updated by privacy.detected bus messages
+        self._privacy_lock = threading.Lock()
+        self._privacy_state: dict = {}
+        self._privacy_enabled: bool = True
 
 
     def on_start(self) -> None:
@@ -799,6 +877,18 @@ class VisionService(Service):
         )
         self._unsubs.append(
             self.bus.subscribe("motion.limits_changed", self._on_servo_limits)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("privacy.detected", self._on_privacy_detected)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("privacy.looking_away", self._on_privacy_looking_away)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("privacy.resuming", self._on_privacy_resuming)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("privacy.set_enabled", self._on_privacy_set_enabled)
         )
         # Spawn background encoder thread
         self._encoder_running = True
@@ -874,9 +964,11 @@ class VisionService(Service):
             servo_angle = self._servo_angle
             servo_min = self._servo_min_deg
             servo_max = self._servo_max_deg
+        with self._privacy_lock:
+            privacy_state = dict(self._privacy_state)
         try:
             self._encode_queue.put_nowait(
-                (frame, faces, objects, face_depths, servo_angle, servo_min, servo_max, idx)
+                (frame, faces, objects, face_depths, servo_angle, servo_min, servo_max, idx, privacy_state)
             )
         except queue.Full:
             pass  # encoder is behind — drop this frame silently
@@ -900,7 +992,7 @@ class VisionService(Service):
                 item = self._encode_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
-            frame, faces, objects, face_depths, servo_angle, servo_min, servo_max, idx = item
+            frame, faces, objects, face_depths, servo_angle, servo_min, servo_max, idx, privacy_state = item
             # Re-read stream dims each frame so GUI/CLI changes take effect immediately.
             sw, sh = self._stream_width, self._stream_height
 
@@ -923,8 +1015,11 @@ class VisionService(Service):
             else:
                 display = frame.copy()
                 scaled_faces, scaled_objects = faces, objects
+                sx, sy = 1.0, 1.0
 
             _draw_overlays(display, scaled_faces, scaled_objects, face_depths)
+            if privacy_state:
+                _draw_privacy_overlay(display, privacy_state, sx, sy)
             if servo_angle is not None:
                 _draw_servo_overlay(display, servo_angle, servo_min, servo_max)
 
@@ -1066,4 +1161,33 @@ class VisionService(Service):
         # Invalidate the static overlay background cache so it re-renders
         # with the new limits on the next frame.
         _servo_bg_cache.clear()
+
+    # ── Privacy detection callbacks ──────────────────────────────────────────
+
+    def _on_privacy_detected(self, _topic, payload: dict) -> None:
+        with self._privacy_lock:
+            if self._privacy_enabled:
+                self._privacy_state = {
+                    "explicit":     payload.get("explicit", False),
+                    "detections":   payload.get("detections", []),
+                    "looking_away": self._privacy_state.get("looking_away", False),
+                }
+
+    def _on_privacy_looking_away(self, _topic, _payload) -> None:
+        with self._privacy_lock:
+            if self._privacy_state:
+                self._privacy_state["looking_away"] = True
+            else:
+                self._privacy_state = {"explicit": True, "detections": [], "looking_away": True}
+
+    def _on_privacy_resuming(self, _topic, _payload) -> None:
+        with self._privacy_lock:
+            self._privacy_state = {"explicit": False, "detections": [], "looking_away": False}
+
+    def _on_privacy_set_enabled(self, _topic, payload: dict) -> None:
+        enabled = bool(payload.get("enabled", True))
+        with self._privacy_lock:
+            self._privacy_enabled = enabled
+            if not enabled:
+                self._privacy_state = {}
 

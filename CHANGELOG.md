@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.42.1] - 2026-06-09
+### Added
+- **Privacy detection overlay on camera feed** (`src/services/vision_service.py`): when the privacy
+  service is active, the live MJPEG stream now shows NudeNet detection bounding boxes with class
+  labels and confidence scores, plus a bottom-left status banner — green "PRIVACY: OK" when clear,
+  red "!EXPLICIT — LOOKING AWAY" when explicit content is detected. All coordinates scale correctly
+  with stream downscaling. Overlay disappears when privacy detection is disabled.
+
 ## [1.42.0] - 2026-06-10
 ### Added
 - **Privacy feature — nudity detection + automatic look-away** (`src/perception/nudity_detector.py`,
