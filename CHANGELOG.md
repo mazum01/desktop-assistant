@@ -6,7 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.35] - 2026-06-11
+## [1.39.36] - 2026-06-11
+### Fixed
+- EQ preset change now audibly affects pianobar in real-time.
+  Root cause: `_migrate_sink_inputs()` was calling `pactl`, which is
+  not installed — the migration silently did nothing every time.
+  Diagnosed via `wpctl status`: the DA Equalizer filter IS present
+  (node `effect_input.da_eq`) but pianobar's stream was routed directly
+  to the reSpeaker hardware sink, bypassing EQ entirely.
+  Fixed by replacing the `pactl`-based approach with the correct
+  PipeWire-native method:
+  1. `pw-dump` to enumerate all `Stream/Output/Audio` nodes (excluding
+     the DA EQ's own `effect_output.da_eq` output stream)
+  2. `pw-metadata <stream_id> target.node <sink_id>` to move each
+     stream to the DA Equalizer — the same mechanism WirePlumber uses
+     internally when a stream is manually moved
+
+
 ### Fixed
 - EQ preset change now takes effect immediately for pianobar without
   requiring a daemon restart.  Root causes:

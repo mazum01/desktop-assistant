@@ -193,38 +193,54 @@ def _set_default_sink(sink_id: str) -> bool:
         return False
 
 
-# The static PipeWire node.name for the DA Equalizer capture side.
-# This is what PulseAudio-compatible clients see as the sink name.
-_DA_EQ_SINK_NAME = "effect_input.da_eq"
+def _get_audio_stream_node_ids() -> list:
+    """Return PipeWire node IDs for all active audio output streams.
 
-
-def _migrate_sink_inputs() -> None:
-    """Move all existing PA sink-inputs to the DA Equalizer sink.
-
-    After filter-chain restarts, in-flight PulseAudio streams (e.g. pianobar)
-    land on the hardware fallback sink because their old sink disappeared.
-    This call migrates them to the new DA Equalizer immediately so the new EQ
-    takes effect without restarting any client process.
+    Parses pw-dump JSON to find Stream/Output/Audio nodes, excluding
+    the DA EQ's own output stream (effect_output.da_eq).
     """
+    import json as _json
     try:
         r = subprocess.run(
-            ["pactl", "list", "short", "sink-inputs"],
-            capture_output=True, text=True, timeout=5,
+            ["pw-dump"], capture_output=True, text=True, timeout=5
         )
         if r.returncode != 0:
-            return
-        for line in r.stdout.splitlines():
-            parts = line.split()
-            if not parts:
+            return []
+        ids = []
+        for obj in _json.loads(r.stdout):
+            if obj.get("type") != "PipeWire:Interface:Node":
                 continue
-            input_id = parts[0]
+            props = obj.get("info", {}).get("props", {})
+            if props.get("media.class") != "Stream/Output/Audio":
+                continue
+            if props.get("node.name", "") == "effect_output.da_eq":
+                continue
+            ids.append(str(obj["id"]))
+        return ids
+    except Exception as exc:
+        log.debug("pipewire_eq: pw-dump parse failed: %s", exc)
+        return []
+
+
+def _migrate_streams(sink_id: str) -> None:
+    """Move all active audio output streams to the DA Equalizer sink.
+
+    After filter-chain restarts, in-flight streams (e.g. pianobar) land on
+    the hardware fallback sink because their old sink disappeared.
+    Uses ``pw-metadata <stream_id> target.node <sink_id>`` — the correct
+    PipeWire-native way to move a stream without restarting the client.
+    """
+    stream_ids = _get_audio_stream_node_ids()
+    for stream_id in stream_ids:
+        try:
             subprocess.run(
-                ["pactl", "move-sink-input", input_id, _DA_EQ_SINK_NAME],
+                ["pw-metadata", stream_id, "target.node", sink_id],
                 capture_output=True, timeout=3,
             )
-        log.debug("pipewire_eq: migrated PA sink-inputs to %s", _DA_EQ_SINK_NAME)
-    except Exception as exc:
-        log.debug("pipewire_eq: sink-input migration failed (non-fatal): %s", exc)
+        except Exception as exc:
+            log.debug("pipewire_eq: failed to move stream %s: %s", stream_id, exc)
+    if stream_ids:
+        log.info("pipewire_eq: migrated %d stream(s) to EQ sink %s", len(stream_ids), sink_id)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -318,7 +334,7 @@ def _apply_bands(bands: list, label: str = "") -> bool:
     if ok:
         _active = True
         log.info("pipewire_eq: applied %s — sink %s set as default", label, sink_id)
-        # Move in-flight PA streams (e.g. pianobar) to the new EQ sink so
-        # the preset change is heard immediately without restarting clients.
-        _migrate_sink_inputs()
+        # Move in-flight streams (e.g. pianobar) to the new EQ sink so the
+        # preset change is heard immediately without restarting any client.
+        _migrate_streams(sink_id)
     return ok

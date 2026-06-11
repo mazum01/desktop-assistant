@@ -79,7 +79,7 @@ def test_apply_bands_restarts_filter_chain(monkeypatch, tmp_path):
     monkeypatch.setattr(_pweq, "_restart_filter_chain", lambda: restart_calls.append(1) or True)
     monkeypatch.setattr(_pweq, "_get_eq_sink_id", lambda: "42")
     monkeypatch.setattr(_pweq, "_set_default_sink", lambda sid: True)
-    monkeypatch.setattr(_pweq, "_migrate_sink_inputs", lambda: migrate_calls.append(1))
+    monkeypatch.setattr(_pweq, "_migrate_streams", lambda sid: migrate_calls.append(sid))
     monkeypatch.setattr(_pweq, "_CONF_DIR", tmp_path)
     monkeypatch.setattr(_pweq, "_CONF_FILE", tmp_path / "da-eq.conf")
     monkeypatch.setattr(_pweq.time, "sleep", lambda _: None)
@@ -91,30 +91,30 @@ def test_apply_bands_restarts_filter_chain(monkeypatch, tmp_path):
 
 
 def test_apply_bands_migrates_streams_on_success(monkeypatch, tmp_path):
-    """_migrate_sink_inputs must be called after a successful apply."""
+    """_migrate_streams must be called with the sink_id after a successful apply."""
     migrate_calls = []
 
     monkeypatch.setattr(_pweq, "_restart_filter_chain", lambda: True)
     monkeypatch.setattr(_pweq, "_get_eq_sink_id", lambda: "42")
     monkeypatch.setattr(_pweq, "_set_default_sink", lambda sid: True)
-    monkeypatch.setattr(_pweq, "_migrate_sink_inputs", lambda: migrate_calls.append(1))
+    monkeypatch.setattr(_pweq, "_migrate_streams", lambda sid: migrate_calls.append(sid))
     monkeypatch.setattr(_pweq, "_CONF_DIR", tmp_path)
     monkeypatch.setattr(_pweq, "_CONF_FILE", tmp_path / "da-eq.conf")
     monkeypatch.setattr(_pweq.time, "sleep", lambda _: None)
 
     _pweq._apply_bands(PRESET_BANDS["flat"], label="test")
 
-    assert len(migrate_calls) == 1, "_migrate_sink_inputs must be called after success"
+    assert migrate_calls == ["42"], "_migrate_streams must be called with the correct sink_id"
 
 
 def test_apply_bands_no_migration_on_failure(monkeypatch, tmp_path):
-    """_migrate_sink_inputs must NOT be called when apply fails."""
+    """_migrate_streams must NOT be called when apply fails."""
     migrate_calls = []
 
     monkeypatch.setattr(_pweq, "_restart_filter_chain", lambda: True)
     # Sink never appears — apply fails
     monkeypatch.setattr(_pweq, "_get_eq_sink_id", lambda: None)
-    monkeypatch.setattr(_pweq, "_migrate_sink_inputs", lambda: migrate_calls.append(1))
+    monkeypatch.setattr(_pweq, "_migrate_streams", lambda sid: migrate_calls.append(sid))
     monkeypatch.setattr(_pweq, "_CONF_DIR", tmp_path)
     monkeypatch.setattr(_pweq, "_CONF_FILE", tmp_path / "da-eq.conf")
     monkeypatch.setattr(_pweq.time, "sleep", lambda _: None)
@@ -122,7 +122,7 @@ def test_apply_bands_no_migration_on_failure(monkeypatch, tmp_path):
     result = _pweq._apply_bands(PRESET_BANDS["flat"], label="test")
 
     assert result is False
-    assert len(migrate_calls) == 0, "_migrate_sink_inputs must not be called on failure"
+    assert len(migrate_calls) == 0, "_migrate_streams must not be called on failure"
 
 
 def test_apply_bands_restart_failure_returns_false(monkeypatch, tmp_path):
