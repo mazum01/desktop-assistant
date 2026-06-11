@@ -346,7 +346,30 @@ class AVService(Service):
         self._enqueue(lambda t=text: self._do_utterance(t), label="utterance")
 
     def _on_announce_version(self, _topic, _payload) -> None:
-        self._enqueue(self._do_announce_request, label="announce_request")
+        """Speak the current version number.
+
+        Uses the synth executor (not the audio worker) for synthesis so
+        that the audio worker is never blocked by TTS rendering.
+        """
+        from src.core.version import get_version, spoken_version
+        phrase = "I am running " + spoken_version()
+        if self._tts is None:
+            return
+
+        def _synth_then_enqueue() -> None:
+            try:
+                samples, sr = self._tts.render(phrase)
+            except Exception:
+                log.exception("TTS synthesis failed for version announcement")
+                return
+            version_str = get_version()
+            log.info("Speaking version: %s (%s)", version_str, phrase)
+            self._enqueue(
+                lambda s=samples, r=sr, p=phrase, v=version_str: self._do_play_version(s, r, p, v),
+                label="announce_version",
+            )
+
+        self._synth_executor.submit(_synth_then_enqueue)
 
     def _on_record(self, _topic, payload) -> None:
         if not isinstance(payload, dict):
@@ -536,12 +559,29 @@ class AVService(Service):
             self._enqueue(self._do_announce_startup, label="announce_startup")
 
     def _do_announce_startup(self) -> None:
-        try:
-            self._announcer.announce_startup()
-            from src.core.version import get_version
-            self.bus.publish("av.version_announced", {"version": get_version()})
-        except Exception:
-            log.exception("Startup version announcement failed")
+        """Fallback startup announcement — only runs when pre-synthesis failed.
+
+        Submits synthesis to the synth executor (not the audio worker) so
+        the audio worker is never blocked by TTS rendering.
+        """
+        if self._tts is None:
+            return
+        from src.core.version import get_version, spoken_version
+        phrase = "VERA starting, " + spoken_version()
+
+        def _synth_then_enqueue() -> None:
+            try:
+                samples, sr = self._tts.render(phrase)
+            except Exception:
+                log.exception("Startup announcement synthesis failed")
+                return
+            log.info("Speaking version: %s (%s)", get_version(), phrase)
+            self._enqueue(
+                lambda s=samples, r=sr, p=phrase: self._do_play_startup(s, r, p),
+                label="announce_startup",
+            )
+
+        self._synth_executor.submit(_synth_then_enqueue)
 
     def _do_play_startup(self, samples, sr: int, phrase: str) -> None:
         """Audio worker: play pre-synthesized startup samples."""
@@ -553,13 +593,14 @@ class AVService(Service):
         except Exception:
             log.exception("Startup announcement playback failed")
 
-    def _do_announce_request(self) -> None:
+    def _do_play_version(self, samples, sr: int, phrase: str, version_str: str) -> None:
+        """Audio worker: play pre-synthesized version announcement samples."""
         try:
-            self._announcer.announce_on_request()
-            from src.core.version import get_version
-            self.bus.publish("av.version_announced", {"version": get_version()})
+            if self._audio is not None:
+                self._audio.play(samples, sample_rate=sr)
+            self.bus.publish("av.version_announced", {"version": version_str})
         except Exception:
-            log.exception("announce_version failed")
+            log.exception("Version announcement playback failed")
 
     def _collect_from_capture_svc(self, seconds: float) -> "np.ndarray":
         """Collect *seconds* of audio from the AudioCaptureService's running

@@ -6,7 +6,28 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.37] - 2026-06-11
+## [1.39.38] - 2026-06-11
+### Fixed
+- Version button and Describe What I See button now work reliably.
+  Two root causes:
+  1. **Audio worker blocked by TTS synthesis** — `_do_announce_request`
+     and `_do_announce_startup` (fallback) called `tts.say()` directly
+     inside the audio worker thread, running full Piper ONNX synthesis
+     there.  If synthesis hung or took long, the audio worker was stuck
+     and all subsequent say/beep/chime calls queued up indefinitely.
+     Fixed by routing `_on_announce_version` through the synth executor
+     (same as `_submit_say`): synthesis runs in the background, only
+     playback runs in the audio worker.  `_do_announce_startup` fallback
+     updated the same way.  `_do_announce_request` is now unreachable
+     dead code and was removed.
+  2. **Describe button had no handler** — a working-tree change to
+     `api_vision_describe` replaced the direct `bus.publish("av.say")`
+     call with `bus.publish("vision.describe")`, which has no
+     subscriber.  Restored the original implementation: builds the scene
+     description from last perception bus payloads and publishes
+     `av.say` directly.
+
+
 ### Fixed
 - Custom EQ panel no longer closes itself after ~2 seconds.
   Root cause: `loadMusicStatus()` polls `/api/music/status` every 2 s

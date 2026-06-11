@@ -39,10 +39,6 @@ GET  /api/settings/random-motion  Get random motion enabled state
 PUT  /api/settings/random-motion  Set random motion  body: {"enabled": bool}
 GET  /api/settings/object-detection  Get object detection enabled state
 PUT  /api/settings/object-detection  Set object detection  body: {"enabled": bool}
-GET  /api/settings/fan/control-points  Get fan control points
-PUT  /api/settings/fan/control-points  Set fan control points body: {"points": [{"temp_c": float, "duty": float}]}
-GET  /api/settings/fan/temp-blend      Get temp blend weights
-PUT  /api/settings/fan/temp-blend      Set temp blend weights  body: {"case_weight": float, "cpu_weight": float}
 GET  /api/settings/greeting  Get greeting config
 PUT  /api/settings/greeting  Update greeting cooldown  body: {"cooldown_min": float}
 POST /api/vision/describe    Speak natural-language description of current scene
@@ -65,8 +61,6 @@ GET  /api/depth/mono         Colorized mono depth map JPEG (TURBO colormap) — 
 GET  /api/depth/query        Depth statistics: nearest/farthest/mean + per-face depths
 GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
-GET  /api/settings/audio   Get audio backend + all per-backend settings + available devices
-PUT  /api/settings/audio   Set audio backend and/or per-backend settings  body: {"backend": str, "default"?: {...}, "respeaker_flex"?: {...}}
 """
 
 import asyncio
@@ -80,20 +74,14 @@ from pathlib import Path
 from typing import Optional
 
 import psutil
-import zmq
 
 from src.core.quiet_hours import QuietHours
-from src.services.object_service import _build_scene_description
 
 from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
 
 _STATIC_DIR = Path(__file__).parent.parent / "web" / "static"
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_THERMAL_CONFIG_PATH = _PROJECT_ROOT / "config" / "thermal.yaml"
-_ASSISTANT_CONFIG_PATH = _PROJECT_ROOT / "config" / "assistant.yaml"
-_THERMAL_REP_ENDPOINT = "ipc:///tmp/desktop-assistant-thermal.rep"
 
 
 class _RenameBody(BaseModel):
@@ -193,241 +181,6 @@ class _TrackingPresetBody(BaseModel):
     name: str
 
 
-class _FanControlPoint(BaseModel):
-    temp_c: float
-    duty: float
-
-
-class _FanControlPointsBody(BaseModel):
-    points: list[_FanControlPoint]
-
-
-class _TempBlendBody(BaseModel):
-    case_weight: float
-    cpu_weight: float
-
-
-# ── Audio backend settings body ───────────────────────────────────────────────
-
-class _AudioDefaultSettings(BaseModel):
-    input_device_name: str = ""
-    input_sample_rate: int = 44100
-    output_alsa_device: str = "pulse"
-    output_sample_rate: int = 44100
-    loudness_boost: float = 2.0
-    eq_preset: str = "flat"
-
-
-class _AudioReSpeakerSettings(BaseModel):
-    input_device_name: str = "ReSpeaker"
-    input_sample_rate: int = 16000
-    input_raw_channels: int = 6
-    input_processed_channel: int = 0
-    output_alsa_device: str = "pulse"
-    output_sample_rate: int = 44100
-    loudness_boost: float = 2.0
-    eq_preset: str = "flat"
-    led_enabled: bool = True
-
-
-class _AudioSettingsBody(BaseModel):
-    backend: str = "default"
-    default: Optional[_AudioDefaultSettings] = None
-    respeaker_flex: Optional[_AudioReSpeakerSettings] = None
-
-
-def _normalise_fan_control_points(points: list[dict]) -> list[dict[str, float]]:
-    if len(points) < 2:
-        raise ValueError("At least two control points are required")
-    cleaned: list[tuple[float, float]] = []
-    for point in points:
-        temp_c = float(point["temp_c"])
-        duty = max(0.0, min(100.0, float(point["duty"])))
-        cleaned.append((temp_c, duty))
-    cleaned.sort(key=lambda p: p[0])
-    dedup: dict[float, float] = {}
-    for temp_c, duty in cleaned:
-        dedup[temp_c] = duty
-    output = [{"temp_c": float(t), "duty": float(d)} for t, d in sorted(dedup.items(), key=lambda p: p[0])]
-    if len(output) < 2:
-        raise ValueError("At least two unique temperature points are required")
-    return output
-
-
-def _thermal_request(req: dict, timeout_ms: int = 1500) -> dict:
-    ctx = zmq.Context.instance()
-    sock = ctx.socket(zmq.REQ)
-    sock.setsockopt(zmq.LINGER, 0)
-    sock.setsockopt(zmq.RCVTIMEO, timeout_ms)
-    sock.setsockopt(zmq.SNDTIMEO, timeout_ms)
-    try:
-        sock.connect(_THERMAL_REP_ENDPOINT)
-        sock.send_string(json.dumps(req))
-        return json.loads(sock.recv_string())
-    except zmq.error.Again:
-        return {"ok": False, "error": "timeout — thermal service unavailable"}
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}
-    finally:
-        sock.close(linger=0)
-
-
-def _read_fan_control_points_from_config() -> list[dict[str, float]]:
-    import yaml
-
-    with open(_THERMAL_CONFIG_PATH) as f:
-        cfg = yaml.safe_load(f) or {}
-    thresholds = cfg.get("thresholds", {})
-    raw = thresholds.get("control_points")
-    if isinstance(raw, list):
-        parsed = []
-        for item in raw:
-            if isinstance(item, dict) and "temp_c" in item and "duty" in item:
-                parsed.append({"temp_c": item["temp_c"], "duty": item["duty"]})
-            elif isinstance(item, (list, tuple)) and len(item) == 2:
-                parsed.append({"temp_c": item[0], "duty": item[1]})
-        if len(parsed) >= 2:
-            return _normalise_fan_control_points(parsed)
-
-    safe_max_c = float(thresholds.get("safe_max_c", 50.0))
-    warn_max_c = float(thresholds.get("warn_max_c", 65.0))
-    critical_c = float(thresholds.get("critical_c", 75.0))
-    fan_min_duty = float(thresholds.get("fan_min_duty", 30.0))
-    fan_max_duty = float(thresholds.get("fan_max_duty", 100.0))
-    if critical_c <= safe_max_c:
-        return _normalise_fan_control_points([
-            {"temp_c": safe_max_c, "duty": fan_min_duty},
-            {"temp_c": safe_max_c + 1.0, "duty": fan_max_duty},
-        ])
-    warn_ratio = max(0.0, min(1.0, (warn_max_c - safe_max_c) / (critical_c - safe_max_c)))
-    warn_duty = fan_min_duty + warn_ratio * (fan_max_duty - fan_min_duty)
-    return _normalise_fan_control_points([
-        {"temp_c": safe_max_c, "duty": fan_min_duty},
-        {"temp_c": warn_max_c, "duty": warn_duty},
-        {"temp_c": critical_c, "duty": fan_max_duty},
-    ])
-
-
-def _write_fan_control_points_to_config(points: list[dict[str, float]]) -> None:
-    import yaml
-
-    with open(_THERMAL_CONFIG_PATH) as f:
-        cfg = yaml.safe_load(f) or {}
-    thresholds = cfg.setdefault("thresholds", {})
-    thresholds["control_points"] = [{"temp_c": p["temp_c"], "duty": p["duty"]} for p in points]
-    with open(_THERMAL_CONFIG_PATH, "w") as f:
-        yaml.safe_dump(cfg, f, sort_keys=False)
-
-
-def _read_temp_blend_from_config() -> dict[str, float]:
-    import yaml
-
-    try:
-        with open(_THERMAL_CONFIG_PATH) as f:
-            cfg = yaml.safe_load(f) or {}
-        blend = cfg.get("temp_blend", {})
-        cw = float(blend.get("case_weight", 0.2))
-        pw = float(blend.get("cpu_weight",  0.8))
-        total = cw + pw
-        return {"case_weight": cw / total, "cpu_weight": pw / total}
-    except Exception:
-        return {"case_weight": 0.2, "cpu_weight": 0.8}
-
-
-def _write_temp_blend_to_config(case_weight: float, cpu_weight: float) -> None:
-    import yaml
-
-    with open(_THERMAL_CONFIG_PATH) as f:
-        cfg = yaml.safe_load(f) or {}
-    blend = cfg.setdefault("temp_blend", {})
-    blend["case_weight"] = round(case_weight, 4)
-    blend["cpu_weight"]  = round(cpu_weight, 4)
-    with open(_THERMAL_CONFIG_PATH, "w") as f:
-        yaml.safe_dump(cfg, f, sort_keys=False)
-
-
-# ── Audio config helpers ──────────────────────────────────────────────────────
-
-_AUDIO_BACKEND_DEFAULT       = "default"
-_AUDIO_BACKEND_RESPEAKER     = "respeaker_flex"
-_AUDIO_VALID_BACKENDS        = (_AUDIO_BACKEND_DEFAULT, _AUDIO_BACKEND_RESPEAKER)
-_AUDIO_VALID_EQ_PRESETS      = ("flat", "bass_boost", "treble_boost", "vocal", "loudness", "warm", "custom")
-
-
-def _read_audio_config() -> dict:
-    """Return the full ``audio:`` section from assistant.yaml with defaults filled in."""
-    import yaml
-
-    try:
-        with open(_ASSISTANT_CONFIG_PATH) as f:
-            cfg = yaml.safe_load(f) or {}
-    except Exception:
-        cfg = {}
-
-    audio = cfg.get("audio", {})
-
-    default_defaults = {
-        "input_device_name": "",
-        "input_sample_rate": 44100,
-        "output_alsa_device": "pulse",
-        "output_sample_rate": 44100,
-        "loudness_boost": 2.0,
-        "eq_preset": "flat",
-    }
-    respeaker_defaults = {
-        "input_device_name": "ReSpeaker",
-        "input_sample_rate": 16000,
-        "input_raw_channels": 6,
-        "input_processed_channel": 0,
-        "output_alsa_device": "pulse",
-        "output_sample_rate": 44100,
-        "loudness_boost": 2.0,
-        "eq_preset": "flat",
-        "led_enabled": True,
-    }
-
-    return {
-        "backend": audio.get("backend", _AUDIO_BACKEND_DEFAULT),
-        "default": {**default_defaults, **audio.get("default", {})},
-        "respeaker_flex": {**respeaker_defaults, **audio.get("respeaker_flex", {})},
-    }
-
-
-def _write_audio_config(body: dict) -> None:
-    """Merge *body* into the ``audio:`` section of assistant.yaml."""
-    import yaml
-
-    with open(_ASSISTANT_CONFIG_PATH) as f:
-        cfg = yaml.safe_load(f) or {}
-
-    audio = cfg.setdefault("audio", {})
-
-    if "backend" in body:
-        audio["backend"] = str(body["backend"])
-
-    for backend_key in ("default", "respeaker_flex"):
-        if backend_key in body and isinstance(body[backend_key], dict):
-            section = audio.setdefault(backend_key, {})
-            section.update(body[backend_key])
-
-    with open(_ASSISTANT_CONFIG_PATH, "w") as f:
-        yaml.safe_dump(cfg, f, sort_keys=False)
-
-
-def _list_audio_input_devices() -> list[dict]:
-    """Return a list of available sounddevice input devices (best-effort)."""
-    try:
-        import sounddevice as sd
-        devices = sd.query_devices()
-        return [
-            {"index": i, "name": d["name"], "channels": d.get("max_input_channels", 0)}
-            for i, d in enumerate(devices)
-            if d.get("max_input_channels", 0) > 0
-        ]
-    except Exception:
-        return []
-
-
 class WebService:
     """Async FastAPI server running in a background thread."""
 
@@ -451,8 +204,6 @@ class WebService:
         dense_stereo_service=None,
         mono_depth_service=None,
         room_service=None,
-        iot_registry=None,
-        privacy_service=None,
         api_key: str = "",
     ) -> None:
         self.bus = bus
@@ -472,8 +223,6 @@ class WebService:
         self._dense_stereo_svc = dense_stereo_service
         self._mono_depth_svc = mono_depth_service
         self._room_svc = room_service
-        self._iot_registry = iot_registry
-        self._privacy_svc = privacy_service
         self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
         self._thread: Optional[threading.Thread] = None
@@ -751,7 +500,6 @@ class WebService:
             "mem_history": list(self._mem_history),
             "room": self._room_svc.room_name if self._room_svc else None,
             "room_detail": self._room_svc.get_status_dict() if self._room_svc else None,
-            "iot": self._iot_registry.get_all_snapshots() if self._iot_registry else {},
         }
 
     # ── FastAPI app ───────────────────────────────────────────────────
@@ -1099,17 +847,6 @@ class WebService:
                 self.bus.publish("tracking.set_random_motion", {"enabled": body.enabled})
             return {"ok": True, "enabled": body.enabled}
 
-        @app.get("/api/settings/person-seek")
-        async def api_get_person_seek():
-            enabled = self._tracking_svc.person_seek_enabled if self._tracking_svc else True
-            return {"enabled": enabled}
-
-        @app.put("/api/settings/person-seek")
-        async def api_put_person_seek(body: _ServoBody):
-            if self.bus:
-                self.bus.publish("tracking.set_person_seek", {"enabled": body.enabled})
-            return {"ok": True, "enabled": body.enabled}
-
         # ── REST: head-tracking tuning ────────────────────────────────
 
         @app.get("/api/tracking/params")
@@ -1198,135 +935,6 @@ class WebService:
             if self.bus:
                 self.bus.publish("object.set_enabled", {"enabled": body.enabled})
             return {"ok": True, "enabled": body.enabled}
-
-        @app.get("/api/settings/fan/control-points")
-        async def api_get_fan_control_points():
-            thermal = _thermal_request({"cmd": "fan_control_points.get"})
-            if thermal.get("ok") and isinstance(thermal.get("control_points"), list):
-                try:
-                    runtime_points = _normalise_fan_control_points(thermal["control_points"])
-                    return {
-                        "ok": True,
-                        "control_points": runtime_points,
-                        "runtime_source": "thermal",
-                    }
-                except ValueError:
-                    pass
-            try:
-                points = _read_fan_control_points_from_config()
-            except Exception as exc:
-                raise HTTPException(500, f"Unable to read fan control points: {exc}")
-            return {
-                "ok": True,
-                "control_points": points,
-                "runtime_source": "config",
-                "runtime_error": thermal.get("error"),
-            }
-
-        @app.put("/api/settings/fan/control-points")
-        async def api_put_fan_control_points(body: _FanControlPointsBody):
-            try:
-                raw_points = [p.model_dump() if hasattr(p, "model_dump") else p.dict() for p in body.points]
-                points = _normalise_fan_control_points(raw_points)
-            except ValueError as exc:
-                raise HTTPException(422, str(exc))
-            try:
-                _write_fan_control_points_to_config(points)
-            except Exception as exc:
-                raise HTTPException(500, f"Unable to save fan control points: {exc}")
-
-            thermal = _thermal_request({"cmd": "fan_control_points.set", "points": points})
-            if thermal.get("ok"):
-                return {
-                    "ok": True,
-                    "control_points": _normalise_fan_control_points(thermal.get("control_points") or points),
-                    "runtime_applied": True,
-                }
-            return {
-                "ok": True,
-                "control_points": points,
-                "runtime_applied": False,
-                "runtime_error": thermal.get("error"),
-            }
-
-        @app.get("/api/settings/fan/temp-blend")
-        async def api_get_temp_blend():
-            thermal = _thermal_request({"cmd": "temp_blend.get"})
-            if thermal.get("ok"):
-                return {
-                    "ok": True,
-                    "case_weight": thermal["case_weight"],
-                    "cpu_weight":  thermal["cpu_weight"],
-                    "runtime_source": "runtime",
-                }
-            cfg_blend = _read_temp_blend_from_config()
-            return {"ok": True, **cfg_blend, "runtime_source": "config",
-                    "runtime_error": thermal.get("error")}
-
-        @app.put("/api/settings/fan/temp-blend")
-        async def api_put_temp_blend(body: _TempBlendBody):
-            total = body.case_weight + body.cpu_weight
-            if total <= 0:
-                raise HTTPException(422, "case_weight + cpu_weight must be > 0")
-            cw = body.case_weight / total
-            pw = body.cpu_weight  / total
-            try:
-                _write_temp_blend_to_config(cw, pw)
-            except Exception as exc:
-                raise HTTPException(500, f"Unable to save temp blend: {exc}")
-            thermal = _thermal_request({"cmd": "temp_blend.set",
-                                        "case_weight": cw, "cpu_weight": pw})
-            if thermal.get("ok"):
-                return {"ok": True, "case_weight": thermal["case_weight"],
-                        "cpu_weight": thermal["cpu_weight"], "runtime_applied": True}
-            return {"ok": True, "case_weight": cw, "cpu_weight": pw,
-                    "runtime_applied": False, "runtime_error": thermal.get("error")}
-
-        # ── REST: audio backend settings ─────────────────────────────
-
-        @app.get("/api/settings/audio")
-        async def api_get_audio():
-            try:
-                audio = _read_audio_config()
-            except Exception as exc:
-                raise HTTPException(500, f"Unable to read audio config: {exc}")
-            devices = _list_audio_input_devices()
-            return {
-                "ok": True,
-                "backend": audio["backend"],
-                "default": audio["default"],
-                "respeaker_flex": audio["respeaker_flex"],
-                "available_backends": list(_AUDIO_VALID_BACKENDS),
-                "available_eq_presets": list(_AUDIO_VALID_EQ_PRESETS),
-                "available_input_devices": devices,
-            }
-
-        @app.put("/api/settings/audio")
-        async def api_put_audio(body: _AudioSettingsBody):
-            if body.backend not in _AUDIO_VALID_BACKENDS:
-                raise HTTPException(
-                    422,
-                    f"Unknown backend {body.backend!r}. "
-                    f"Valid: {list(_AUDIO_VALID_BACKENDS)}",
-                )
-            patch: dict = {"backend": body.backend}
-            if body.default is not None:
-                patch["default"] = body.default.model_dump()
-            if body.respeaker_flex is not None:
-                patch["respeaker_flex"] = body.respeaker_flex.model_dump()
-            try:
-                _write_audio_config(patch)
-            except Exception as exc:
-                raise HTTPException(500, f"Unable to save audio config: {exc}")
-            updated = _read_audio_config()
-            return {
-                "ok": True,
-                "backend": updated["backend"],
-                "default": updated["default"],
-                "respeaker_flex": updated["respeaker_flex"],
-                "restart_required": True,
-                "message": "Audio backend change takes effect after service restart.",
-            }
 
         # ── REST: greeting settings ───────────────────────────────────
 
@@ -1538,41 +1146,17 @@ class WebService:
 
         @app.post("/api/restart")
         async def api_restart():
+            import asyncio
             import subprocess
-            import os
-            import threading
 
-            def _do_restart():
-                import time
-                time.sleep(0.5)
-                uid = os.getuid()
-                env = os.environ.copy()
-                env["XDG_RUNTIME_DIR"] = f"/run/user/{uid}"
-                env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path=/run/user/{uid}/bus"
-                try:
-                    proc = subprocess.Popen(
-                        [
-                            "systemd-run", "--user", "--no-block", "--collect",
-                            "/bin/sh", "-c",
-                            "sleep 0.3 && sudo /usr/bin/systemctl restart "
-                            "desktop-assistant-core.service",
-                        ],
-                        close_fds=True,
-                        start_new_session=True,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.PIPE,
-                        env=env,
-                    )
-                    _, err = proc.communicate(timeout=5)
-                    if proc.returncode != 0:
-                        log.error("restart: systemd-run failed (rc=%d): %s",
-                                  proc.returncode, err.decode().strip())
-                    else:
-                        log.info("restart: systemd-run OK")
-                except Exception:
-                    log.exception("restart: Popen failed")
+            async def _do_restart():
+                await asyncio.sleep(0.4)
+                subprocess.Popen(
+                    ["sudo", "systemctl", "restart", "desktop-assistant-core.service"],
+                    close_fds=True,
+                )
 
-            threading.Thread(target=_do_restart, name="daemon-restart", daemon=True).start()
+            asyncio.ensure_future(_do_restart())
             return {"ok": True, "message": "Restarting daemon…"}
 
         @app.post("/api/system/reboot")
@@ -1609,6 +1193,7 @@ class WebService:
         async def api_vision_describe():
             if not self.bus:
                 raise HTTPException(503, "bus unavailable")
+            from src.services.object_service import _build_scene_description
             faces_payload = self.bus.last("perception.faces")
             objs_payload = self.bus.last("perception.objects")
             description = _build_scene_description(faces_payload, objs_payload)
@@ -1734,58 +1319,6 @@ class WebService:
                     self.bus.publish("depth.set_dense_enabled", {"enabled": bool(body["dense_enabled"])})
                 if "mono_enabled" in body:
                     self.bus.publish("depth.set_mono_enabled", {"enabled": bool(body["mono_enabled"])})
-            # Persist to config/assistant.yaml so settings survive restarts.
-            try:
-                import yaml as _yaml
-                _cfg_path = _ASSISTANT_CONFIG_PATH
-                with open(_cfg_path) as _f:
-                    _cfg = _yaml.safe_load(_f) or {}
-                if "depth" not in _cfg:
-                    _cfg["depth"] = {}
-                if "dense_enabled" in body:
-                    _cfg["depth"]["dense_enabled"] = bool(body["dense_enabled"])
-                if "mono_enabled" in body:
-                    _cfg["depth"]["mono_enabled"] = bool(body["mono_enabled"])
-                with open(_cfg_path, "w") as _f:
-                    _yaml.dump(_cfg, _f, default_flow_style=False, allow_unicode=True)
-            except Exception as _exc:
-                log.warning("depth settings: could not persist to YAML: %s", _exc)
-            return {"ok": True}
-
-        # ── Privacy settings ─────────────────────────────────────────────
-
-        @app.get("/api/settings/privacy")
-        async def api_get_privacy_settings():
-            svc = self._privacy_svc
-            return {
-                "enabled":            getattr(svc, "_enabled", True) if svc else True,
-                "hardware_ready":     getattr(svc, "hardware_ready", False) if svc else False,
-                "rate_hz":            getattr(getattr(svc, "_cfg", None), "rate_hz", 1.0),
-                "threshold":          getattr(getattr(svc, "_cfg", None), "threshold", 0.6),
-                "look_away_angle_deg":getattr(getattr(svc, "_cfg", None), "look_away_angle_deg", 45.0),
-                "cooldown_s":         getattr(getattr(svc, "_cfg", None), "cooldown_s", 10.0),
-                "announce":           getattr(getattr(svc, "_cfg", None), "announce", True),
-            }
-
-        @app.put("/api/settings/privacy")
-        async def api_put_privacy_settings(body: dict):
-            if self.bus and "enabled" in body:
-                self.bus.publish("privacy.set_enabled", {"enabled": bool(body["enabled"])})
-            try:
-                import yaml as _yaml
-                _cfg_path = _ASSISTANT_CONFIG_PATH
-                with open(_cfg_path) as _f:
-                    _cfg = _yaml.safe_load(_f) or {}
-                if "privacy" not in _cfg:
-                    _cfg["privacy"] = {}
-                for key in ("enabled", "rate_hz", "threshold", "look_away_angle_deg",
-                            "cooldown_s", "clear_frames", "announce", "announce_text", "resume_text"):
-                    if key in body:
-                        _cfg["privacy"][key] = body[key]
-                with open(_cfg_path, "w") as _f:
-                    _yaml.dump(_cfg, _f, default_flow_style=False, allow_unicode=True)
-            except Exception as _exc:
-                log.warning("privacy settings: could not persist to YAML: %s", _exc)
             return {"ok": True}
 
         # ── Depth query ─────────────────────────────────────────────────
