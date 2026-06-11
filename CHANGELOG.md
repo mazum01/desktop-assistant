@@ -6,7 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.42] - 2026-06-11
+## [1.39.43] - 2026-06-11
+### Fixed
+- Version button now responds promptly instead of after 25+ second delay.
+  Root cause: `_on_announce_version` submitted synthesis to the single-
+  threaded synth executor.  If the clock announcer or other `av.say` calls
+  were already queued there (each taking ~5–10 s Piper synthesis), the
+  version request waited behind all of them.
+  Two fixes:
+  1. Simplified `_on_announce_version` to call `_submit_say()` directly,
+     the same path used by `av.say`.  Removes the duplicated synthesis
+     logic and the now-unused `_do_play_version` helper.
+  2. Raised synth executor `max_workers` from 1 → 2 so an on-demand
+     request (version button, describe button) can synthesize in parallel
+     with any in-progress background synthesis instead of waiting behind it.
+
+
 ### Fixed
 - Fan control point editor missing from web GUI.  Same root cause as
   v1.39.41: the EQ panel commit (v1.39.37) also staged a truncated

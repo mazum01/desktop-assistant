@@ -83,10 +83,12 @@ class AVService(Service):
         # Single-threaded synthesis executor: TTS synthesis is CPU-heavy
         # (~9s cold-start, ~1–5s warm on Pi 5 with amy-medium). All synthesis
         # runs here so the audio worker only blocks during actual playback,
-        # keeping recording responsive.
+        # keeping recording responsive.  Two workers allow an on-demand
+        # request (e.g. version button) to synthesize in parallel with any
+        # in-progress background synthesis instead of waiting behind it.
         self._synth_executor: concurrent.futures.ThreadPoolExecutor = (
             concurrent.futures.ThreadPoolExecutor(
-                max_workers=1, thread_name_prefix="tts-synth"
+                max_workers=2, thread_name_prefix="tts-synth"
             )
         )
 
@@ -346,30 +348,10 @@ class AVService(Service):
         self._enqueue(lambda t=text: self._do_utterance(t), label="utterance")
 
     def _on_announce_version(self, _topic, _payload) -> None:
-        """Speak the current version number.
-
-        Uses the synth executor (not the audio worker) for synthesis so
-        that the audio worker is never blocked by TTS rendering.
-        """
         from src.core.version import get_version, spoken_version
         phrase = "I am running " + spoken_version()
-        if self._tts is None:
-            return
-
-        def _synth_then_enqueue() -> None:
-            try:
-                samples, sr = self._tts.render(phrase)
-            except Exception:
-                log.exception("TTS synthesis failed for version announcement")
-                return
-            version_str = get_version()
-            log.info("Speaking version: %s (%s)", version_str, phrase)
-            self._enqueue(
-                lambda s=samples, r=sr, p=phrase, v=version_str: self._do_play_version(s, r, p, v),
-                label="announce_version",
-            )
-
-        self._synth_executor.submit(_synth_then_enqueue)
+        log.info("Speaking version: %s (%s)", get_version(), phrase)
+        self._submit_say(phrase)
 
     def _on_record(self, _topic, payload) -> None:
         if not isinstance(payload, dict):
@@ -592,15 +574,6 @@ class AVService(Service):
             self.bus.publish("av.version_announced", {"version": get_version()})
         except Exception:
             log.exception("Startup announcement playback failed")
-
-    def _do_play_version(self, samples, sr: int, phrase: str, version_str: str) -> None:
-        """Audio worker: play pre-synthesized version announcement samples."""
-        try:
-            if self._audio is not None:
-                self._audio.play(samples, sample_rate=sr)
-            self.bus.publish("av.version_announced", {"version": version_str})
-        except Exception:
-            log.exception("Version announcement playback failed")
 
     def _collect_from_capture_svc(self, seconds: float) -> "np.ndarray":
         """Collect *seconds* of audio from the AudioCaptureService's running
