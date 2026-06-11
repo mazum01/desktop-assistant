@@ -6,7 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.40] - 2026-06-11
+## [1.39.41] - 2026-06-11
+### Fixed
+- Restored web GUI features lost when v1.39.38 accidentally committed a
+  stripped-down working-tree version of `web_service.py`.  Missing features
+  restored: fan curve editor, temperature blend slider, IoT/smart-home
+  tiles, room recognition display, audio backend settings panel.
+  Root cause: `git add src/services/web_service.py` during the EQ/TTS
+  fix staged the full working-tree state (which had 467 lines removed by
+  an unrelated in-progress refactor), instead of only the two-line
+  `api_vision_describe` change that was intended.
+  Fix: restored `web_service.py` from commit `37967ae` (the last fully
+  intact version) — the `api_vision_describe` correction from v1.39.38
+  was already present in that version.
+
+
 ### Fixed
 - TTS silent after EQ preset change (v1.39.39 regression).
   Root cause: removing `node.passive = true` from `playback.props`
