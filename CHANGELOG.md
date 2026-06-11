@@ -6,7 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.36] - 2026-06-11
+## [1.39.37] - 2026-06-11
+### Fixed
+- Custom EQ panel no longer closes itself after ~2 seconds.
+  Root cause: `loadMusicStatus()` polls `/api/music/status` every 2 s
+  and unconditionally reset the EQ dropdown to the server's current
+  preset.  When the user selected "custom", the panel opened locally
+  but the server still reported the old preset — so the next poll
+  immediately set the dropdown back and hid the panel.
+  Fixed by skipping the EQ block in `loadMusicStatus` whenever the
+  custom EQ panel is already visible, so the user can edit and Apply
+  without the poll interfering.
+
+
 ### Fixed
 - EQ preset change now audibly affects pianobar in real-time.
   Root cause: `_migrate_sink_inputs()` was calling `pactl`, which is

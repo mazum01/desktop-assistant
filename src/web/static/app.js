@@ -1114,192 +1114,6 @@ async function loadQuietHours() {
   } catch (e) { /* ignore */ }
 }
 
-// ── Fan curve table ─────────────────────────────────────────────────────────
-
-function updateBlendLabels() {
-  const slider = el("blend-slider");
-  if (!slider) return;
-  const caseVal = parseInt(slider.value, 10);
-  const cpuVal  = 100 - caseVal;
-  const caseEl  = el("blend-case-pct");
-  const cpuEl   = el("blend-cpu-pct");
-  if (caseEl) caseEl.textContent = caseVal + "%";
-  if (cpuEl)  cpuEl.textContent  = cpuVal  + "%";
-}
-
-function renderFanCurveTable(points) {
-  const tbody = el("fan-curve-tbody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  points.forEach((pt, idx) => {
-    const isFloor   = idx === 0;
-    const isCeiling = idx === points.length - 1;
-    const isLocked  = isFloor || isCeiling;
-    const label     = isFloor ? "🔒 Floor" : (isCeiling ? "🔒 Ceiling" : "");
-
-    const tr = document.createElement("tr");
-    tr.style.borderBottom = "1px solid var(--border)";
-
-    const tdTemp = document.createElement("td");
-    tdTemp.style.padding = "4px 8px";
-    const tempInput = document.createElement("input");
-    tempInput.type  = "number";
-    tempInput.value = pt.temp_c;
-    tempInput.min   = -40;
-    tempInput.max   = 150;
-    tempInput.step  = 0.5;
-    tempInput.style.width = "80px";
-    tempInput.dataset.field = "temp_c";
-    if (isLocked) tempInput.style.fontWeight = "bold";
-    tdTemp.appendChild(tempInput);
-    if (label) {
-      const badge = document.createElement("small");
-      badge.textContent = " " + label;
-      badge.style.color = "var(--text-muted)";
-      tdTemp.appendChild(badge);
-    }
-
-    const tdDuty = document.createElement("td");
-    tdDuty.style.padding = "4px 8px";
-    const dutyInput = document.createElement("input");
-    dutyInput.type  = "number";
-    dutyInput.value = Math.round(pt.duty);
-    dutyInput.min   = 0;
-    dutyInput.max   = 100;
-    dutyInput.step  = 1;
-    dutyInput.style.width = "70px";
-    dutyInput.dataset.field = "duty";
-    if (isLocked) dutyInput.style.fontWeight = "bold";
-    tdDuty.appendChild(dutyInput);
-
-    const tdDel = document.createElement("td");
-    tdDel.style.padding = "4px";
-    if (!isLocked) {
-      const btn = document.createElement("button");
-      btn.className   = "btn btn-danger btn-sm";
-      btn.textContent = "✕";
-      btn.title       = "Remove this point";
-      btn.onclick     = () => deleteFanCurveRow(btn);
-      tdDel.appendChild(btn);
-    }
-
-    tr.appendChild(tdTemp);
-    tr.appendChild(tdDuty);
-    tr.appendChild(tdDel);
-    tbody.appendChild(tr);
-  });
-}
-
-function _readFanCurveTable() {
-  const tbody = el("fan-curve-tbody");
-  if (!tbody) return [];
-  const rows = [...tbody.querySelectorAll("tr")];
-  return rows.map((tr) => {
-    const inputs = tr.querySelectorAll("input");
-    return {
-      temp_c: parseFloat(inputs[0].value),
-      duty:   parseFloat(inputs[1].value),
-    };
-  });
-}
-
-function addFanCurveRow() {
-  const tbody = el("fan-curve-tbody");
-  if (!tbody) return;
-  const current = _readFanCurveTable();
-  if (current.length < 2) return;
-  const last   = current[current.length - 1];
-  const prev   = current[current.length - 2];
-  const newTemp = parseFloat(((prev.temp_c + last.temp_c) / 2).toFixed(1));
-  const newDuty = Math.round((prev.duty + last.duty) / 2);
-  const newPoints = [
-    ...current.slice(0, current.length - 1),
-    { temp_c: newTemp, duty: newDuty },
-    last,
-  ];
-  renderFanCurveTable(newPoints);
-}
-
-function deleteFanCurveRow(btn) {
-  const tr     = btn.closest("tr");
-  const tbody  = el("fan-curve-tbody");
-  const rows   = [...tbody.querySelectorAll("tr")];
-  const idx    = rows.indexOf(tr);
-  if (idx <= 0 || idx >= rows.length - 1) return; // never delete floor/ceiling
-  const current = _readFanCurveTable();
-  current.splice(idx, 1);
-  renderFanCurveTable(current);
-}
-
-async function loadFanControlPoints() {
-  const status = el("fan-curve-status");
-  try {
-    const [rPts, rBlend] = await Promise.all([
-      fetch("/api/settings/fan/control-points"),
-      fetch("/api/settings/fan/temp-blend"),
-    ]);
-    const dPts   = await rPts.json().catch(() => ({}));
-    const dBlend = await rBlend.json().catch(() => ({}));
-    if (!rPts.ok) throw new Error(dPts.detail || "Failed to load fan control points");
-    renderFanCurveTable(dPts.control_points || []);
-    const slider = el("blend-slider");
-    if (slider && dBlend.case_weight !== undefined) {
-      slider.value = Math.round(dBlend.case_weight * 100);
-      updateBlendLabels();
-    }
-    if (status) status.textContent = "";
-  } catch (e) {
-    if (status) {
-      status.className = "qh-status error";
-      status.textContent = e.message || "Network error";
-    }
-  }
-}
-
-async function saveFanControlPoints() {
-  const status = el("fan-curve-status");
-  try {
-    const points = _readFanCurveTable();
-    if (points.length < 2) throw new Error("At least two control points are required.");
-    for (const p of points) {
-      if (!Number.isFinite(p.temp_c) || !Number.isFinite(p.duty)) {
-        throw new Error("All temp/duty fields must be valid numbers.");
-      }
-    }
-    const slider    = el("blend-slider");
-    const casePct   = slider ? parseInt(slider.value, 10) : 20;
-    const blendBody = { case_weight: casePct / 100, cpu_weight: (100 - casePct) / 100 };
-
-    const [rPts, rBlend] = await Promise.all([
-      fetch("/api/settings/fan/control-points", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ points }),
-      }),
-      fetch("/api/settings/fan/temp-blend", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(blendBody),
-      }),
-    ]);
-    const dPts = await rPts.json().catch(() => ({}));
-    if (!rPts.ok) throw new Error(dPts.detail || "Failed to save fan control points");
-    renderFanCurveTable(dPts.control_points || points);
-    if (status) {
-      status.className = "qh-status";
-      status.textContent = dPts.runtime_applied ? "Saved ✓" : "Saved to config (thermal offline)";
-    }
-  } catch (e) {
-    if (status) {
-      status.className = "qh-status error";
-      status.textContent = e.message || "Network error";
-    }
-  }
-  setTimeout(() => {
-    if (status) status.textContent = "";
-  }, 3500);
-}
-
 async function saveQuietHours() {
   const enabled = el("qh-enabled").checked;
   const start = el("qh-start").value;
@@ -1559,119 +1373,6 @@ async function saveGreetingSettings() {
     st.style.color = "var(--red)";
   }
   setTimeout(() => { st.textContent = ""; }, 3000);
-}
-
-
-// ── Audio backend settings ─────────────────────────────────────────────────
-
-function onAudioBackendChange() {
-  const backend = el("audio-backend-select").value;
-  document.querySelectorAll(".audio-backend-section").forEach(sec => {
-    sec.style.display = sec.id === `audio-section-${backend}` ? "" : "none";
-  });
-}
-
-async function loadAudioSettings() {
-  const st = el("audio-status");
-  try {
-    const d = await fetch("/api/settings/audio").then(r => r.json());
-
-    // Backend selector
-    const sel = el("audio-backend-select");
-    if (sel) sel.value = d.backend ?? "default";
-    onAudioBackendChange();
-
-    // Default backend fields
-    const def = d.default ?? {};
-    _setVal("audio-default-input-device", def.input_device_name ?? "");
-    _setVal("audio-default-input-rate",   def.input_sample_rate ?? 44100);
-    _setVal("audio-default-output-alsa",  def.output_alsa_device ?? "pulse");
-    _setVal("audio-default-output-rate",  def.output_sample_rate ?? 44100);
-    _setVal("audio-default-loudness",     def.loudness_boost ?? 2.0);
-    _setVal("audio-default-eq",           def.eq_preset ?? "flat");
-
-    // ReSpeaker Flex fields
-    const rs = d.respeaker_flex ?? {};
-    _setVal("audio-rs-input-device", rs.input_device_name ?? "ReSpeaker");
-    _setVal("audio-rs-input-rate",   rs.input_sample_rate ?? 16000);
-    _setVal("audio-rs-raw-ch",       rs.input_raw_channels ?? 6);
-    _setVal("audio-rs-proc-ch",      rs.input_processed_channel ?? 0);
-    _setVal("audio-rs-output-alsa",  rs.output_alsa_device ?? "pulse");
-    _setVal("audio-rs-output-rate",  rs.output_sample_rate ?? 44100);
-    _setVal("audio-rs-loudness",     rs.loudness_boost ?? 2.0);
-    _setVal("audio-rs-eq",           rs.eq_preset ?? "flat");
-    const ledEl = el("audio-rs-led");
-    if (ledEl) ledEl.checked = rs.led_enabled !== false;
-
-    // Device list
-    const listEl = el("audio-devices-list");
-    if (listEl && Array.isArray(d.available_input_devices)) {
-      if (d.available_input_devices.length === 0) {
-        listEl.innerHTML = "<li>No input devices found</li>";
-      } else {
-        listEl.innerHTML = d.available_input_devices
-          .map(dev => `<li>[${dev.index}] ${dev.name} &mdash; ${dev.channels} ch</li>`)
-          .join("");
-      }
-    }
-
-    if (st) st.textContent = "";
-  } catch (e) {
-    if (st) { st.className = "qh-status error"; st.textContent = e.message || "Load failed"; }
-  }
-}
-
-function _setVal(id, val) {
-  const e = el(id);
-  if (!e) return;
-  if (e.tagName === "SELECT") e.value = String(val);
-  else e.value = val;
-}
-
-async function saveAudioSettings() {
-  const st = el("audio-status");
-  const backend = el("audio-backend-select").value;
-  const body = { backend };
-
-  if (backend === "default") {
-    body.default = {
-      input_device_name: el("audio-default-input-device").value,
-      input_sample_rate: parseInt(el("audio-default-input-rate").value, 10),
-      output_alsa_device: el("audio-default-output-alsa").value,
-      output_sample_rate: parseInt(el("audio-default-output-rate").value, 10),
-      loudness_boost: parseFloat(el("audio-default-loudness").value),
-      eq_preset: el("audio-default-eq").value,
-    };
-  } else if (backend === "respeaker_flex") {
-    body.respeaker_flex = {
-      input_device_name: el("audio-rs-input-device").value,
-      input_sample_rate: parseInt(el("audio-rs-input-rate").value, 10),
-      input_raw_channels: parseInt(el("audio-rs-raw-ch").value, 10),
-      input_processed_channel: parseInt(el("audio-rs-proc-ch").value, 10),
-      output_alsa_device: el("audio-rs-output-alsa").value,
-      output_sample_rate: parseInt(el("audio-rs-output-rate").value, 10),
-      loudness_boost: parseFloat(el("audio-rs-loudness").value),
-      eq_preset: el("audio-rs-eq").value,
-      led_enabled: el("audio-rs-led").checked,
-    };
-  }
-
-  try {
-    const r = await fetch("/api/settings/audio", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(d.detail || "Save failed");
-    if (st) {
-      st.className = "qh-status";
-      st.textContent = "Saved ✓ — restart required to apply";
-    }
-  } catch (e) {
-    if (st) { st.className = "qh-status error"; st.textContent = e.message || "Error"; }
-  }
-  setTimeout(() => { if (st) st.textContent = ""; }, 5000);
 }
 
 
@@ -1975,35 +1676,12 @@ async function saveCam2StreamResolution(val) {
 
 async function doDescribe() {
   const btn = document.querySelector('[onclick="doDescribe()"]');
-  const st = el("vision-describe-status");
   if (btn) { btn.disabled = true; btn.textContent = "Describing…"; }
-  if (st) {
-    st.textContent = "Listening to the current scene...";
-    st.style.color = "var(--text-muted)";
-  }
   try {
-    const r = await fetch("/api/vision/describe", { method: "POST" });
-    if (!r.ok) {
-      if (st) {
-        st.textContent = `Error ${r.status}`;
-        st.style.color = "var(--red)";
-      }
-    } else {
-      const data = await r.json();
-      if (st) {
-        st.textContent = data.description || "Description spoken.";
-        st.style.color = "var(--green)";
-      }
-    }
-  } catch (e) {
-    if (st) {
-      st.textContent = "Error";
-      st.style.color = "var(--red)";
-    }
-  }
+    await fetch("/api/vision/describe", { method: "POST" });
+  } catch (e) { /* ignore */ }
   setTimeout(() => {
     if (btn) { btn.disabled = false; btn.textContent = "Describe What I See"; }
-    if (st) st.textContent = "";
   }, 3000);
 }
 
@@ -2287,8 +1965,6 @@ document.addEventListener("DOMContentLoaded", () => {
   _initPanSlider();
   loadFaces();
   loadQuietHours();
-  loadFanControlPoints();
-  loadAudioSettings();
   loadServoEnabled();
   loadServoLimits();
   loadFaceTrackingEnabled();
@@ -2366,8 +2042,10 @@ async function loadMusicStatus() {
       el("music-volume-slider").value = d.volume;
       el("music-volume-label").textContent = `${d.volume}%`;
     }
-    // EQ
-    if (d.eq_preset) {
+    // EQ — skip if user has the custom EQ panel open (they're actively editing)
+    const _customPanel = el("custom-eq-panel");
+    const _customPanelOpen = _customPanel && _customPanel.style.display !== "none";
+    if (d.eq_preset && !_customPanelOpen) {
       el("music-eq-select").value = d.eq_preset;
       // Show custom EQ panel immediately if preset is "custom".
       const panel = el("custom-eq-panel");
