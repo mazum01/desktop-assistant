@@ -6,7 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.41] - 2026-06-11
+## [1.39.42] - 2026-06-11
+### Fixed
+- Fan control point editor missing from web GUI.  Same root cause as
+  v1.39.41: the EQ panel commit (v1.39.37) also staged a truncated
+  working-tree `app.js` (2773 lines vs the correct 3095), dropping the
+  fan curve editor, temperature blend slider, audio backend settings,
+  and other JS functions.  Restored `app.js` from commit `693add4`
+  and re-applied the custom EQ panel open-guard fix.
+
+
 ### Fixed
 - Restored web GUI features lost when v1.39.38 accidentally committed a
   stripped-down working-tree version of `web_service.py`.  Missing features
