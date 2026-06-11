@@ -6,7 +6,28 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.34] - 2026-06-11
+## [1.39.35] - 2026-06-11
+### Fixed
+- EQ preset change now takes effect immediately for pianobar without
+  requiring a daemon restart.  Root causes:
+  1. **False-positive live update (v1.39.34 regression)** — `pw-cli
+     set-param` returns exit code 0 even when the SPA JSON format is
+     wrong or the node silently ignores the update.  This caused
+     `_try_live_update()` to report success, which disabled the Python
+     biquad path (`set_eq_preset("flat")`) while leaving PipeWire EQ
+     unchanged — net result: no EQ applied to anything.  Fixed by
+     removing the unreliable `pw-cli` live-update path entirely.
+  2. **Pianobar stream not migrated after filter-chain restart** — when
+     `filter-chain.service` restarts, the old DA Equalizer node
+     disappears and PipeWire moves pianobar's PA stream to the hardware
+     fallback sink.  The new DA Equalizer node was set as the system
+     default but existing streams were not moved to it, so pianobar
+     continued to play without EQ until the daemon (and thus pianobar)
+     was restarted.  Fixed by adding `_migrate_sink_inputs()` which
+     calls `pactl move-sink-input` for every active PA sink-input
+     immediately after the new EQ sink is elected as default.
+
+
 ### Fixed
 - EQ preset selection now takes effect immediately without restarting
   `filter-chain.service`.  `pipewire_eq._apply_bands()` now tries a

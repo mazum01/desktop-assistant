@@ -6,23 +6,17 @@ pianobar, TTS, beeps — so the EQ applies universally.
 
 Strategy
 --------
-First apply (filter-chain not yet running):
-  1. Write ``~/.config/pipewire/filter-chain.conf.d/da-eq.conf`` with
-     the desired biquad filter graph.
-  2. Restart the ``filter-chain`` user service (already enabled on the Pi).
-  3. Poll ``wpctl status`` until the "DA Equalizer" sink appears, then
-     call ``wpctl set-default`` to route all audio through it.
-  4. Return success flag so callers can fall back to software EQ.
+1. Write ``~/.config/pipewire/filter-chain.conf.d/da-eq.conf`` with
+   the desired biquad filter graph.
+2. Restart the ``filter-chain`` user service (already enabled on the Pi).
+3. Poll ``wpctl status`` until the "DA Equalizer" sink appears, then
+   call ``wpctl set-default`` to route all audio through it.
+4. Migrate any existing PulseAudio sink-inputs (e.g. pianobar) to the
+   new DA Equalizer sink via ``pactl move-sink-input`` so in-flight
+   streams are immediately EQ'd without a daemon restart.
+5. Return success flag so callers can fall back to software EQ.
 
-Subsequent applies (filter-chain already running):
-  1. Use ``pw-dump`` to locate the running EQ band nodes by name.
-  2. Call ``pw-cli set-param <id> Props ...`` on each band to update
-     Freq/Q/Gain in-place — no service restart, no audio interruption.
-  3. Update the config file for persistence across restarts.
-  4. Fall back to full restart only if live update fails.
-
-Callers run this on a daemon thread; first-time setup takes ~1–2 s
-(restart + poll). Live updates return in milliseconds.
+Callers run this on a daemon thread because step 2+3 take ~1–2 s.
 
 Note: When PipeWire EQ is active, ``AudioOutput.set_eq_preset("flat")``
 is called to disable the redundant Python biquad path so audio is not
@@ -31,7 +25,6 @@ double-processed.
 
 from __future__ import annotations
 
-import json as _json
 import logging
 import subprocess
 import time
@@ -200,81 +193,38 @@ def _set_default_sink(sink_id: str) -> bool:
         return False
 
 
-def _get_eq_band_node_ids() -> dict:
-    """Return {band_num: node_id} for the running DA EQ biquad nodes.
+# The static PipeWire node.name for the DA Equalizer capture side.
+# This is what PulseAudio-compatible clients see as the sink name.
+_DA_EQ_SINK_NAME = "effect_input.da_eq"
 
-    Filter-chain exposes each builtin DSP node as a PipeWire node with a
-    name like ``"DA Equalizer:eq_band_1"`` (description) or a variant with
-    the effect node prefix.  We accept any node name/description that
-    contains the ``":eq_band_<N>"`` pattern.
 
-    Returns an empty dict if pw-dump is unavailable or no band nodes found.
+def _migrate_sink_inputs() -> None:
+    """Move all existing PA sink-inputs to the DA Equalizer sink.
+
+    After filter-chain restarts, in-flight PulseAudio streams (e.g. pianobar)
+    land on the hardware fallback sink because their old sink disappeared.
+    This call migrates them to the new DA Equalizer immediately so the new EQ
+    takes effect without restarting any client process.
     """
     try:
         r = subprocess.run(
-            ["pw-dump"], capture_output=True, text=True, timeout=5
+            ["pactl", "list", "short", "sink-inputs"],
+            capture_output=True, text=True, timeout=5,
         )
         if r.returncode != 0:
-            return {}
-        objects = _json.loads(r.stdout)
-        result: dict = {}
-        for obj in objects:
-            if obj.get("type") != "PipeWire:Interface:Node":
+            return
+        for line in r.stdout.splitlines():
+            parts = line.split()
+            if not parts:
                 continue
-            props = obj.get("info", {}).get("props", {})
-            for field in (props.get("node.name", ""), props.get("node.description", "")):
-                for i in range(1, 20):
-                    if f":eq_band_{i}" in field or field == f"eq_band_{i}":
-                        result[i] = str(obj["id"])
-                        break
-        return result
+            input_id = parts[0]
+            subprocess.run(
+                ["pactl", "move-sink-input", input_id, _DA_EQ_SINK_NAME],
+                capture_output=True, timeout=3,
+            )
+        log.debug("pipewire_eq: migrated PA sink-inputs to %s", _DA_EQ_SINK_NAME)
     except Exception as exc:
-        log.debug("pipewire_eq: pw-dump parse failed: %s", exc)
-        return {}
-
-
-def _update_band_props(node_id: str, hz: float, gain_db: float, q: float) -> bool:
-    """Update Freq/Q/Gain on a single EQ band node via pw-cli (no restart)."""
-    try:
-        spa_json = (
-            f'{{ params = [ "Freq" {hz:.1f}  "Q" {q:.2f}  "Gain" {gain_db:.2f} ] }}'
-        )
-        r = subprocess.run(
-            ["pw-cli", "set-param", node_id, "Props", spa_json],
-            timeout=3, capture_output=True,
-        )
-        return r.returncode == 0
-    except Exception as exc:
-        log.debug("pipewire_eq: pw-cli set-param node %s failed: %s", node_id, exc)
-        return False
-
-
-def _try_live_update(bands: list) -> bool:
-    """Update EQ band parameters in-place without restarting filter-chain.
-
-    Finds the running eq_band_N nodes via pw-dump and pushes new Freq/Q/Gain
-    values to each via pw-cli set-param.  Returns True only if every band
-    was updated successfully.  Falls back to full restart when:
-      - pw-dump/pw-cli are unavailable
-      - fewer nodes are found than there are bands (graph mismatch)
-      - any individual set-param call fails
-    """
-    node_ids = _get_eq_band_node_ids()
-    if len(node_ids) < len(bands):
-        log.debug(
-            "pipewire_eq: live update skipped — found %d nodes, need %d",
-            len(node_ids), len(bands),
-        )
-        return False
-    for i, (hz, gain_db, q, _ftype) in enumerate(bands, 1):
-        node_id = node_ids.get(i)
-        if not node_id:
-            log.debug("pipewire_eq: live update skipped — eq_band_%d not found", i)
-            return False
-        if not _update_band_props(node_id, hz, gain_db, q):
-            log.debug("pipewire_eq: live update failed for eq_band_%d", i)
-            return False
-    return True
+        log.debug("pipewire_eq: sink-input migration failed (non-fatal): %s", exc)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -340,25 +290,6 @@ def ensure_default() -> None:
 
 def _apply_bands(bands: list, label: str = "") -> bool:
     global _active
-
-    # ── Fast path: live parameter update (no restart, no audio glitch) ─────
-    # If the filter-chain is already running we can push new Freq/Q/Gain values
-    # directly to each biquad node via pw-cli.  Only attempt this when the sink
-    # is already present so we don't spin pw-dump on a cold start.
-    if _active or _get_eq_sink_id():
-        if _try_live_update(bands):
-            _active = True
-            # Keep config in sync for the next daemon cold-start.
-            try:
-                _CONF_DIR.mkdir(parents=True, exist_ok=True)
-                _CONF_FILE.write_text(_build_config(bands))
-            except Exception as exc:
-                log.debug("pipewire_eq: config sync failed (non-fatal): %s", exc)
-            log.info("pipewire_eq: applied %s live (no restart)", label)
-            return True
-        log.debug("pipewire_eq: live update failed — falling back to filter-chain restart")
-
-    # ── Cold path: write config + restart filter-chain ──────────────────────
     try:
         _CONF_DIR.mkdir(parents=True, exist_ok=True)
         _CONF_FILE.write_text(_build_config(bands))
@@ -387,4 +318,7 @@ def _apply_bands(bands: list, label: str = "") -> bool:
     if ok:
         _active = True
         log.info("pipewire_eq: applied %s — sink %s set as default", label, sink_id)
+        # Move in-flight PA streams (e.g. pianobar) to the new EQ sink so
+        # the preset change is heard immediately without restarting clients.
+        _migrate_sink_inputs()
     return ok
