@@ -6,7 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.38] - 2026-06-11
+## [1.39.39] - 2026-06-11
+### Fixed
+- TTS (and all audio) permanently hung after daemon restart unless
+  pianobar was already playing.
+  Root cause: `node.passive = true` on the `effect_output.da_eq`
+  playback node meant the DA Equalizer output would NOT wake the
+  reSpeaker from its suspended state.  When nothing was actively
+  playing (daemon just restarted, pianobar not yet streaming), aplay
+  connected to the DA EQ input successfully but no audio reached the
+  hardware.  PipeWire kept the reSpeaker suspended, its internal ring
+  buffer never advanced, aplay's pipe backed up and filled, and
+  `proc.stdin.write()` in the audio worker blocked forever.
+  Fixed by removing `node.passive = true` from the filter-chain config.
+  The EQ output now holds the reSpeaker awake at all times while
+  filter-chain is running.
+
+
 ### Fixed
 - Version button and Describe What I See button now work reliably.
   Two root causes:

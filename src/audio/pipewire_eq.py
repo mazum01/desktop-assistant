@@ -142,7 +142,6 @@ context.modules = [
             }}
             playback.props = {{
                 node.name   = "effect_output.da_eq"
-                node.passive = true
             }}
         }}
     }}
