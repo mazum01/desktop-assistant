@@ -168,3 +168,13 @@ privacy:
   announce: true             # speak "I'll give you some privacy" on first detection
   announce_text: "I'll give you some privacy."
   resume_text: ""            # leave blank for silent resume
+
+tts:
+  # Piper neural TTS voice model.
+  # en_US-lessac-medium: ~1.8s synthesis (recommended — 6x faster than high)
+  # en_US-lessac-high:   ~12s synthesis  (higher quality, very slow on Pi 5)
+  # en_US-amy-medium:    ~2.6s synthesis
+  piper_voice_name: en_US-lessac-medium
+  piper_length_scale: 1.15   # slightly slower — TNG-computer pacing
+  piper_noise_scale: 0.3     # flatter prosody
+  piper_noise_w: 0.5         # tighter phoneme timing

@@ -6,7 +6,22 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.45] - 2026-06-11
+## [1.39.46] - 2026-06-11
+### Fixed
+- TTS synthesis time reduced from ~12s to ~1.8s per phrase (6.7× faster).
+  The `TTSConfig` default was `en_US-lessac-high`; `assistant.yaml`
+  already specified `en_US-lessac-medium` but `AVService.on_start` was
+  constructing `TextToSpeech()` with no config, ignoring the YAML.
+  Benchmarks on Pi 5 (warm model, same phrase):
+    en_US-lessac-high:   11.8s synthesis
+    en_US-lessac-medium:  1.8s synthesis  ← now used
+    en_US-amy-medium:     2.6s synthesis
+  Fixes: changed `TTSConfig` default to `lessac-medium`, and wired
+  `AVService.on_start` to read the `tts:` section from `assistant.yaml`
+  (voice name + Piper scales).  Added `tts:` block to `assistant.yaml`
+  documenting all options.
+
+
 ### Fixed
 - Version button now plays instantly instead of after ~18s Piper delay.
   `_synth_startup_phrase()` now pre-synthesizes both the startup phrase

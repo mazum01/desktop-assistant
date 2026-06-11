@@ -105,8 +105,23 @@ class AVService(Service):
             from src.audio.output import AudioOutput
             self._audio = AudioOutput()
         if self._tts is None:
-            from src.audio.tts import TextToSpeech
-            self._tts = TextToSpeech()
+            from src.audio.tts import TextToSpeech, TTSConfig
+            from pathlib import Path
+            import yaml as _yaml
+            _cfg_path = Path(__file__).parents[2] / "config" / "assistant.yaml"
+            _tts_cfg = {}
+            if _cfg_path.exists():
+                try:
+                    _tts_cfg = _yaml.safe_load(_cfg_path.read_text()).get("tts", {})
+                except Exception:
+                    pass
+            tts_config = TTSConfig(
+                piper_voice_name=_tts_cfg.get("piper_voice_name", TTSConfig.piper_voice_name),
+                piper_length_scale=float(_tts_cfg.get("piper_length_scale", TTSConfig.piper_length_scale)),
+                piper_noise_scale=float(_tts_cfg.get("piper_noise_scale", TTSConfig.piper_noise_scale)),
+                piper_noise_w=float(_tts_cfg.get("piper_noise_w", TTSConfig.piper_noise_w)),
+            )
+            self._tts = TextToSpeech(tts_config)
         if self._announcer is None:
             from src.audio.version_announcer import VersionAnnouncer
             self._announcer = VersionAnnouncer(tts=self._tts, audio_output=self._audio)
