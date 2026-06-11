@@ -6,7 +6,23 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.43] - 2026-06-11
+## [1.39.44] - 2026-06-11
+### Fixed
+- DA Equalizer no longer loses its default-sink status when the user
+  changes audio output in a desktop GUI panel.
+  Two fixes in `_get_eq_sink_id()` and `_set_default_sink()`:
+  1. `_get_eq_sink_id()` now falls back to `pw-dump` JSON when `wpctl
+     status` doesn't show the DA EQ in its Filters section (happens when
+     WirePlumber hasn't re-indexed the node or after a desktop default
+     change).  Also matches `effect_input.da_eq` by node name in addition
+     to "DA Equalizer" description.
+  2. `_set_default_sink()` now also calls
+     `pw-metadata 0 default.audio.sink '{"name":"effect_input.da_eq"}'`
+     after the `wpctl set-default` call.  This persists the choice by
+     node name in WirePlumber's session metadata so it survives desktop
+     audio panel changes and PipeWire session resets.
+
+
 ### Fixed
 - Version button now responds promptly instead of after 25+ second delay.
   Root cause: `_on_announce_version` submitted synthesis to the single-

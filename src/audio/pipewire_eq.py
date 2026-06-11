@@ -165,32 +165,69 @@ def _restart_filter_chain() -> bool:
 
 
 def _get_eq_sink_id() -> Optional[str]:
-    """Return the wpctl node ID of the DA Equalizer sink, or None."""
+    """Return the PipeWire node ID of the DA Equalizer sink, or None.
+
+    First tries wpctl status (fast).  Falls back to pw-dump if the
+    filter-chain node doesn't appear in the wpctl Filters section
+    (can happen when WirePlumber hasn't re-indexed the node yet, or
+    when the node was registered before the session default changed).
+    """
+    # Fast path: wpctl status
     try:
         r = subprocess.run(
             ["wpctl", "status"], capture_output=True, text=True, timeout=5
         )
         for line in r.stdout.splitlines():
-            if "DA Equalizer" in line:
-                # Format: "  *  <id>. DA Equalizer  [...]"
+            if "DA Equalizer" in line or "effect_input.da_eq" in line:
                 token = line.split(".")[0].strip().lstrip("*").strip()
                 if token.isdigit():
                     return token
     except Exception as exc:
         log.warning("pipewire_eq: wpctl status failed: %s", exc)
+
+    # Fallback: pw-dump
+    import json as _json
+    try:
+        r = subprocess.run(
+            ["pw-dump"], capture_output=True, text=True, timeout=5
+        )
+        for obj in _json.loads(r.stdout):
+            if obj.get("type") != "PipeWire:Interface:Node":
+                continue
+            props = obj.get("info", {}).get("props", {})
+            if props.get("node.name") == "effect_input.da_eq":
+                return str(obj["id"])
+    except Exception as exc:
+        log.debug("pipewire_eq: pw-dump fallback failed: %s", exc)
     return None
 
 
 def _set_default_sink(sink_id: str) -> bool:
+    """Set DA Equalizer as the default PipeWire sink by numeric ID.
+
+    Also persists the choice by node name so it survives PipeWire
+    session resets and manual changes in desktop audio panels.
+    """
     try:
         r = subprocess.run(
             ["wpctl", "set-default", sink_id],
             timeout=3, capture_output=True,
         )
-        return r.returncode == 0
+        ok = r.returncode == 0
     except Exception as exc:
         log.warning("pipewire_eq: wpctl set-default failed: %s", exc)
         return False
+    # Persist by name via pw-metadata so the choice survives
+    # user changes in desktop sound settings panels.
+    try:
+        subprocess.run(
+            ["pw-metadata", "0", "default.audio.sink",
+             '{"name": "effect_input.da_eq"}'],
+            capture_output=True, timeout=3,
+        )
+    except Exception:
+        pass  # non-fatal
+    return ok
 
 
 def _get_audio_stream_node_ids() -> list:
