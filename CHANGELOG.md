@@ -6,7 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.39] - 2026-06-11
+## [1.39.40] - 2026-06-11
+### Fixed
+- TTS silent after EQ preset change (v1.39.39 regression).
+  Root cause: removing `node.passive = true` from `playback.props`
+  caused WirePlumber to auto-route the `effect_output.da_eq` output
+  node back to the default sink — which IS `effect_input.da_eq`.
+  This created a feedback loop: EQ output → EQ input → EQ output …
+  PipeWire detected the cycle and muted the graph, silencing all audio.
+  Restored `node.passive = true` on the playback side.  The `node.passive`
+  flag was correct all along; the real TTS hang (v1.39.38) was caused by
+  synthesis blocking the audio worker thread, which was separately fixed.
+
+
 ### Fixed
 - TTS (and all audio) permanently hung after daemon restart unless
   pianobar was already playing.
