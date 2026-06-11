@@ -6,7 +6,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.44] - 2026-06-11
+## [1.39.45] - 2026-06-11
+### Fixed
+- Version button now plays instantly instead of after ~18s Piper delay.
+  `_synth_startup_phrase()` now pre-synthesizes both the startup phrase
+  AND the on-request version phrase ("I am running …") while the Piper
+  model is already warm.  The extra phrase costs ~1 s on top of the
+  existing ~18 s prewarm.  `_on_announce_version` plays from the cached
+  samples (audio worker enqueue only — no synthesis wait) and falls back
+  to live synthesis if the cache isn't populated yet.
+
+
 ### Fixed
 - DA Equalizer no longer loses its default-sink status when the user
   changes audio output in a desktop GUI panel.

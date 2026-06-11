@@ -69,6 +69,9 @@ class AVService(Service):
         self._announcer = announcer
         self._announce_on_start = announce_on_start
         self._unsubs = []
+        # Pre-synthesized version phrase cache: populated during prewarm so the
+        # version button plays instantly instead of waiting ~10s for Piper.
+        self._version_samples: Optional[tuple] = None  # (samples, sr)
         # Injected reference to AudioCaptureService for conflict-free recording.
         # When set, _do_record_clip collects from this service's running stream
         # instead of opening a competing PortAudio input stream via sd.rec().
@@ -351,7 +354,15 @@ class AVService(Service):
         from src.core.version import get_version, spoken_version
         phrase = "I am running " + spoken_version()
         log.info("Speaking version: %s (%s)", get_version(), phrase)
-        self._submit_say(phrase)
+        # Play from pre-synthesized cache if available (instant response).
+        if self._version_samples is not None:
+            samples, sr = self._version_samples
+            self._enqueue(
+                lambda s=samples, r=sr, p=phrase: self._do_play_samples(s, r, p, None),
+                label="announce_version",
+            )
+        else:
+            self._submit_say(phrase)
 
     def _on_record(self, _topic, payload) -> None:
         if not isinstance(payload, dict):
@@ -536,6 +547,16 @@ class AVService(Service):
                 lambda s=samples, r=sr, p=phrase: self._do_play_startup(s, r, p),
                 label="announce_startup",
             )
+
+            # Pre-synthesize the on-request version phrase too so the button
+            # responds instantly.  The model is already warm so this only costs ~1 s.
+            try:
+                ver_phrase = "I am running " + spoken_version()
+                ver_samples, ver_sr = self._tts.render(ver_phrase)
+                self._version_samples = (ver_samples, ver_sr)
+                log.info("Version phrase pre-synthesized (%.2fs audio)", len(ver_samples) / ver_sr)
+            except Exception:
+                log.debug("Version phrase pre-synthesis failed (non-fatal)")
         except Exception:
             log.exception("Startup phrase pre-synthesis failed — falling back")
             self._enqueue(self._do_announce_startup, label="announce_startup")
