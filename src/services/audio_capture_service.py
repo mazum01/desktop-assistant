@@ -115,6 +115,14 @@ class AudioCaptureService(Service):
         )
 
     def on_stop(self) -> None:
+        # Release the mic backend (e.g. terminate the pw-record subprocess)
+        # so shutdown is clean and bounded.
+        mic = self._mic
+        if mic is not None and hasattr(mic, "close"):
+            try:
+                mic.close()
+            except Exception:
+                log.debug("AudioCaptureService: mic.close() failed", exc_info=True)
         log.info("AudioCaptureService stopped")
 
     # ── Public accessors ───────────────────────────────────────────────

@@ -6,7 +6,37 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.40.1] - 2026-06-12
+## [1.41.0] - 2026-06-12
+### Added
+- `src/audio/pw_input.py` — `PipeWireMicInput`, a PipeWire-native microphone
+  capture class.  Runs `pw-record` as a subprocess streaming raw S16 mono PCM
+  to stdout; a reader thread fills a bounded ring buffer and `record(seconds)`
+  pulls fixed-length chunks.  Shutdown is clean and bounded (terminate the
+  subprocess → pipe closes → reader thread joins), unlike PortAudio `sd.rec()`
+  on `pulse` which blocked indefinitely.  Drop-in API-compatible with
+  `AudioInput`.  Test stub: `tests/test_pw_input.py`.
+### Changed
+- The reSpeaker Flex XVF3800 mic array is now the live audio input source.
+  `config/assistant.yaml` sets `input_device_name: pipewire`,
+  `input_sample_rate: 16000`, `input_source_match: reSpeaker`.  The factory's
+  `default` backend returns `PipeWireMicInput` when `input_device_name` is
+  `pipewire`.  No USB-device removal required — the previous failure was the
+  blocking PortAudio path, not device contention.
+- `core_main` now wires `av.set_capture_service(capture_svc)` so on-demand
+  recordings (`/api/audio/record`) pull from the already-running reSpeaker
+  capture stream instead of opening a second, conflicting input device.
+- `AudioCaptureService.on_stop` now calls `mic.close()` when available, so the
+  `pw-record` subprocess is reaped cleanly on shutdown.
+### Notes
+- Full reSpeaker I/O verified live: playback at 16 kHz through the EQ path,
+  and capture via `pw-record` (16 kHz, real signal, `hardware_ready=true`).
+  Service restart is back to ~4 s (was 90 s+ when the `pulse` capture wedged
+  shutdown).
+- Pre-existing failures in `tests/test_services.py` (av say/version/beep mocks)
+  are stale assertions from the async-synthesis refactor and are unrelated to
+  this change; tracked separately.
+
+
 ### Fixed
 - Service shutdown wedged ("deactivating" until SIGKILL) after the v1.40.0
   switch to capturing the reSpeaker mic via the PortAudio `pulse` device.

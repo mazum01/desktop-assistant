@@ -339,10 +339,14 @@ def main() -> int:
 
     obj_svc = ObjectService(bus=bus, vision_service=vis, config=_obj_cfg)
     perc_svc = PerceptionService(bus=bus, vision_service=vis, config=_perc_cfg)
+    capture_svc = AudioCaptureService(bus=bus, mic=_audio_in)
+    # Let AVService record clips from the already-running capture stream
+    # instead of opening a second (conflicting) input device.
+    av.set_capture_service(capture_svc)
     services = [
         motion_svc,
         vis,
-        AudioCaptureService(bus=bus, mic=_audio_in),
+        capture_svc,
         av,
         perc_svc,
         obj_svc,

@@ -11,11 +11,15 @@ audio:
   # sd.rec() indefinitely (PortAudio/ALSA-pulse plugin), which wedged service
   # shutdown.  Until a non-blocking PipeWire-native capture path is added,
   # input uses the system-default input device.  See docs/TODO.md.
+  # Input: the reSpeaker mic array is owned exclusively by PipeWire, so capture
+  # uses a PipeWire-native pw-record subprocess (input_device_name: pipewire).
+  # This is non-blocking on shutdown, unlike the PortAudio "pulse" device.
   backend: default
   default:
     eq_preset: bass_boost
-    input_device_name: ''           # system default input (non-blocking)
-    input_sample_rate: 44100
+    input_device_name: pipewire     # pw-record subprocess from the reSpeaker source
+    input_sample_rate: 16000        # reSpeaker native capture rate
+    input_source_match: reSpeaker   # node.name substring of the capture source
     loudness_boost: 2.5             # tanh drive; lower = cleaner, higher = louder
     output_alsa_device: pulse
     output_sample_rate: 16000       # reSpeaker native playback rate (hardware max)

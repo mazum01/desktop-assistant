@@ -82,6 +82,21 @@ def create_audio_input(backend: str, cfg: dict | None = None) -> Any:
 
     # default
     from src.audio.input import AudioInput, AudioInputConfig
+    # "pipewire" selects the PipeWire-native capture path (pw-record subprocess),
+    # which is the robust way to read the PipeWire-owned reSpeaker mic array.
+    if str(cfg.get("input_device_name", "")).lower() == "pipewire":
+        from src.audio.pw_input import PipeWireMicInput, PipeWireMicConfig
+        pw_cfg = PipeWireMicConfig(
+            sample_rate=int(cfg.get("input_sample_rate", 16000)),
+            channels=1,
+            source_match=str(cfg.get("input_source_match", "reSpeaker")),
+        )
+        log.info(
+            "Audio backend: default — input via PipeWire (pw-record) rate=%d match=%r",
+            pw_cfg.sample_rate, pw_cfg.source_match,
+        )
+        return PipeWireMicInput(pw_cfg)
+
     input_cfg = AudioInputConfig(
         device_name=str(cfg.get("input_device_name", "")),
         sample_rate=int(cfg.get("input_sample_rate", 44100)),
