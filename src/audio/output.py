@@ -340,12 +340,33 @@ class AudioOutput:
 
 
 def _resample_linear(samples: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
-    """Cheap linear resampler. Sufficient for speech and short tones; we
-    don't want a scipy/librosa dep just for boot audio.
+    """Resample audio from *src_sr* to *dst_sr*.
+
+    Uses scipy's polyphase resampler (``resample_poly``) when available — it
+    applies a proper anti-aliasing FIR filter, which matters when DOWN-sampling
+    (e.g. Piper TTS 22050 Hz → reSpeaker 16000 Hz) to avoid aliasing artifacts
+    that make speech sound harsh/metallic.  Falls back to cheap linear
+    interpolation if scipy is unavailable.
     """
     if src_sr == dst_sr or len(samples) == 0:
         return samples
     samples = np.asarray(samples)
+
+    # Preferred: scipy polyphase resampling with anti-alias filter.
+    try:
+        from math import gcd
+        from scipy.signal import resample_poly  # type: ignore
+        g = gcd(int(src_sr), int(dst_sr))
+        up = int(dst_sr) // g
+        down = int(src_sr) // g
+        if samples.ndim == 1:
+            return resample_poly(samples, up, down).astype(np.float32)
+        out_cols = [resample_poly(samples[:, c], up, down) for c in range(samples.shape[1])]
+        return np.column_stack(out_cols).astype(np.float32)
+    except Exception:
+        pass
+
+    # Fallback: linear interpolation (no anti-aliasing).
     n_src = samples.shape[0]
     n_dst = int(round(n_src * dst_sr / src_sr))
     if n_dst <= 0:

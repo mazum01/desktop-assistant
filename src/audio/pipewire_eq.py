@@ -213,6 +213,32 @@ def _set_sink_volume(sink_id: str, volume: float) -> None:
         log.debug("pipewire_eq: set-volume failed: %s", exc)
 
 
+def _pin_hardware_sink_volume(volume: float = 1.0) -> None:
+    """Pin the reSpeaker hardware sink (downstream of the EQ) to *volume*.
+
+    The DA EQ output feeds the reSpeaker ALSA sink node, which has its own
+    PipeWire volume.  If that drifts below unity (seen at 0.32 after desktop
+    panel interaction) it attenuates everything after the EQ.  Find it by
+    node name via pw-dump and pin it.
+    """
+    import json as _json
+    try:
+        r = subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=5)
+        if r.returncode != 0:
+            return
+        for obj in _json.loads(r.stdout):
+            if obj.get("type") != "PipeWire:Interface:Node":
+                continue
+            props = obj.get("info", {}).get("props", {})
+            name = props.get("node.name", "")
+            if name.startswith("alsa_output.") and "reSpeaker" in name:
+                _set_sink_volume(str(obj["id"]), volume)
+                log.info("pipewire_eq: pinned reSpeaker hw sink %s to %.2f", obj["id"], volume)
+                return
+    except Exception as exc:
+        log.debug("pipewire_eq: pin hw sink failed: %s", exc)
+
+
 def _set_default_sink(sink_id: str) -> bool:
     """Set DA Equalizer as the default PipeWire sink by numeric ID.
 
@@ -345,6 +371,7 @@ def ensure_default() -> None:
     if sink_id:
         _set_default_sink(sink_id)
         _set_sink_volume(sink_id, 1.0)
+        _pin_hardware_sink_volume(1.0)
         _active = True
         log.info("pipewire_eq: restored DA Equalizer as default sink (id %s)", sink_id)
     else:
@@ -383,6 +410,7 @@ def _apply_bands(bands: list, label: str = "") -> bool:
     if ok:
         _active = True
         _set_sink_volume(sink_id, 1.0)
+        _pin_hardware_sink_volume(1.0)
         log.info("pipewire_eq: applied %s — sink %s set as default", label, sink_id)
         # Move in-flight streams (e.g. pianobar) to the new EQ sink so the
         # preset change is heard immediately without restarting any client.

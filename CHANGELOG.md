@@ -6,7 +6,40 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.47] - 2026-06-11
+## [1.40.0] - 2026-06-12
+### Changed
+- Audio I/O architecture reworked around the reSpeaker Flex XVF3800 as the
+  sole audio device, routing everything through PipeWire (which owns the
+  hardware exclusively).
+  - **Backend:** switched from `respeaker_flex` to `default`.  The
+    `respeaker_flex` backend opened the reSpeaker via PortAudio directly,
+    which silently failed (PipeWire claims the device) and left the mic in
+    sim mode.  The `default` backend now routes both capture and playback
+    through PipeWire's `pulse` layer → reSpeaker.
+  - **Input:** `input_device_name: pulse`, `input_sample_rate: 16000` —
+    captures the reSpeaker mic array (on-chip AEC/beamforming) via the
+    PipeWire default source.
+  - **Output:** `output_sample_rate: 16000` (was 44100).  The XVF3800 only
+    supports 16 kHz playback; matching it eliminates the previous
+    double-resample (TTS 22050→44100→16000) and its artifacts.
+### Fixed
+- reSpeaker very low volume.  Root causes addressed:
+  - New `src/audio/hw_mixer.py` pins the reSpeaker ALSA hardware playback
+    gain (`PCM`) to 0 dB at startup — it was sitting at **-29 dB**.  Called
+    from `AVService.on_start`; finds the card by name (index isn't stable).
+  - `pipewire_eq` now also pins the downstream reSpeaker hardware sink to
+    1.0 (it had drifted to 0.32) in addition to the EQ sink.
+- reSpeaker poor audio quality.  `_resample_linear` in `output.py` now uses
+  scipy's polyphase resampler (`resample_poly`) with a proper anti-aliasing
+  filter when down-sampling (22050→16000), falling back to linear interp if
+  scipy is unavailable.  `loudness_boost` lowered 3.0 → 2.5 to reduce tanh
+  distortion now that real gain comes from the hardware mixer.
+### Notes
+- EQ path unchanged: TTS, tones, and music (pianobar) all converge on the
+  DA Equalizer filter-chain sink before reaching the reSpeaker speaker, so
+  the web GUI EQ presets tune everything.
+
+
 ### Fixed
 - reSpeaker output volume too low.  Three causes:
   1. PipeWire DA EQ sink volume drifted to 0.83 after desktop panel

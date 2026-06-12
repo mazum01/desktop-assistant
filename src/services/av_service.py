@@ -101,6 +101,14 @@ class AVService(Service):
         self._capture_svc = svc
 
     def on_start(self) -> None:
+        # Pin the reSpeaker hardware playback gain to max so the only volume
+        # attenuation happens in the PipeWire graph (EQ + per-app volume).
+        try:
+            from src.audio.hw_mixer import ensure_max_playback_gain
+            ensure_max_playback_gain()
+        except Exception:
+            log.debug("AVService: hardware mixer setup skipped", exc_info=True)
+
         if self._audio is None:
             from src.audio.output import AudioOutput
             self._audio = AudioOutput()
