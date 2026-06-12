@@ -6,7 +6,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.41.0] - 2026-06-12
+## [1.41.1] - 2026-06-12
+### Fixed
+- Stale/flaky `tests/test_services.py` AV tests, and the underlying race they
+  exposed.
+  - Updated 4 tests (`say_routes_to_tts`, `announces_version_on_startup`,
+    `announce_version_topic`, `beep`) to match the current AV pipeline:
+    synthesis goes through `tts.render()` on the synth executor and playback
+    through `audio.play()` (the old `tts.say()` / `announcer.*` direct-call
+    assertions were stale after the async-synthesis refactor).  `beep` now
+    asserts the real `frequency=` kwarg.  `_make_av` gives `tts.render` a real
+    `(samples, sr)` return value.
+  - Reverted the synth executor from `max_workers=2` back to `max_workers=1`.
+    Two workers broke `wait_idle()`'s FIFO ordering guarantee — its barrier
+    task could resolve on the second worker before the real synth task
+    finished, causing a genuine race (intermittent: passed in isolation,
+    failed in the full suite).  The 2-worker change (v1.39.43) is now
+    redundant: the version button is already instant because its phrase is
+    pre-synthesized and cached at startup (v1.39.45).
+- Full suite now green: 842 passed.
+
+
 ### Added
 - `src/audio/pw_input.py` — `PipeWireMicInput`, a PipeWire-native microphone
   capture class.  Runs `pw-record` as a subprocess streaming raw S16 mono PCM

@@ -3,6 +3,7 @@
 import time
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 
 from src.core.bus import MessageBus
@@ -209,6 +210,10 @@ def test_motion_service_pan_to_ignores_bad_payload():
 def _make_av(bus, announce_on_start=False):
     audio = MagicMock(hardware_ready=True)
     tts = MagicMock(hardware_ready=True)
+    # AVService synthesizes via tts.render() (returns samples, sample_rate)
+    # on a background executor, then plays via audio.play(). Give render a
+    # real tuple so the unpack in _submit_say/_synth_startup_phrase succeeds.
+    tts.render.return_value = (np.zeros(1000, dtype=np.float32), 22050)
     announcer = MagicMock()
     announcer.maybe_handle.return_value = False
     svc = AVService(
@@ -231,7 +236,9 @@ def test_av_service_say_routes_to_tts():
         bus.subscribe("av.spoke", lambda t, p: spoke.append(p))
         bus.publish("av.say", {"text": "hello world"})
         svc.wait_idle()
-        tts.say.assert_called_once_with("hello world", output=audio)
+        # Synthesis goes through tts.render(); playback through audio.play().
+        tts.render.assert_called_once_with("hello world")
+        assert audio.play.called
         assert spoke and spoke[0]["text"] == "hello world"
     finally:
         svc.stop()
@@ -239,11 +246,16 @@ def test_av_service_say_routes_to_tts():
 
 def test_av_service_announces_version_on_startup():
     bus = MessageBus()
-    svc, _, _, announcer = _make_av(bus, announce_on_start=True)
+    svc, audio, tts, _ = _make_av(bus, announce_on_start=True)
+    announced = []
+    bus.subscribe("av.version_announced", lambda t, p: announced.append(p))
     svc.start()
     try:
         svc.wait_idle()
-        announcer.announce_startup.assert_called_once()
+        # Startup pre-warms the model and renders the boot phrase, then plays it.
+        assert tts.prewarm.called
+        assert audio.play.called
+        assert announced, "startup should publish av.version_announced"
     finally:
         svc.stop()
 
@@ -263,12 +275,18 @@ def test_av_service_utterance_invokes_version_announcer():
 
 def test_av_service_announce_version_topic():
     bus = MessageBus()
-    svc, _, _, announcer = _make_av(bus)
+    svc, audio, tts, _ = _make_av(bus)
+    spoke = []
+    bus.subscribe("av.spoke", lambda t, p: spoke.append(p))
     svc.start()
     try:
         bus.publish("av.announce_version", None)
         svc.wait_idle()
-        announcer.announce_on_request.assert_called_once()
+        # With no pre-synthesized cache, the version phrase is rendered on
+        # demand and played; the spoken text contains the version number.
+        assert tts.render.called
+        assert audio.play.called
+        assert spoke and "running" in spoke[0]["text"].lower()
     finally:
         svc.stop()
 
@@ -280,7 +298,7 @@ def test_av_service_beep():
     try:
         bus.publish("av.beep", {"freq": 440, "duration": 0.1})
         svc.wait_idle()
-        audio.beep.assert_called_once_with(freq=440.0, duration=0.1)
+        audio.beep.assert_called_once_with(frequency=440.0, duration=0.1)
     finally:
         svc.stop()
 

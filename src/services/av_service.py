@@ -86,12 +86,12 @@ class AVService(Service):
         # Single-threaded synthesis executor: TTS synthesis is CPU-heavy
         # (~9s cold-start, ~1–5s warm on Pi 5 with amy-medium). All synthesis
         # runs here so the audio worker only blocks during actual playback,
-        # keeping recording responsive.  Two workers allow an on-demand
-        # request (e.g. version button) to synthesize in parallel with any
-        # in-progress background synthesis instead of waiting behind it.
+        # keeping recording responsive.  Single worker preserves FIFO ordering
+        # (relied on by wait_idle); the version button stays instant because
+        # its phrase is pre-synthesized and cached at startup (_version_samples).
         self._synth_executor: concurrent.futures.ThreadPoolExecutor = (
             concurrent.futures.ThreadPoolExecutor(
-                max_workers=2, thread_name_prefix="tts-synth"
+                max_workers=1, thread_name_prefix="tts-synth"
             )
         )
 
