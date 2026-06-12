@@ -1,16 +1,21 @@
 audio:
-  # The reSpeaker Flex XVF3800 is the sole audio device (mic array + speaker).
-  # PipeWire owns the hardware exclusively, so BOTH capture and playback are
-  # routed through PipeWire's PulseAudio-compat layer ("pulse"):
-  #   input : pulse  -> PipeWire default source (reSpeaker mics, on-chip AEC)
+  # The reSpeaker Flex XVF3800 is the playback device (mic array + speaker).
+  # PipeWire owns the hardware exclusively, so playback is routed through
+  # PipeWire's PulseAudio-compat layer ("pulse"):
   #   output: aplay -D pulse -> PipeWire -> DA Equalizer -> reSpeaker speaker
   # The reSpeaker plays back at 16 kHz natively; matching that rate avoids
   # double resampling and the artifacts that come with it.
+  #
+  # Input note: the reSpeaker mic array is held exclusively by PipeWire, so the
+  # only capture route is PortAudio's "pulse" device.  That path can block
+  # sd.rec() indefinitely (PortAudio/ALSA-pulse plugin), which wedged service
+  # shutdown.  Until a non-blocking PipeWire-native capture path is added,
+  # input uses the system-default input device.  See docs/TODO.md.
   backend: default
   default:
     eq_preset: bass_boost
-    input_device_name: pulse        # PipeWire default source = reSpeaker mics
-    input_sample_rate: 16000        # reSpeaker native capture rate
+    input_device_name: ''           # system default input (non-blocking)
+    input_sample_rate: 44100
     loudness_boost: 2.5             # tanh drive; lower = cleaner, higher = louder
     output_alsa_device: pulse
     output_sample_rate: 16000       # reSpeaker native playback rate (hardware max)

@@ -6,7 +6,25 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.40.0] - 2026-06-12
+## [1.40.1] - 2026-06-12
+### Fixed
+- Service shutdown wedged ("deactivating" until SIGKILL) after the v1.40.0
+  switch to capturing the reSpeaker mic via the PortAudio `pulse` device.
+  `sd.rec()` on `pulse` can block indefinitely at the C level (ALSA-pulse
+  plugin), so the capture thread never joined and `on_stop` hung past the
+  90 s systemd stop timeout.  The reSpeaker mic *does* capture real audio
+  (verified peak ~30894/32767), but the PortAudio `pulse` path is not
+  robust enough for production.
+  Reverted `audio.default.input_device_name` to the system-default input
+  device (non-blocking).  All v1.40.0 **output** improvements are retained:
+  16 kHz native playback, hardware-gain pinning, sink-volume pinning,
+  anti-aliased resampling, and the EQ path.
+  Logged a follow-up in `docs/TODO.md`: a non-blocking PipeWire-native
+  capture path (e.g. a `pw-cat`/`pw-record` subprocess, or sounddevice with
+  a hard read timeout) is needed before the reSpeaker mic can be the live
+  input source.
+
+
 ### Changed
 - Audio I/O architecture reworked around the reSpeaker Flex XVF3800 as the
   sole audio device, routing everything through PipeWire (which owns the

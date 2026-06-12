@@ -71,3 +71,13 @@ Smoke-test scripts for each component (`scripts/test_<device>.py` exits 0).
   XL430-W250 (half-duplex TTL UART, near-silent, position feedback built in).
   Requires `src/hardware/servo.py` rewrite + Pi hardware UART freed up.
   See `PROJECT_PHASES.md § Future Upgrades` for wiring and library details.
+
+## Audio
+- [ ] reSpeaker mic capture: the XVF3800 array is held exclusively by PipeWire,
+      so the only PortAudio capture route is the `pulse` device. `sd.rec()` on
+      `pulse` can block indefinitely (ALSA-pulse plugin), which wedged service
+      shutdown (stuck "deactivating" until SIGKILL). The mic DOES capture real
+      audio when it works (verified: peak ~30894/32767). Needs a non-blocking
+      PipeWire-native capture path (e.g. a `pw-record`/`pw-cat` subprocess feeding
+      the AudioCaptureService, or sounddevice with a hard read timeout) before
+      switching `audio.default.input_device_name` to `pulse`.
