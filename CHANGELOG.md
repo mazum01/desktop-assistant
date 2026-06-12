@@ -6,7 +6,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.39.46] - 2026-06-11
+## [1.39.47] - 2026-06-11
+### Fixed
+- reSpeaker output volume too low.  Three causes:
+  1. PipeWire DA EQ sink volume drifted to 0.83 after desktop panel
+     interaction.  `ensure_default()` and `_apply_bands()` now call
+     `wpctl set-volume <id> 1.00` whenever they elect the EQ sink as
+     default, keeping it pinned at unity.
+  2. `loudness_boost` was 2.0 (tanh drive).  Raised to 4.0 in
+     `config/assistant.yaml` for both `default` and `respeaker_flex`
+     backends.  At drive=4 the tanh waveshaper gives ~6 dB more
+     perceived loudness while hard-clipping is prevented by the tanh
+     ceiling.  Adjust down in `config/assistant.yaml` if distortion
+     is audible.
+
+
 ### Fixed
 - TTS synthesis time reduced from ~12s to ~1.8s per phrase (6.7× faster).
   The `TTSConfig` default was `en_US-lessac-high`; `assistant.yaml`

@@ -4,7 +4,7 @@ audio:
     eq_preset: bass_boost
     input_device_name: ''
     input_sample_rate: 44100
-    loudness_boost: 2.0
+    loudness_boost: 4.0
     output_alsa_device: pulse
     output_sample_rate: 44100
   respeaker_flex:
@@ -14,7 +14,7 @@ audio:
     input_raw_channels: 6
     input_sample_rate: 16000
     led_enabled: true
-    loudness_boost: 2.0
+    loudness_boost: 4.0
     output_alsa_device: pulse
     output_sample_rate: 44100
 camera:

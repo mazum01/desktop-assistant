@@ -202,6 +202,17 @@ def _get_eq_sink_id() -> Optional[str]:
     return None
 
 
+def _set_sink_volume(sink_id: str, volume: float) -> None:
+    """Set the PipeWire volume of a sink node (0.0–1.5)."""
+    try:
+        subprocess.run(
+            ["wpctl", "set-volume", sink_id, f"{volume:.2f}"],
+            capture_output=True, timeout=3,
+        )
+    except Exception as exc:
+        log.debug("pipewire_eq: set-volume failed: %s", exc)
+
+
 def _set_default_sink(sink_id: str) -> bool:
     """Set DA Equalizer as the default PipeWire sink by numeric ID.
 
@@ -333,6 +344,7 @@ def ensure_default() -> None:
     sink_id = _get_eq_sink_id()
     if sink_id:
         _set_default_sink(sink_id)
+        _set_sink_volume(sink_id, 1.0)
         _active = True
         log.info("pipewire_eq: restored DA Equalizer as default sink (id %s)", sink_id)
     else:
@@ -370,6 +382,7 @@ def _apply_bands(bands: list, label: str = "") -> bool:
     ok = _set_default_sink(sink_id)
     if ok:
         _active = True
+        _set_sink_volume(sink_id, 1.0)
         log.info("pipewire_eq: applied %s — sink %s set as default", label, sink_id)
         # Move in-flight streams (e.g. pianobar) to the new EQ sink so the
         # preset change is heard immediately without restarting any client.
