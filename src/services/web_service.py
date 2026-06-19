@@ -906,6 +906,7 @@ class WebService:
             "room": self._room_svc.room_name if self._room_svc else None,
             "room_detail": self._room_svc.get_status_dict() if self._room_svc else None,
             "iot": self._iot_registry.get_all_snapshots() if self._iot_registry else {},
+            "processes": _get_vera_processes(),
         }
 
     # ── FastAPI app ───────────────────────────────────────────────────

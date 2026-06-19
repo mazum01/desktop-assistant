@@ -6,6 +6,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.7] - 2026-06-19
+### Changed
+- Process table in System Resources card now updates at the WebSocket rate (~1 s),
+  in sync with the CPU and memory sparklines. Process data is included in the
+  `_build_status_snapshot()` payload so each WS push carries a fresh list.
+  The separate 10-second REST poll (`setInterval(loadProcesses, 10000)`) is
+  removed; the manual ↺ button still calls `/api/processes` directly as a
+  fallback before the WS connection establishes.
+
 ## [1.41.6] - 2026-06-19
 ### Fixed
 - `vera system processes` / `/api/processes` showed wildly incorrect CPU% (e.g. 209%)

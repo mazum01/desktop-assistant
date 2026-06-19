@@ -280,6 +280,11 @@ function updateDashboard(data) {
   if (data.iot && typeof data.iot === "object") {
     renderIoTDevices(data.iot);
   }
+
+  // Process list — updated at WS rate (same as CPU/mem sparklines)
+  if (Array.isArray(data.processes)) {
+    renderProcesses(data.processes);
+  }
 }
 
 // ── IoT plugin device cards ────────────────────────────────────────
@@ -2344,33 +2349,37 @@ async function announceDrop() {
 
 // ── Process list ──────────────────────────────────────────────────
 
-async function loadProcesses() {
+function renderProcesses(procs) {
   const tbody = el("processes-tbody");
   if (!tbody) return;
+  if (!procs || procs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:4px 6px;color:var(--text-muted)">No processes found</td></tr>';
+    return;
+  }
+  const roleColor = { main: "var(--blue)", child: "var(--text-muted)", companion: "var(--green)" };
+  tbody.innerHTML = procs.map(p => {
+    const nameStyle = p.role === "main" ? "font-weight:600;color:var(--blue)" : "";
+    const rc = roleColor[p.role] || "var(--text-muted)";
+    const cpuColor = (p.cpu_pct || 0) > 50 ? "var(--red)" : (p.cpu_pct || 0) > 15 ? "var(--yellow)" : "";
+    const threads = p.threads != null ? p.threads : "—";
+    return `<tr>
+      <td style="padding:2px 6px;${nameStyle}">${esc(p.name)}</td>
+      <td style="padding:2px 6px;color:var(--text-muted);font-size:0.75em">${p.pid}</td>
+      <td style="padding:2px 6px;font-size:0.75em;color:${rc}">${p.role}</td>
+      <td style="padding:2px 6px;font-size:0.75em;color:var(--text-muted)">${esc(p.status)}</td>
+      <td style="padding:2px 6px;text-align:right;color:${cpuColor || 'inherit'}">${p.cpu_pct != null ? p.cpu_pct.toFixed(1) : "—"}</td>
+      <td style="padding:2px 6px;text-align:right">${p.mem_mb != null ? p.mem_mb.toFixed(1) : "—"}</td>
+      <td style="padding:2px 6px;text-align:right;color:var(--text-muted)">${threads}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function loadProcesses() {
   try {
     const d = await fetch("/api/processes").then(r => r.json());
-    const procs = d.processes || [];
-    if (procs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="padding:4px 6px;color:var(--text-muted)">No processes found</td></tr>';
-      return;
-    }
-    const roleColor = { main: "var(--blue)", child: "var(--text-muted)", companion: "var(--green)" };
-    tbody.innerHTML = procs.map(p => {
-      const nameStyle = p.role === "main" ? "font-weight:600;color:var(--blue)" : "";
-      const rc = roleColor[p.role] || "var(--text-muted)";
-      const cpuColor = (p.cpu_pct || 0) > 50 ? "var(--red)" : (p.cpu_pct || 0) > 15 ? "var(--yellow)" : "";
-      const threads = p.threads != null ? p.threads : "—";
-      return `<tr>
-        <td style="padding:2px 6px;${nameStyle}">${esc(p.name)}</td>
-        <td style="padding:2px 6px;color:var(--text-muted);font-size:0.75em">${p.pid}</td>
-        <td style="padding:2px 6px;font-size:0.75em;color:${rc}">${p.role}</td>
-        <td style="padding:2px 6px;font-size:0.75em;color:var(--text-muted)">${esc(p.status)}</td>
-        <td style="padding:2px 6px;text-align:right;color:${cpuColor || 'inherit'}">${p.cpu_pct != null ? p.cpu_pct.toFixed(1) : "—"}</td>
-        <td style="padding:2px 6px;text-align:right">${p.mem_mb != null ? p.mem_mb.toFixed(1) : "—"}</td>
-        <td style="padding:2px 6px;text-align:right;color:var(--text-muted)">${threads}</td>
-      </tr>`;
-    }).join("");
+    renderProcesses(d.processes || []);
   } catch (e) {
+    const tbody = el("processes-tbody");
     if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="padding:4px 6px;color:var(--red)">Error: ${esc(String(e))}</td></tr>`;
   }
 }
@@ -2497,11 +2506,10 @@ document.addEventListener("DOMContentLoaded", () => {
         break;
     }
   });
-  // Refresh face registry every 30s; music status every 2s; processes every 10s; depth maps every 3s
+  // Refresh face registry every 30s; music status every 2s; depth maps every 3s
   setInterval(loadFaces, 30000);
   setInterval(loadMusicStatus, 2000);
   setInterval(loadAudioInputGain, 30000);
-  setInterval(loadProcesses, 10000);
   setInterval(() => {
     const dense = el("depth-dense-enabled") && el("depth-dense-enabled").checked;
     const mono  = el("depth-mono-enabled")  && el("depth-mono-enabled").checked;
