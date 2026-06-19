@@ -587,8 +587,21 @@ def _draw_privacy_overlay(
         color = _PRIV_BOX if cls in EXPLICIT_LABELS else (80, 80, 160)
         cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), color, max(1, ft), cv2.LINE_AA)
         lbl = f"{cls.replace('_', ' ')} {int(score * 100)}%"
-        ly  = max(12, y1 - 4)
-        _put_text_outlined(frame_bgr, lbl, (x1, ly), font, fs, color, ft)
+        (lw, lh), lb = cv2.getTextSize(lbl, font, fs, ft)
+        side_pad = max(4, ft * 2)
+
+        # Prefer label on the left of the box; if it would clip off-frame,
+        # place it on the right.
+        lx = x1 - lw - side_pad
+        if lx < 0:
+            lx = x2 + side_pad
+        # If both sides are too tight, clamp to keep text fully visible.
+        lx = max(0, min(w - lw - 1, lx))
+
+        # Baseline Y near the top of the box, clamped to frame.
+        ly = y1 + lh + side_pad
+        ly = max(lh + lb + 1, min(h - 1, ly))
+        _put_text_outlined(frame_bgr, lbl, (lx, ly), font, fs, color, ft)
 
     # Status banner — bottom-left corner, always visible
     if explicit or looking_away:

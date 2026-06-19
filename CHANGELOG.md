@@ -6,6 +6,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.9] - 2026-06-19
+### Changed
+- Privacy outline label placement on Cam 1 now prefers the **left side** of each
+  detection box. If left placement would go off-frame, the label is placed on the
+  **right side** instead.
+- Added frame-bound clamping for horizontal label placement so text stays visible
+  even when detections are near image edges.
+
 ## [1.41.8] - 2026-06-19
 ### Fixed
 - Privacy detection outlines on Cam 1 could be offset from the image because
