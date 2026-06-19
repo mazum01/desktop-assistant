@@ -6,6 +6,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.8] - 2026-06-19
+### Fixed
+- Privacy detection outlines on Cam 1 could be offset from the image because
+  NudeNet emits `box` as `[x, y, w, h]`, but the overlay renderer treated it as
+  `[x1, y1, x2, y2]`.
+- Updated privacy overlay coordinate handling to:
+  - treat `box` as width/height (`x2=x+w`, `y2=y+h`),
+  - continue supporting `bbox` as `[x1, y1, x2, y2]`,
+  - clamp coordinates to frame bounds and skip invalid rectangles.
+
 ## [1.41.7] - 2026-06-19
 ### Changed
 - Process table in System Resources card now updates at the WebSocket rate (~1 s),

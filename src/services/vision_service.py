@@ -558,15 +558,30 @@ def _draw_privacy_overlay(
 
     # Draw detection boxes for ALL detections returned by NudeNet
     for det in detections:
-        box = det.get("box") or det.get("bbox")
         cls = det.get("class", "?")
         score = float(det.get("score", 0.0))
-        if not box or len(box) < 4:
+
+        # NudeNet's `box` is [x, y, w, h] while many internal payloads use
+        # `bbox` as [x1, y1, x2, y2]. Handle both explicitly so overlays align.
+        if det.get("box") and len(det["box"]) >= 4:
+            bx = det["box"]
+            x1, y1 = int(bx[0] * sx), int(bx[1] * sy)
+            x2, y2 = int((bx[0] + bx[2]) * sx), int((bx[1] + bx[3]) * sy)
+        elif det.get("bbox") and len(det["bbox"]) >= 4:
+            bx = det["bbox"]
+            x1, y1 = int(bx[0] * sx), int(bx[1] * sy)
+            x2, y2 = int(bx[2] * sx), int(bx[3] * sy)
+        else:
             continue
-        x1 = int(box[0] * sx)
-        y1 = int(box[1] * sy)
-        x2 = int(box[2] * sx)
-        y2 = int(box[3] * sy)
+
+        # Clamp to frame bounds and skip invalid boxes.
+        x1 = max(0, min(w - 1, x1))
+        y1 = max(0, min(h - 1, y1))
+        x2 = max(0, min(w - 1, x2))
+        y2 = max(0, min(h - 1, y2))
+        if x2 <= x1 or y2 <= y1:
+            continue
+
         # Red for explicit triggers, dim for non-explicit labels
         from src.perception.nudity_detector import EXPLICIT_LABELS
         color = _PRIV_BOX if cls in EXPLICIT_LABELS else (80, 80, 160)
