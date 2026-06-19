@@ -5,6 +5,8 @@ description: >
   temperature, fan speed, servo angle, camera FPS, face count, and running
   services. Use for "how are you?", "system status", "what's your temperature?",
   "are you running okay?", and similar health queries.
+  Also supports listing active processes: vera-core, child processes (pw-record, etc.),
+  and companion services (PipeWire, WirePlumber, pianobar).
 metadata:
   openclaw:
     os: ["linux"]
@@ -14,7 +16,7 @@ metadata:
 
 # System Status Skill
 
-Fetch a health and telemetry summary from VERA.
+Fetch a health and telemetry summary from VERA, or list active processes.
 
 ## When to use
 
@@ -25,16 +27,29 @@ Fetch a health and telemetry summary from VERA.
 - "What's the camera FPS?"
 - "Are all services running?"
 - "Is everything okay?"
+- "What processes are running?" / "List active processes"
+
+## Commands
+
+| Command      | Description |
+|---|---|
+| `status`     | Health and telemetry snapshot (default) |
+| `processes`  | List vera-core, child, and companion processes |
 
 ## How to invoke
 
-No arguments needed.
-
 ```bash
-python3 ~/.openclaw/workspace/skills/system-status/system_status.py
+python3 ~/.openclaw/workspace/skills/system-status/system_status.py [command]
 ```
 
-On success prints JSON with fields:
+Examples:
+```bash
+python3 ~/.openclaw/workspace/skills/system-status/system_status.py
+python3 ~/.openclaw/workspace/skills/system-status/system_status.py status
+python3 ~/.openclaw/workspace/skills/system-status/system_status.py processes
+```
+
+On `status` success prints JSON with fields:
 - `version` — firmware version string
 - `cpu_percent` — CPU load (%)
 - `mem_percent` — RAM usage (%)
@@ -45,6 +60,9 @@ On success prints JSON with fields:
 - `cam1_fps` / `cam2_fps` — camera frame rates
 - `faces_visible` — number of faces currently detected
 - `services` — dict of service name → state
+
+On `processes` success prints JSON with:
+- `processes` — list of `{name, pid, role, status, cpu_pct, mem_mb, threads?}`
 
 Summarize the key metrics for the user in natural language.
 Highlight anything abnormal (high temp, stopped services, etc.).

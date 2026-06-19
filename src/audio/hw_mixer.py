@@ -30,6 +30,7 @@ _CARD_MATCH = ("reSpeaker", "L16K6Ch", "XVF3800")
 # Playback simple-control name on the XVF3800 and the level to set
 # (the control range is 0-60; 60 == 0 dB == unity).
 _PLAYBACK_CONTROL = "PCM"
+_CAPTURE_CONTROL = "Mic"
 
 
 def _find_card_index() -> Optional[int]:
@@ -62,6 +63,40 @@ def _amixer_set_max(card: int, control: str) -> bool:
         return False
 
 
+def _amixer_set_percent(card: int, control: str, percent: int, capture: bool = False) -> bool:
+    """Set an amixer simple control to *percent* on *card*."""
+    pct = max(0, min(100, int(percent)))
+    cmd = ["amixer", "-c", str(card), "sset", control, f"{pct}%"]
+    if capture:
+        cmd.append("cap")
+    else:
+        cmd.append("unmute")
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        return r.returncode == 0
+    except Exception as exc:
+        log.debug("hw_mixer: amixer sset %s=%s failed: %s", control, pct, exc)
+        return False
+
+
+def _amixer_get_percent(card: int, control: str) -> Optional[int]:
+    """Read the first percentage value for a simple control."""
+    try:
+        r = subprocess.run(
+            ["amixer", "-c", str(card), "sget", control],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r.returncode != 0:
+            return None
+        m = re.search(r"\[(\d{1,3})%\]", r.stdout)
+        if not m:
+            return None
+        return int(m.group(1))
+    except Exception as exc:
+        log.debug("hw_mixer: amixer sget %s failed: %s", control, exc)
+        return None
+
+
 def ensure_max_playback_gain() -> bool:
     """Pin the reSpeaker hardware playback gain to maximum (0 dB).
 
@@ -77,4 +112,26 @@ def ensure_max_playback_gain() -> bool:
         log.info("hw_mixer: reSpeaker (card %d) playback gain pinned to max", card)
     else:
         log.warning("hw_mixer: failed to set reSpeaker (card %d) playback gain", card)
+    return ok
+
+
+def get_capture_gain_percent() -> Optional[int]:
+    """Read current reSpeaker microphone input gain percent (0-100)."""
+    card = _find_card_index()
+    if card is None:
+        return None
+    return _amixer_get_percent(card, _CAPTURE_CONTROL)
+
+
+def set_capture_gain_percent(percent: int) -> bool:
+    """Set reSpeaker microphone input gain percent (0-100)."""
+    card = _find_card_index()
+    if card is None:
+        log.info("hw_mixer: reSpeaker card not found — skipping capture gain setup")
+        return False
+    ok = _amixer_set_percent(card, _CAPTURE_CONTROL, percent, capture=True)
+    if ok:
+        log.info("hw_mixer: reSpeaker (card %d) capture gain set to %d%%", card, percent)
+    else:
+        log.warning("hw_mixer: failed setting reSpeaker (card %d) capture gain", card)
     return ok

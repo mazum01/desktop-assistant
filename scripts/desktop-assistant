@@ -943,55 +943,6 @@ def cmd_camera2(args) -> int:
     return 1
 
 
-# ── Voice EQ subcommands ──────────────────────────────────────────────────────
-
-def cmd_eq(args) -> int:
-    _EQ_PRESETS = ["flat", "bass_boost", "treble_boost", "vocal", "loudness", "warm"]
-    sub = args.eq_cmd
-    if sub == "set":
-        if args.preset not in _EQ_PRESETS:
-            print(f"Unknown preset '{args.preset}'. Valid: {', '.join(_EQ_PRESETS)}")
-            return 1
-        r = _request({
-            "cmd": "publish",
-            "topic": "av.set_eq_preset",
-            "payload": {"preset": args.preset},
-        })
-        if r.get("ok"):
-            print(f"EQ preset set to '{args.preset}'")
-        else:
-            print(json.dumps(r, indent=2))
-        return 0 if r.get("ok") else 1
-    if sub == "custom":
-        bands = []
-        for spec in args.band:
-            if "=" in spec:
-                parts = dict(p.split("=") for p in spec.split(","))
-                hz   = float(parts.get("hz", 1000))
-                gain = float(parts.get("gain", 0))
-                q    = float(parts.get("q", 1.0))
-            elif ":" in spec:
-                pieces = spec.split(":")
-                hz   = float(pieces[0]) if len(pieces) > 0 else 1000.0
-                gain = float(pieces[1]) if len(pieces) > 1 else 0.0
-                q    = float(pieces[2]) if len(pieces) > 2 else 1.0
-            else:
-                print(f"Cannot parse band spec: {spec!r}", file=sys.stderr)
-                return 1
-            bands.append({"hz": hz, "gain_db": gain, "q": q})
-        r = _request({
-            "cmd": "publish",
-            "topic": "av.set_custom_eq",
-            "payload": {"bands": bands},
-        })
-        if r.get("ok"):
-            print(f"Custom EQ applied ({len(bands)} band(s)).")
-        else:
-            print(json.dumps(r, indent=2))
-        return 0 if r.get("ok") else 1
-    return 1
-
-
 # ── Object Detection subcommands ──────────────────────────────────────────────
 
 def cmd_object_detection(args) -> int:
@@ -1284,7 +1235,7 @@ def cmd_quiet_hours(args) -> int:
 
 
 def cmd_privacy(args) -> int:
-    """Enable, disable, or check the privacy (nudity look-away) service."""
+    """Enable, disable, tune, or check the privacy (nudity look-away) service."""
     from pathlib import Path as _P
     action = getattr(args, "privacy_action", "status") or "status"
     _CONFIG = _P(__file__).resolve().parent.parent / "config" / "assistant.yaml"
@@ -1308,6 +1259,8 @@ def cmd_privacy(args) -> int:
         thr      = d.get("threshold", 0.6)
         look     = d.get("look_away_angle_deg", 45.0)
         cooldown = d.get("cooldown_s", 10.0)
+        clear_n  = d.get("clear_frames", 3)
+        announce = d.get("announce", True)
         state    = f"{GRN}enabled{RST}" if enabled else f"{YLW}disabled{RST}"
         hw_str   = (f"{GRN}✓{RST}" if hw is True else f"{YLW}⚠ sim{RST}") if hw != "?" else "?"
         print()
@@ -1318,6 +1271,12 @@ def cmd_privacy(args) -> int:
         print(f"    Threshold: {thr}")
         print(f"    Look away: {look}°")
         print(f"    Cooldown : {cooldown}s")
+        print(f"    Clear N  : {clear_n} frame(s)")
+        print(f"    Announce : {'yes' if announce else 'no'}")
+        if "announce_text" in d:
+            print(f"    Say-away : {d.get('announce_text')!r}")
+        if "resume_text" in d and d.get("resume_text"):
+            print(f"    Say-back : {d.get('resume_text')!r}")
         print()
         return 0
 
@@ -1344,6 +1303,46 @@ def cmd_privacy(args) -> int:
         print(f"Privacy detection {'enabled' if enabled else 'disabled'}.")
         return 0
 
+    if action == "set":
+        patch = {}
+        for key, value in (
+            ("rate_hz", getattr(args, "rate_hz", None)),
+            ("threshold", getattr(args, "threshold", None)),
+            ("look_away_angle_deg", getattr(args, "look_away_deg", None)),
+            ("cooldown_s", getattr(args, "cooldown_s", None)),
+            ("clear_frames", getattr(args, "clear_frames", None)),
+            ("announce_text", getattr(args, "announce_text", None)),
+            ("resume_text", getattr(args, "resume_text", None)),
+        ):
+            if value is not None:
+                patch[key] = value
+        announce = getattr(args, "announce", None)
+        if announce is not None:
+            patch["announce"] = announce.lower() == "on"
+        if not patch:
+            print("Nothing to update. Use one or more --rate-hz/--threshold/--look-away-deg/--cooldown-s/--clear-frames/--announce/--announce-text/--resume-text options.", file=sys.stderr)
+            return 1
+        try:
+            _http_put("/api/settings/privacy", patch)
+        except Exception:
+            # Fallback: write config directly
+            try:
+                from ruamel.yaml import YAML as _YAML
+                _yaml = _YAML()
+                _yaml.preserve_quotes = True
+                with open(_CONFIG) as _f:
+                    _cfg = _yaml.load(_f)
+                if "privacy" not in _cfg:
+                    _cfg["privacy"] = {}
+                _cfg["privacy"].update(patch)
+                with open(_CONFIG, "w") as _f:
+                    _yaml.dump(_cfg, _f)
+            except Exception as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+        print("Privacy settings updated.")
+        return 0
+
     return 1
 
 
@@ -1355,6 +1354,7 @@ def cmd_audio(args) -> int:
     _BASE_URL = "http://localhost:8080"
     GRN = "\033[32m"; YLW = "\033[33m"; CYN = "\033[36m"; RST = "\033[0m"; BLD = "\033[1m"
     action = getattr(args, "audio_action", "status") or "status"
+    _EQ_PRESETS = ["flat", "bass_boost", "treble_boost", "vocal", "loudness", "warm", "custom"]
 
     def _api_get():
         import urllib.request
@@ -1404,6 +1404,122 @@ def cmd_audio(args) -> int:
                 print(f"    [{dev['index']}] {dev['name']}  ({dev['channels']} ch)")
         print()
         return 0
+
+    if action == "volume":
+        level = getattr(args, "level", None)
+        try:
+            if level is None:
+                d = _http_get("/api/music/volume")
+                lvl = int(d.get("level", -1))
+                print("Volume: (unavailable)" if lvl < 0 else f"Volume: {lvl}%")
+            else:
+                if level < 0 or level > 100:
+                    print("Volume must be 0–100", file=sys.stderr)
+                    return 1
+                _http_put("/api/music/volume", {"level": int(level)})
+                print(f"Volume set to {level}%")
+            return 0
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+    if action == "mute":
+        state = getattr(args, "state", None)
+        try:
+            if state is None:
+                d = _http_get("/api/audio/mute")
+                print(f"Muted: {'yes' if d.get('muted', False) else 'no'}")
+            else:
+                muted = str(state).lower() == "on"
+                _http_put("/api/audio/mute", {"muted": muted})
+                print("Audio muted." if muted else "Audio unmuted.")
+            return 0
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+    if action == "repeat":
+        try:
+            d = _http_post("/api/audio/repeat", {})
+            if not d.get("ok", False):
+                print(d.get("error", "No spoken phrase available"), file=sys.stderr)
+                return 1
+            print(f"Repeating: {d.get('text', '')}")
+            return 0
+        except _urllib_error.HTTPError as exc:
+            if exc.code == 404:
+                print("No spoken phrase available yet.", file=sys.stderr)
+            else:
+                print(f"Error: HTTP {exc.code}", file=sys.stderr)
+            return 1
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+    if action == "input-gain":
+        level = getattr(args, "level", None)
+        try:
+            if level is None:
+                d = _http_get("/api/audio/input-gain")
+                if not d.get("available", False):
+                    print("Input gain: unavailable")
+                else:
+                    print(f"Input gain: {int(d.get('level', 0))}%")
+            else:
+                if level < 0 or level > 100:
+                    print("Input gain must be 0–100", file=sys.stderr)
+                    return 1
+                _http_put("/api/audio/input-gain", {"level": int(level)})
+                print(f"Input gain set to {level}%")
+            return 0
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+    if action == "eq":
+        preset = getattr(args, "preset", None)
+        try:
+            if preset is None:
+                d = _http_get("/api/music/eq")
+                current = d.get("preset", "flat")
+                presets = d.get("presets", _EQ_PRESETS)
+                print(f"EQ preset: {current}")
+                print(f"Available: {', '.join(presets)}")
+            else:
+                if preset not in _EQ_PRESETS:
+                    print(f"Unknown preset '{preset}'. Valid: {', '.join(_EQ_PRESETS)}", file=sys.stderr)
+                    return 1
+                _http_put("/api/music/eq", {"preset": preset})
+                print(f"EQ preset set to '{preset}'")
+            return 0
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+    if action == "eq-custom":
+        bands = []
+        for spec in getattr(args, "band", []) or []:
+            if "=" in spec:
+                parts = dict(p.split("=") for p in spec.split(","))
+                hz = float(parts.get("hz", 1000))
+                gain = float(parts.get("gain", 0))
+                q = float(parts.get("q", 1.0))
+            elif ":" in spec:
+                pieces = spec.split(":")
+                hz = float(pieces[0]) if len(pieces) > 0 else 1000.0
+                gain = float(pieces[1]) if len(pieces) > 1 else 0.0
+                q = float(pieces[2]) if len(pieces) > 2 else 1.0
+            else:
+                print(f"Cannot parse band spec: {spec!r}", file=sys.stderr)
+                return 1
+            bands.append({"hz": hz, "gain_db": gain, "q": q})
+        try:
+            _http_put("/api/music/eq/custom", {"bands": bands})
+            print(f"Custom EQ applied ({len(bands)} band(s)).")
+            return 0
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
 
     if action == "set-backend":
         backend = getattr(args, "backend_name", None)
@@ -1543,7 +1659,8 @@ def cmd_help(args) -> int:
                             "                  system restart          Restart vera-core service.\n"
                             "                  system reboot           Reboot the Raspberry Pi.\n"
                             "                  system shutdown         Shut down the Raspberry Pi.\n"
-                            "                  system version          Speak the current version number.",
+                            "                  system version          Speak the current version number.\n"
+                            "                  system processes        List active vera-core and companion processes.",
         "face":             "Face registry and greeting management. Sub-commands:\n"
                             "                  face meet \"<Name>\"      Name the most recently seen face.\n"
                             "                  face list               List faces with IDs and last-seen times.\n"
@@ -1571,11 +1688,6 @@ def cmd_help(args) -> int:
         "playback":         "Play a recorded WAV clip.\n"
                     "                  Usage: playback [--input FILE]\n"
                     "                  If --input is omitted, plays the most recent recording.",
-        "eq":               "Voice / TTS audio equalizer. Sub-commands:\n"
-                            "                  eq set <preset>             Apply a named preset\n"
-                            "                    (flat | bass_boost | treble_boost | vocal | loudness | warm).\n"
-                            "                  eq custom <band> [<band>…]  Apply custom per-band EQ.\n"
-                            "                    Band format: hz=<Hz>,gain=<dB>,q=<Q>  or  <Hz>:<dB>:<Q>",
         "object-detection": "Enable or disable object classification (Hailo-8 COCO). Sub-commands:\n"
                             "                  object-detection enable     Turn on object detection.\n"
                             "                  object-detection disable    Turn off object detection.\n"
@@ -1588,9 +1700,7 @@ def cmd_help(args) -> int:
                             "                  music thumbs-up             Love the current song.\n"
                             "                  music thumbs-down           Ban the current song (skips it).\n"
                             "                  music stations              List available Pandora stations.\n"
-                            "                  music status                Show playback state and current song.\n"
-                            "                  music volume [LEVEL]        Get or set system volume 0–100.\n"
-                            "                  music eq [PRESET]           Get or set music EQ preset.",
+                            "                  music status                Show playback state and current song.",
         "quiet-hours":      "Quiet-hours (TTS silence window) configuration. Sub-commands:\n"
                             "                  quiet-hours status               Show current state and hours.\n"
                             "                  quiet-hours enable               Enable quiet hours.\n"
@@ -1641,16 +1751,23 @@ def cmd_help(args) -> int:
                             "                  fan-tach status               Show tach enabled state and current RPM.\n"
                             "                  fan-tach enable               Enable GPIO edge-callback tach; restart thermal.\n"
                             "                  fan-tach disable              Disable GPIO edge-callback tach; restart thermal.",
-        "audio":            "Audio backend configuration. Sub-commands:\n"
+        "audio":            "Audio controls and backend configuration. Sub-commands:\n"
                             "                  audio status                  Show active backend and all settings.\n"
                             "                  audio set-backend <name>      Switch to a different backend (default|respeaker_flex).\n"
                             "                  audio set [--backend <b>] k=v ...  Update one or more settings for a backend.\n"
                             "                  audio devices                 List available sounddevice input devices.\n"
+                            "                  audio volume [LEVEL]          Get or set output volume 0–100.\n"
+                            "                  audio mute [on|off]           Get mute state, or mute/unmute output.\n"
+                            "                  audio input-gain [LEVEL]      Get or set mic input gain 0–100.\n"
+                            "                  audio eq [PRESET]             Get or set EQ preset.\n"
+                            "                  audio eq-custom <band...>     Apply custom per-band EQ.\n"
+                            "                  audio repeat                  Repeat the last spoken phrase.\n"
                             "                  Note: backend changes require a service restart to take effect.",
         "privacy":          "Nudity detection look-away service. Sub-commands:\n"
                             "                  privacy status                Show enabled state, hardware readiness, and settings.\n"
                             "                  privacy enable                Enable nudity detection + look-away.\n"
-                            "                  privacy disable               Disable nudity detection (camera behaves normally).",
+                            "                  privacy disable               Disable nudity detection (camera behaves normally).\n"
+                            "                  privacy set [flags]           Update privacy tuning (rate/threshold/angles/cooldown/announce).",
         "fan":              "Fan speed override and tachometer control. Sub-commands:\n"
                             "                  fan status                    Show duty, backend, RPM, and override state.\n"
                             "                  fan set <pct>                 Pin fan to a fixed duty % (0–100), bypasses thermal loop.\n"
@@ -2286,6 +2403,45 @@ def cmd_version(_args) -> int:
     return 0 if r.get("ok") else 1
 
 
+def cmd_processes(_args) -> int:
+    """List active vera-core and companion processes."""
+    GRN = "\033[32m"; YLW = "\033[33m"; RED = "\033[31m"; DIM = "\033[2m"; RST = "\033[0m"
+    try:
+        d = _http_get("/api/processes")
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    procs = d.get("processes", [])
+    if not procs:
+        print("No processes found.")
+        return 0
+    print()
+    print(f"  {'Name':<22} {'PID':>6}  {'Role':<10} {'Status':<10} {'CPU%':>6}  {'Mem MB':>8}  {'Threads':>7}")
+    print("  " + "─" * 78)
+    for p in procs:
+        name    = p.get("name", "?")
+        pid     = p.get("pid", "?")
+        role    = p.get("role", "?")
+        status  = p.get("status", "?")
+        cpu     = p.get("cpu_pct")
+        mem     = p.get("mem_mb")
+        threads = p.get("threads")
+
+        if role == "main":
+            name_s = f"{GRN}{name}{RST}"
+        elif role == "companion":
+            name_s = f"{YLW}{name}{RST}"
+        else:
+            name_s = f"{DIM}{name}{RST}"
+
+        cpu_s = f"{cpu:5.1f}" if cpu is not None else "    —"
+        mem_s = f"{mem:7.1f}" if mem is not None else "      —"
+        thr_s = f"{threads:6}" if threads is not None else "     —"
+        print(f"  {name_s:<30} {pid:>6}  {role:<10} {status:<10} {cpu_s}  {mem_s}  {thr_s}")
+    print()
+    return 0
+
+
 def cmd_watch(args) -> int:
     ctx = zmq.Context.instance()
     sock = ctx.socket(zmq.SUB)
@@ -2519,45 +2675,6 @@ def cmd_music_status(_args) -> int:
     return 0
 
 
-def cmd_music_volume(args) -> int:
-    """Get or set system volume (0–100)."""
-    try:
-        if hasattr(args, "level") and args.level is not None:
-            _http_put("/api/music/volume", {"level": int(args.level)})
-            print(f"Volume set to {args.level}%")
-        else:
-            d = _http_get("/api/music/volume")
-            lvl = d.get("level", -1)
-            if lvl < 0:
-                print("Volume: (unavailable)")
-            else:
-                print(f"Volume: {lvl}%")
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
-    return 0
-
-
-def cmd_music_eq(args) -> int:
-    """Get or set the software EQ preset."""
-    _EQ_PRESETS = ["flat", "bass_boost", "treble_boost", "vocal", "loudness", "warm"]
-    try:
-        if hasattr(args, "preset") and args.preset is not None:
-            if args.preset not in _EQ_PRESETS:
-                print(f"Unknown preset '{args.preset}'. Valid: {', '.join(_EQ_PRESETS)}")
-                return 1
-            _http_put("/api/music/eq", {"preset": args.preset})
-            print(f"EQ preset set to '{args.preset}'")
-        else:
-            d = _http_get("/api/music/eq")
-            print(f"EQ preset: {d.get('preset', 'flat')}")
-            print(f"Available: {', '.join(d.get('presets', _EQ_PRESETS))}")
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
-    return 0
-
-
 def main() -> int:
     p = argparse.ArgumentParser(
         prog="vera",
@@ -2573,11 +2690,12 @@ def main() -> int:
     sys_sp = sub.add_parser("system", help="System management (ping/restart/reboot/shutdown/version)")
     sys_sub = sys_sp.add_subparsers(dest="sys_cmd", metavar="<subcommand>")
     sys_sub.required = True
-    sys_sub.add_parser("ping",     help="Round-trip check — confirms daemon is reachable").set_defaults(func=cmd_ping)
-    sys_sub.add_parser("restart",  help="Restart vera-core systemd service").set_defaults(func=cmd_restart)
-    sys_sub.add_parser("reboot",   help="Reboot the Raspberry Pi (prompts for confirmation)").set_defaults(func=cmd_reboot)
-    sys_sub.add_parser("shutdown", help="Shut down the Raspberry Pi (prompts for confirmation)").set_defaults(func=cmd_shutdown)
-    sys_sub.add_parser("version",  help="Speak the current version number via TTS").set_defaults(func=cmd_version)
+    sys_sub.add_parser("ping",      help="Round-trip check — confirms daemon is reachable").set_defaults(func=cmd_ping)
+    sys_sub.add_parser("restart",   help="Restart vera-core systemd service").set_defaults(func=cmd_restart)
+    sys_sub.add_parser("reboot",    help="Reboot the Raspberry Pi (prompts for confirmation)").set_defaults(func=cmd_reboot)
+    sys_sub.add_parser("shutdown",  help="Shut down the Raspberry Pi (prompts for confirmation)").set_defaults(func=cmd_shutdown)
+    sys_sub.add_parser("version",   help="Speak the current version number via TTS").set_defaults(func=cmd_version)
+    sys_sub.add_parser("processes", help="List active vera-core and companion processes").set_defaults(func=cmd_processes)
 
     # ── face subcommand group ────────────────────────────────────────
     face_sp = sub.add_parser("face", help="Face registry and greeting management")
@@ -2640,19 +2758,6 @@ def main() -> int:
 
     cam2_sub.add_parser("rotation-status", help="Show current camera 2 rotation angle").set_defaults(func=cmd_camera2)
 
-    # ── voice EQ subcommand group ────────────────────────────────────
-    eq_sp = sub.add_parser("eq", help="Voice / TTS audio equalizer settings")
-    eq_sub = eq_sp.add_subparsers(dest="eq_cmd", metavar="<subcommand>")
-    eq_sub.required = True
-
-    ssp = eq_sub.add_parser("set", help="Apply a named EQ preset")
-    ssp.add_argument("preset", help="flat | bass_boost | treble_boost | vocal | loudness | warm")
-    ssp.set_defaults(func=cmd_eq)
-
-    ssp = eq_sub.add_parser("custom", help="Apply custom per-band EQ (hz=<Hz>,gain=<dB>,q=<Q>  or  <Hz>:<dB>:<Q>)")
-    ssp.add_argument("band", nargs="+", help="Band spec: hz=1000,gain=3.5,q=1.0  or  1000:3.5:1.0")
-    ssp.set_defaults(func=cmd_eq)
-
     # ── object detection subcommand group ────────────────────────────
     od_sp = sub.add_parser("object-detection", help="Enable/disable COCO object classification (Hailo-8)")
     od_sub = od_sp.add_subparsers(dest="action", metavar="<subcommand>")
@@ -2677,15 +2782,6 @@ def main() -> int:
     mus_sub.add_parser("thumbs-down", help="Ban the current song (skips it)").set_defaults(func=cmd_music_thumbs_down)
     mus_sub.add_parser("stations",    help="List available Pandora stations").set_defaults(func=cmd_music_stations)
     mus_sub.add_parser("status",      help="Show playback state and current song").set_defaults(func=cmd_music_status)
-
-    ssp = mus_sub.add_parser("volume", help="Get or set system volume (0–100)")
-    ssp.add_argument("level", nargs="?", type=int, default=None, help="Volume level 0–100 (omit to read)")
-    ssp.set_defaults(func=cmd_music_volume)
-
-    ssp = mus_sub.add_parser("eq", help="Get or set music EQ preset")
-    ssp.add_argument("preset", nargs="?", default=None,
-                     help="EQ preset: flat | bass_boost | treble_boost | vocal | loudness | warm")
-    ssp.set_defaults(func=cmd_music_eq)
 
     sub.add_parser("topics", help="List subscribed topics").set_defaults(func=cmd_topics)
     sub.add_parser("ping", help="Round-trip latency check (shortcut for 'system ping')").set_defaults(func=cmd_ping)
@@ -2835,6 +2931,30 @@ def main() -> int:
                      help="Settings to update, e.g. loudness_boost=3.0 output_alsa_device=pulse")
     ssp.set_defaults(func=cmd_audio)
 
+    ssp = audio_sub.add_parser("volume", help="Get or set output volume (0–100)")
+    ssp.add_argument("level", nargs="?", type=int, default=None, help="Volume level 0–100 (omit to read)")
+    ssp.set_defaults(func=cmd_audio)
+
+    ssp = audio_sub.add_parser("mute", help="Get or set output mute state")
+    ssp.add_argument("state", nargs="?", choices=["on", "off"], default=None,
+                     help="on=muted, off=unmuted (omit to read current state)")
+    ssp.set_defaults(func=cmd_audio)
+
+    audio_sub.add_parser("repeat", help="Repeat the last spoken phrase").set_defaults(func=cmd_audio)
+
+    ssp = audio_sub.add_parser("input-gain", help="Get or set mic input gain (0–100)")
+    ssp.add_argument("level", nargs="?", type=int, default=None, help="Input gain level 0–100 (omit to read)")
+    ssp.set_defaults(func=cmd_audio)
+
+    ssp = audio_sub.add_parser("eq", help="Get or set EQ preset")
+    ssp.add_argument("preset", nargs="?", default=None,
+                     help="EQ preset: flat | bass_boost | treble_boost | vocal | loudness | warm | custom")
+    ssp.set_defaults(func=cmd_audio)
+
+    ssp = audio_sub.add_parser("eq-custom", help="Apply custom per-band EQ (hz=<Hz>,gain=<dB>,q=<Q> or <Hz>:<dB>:<Q>)")
+    ssp.add_argument("band", nargs="+", help="Band spec: hz=1000,gain=3.5,q=1.0  or  1000:3.5:1.0")
+    ssp.set_defaults(func=cmd_audio)
+
     # ── Privacy (nudity look-away) ────────────────────────────────────
     priv_sp = sub.add_parser("privacy", help="Nudity detection look-away service")
     priv_sub = priv_sp.add_subparsers(dest="privacy_action", metavar="<subcommand>")
@@ -2842,6 +2962,16 @@ def main() -> int:
     priv_sub.add_parser("status",  help="Show enabled state, hardware readiness, and settings").set_defaults(func=cmd_privacy)
     priv_sub.add_parser("enable",  help="Enable nudity detection and look-away").set_defaults(func=cmd_privacy)
     priv_sub.add_parser("disable", help="Disable nudity detection (camera behaves normally)").set_defaults(func=cmd_privacy)
+    ssp = priv_sub.add_parser("set", help="Update privacy tuning settings")
+    ssp.add_argument("--rate-hz", type=float, default=None, help="Detection loop rate in Hz (min 0.1)")
+    ssp.add_argument("--threshold", type=float, default=None, help="Explicit detection threshold 0.0–1.0")
+    ssp.add_argument("--look-away-deg", type=float, default=None, help="Look-away servo angle in degrees")
+    ssp.add_argument("--cooldown-s", type=float, default=None, help="Seconds to hold look-away before checking clear")
+    ssp.add_argument("--clear-frames", type=int, default=None, help="Consecutive clear frames before resuming")
+    ssp.add_argument("--announce", choices=["on", "off"], default=None, help="Speak privacy announcements on/off")
+    ssp.add_argument("--announce-text", default=None, help="Phrase spoken when privacy mode engages")
+    ssp.add_argument("--resume-text", default=None, help="Phrase spoken when privacy mode resumes")
+    ssp.set_defaults(func=cmd_privacy)
 
     # ── Skills subcommand group ───────────────────────────────────────
     sk_sp = sub.add_parser("skills", help="Voice skills management")

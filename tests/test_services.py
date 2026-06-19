@@ -303,6 +303,22 @@ def test_av_service_beep():
         svc.stop()
 
 
+def test_av_service_repeat_last_spoken():
+    bus = MessageBus()
+    svc, audio, tts, _ = _make_av(bus)
+    svc.start()
+    try:
+        bus.publish("av.say", {"text": "repeat me"})
+        svc.wait_idle()
+        tts.render.reset_mock()
+        bus.publish("av.repeat_last", {})
+        svc.wait_idle()
+        tts.render.assert_called_once_with("repeat me")
+        assert audio.play.called
+    finally:
+        svc.stop()
+
+
 def test_av_service_chime_default():
     bus = MessageBus()
     svc, audio, _, _ = _make_av(bus)

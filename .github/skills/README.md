@@ -14,7 +14,7 @@ This directory contains skills for two systems:
 Copy skill directories into the OpenClaw workspace:
 
 ```bash
-for skill in say describe-scene music face-tracking system-status quiet-hours object-detection pan-camera grab-frame; do
+for skill in say describe-scene music audio privacy face-tracking system-status quiet-hours object-detection pan-camera grab-frame; do
     cp -r .github/skills/$skill ~/.openclaw/workspace/skills/
 done
 ```
@@ -37,7 +37,9 @@ systemctl --user restart openclaw-gateway.service
 |---------------------|-----------------------------------------------------------|------------------------------------------------------|
 | `say`               | Speak any text via TTS                                    | "Say good morning", "Announce dinner is ready"       |
 | `describe-scene`    | Describe what the camera sees, spoken aloud               | "What do you see?", "Describe the room"              |
-| `music`             | Pandora: play/stop/skip/pause/thumbs/volume/stations      | "Play jazz", "Skip this song", "Volume 70"           |
+| `music`             | Pandora: play/stop/skip/pause/thumbs/stations             | "Play jazz", "Skip this song", "What's playing?"     |
+| `audio`             | Volume/EQ/input-gain/mute/repeat/backend controls         | "Mute audio", "Repeat that", "Set EQ vocal"           |
+| `privacy`           | Privacy mode enable/disable and tuning controls           | "Enable privacy mode", "Set threshold to 0.7"         |
 | `face-tracking`     | Enable/disable auto face-following servo                  | "Follow me", "Hold still", "Is tracking on?"        |
 | `system-status`     | Health: CPU, memory, temp, FPS, services                  | "How are you?", "What's your temperature?"           |
 | `quiet-hours`       | Enable/disable/configure TTS silence window               | "Enable quiet mode", "Set quiet hours 10pm–7am"     |
@@ -52,4 +54,3 @@ systemctl --user restart openclaw-gateway.service
 | Skill            | Description                                       |
 |------------------|---------------------------------------------------|
 | `restart-daemon` | Restart `desktop-assistant-core.service` + verify |
-

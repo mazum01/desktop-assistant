@@ -149,6 +149,17 @@ class MusicService(Service):
         except Exception:
             return -1
 
+    @property
+    def muted(self) -> bool:
+        """Return True when the default sink is muted."""
+        try:
+            out = subprocess.check_output(
+                ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], text=True
+            )
+            return "[MUTED]" in out
+        except Exception:
+            return False
+
     def set_volume(self, level: int) -> None:
         """Set system volume to level (0–100)."""
         level = max(0, min(100, level))
@@ -159,6 +170,16 @@ class MusicService(Service):
             )
         except Exception:
             log.exception("set_volume(%d) failed", level)
+
+    def set_muted(self, muted: bool) -> None:
+        """Mute/unmute the default sink."""
+        try:
+            subprocess.run(
+                ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1" if muted else "0"],
+                check=True,
+            )
+        except Exception:
+            log.exception("set_muted(%s) failed", muted)
 
     @property
     def eq_preset(self) -> str:
@@ -265,7 +286,7 @@ class MusicService(Service):
         if "level" in payload:
             self.set_volume(int(payload["level"]))
         elif "delta" in payload:
-            current = self.get_volume()
+            current = self.volume
             if current >= 0:
                 self.set_volume(current + int(payload["delta"]))
 

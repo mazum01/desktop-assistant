@@ -254,6 +254,65 @@ def test_audio_playback_endpoint_calls_av_service(app_client):
     assert data["seconds"] == pytest.approx(1.25)
 
 
+def test_audio_mute_get_and_set(app_client):
+    client, bus, svc = app_client
+
+    class _FakeMusic:
+        muted = False
+
+        def set_muted(self, muted: bool):
+            self.muted = bool(muted)
+
+    svc._music_svc = _FakeMusic()
+
+    r = client.get("/api/audio/mute")
+    assert r.status_code == 200
+    assert r.json()["muted"] is False
+
+    r2 = client.put("/api/audio/mute", json={"muted": True})
+    assert r2.status_code == 200
+    assert r2.json()["muted"] is True
+    assert svc._music_svc.muted is True
+
+
+def test_audio_repeat_endpoint_calls_av_service(app_client):
+    client, bus, svc = app_client
+
+    class _FakeAV:
+        name = "av"
+
+        def repeat_last_spoken(self):
+            return {"ok": True, "text": "hello again"}
+
+    svc._all_services = [_FakeAV()]
+    r = client.post("/api/audio/repeat")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["text"] == "hello again"
+
+
+def test_put_privacy_settings_publishes_runtime_config(app_client):
+    client, bus, svc = app_client
+    events = []
+    bus.subscribe("privacy.set_config", lambda t, p: events.append(p))
+
+    r = client.put("/api/settings/privacy", json={
+        "enabled": True,
+        "threshold": 0.7,
+        "cooldown_s": 5.0,
+        "clear_frames": 4,
+        "announce": False,
+    })
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert events
+    assert events[-1]["threshold"] == pytest.approx(0.7)
+    assert events[-1]["cooldown_s"] == pytest.approx(5.0)
+    assert events[-1]["clear_frames"] == 4
+    assert events[-1]["announce"] is False
+
+
 # ── Status API ────────────────────────────────────────────────────────────────
 
 def test_status_returns_version(app_client):

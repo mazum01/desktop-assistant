@@ -207,6 +207,8 @@ function updateDashboard(data) {
   if (spoke && spoke.text) {
     const snip = spoke.text.length > 60 ? spoke.text.slice(0, 60) + "…" : spoke.text;
     el("stat-spoken").textContent = `"${snip}"`;
+    const repeatBtn = el("repeat-spoken-btn");
+    if (repeatBtn) repeatBtn.disabled = false;
   }
 
   // Face overlay badge (boxes are now drawn server-side into the JPEG stream)
@@ -1528,6 +1530,62 @@ async function saveObjectDetectionEnabled(enabled) {
   } catch (e) { /* ignore */ }
 }
 
+async function loadPrivacySettings() {
+  const st = el("privacy-status");
+  try {
+    const d = await fetch("/api/settings/privacy").then(r => r.json());
+    _setVal("privacy-enabled", !!d.enabled);
+    _setVal("privacy-rate-hz", d.rate_hz ?? 1.0);
+    _setVal("privacy-threshold", d.threshold ?? 0.6);
+    _setVal("privacy-look-away-deg", d.look_away_angle_deg ?? 45.0);
+    _setVal("privacy-cooldown-s", d.cooldown_s ?? 10.0);
+    _setVal("privacy-clear-frames", d.clear_frames ?? 3);
+    _setVal("privacy-announce", d.announce !== false);
+    _setVal("privacy-announce-text", d.announce_text ?? "I'll give you some privacy.");
+    _setVal("privacy-resume-text", d.resume_text ?? "");
+    if (st) st.textContent = "";
+  } catch (e) {
+    if (st) {
+      st.textContent = "Load failed";
+      st.style.color = "var(--red)";
+    }
+  }
+}
+
+async function savePrivacySettings() {
+  const st = el("privacy-status");
+  const body = {
+    enabled: !!el("privacy-enabled").checked,
+    rate_hz: parseFloat(el("privacy-rate-hz").value),
+    threshold: parseFloat(el("privacy-threshold").value),
+    look_away_angle_deg: parseFloat(el("privacy-look-away-deg").value),
+    cooldown_s: parseFloat(el("privacy-cooldown-s").value),
+    clear_frames: parseInt(el("privacy-clear-frames").value, 10),
+    announce: !!el("privacy-announce").checked,
+    announce_text: el("privacy-announce-text").value,
+    resume_text: el("privacy-resume-text").value,
+  };
+  try {
+    const r = await fetch("/api/settings/privacy", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || "Save failed");
+    if (st) {
+      st.textContent = "Saved ✓";
+      st.style.color = "var(--green)";
+    }
+  } catch (e) {
+    if (st) {
+      st.textContent = e.message || "Save failed";
+      st.style.color = "var(--red)";
+    }
+  }
+  setTimeout(() => { if (st) st.textContent = ""; }, 4000);
+}
+
 // ── Greeting settings ─────────────────────────────────────────────
 
 async function loadGreetingSettings() {
@@ -1621,10 +1679,34 @@ async function loadAudioSettings() {
   }
 }
 
+async function loadAudioInputGain() {
+  const slider = el("audio-input-gain-slider");
+  const label = el("audio-input-gain-label");
+  const st = el("audio-input-gain-status");
+  if (!slider || !label) return;
+  try {
+    const d = await fetch("/api/audio/input-gain").then(r => r.json());
+    if (d && d.available && d.level !== null && d.level !== undefined) {
+      slider.value = d.level;
+      label.textContent = `${d.level}%`;
+      if (st) st.textContent = "";
+    } else if (st) {
+      st.textContent = "Unavailable";
+      st.style.color = "var(--text-muted)";
+    }
+  } catch (_e) {
+    if (st) {
+      st.textContent = "Error";
+      st.style.color = "var(--red)";
+    }
+  }
+}
+
 function _setVal(id, val) {
   const e = el(id);
   if (!e) return;
-  if (e.tagName === "SELECT") e.value = String(val);
+  if (e.type === "checkbox") e.checked = !!val;
+  else if (e.tagName === "SELECT") e.value = String(val);
   else e.value = val;
 }
 
@@ -1783,6 +1865,53 @@ async function doPan() {
 
 async function doVersion() {
   await fetch("/api/version", { method: "POST" });
+}
+
+async function audioToggleMute() {
+  const btn = el("audio-mute-btn");
+  const st = el("audio-mute-status");
+  let currentlyMuted = false;
+  try {
+    const state = await fetch("/api/audio/mute").then(r => r.json());
+    currentlyMuted = !!state.muted;
+  } catch (_e) {}
+  const targetMuted = !currentlyMuted;
+  try {
+    await fetch("/api/audio/mute", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ muted: targetMuted }),
+    });
+    if (btn) btn.textContent = targetMuted ? "🔊 Unmute" : "🔇 Mute";
+    if (st) {
+      st.textContent = targetMuted ? "Muted" : "Unmuted";
+      st.style.color = "var(--green)";
+    }
+  } catch (_e) {
+    if (st) {
+      st.textContent = "Error";
+      st.style.color = "var(--red)";
+    }
+  }
+  setTimeout(() => { if (st) st.textContent = ""; }, 1500);
+}
+
+async function repeatLastSpoken() {
+  const st = el("repeat-spoken-status");
+  try {
+    const r = await fetch("/api/audio/repeat", { method: "POST" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    if (st) {
+      st.textContent = "Repeating…";
+      st.style.color = "var(--green)";
+    }
+  } catch (_e) {
+    if (st) {
+      st.textContent = "Nothing to repeat";
+      st.style.color = "var(--text-muted)";
+    }
+  }
+  setTimeout(() => { if (st) st.textContent = ""; }, 2000);
 }
 
 async function loadCamRotation() {
@@ -2213,6 +2342,39 @@ async function announceDrop() {
   }, 3000);
 }
 
+// ── Process list ──────────────────────────────────────────────────
+
+async function loadProcesses() {
+  const tbody = el("processes-tbody");
+  if (!tbody) return;
+  try {
+    const d = await fetch("/api/processes").then(r => r.json());
+    const procs = d.processes || [];
+    if (procs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="padding:4px 6px;color:var(--text-muted)">No processes found</td></tr>';
+      return;
+    }
+    const roleColor = { main: "var(--blue)", child: "var(--text-muted)", companion: "var(--green)" };
+    tbody.innerHTML = procs.map(p => {
+      const nameStyle = p.role === "main" ? "font-weight:600;color:var(--blue)" : "";
+      const rc = roleColor[p.role] || "var(--text-muted)";
+      const cpuColor = (p.cpu_pct || 0) > 50 ? "var(--red)" : (p.cpu_pct || 0) > 15 ? "var(--yellow)" : "";
+      const threads = p.threads != null ? p.threads : "—";
+      return `<tr>
+        <td style="padding:2px 6px;${nameStyle}">${esc(p.name)}</td>
+        <td style="padding:2px 6px;color:var(--text-muted);font-size:0.75em">${p.pid}</td>
+        <td style="padding:2px 6px;font-size:0.75em;color:${rc}">${p.role}</td>
+        <td style="padding:2px 6px;font-size:0.75em;color:var(--text-muted)">${esc(p.status)}</td>
+        <td style="padding:2px 6px;text-align:right;color:${cpuColor || 'inherit'}">${p.cpu_pct != null ? p.cpu_pct.toFixed(1) : "—"}</td>
+        <td style="padding:2px 6px;text-align:right">${p.mem_mb != null ? p.mem_mb.toFixed(1) : "—"}</td>
+        <td style="padding:2px 6px;text-align:right;color:var(--text-muted)">${threads}</td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="padding:4px 6px;color:var(--red)">Error: ${esc(String(e))}</td></tr>`;
+  }
+}
+
 async function restartDaemon() {
   if (!confirm("Restart the vera-core service?")) return;
   const btn = document.querySelector('[onclick="restartDaemon()"]');
@@ -2289,6 +2451,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadQuietHours();
   loadFanControlPoints();
   loadAudioSettings();
+  loadAudioInputGain();
   loadServoEnabled();
   loadServoLimits();
   loadFaceTrackingEnabled();
@@ -2299,7 +2462,9 @@ document.addEventListener("DOMContentLoaded", () => {
   loadStreamResolution();
   loadCam2Resolutions();
   loadObjectDetectionEnabled();
+  loadPrivacySettings();
   loadMusicStatus();
+  loadProcesses();
   loadDepthSettings();
   connectWS();
   _startRoomPoller();
@@ -2332,9 +2497,11 @@ document.addEventListener("DOMContentLoaded", () => {
         break;
     }
   });
-  // Refresh face registry every 30s; music status every 2s; depth maps every 3s
+  // Refresh face registry every 30s; music status every 2s; processes every 10s; depth maps every 3s
   setInterval(loadFaces, 30000);
   setInterval(loadMusicStatus, 2000);
+  setInterval(loadAudioInputGain, 30000);
+  setInterval(loadProcesses, 10000);
   setInterval(() => {
     const dense = el("depth-dense-enabled") && el("depth-dense-enabled").checked;
     const mono  = el("depth-mono-enabled")  && el("depth-mono-enabled").checked;
@@ -2366,6 +2533,8 @@ async function loadMusicStatus() {
       el("music-volume-slider").value = d.volume;
       el("music-volume-label").textContent = `${d.volume}%`;
     }
+    const muteBtn = el("audio-mute-btn");
+    if (muteBtn) muteBtn.textContent = d.muted ? "🔊 Unmute" : "🔇 Mute";
     // EQ — skip if user has the custom EQ panel open (they're actively editing)
     const _customPanel = el("custom-eq-panel");
     const _customPanelOpen = _customPanel && _customPanel.style.display !== "none";
@@ -2486,6 +2655,36 @@ async function musicSetVolume(level) {
       });
     } catch (e) { /* ignore */ }
   }, 300);
+}
+
+let _inputGainTimer = null;
+async function audioSetInputGain(level) {
+  const pct = parseInt(level, 10);
+  const label = el("audio-input-gain-label");
+  const st = el("audio-input-gain-status");
+  if (label) label.textContent = `${pct}%`;
+  clearTimeout(_inputGainTimer);
+  _inputGainTimer = setTimeout(async () => {
+    try {
+      const r = await fetch("/api/audio/input-gain", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ level: pct }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (st) {
+        st.textContent = "Saved";
+        st.style.color = "var(--green)";
+      }
+    } catch (_e) {
+      if (st) {
+        st.textContent = "Error";
+        st.style.color = "var(--red)";
+      }
+    }
+    setTimeout(() => {
+      if (st) st.textContent = "";
+    }, 1500);
+  }, 250);
 }
 
 async function musicSetEq(preset) {

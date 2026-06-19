@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch and summarize VERA health and telemetry."""
+"""Fetch and summarize VERA health and telemetry, with optional process listing."""
 
 import json
 import sys
@@ -7,12 +7,31 @@ import urllib.request
 import urllib.error
 
 BASE_URL = "http://localhost:8080"
+COMMANDS = ("status", "processes")
+
+
+def _get(path: str) -> dict:
+    with urllib.request.urlopen(f"{BASE_URL}{path}", timeout=5) as resp:
+        return json.loads(resp.read())
 
 
 def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
+    if cmd not in COMMANDS:
+        print(json.dumps({
+            "ok": False,
+            "error": f"Unknown command: {cmd!r}. Commands: {', '.join(COMMANDS)}",
+        }))
+        sys.exit(1)
+
     try:
-        with urllib.request.urlopen(f"{BASE_URL}/api/status", timeout=5) as resp:
-            data = json.loads(resp.read())
+        if cmd == "processes":
+            data = _get("/api/processes")
+            print(json.dumps({"ok": True, "processes": data.get("processes", [])}))
+            return
+
+        # default: status
+        data = _get("/api/status")
     except urllib.error.URLError as exc:
         print(json.dumps({"ok": False, "error": f"Cannot reach assistant: {exc}"}))
         sys.exit(1)

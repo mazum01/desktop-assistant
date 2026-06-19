@@ -1,28 +1,13 @@
 audio:
-  # The reSpeaker Flex XVF3800 is the playback device (mic array + speaker).
-  # PipeWire owns the hardware exclusively, so playback is routed through
-  # PipeWire's PulseAudio-compat layer ("pulse"):
-  #   output: aplay -D pulse -> PipeWire -> DA Equalizer -> reSpeaker speaker
-  # The reSpeaker plays back at 16 kHz natively; matching that rate avoids
-  # double resampling and the artifacts that come with it.
-  #
-  # Input note: the reSpeaker mic array is held exclusively by PipeWire, so the
-  # only capture route is PortAudio's "pulse" device.  That path can block
-  # sd.rec() indefinitely (PortAudio/ALSA-pulse plugin), which wedged service
-  # shutdown.  Until a non-blocking PipeWire-native capture path is added,
-  # input uses the system-default input device.  See docs/TODO.md.
-  # Input: the reSpeaker mic array is owned exclusively by PipeWire, so capture
-  # uses a PipeWire-native pw-record subprocess (input_device_name: pipewire).
-  # This is non-blocking on shutdown, unlike the PortAudio "pulse" device.
   backend: default
   default:
     eq_preset: bass_boost
-    input_device_name: pipewire     # pw-record subprocess from the reSpeaker source
-    input_sample_rate: 16000        # reSpeaker native capture rate
-    input_source_match: reSpeaker   # node.name substring of the capture source
-    loudness_boost: 2.5             # tanh drive; lower = cleaner, higher = louder
+    input_device_name: pipewire
+    input_sample_rate: 16000
+    input_source_match: reSpeaker
+    loudness_boost: 2.5
     output_alsa_device: pulse
-    output_sample_rate: 16000       # reSpeaker native playback rate (hardware max)
+    output_sample_rate: 16000
   respeaker_flex:
     eq_preset: custom
     input_device_name: ReSpeaker
@@ -124,6 +109,16 @@ object_detection:
   enabled: true
   max_fps: 2.0
   max_objects: 8
+privacy:
+  announce: false
+  announce_text: I'll give you some privacy.
+  clear_frames: 4
+  cooldown_s: 5.0
+  enabled: true
+  look_away_angle_deg: 45
+  rate_hz: 1
+  resume_text: Are you decent?
+  threshold: 0.7
 quiet_hours:
   enabled: true
   end: 06:00
@@ -150,19 +145,19 @@ servo:
 telegram:
   bot_token: ''
   chat_id: ''
-  emoji_named: "\U0001F3F7\uFE0F"
-  emoji_new_face: "\U0001F44B"
-  emoji_returning: "\U0001F464"
+  emoji_named: 🏷️
+  emoji_new_face: 👋
+  emoji_returning: 👤
   enabled: true
   forward_tts: true
   tts_skip_patterns:
   - It is now
   - The time is
 tts:
-  piper_voice_name: en_US-lessac-medium
   piper_length_scale: 1.15
   piper_noise_scale: 0.3
   piper_noise_w: 0.5
+  piper_voice_name: en_US-lessac-medium
 watchdog:
   check_interval_s: 30
   enabled: true
@@ -174,13 +169,3 @@ web_dashboard:
   enabled: true
   host: 0.0.0.0
   port: 8080
-privacy:
-  enabled: true
-  rate_hz: 1.0
-  threshold: 0.6
-  look_away_angle_deg: 45.0
-  cooldown_s: 10.0
-  clear_frames: 3
-  announce: true
-  announce_text: I'll give you some privacy.
-  resume_text: ''

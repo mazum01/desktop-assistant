@@ -156,3 +156,50 @@ class TestPrivacyServiceSetEnabled:
         svc = PrivacyService(bus=bus, config=PrivacyConfig(enabled=True))
         svc._on_set_enabled("privacy.set_enabled", {"enabled": False})
         assert svc._enabled is False
+
+
+class TestPrivacyServiceSetConfig:
+    def test_set_config_updates_fields_and_resumes_if_disabled(self):
+        from src.services.privacy_service import PrivacyService, PrivacyConfig
+        bus = MagicMock()
+        svc = PrivacyService(bus=bus, config=PrivacyConfig(enabled=True))
+        svc._looking_away = True
+
+        with patch.object(svc, "_resume") as mock_resume:
+            svc._on_set_config("privacy.set_config", {
+                "enabled": False,
+                "rate_hz": 2.0,
+                "threshold": 0.7,
+                "look_away_angle_deg": 60.0,
+                "cooldown_s": 5.0,
+                "clear_frames": 4,
+                "announce": False,
+                "announce_text": "privacy mode",
+                "resume_text": "all clear",
+            })
+
+            assert svc._enabled is False
+            assert svc._cfg.rate_hz == pytest.approx(2.0)
+            assert svc._cfg.threshold == pytest.approx(0.7)
+            assert svc._cfg.look_away_angle_deg == pytest.approx(60.0)
+            assert svc._cfg.cooldown_s == pytest.approx(5.0)
+            assert svc._cfg.clear_frames == 4
+            assert svc._cfg.announce is False
+            assert svc._cfg.announce_text == "privacy mode"
+            assert svc._cfg.resume_text == "all clear"
+            mock_resume.assert_called_once()
+
+    def test_set_config_clamps_ranges(self):
+        from src.services.privacy_service import PrivacyService, PrivacyConfig
+        bus = MagicMock()
+        svc = PrivacyService(bus=bus, config=PrivacyConfig(enabled=True))
+        svc._on_set_config("privacy.set_config", {
+            "rate_hz": 0.0,
+            "threshold": 9.0,
+            "cooldown_s": -1.0,
+            "clear_frames": 0,
+        })
+        assert svc._cfg.rate_hz == pytest.approx(0.1)
+        assert svc._cfg.threshold == pytest.approx(1.0)
+        assert svc._cfg.cooldown_s == pytest.approx(0.0)
+        assert svc._cfg.clear_frames == 1

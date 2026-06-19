@@ -12,6 +12,7 @@ Topics subscribed:
     av.utterance          {"text": str}            — user said something;
                                                      handle version queries
     av.announce_version   None                     — speak the current version
+    av.repeat_last        {}                       — repeat most recent spoken text
     av.set_eq_preset      {"preset": str}          — switch named EQ preset
     av.set_custom_eq      {"bands": [...]}         — set user-defined EQ bands;
                            each band: {"hz": float, "gain_db": float, "q": float}
@@ -76,6 +77,7 @@ class AVService(Service):
         # When set, _do_record_clip collects from this service's running stream
         # instead of opening a competing PortAudio input stream via sd.rec().
         self._capture_svc: Optional[Any] = None
+        self._last_spoken_text: Optional[str] = None
         # Single-threaded audio worker: every play action (say/chime/beep)
         # is enqueued here, so they execute strictly in order even when
         # bus events arrive in parallel. Prevents the boot self-test
@@ -141,6 +143,7 @@ class AVService(Service):
         self._unsubs.append(
             self.bus.subscribe("av.announce_version", self._on_announce_version)
         )
+        self._unsubs.append(self.bus.subscribe("av.repeat_last", self._on_repeat_last))
         self._unsubs.append(self.bus.subscribe("av.set_eq_preset",  self._on_set_eq_preset))
         self._unsubs.append(self.bus.subscribe("av.set_custom_eq",  self._on_set_custom_eq))
         self._unsubs.append(self.bus.subscribe("av.record", self._on_record))
@@ -325,6 +328,7 @@ class AVService(Service):
         text = (payload or {}).get("text", "") if isinstance(payload, dict) else ""
         if not text:
             return
+        self._last_spoken_text = text
         request_id = (payload or {}).get("request_id") if isinstance(payload, dict) else None
         self._submit_say(text, request_id=request_id)
 
@@ -386,6 +390,12 @@ class AVService(Service):
             )
         else:
             self._submit_say(phrase)
+
+    def _on_repeat_last(self, _topic, _payload) -> None:
+        text = (self._last_spoken_text or "").strip()
+        if not text:
+            return
+        self._submit_say(text)
 
     def _on_record(self, _topic, payload) -> None:
         if not isinstance(payload, dict):
@@ -491,6 +501,7 @@ class AVService(Service):
             payload = {"text": text, "ts": time.time()}
             if request_id is not None:
                 payload["request_id"] = request_id
+            self._last_spoken_text = text
             self.bus.publish("av.spoke", payload)
         except Exception:
             log.exception("say(%r) failed", text)
@@ -506,6 +517,7 @@ class AVService(Service):
             payload = {"text": text, "ts": time.time()}
             if request_id is not None:
                 payload["request_id"] = request_id
+            self._last_spoken_text = text
             self.bus.publish("av.spoke", payload)
         except Exception:
             log.exception("play_samples(%r) failed", text)
@@ -769,3 +781,11 @@ class AVService(Service):
         stamp = time.strftime("%Y%m%d_%H%M%S")
         _RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
         return _RECORDINGS_DIR / f"recording_{stamp}.wav"
+
+    def repeat_last_spoken(self) -> dict:
+        """Repeat the most recently spoken phrase, if available."""
+        text = (self._last_spoken_text or "").strip()
+        if not text:
+            return {"ok": False, "error": "no spoken phrase available"}
+        self._submit_say(text)
+        return {"ok": True, "text": text}

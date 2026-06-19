@@ -99,6 +99,9 @@ class PrivacyService(Service):
             self._unsubs.append(
                 self.bus.subscribe("privacy.set_enabled", self._on_set_enabled)
             )
+            self._unsubs.append(
+                self.bus.subscribe("privacy.set_config", self._on_set_config)
+            )
         self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._run_loop, name="privacy-detect", daemon=True
@@ -127,6 +130,46 @@ class PrivacyService(Service):
         if not self._enabled and self._looking_away:
             self._resume()
         log.info("PrivacyService: enabled=%s", self._enabled)
+
+    def _on_set_config(self, _topic, payload: dict) -> None:
+        if not isinstance(payload, dict):
+            return
+        if "enabled" in payload:
+            self._enabled = bool(payload["enabled"])
+        if "rate_hz" in payload:
+            self._cfg.rate_hz = max(0.1, float(payload["rate_hz"]))
+        if "threshold" in payload:
+            self._cfg.threshold = max(0.0, min(1.0, float(payload["threshold"])))
+            if self._detector is not None:
+                try:
+                    from src.perception.nudity_detector import NudityDetector
+                    self._detector = NudityDetector(threshold=self._cfg.threshold)
+                except Exception:
+                    log.debug("PrivacyService: detector threshold refresh failed", exc_info=True)
+        if "look_away_angle_deg" in payload:
+            self._cfg.look_away_angle_deg = float(payload["look_away_angle_deg"])
+        if "cooldown_s" in payload:
+            self._cfg.cooldown_s = max(0.0, float(payload["cooldown_s"]))
+        if "clear_frames" in payload:
+            self._cfg.clear_frames = max(1, int(payload["clear_frames"]))
+        if "announce" in payload:
+            self._cfg.announce = bool(payload["announce"])
+        if "announce_text" in payload:
+            self._cfg.announce_text = str(payload["announce_text"])
+        if "resume_text" in payload:
+            self._cfg.resume_text = str(payload["resume_text"])
+        if not self._enabled and self._looking_away:
+            self._resume()
+        log.info(
+            "PrivacyService: config updated enabled=%s rate=%.2f threshold=%.2f look=%.1f cooldown=%.1f clear=%d announce=%s",
+            self._enabled,
+            self._cfg.rate_hz,
+            self._cfg.threshold,
+            self._cfg.look_away_angle_deg,
+            self._cfg.cooldown_s,
+            self._cfg.clear_frames,
+            self._cfg.announce,
+        )
 
     @property
     def hardware_ready(self) -> bool:

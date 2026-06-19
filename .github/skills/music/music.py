@@ -8,7 +8,7 @@ import urllib.error
 
 BASE_URL = "http://localhost:8080"
 COMMANDS = ("status", "play", "stop", "next", "pause", "thumbs-up", "thumbs-down",
-            "volume", "stations", "station")
+            "stations", "station")
 
 
 def _get(path: str) -> dict:
@@ -21,16 +21,6 @@ def _post(path: str, body: dict | None = None) -> dict:
     req = urllib.request.Request(
         f"{BASE_URL}{path}", data=data,
         headers={"Content-Type": "application/json"}, method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=5) as resp:
-        return json.loads(resp.read())
-
-
-def _put(path: str, body: dict) -> dict:
-    data = json.dumps(body).encode()
-    req = urllib.request.Request(
-        f"{BASE_URL}{path}", data=data,
-        headers={"Content-Type": "application/json"}, method="PUT",
     )
     with urllib.request.urlopen(req, timeout=5) as resp:
         return json.loads(resp.read())
@@ -97,22 +87,6 @@ def main():
         elif cmd == "thumbs-down":
             _post("/api/music/thumbs-down")
             print(json.dumps({"ok": True, "message": "Thumbs down — song banned on Pandora"}))
-
-        elif cmd == "volume":
-            if len(sys.argv) < 3:
-                data = _get("/api/music/volume")
-                print(json.dumps({"ok": True, "volume": data.get("level", -1)}))
-            else:
-                try:
-                    level = int(sys.argv[2])
-                except ValueError:
-                    print(json.dumps({"ok": False, "error": f"Invalid volume: {sys.argv[2]!r}"}))
-                    sys.exit(1)
-                if not (0 <= level <= 100):
-                    print(json.dumps({"ok": False, "error": "Volume must be 0–100"}))
-                    sys.exit(1)
-                _put("/api/music/volume", {"level": level})
-                print(json.dumps({"ok": True, "volume": level, "message": f"Volume set to {level}"}))
 
         elif cmd == "station":
             if len(sys.argv) < 3:

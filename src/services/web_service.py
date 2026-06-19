@@ -23,6 +23,9 @@ POST /api/faces/{id}/train  Capture current frame and add embedding/thumbnail to
 POST /api/say             Speak text   body: {"text": "hello"}
 POST /api/audio/record    Record microphone to WAV  body: {"seconds": float, "path": str?}
 POST /api/audio/playback  Play latest/specified WAV body: {"path": str?}
+GET  /api/audio/mute      Get output mute state
+PUT  /api/audio/mute      Set output mute state body: {"muted": bool}
+POST /api/audio/repeat    Repeat the last spoken phrase
 POST /api/pan             Pan servo    body: {"angle": 180.0}
 GET  /api/snapshot            Full-resolution JPEG snapshot from camera 1
 GET  /api/snapshot2           Full-resolution JPEG snapshot from camera 2
@@ -65,6 +68,8 @@ GET  /api/depth/mono         Colorized mono depth map JPEG (TURBO colormap) — 
 GET  /api/depth/query        Depth statistics: nearest/farthest/mean + per-face depths
 GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
+GET  /api/audio/input-gain Get current reSpeaker mic input gain percentage
+PUT  /api/audio/input-gain Set reSpeaker mic input gain percentage body: {"level": int}
 GET  /api/settings/audio   Get audio backend + all per-backend settings + available devices
 PUT  /api/settings/audio   Set audio backend and/or per-backend settings  body: {"backend": str, "default"?: {...}, "respeaker_flex"?: {...}}
 """
@@ -96,6 +101,108 @@ _ASSISTANT_CONFIG_PATH = _PROJECT_ROOT / "config" / "assistant.yaml"
 _THERMAL_REP_ENDPOINT = "ipc:///tmp/desktop-assistant-thermal.rep"
 
 
+# ── Process list helper ───────────────────────────────────────────────────────
+
+# Names of system-level companions to include alongside vera children.
+_COMPANION_NAMES = frozenset({
+    "pipewire", "wireplumber", "pipewire-pulse", "pipewire-media-session",
+    "pianobar", "pw-record", "pw-cat", "pw-play",
+})
+
+
+def _get_vera_processes() -> list[dict]:
+    """Return a structured list of vera-core and its companions.
+
+    Includes:
+      - The main vera-core Python process (matched by core_main in cmdline).
+      - All child processes of that process.
+      - Companion system services (PipeWire, WirePlumber, pianobar …).
+
+    Each entry: pid, name, role, status, cpu_pct, mem_mb, threads (main only).
+    """
+    entries: list[dict] = []
+    seen: set[int] = set()
+
+    vera_proc: Optional[psutil.Process] = None
+    for proc in psutil.process_iter(["pid", "name", "cmdline", "status"]):
+        try:
+            cmd = " ".join(proc.info.get("cmdline") or [])
+            if "core_main" in cmd or ("desktop-assistant" in cmd and "python" in (proc.info.get("name") or "")):
+                vera_proc = proc
+                break
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    if vera_proc is not None:
+        try:
+            with vera_proc.oneshot():
+                cpu = vera_proc.cpu_percent(interval=0)
+                mem_mb = round(vera_proc.memory_info().rss / 1024 / 1024, 1)
+                threads = vera_proc.num_threads()
+                status = vera_proc.status()
+            entries.append({
+                "pid":      vera_proc.pid,
+                "name":     "vera-core",
+                "role":     "main",
+                "status":   status,
+                "cpu_pct":  round(cpu, 1),
+                "mem_mb":   mem_mb,
+                "threads":  threads,
+            })
+            seen.add(vera_proc.pid)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+        try:
+            for child in vera_proc.children(recursive=True):
+                if child.pid in seen:
+                    continue
+                try:
+                    with child.oneshot():
+                        name    = child.name()
+                        cpu     = child.cpu_percent(interval=0)
+                        mem_mb  = round(child.memory_info().rss / 1024 / 1024, 1)
+                        status  = child.status()
+                    entries.append({
+                        "pid":      child.pid,
+                        "name":     name,
+                        "role":     "child",
+                        "status":   status,
+                        "cpu_pct":  round(cpu, 1),
+                        "mem_mb":   mem_mb,
+                    })
+                    seen.add(child.pid)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    for proc in psutil.process_iter(["pid", "name", "status"]):
+        if proc.pid in seen:
+            continue
+        try:
+            name = (proc.info.get("name") or "").lower()
+            if any(name == c or name.startswith(c) for c in _COMPANION_NAMES):
+                with proc.oneshot():
+                    display = proc.info.get("name", name)
+                    cpu     = proc.cpu_percent(interval=0)
+                    mem_mb  = round(proc.memory_info().rss / 1024 / 1024, 1)
+                    status  = proc.info.get("status", "?")
+                entries.append({
+                    "pid":      proc.pid,
+                    "name":     display,
+                    "role":     "companion",
+                    "status":   status,
+                    "cpu_pct":  round(cpu, 1),
+                    "mem_mb":   mem_mb,
+                })
+                seen.add(proc.pid)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    return entries
+
+
 class _RenameBody(BaseModel):
     name: str
 
@@ -125,6 +232,10 @@ class _RecordBody(BaseModel):
 
 class _PlaybackBody(BaseModel):
     path: Optional[str] = None
+
+
+class _AudioMuteBody(BaseModel):
+    muted: bool
 
 
 class _MergeFacesBody(BaseModel):
@@ -163,6 +274,10 @@ class _MusicVolumeBody(BaseModel):
 
 class _MusicEqBody(BaseModel):
     preset: str
+
+
+class _InputGainBody(BaseModel):
+    level: int
 
 
 class _CustomEqBand(BaseModel):
@@ -891,6 +1006,10 @@ class WebService:
         async def api_status():
             return JSONResponse(self._build_status_snapshot())
 
+        @app.get("/api/processes")
+        async def api_processes():
+            return JSONResponse({"processes": _get_vera_processes()})
+
         # ── REST: faces ───────────────────────────────────────────────
 
         @app.get("/api/faces")
@@ -1401,6 +1520,31 @@ class WebService:
             except Exception as exc:
                 raise HTTPException(500, f"playback failed: {exc}")
 
+        @app.get("/api/audio/mute")
+        async def api_audio_mute_get():
+            if not self._music_svc:
+                return {"muted": False}
+            return {"muted": bool(self._music_svc.muted)}
+
+        @app.put("/api/audio/mute")
+        async def api_audio_mute_set(body: _AudioMuteBody):
+            if self._music_svc:
+                self._music_svc.set_muted(bool(body.muted))
+            return {"ok": True, "muted": bool(body.muted)}
+
+        @app.post("/api/audio/repeat")
+        async def api_audio_repeat():
+            av_svc = self._get_service_by_name("av")
+            if av_svc is None or not hasattr(av_svc, "repeat_last_spoken"):
+                raise HTTPException(503, "av service unavailable")
+            try:
+                result = await asyncio.to_thread(av_svc.repeat_last_spoken)
+            except Exception as exc:
+                raise HTTPException(500, f"repeat failed: {exc}")
+            if not result.get("ok", False):
+                raise HTTPException(404, result.get("error", "no spoken phrase available"))
+            return result
+
         # ── Skills ────────────────────────────────────────────────────
 
         @app.get("/api/skills")
@@ -1764,13 +1908,27 @@ class WebService:
                 "threshold":          getattr(getattr(svc, "_cfg", None), "threshold", 0.6),
                 "look_away_angle_deg":getattr(getattr(svc, "_cfg", None), "look_away_angle_deg", 45.0),
                 "cooldown_s":         getattr(getattr(svc, "_cfg", None), "cooldown_s", 10.0),
+                "clear_frames":       getattr(getattr(svc, "_cfg", None), "clear_frames", 3),
                 "announce":           getattr(getattr(svc, "_cfg", None), "announce", True),
+                "announce_text":      getattr(getattr(svc, "_cfg", None), "announce_text", "I'll give you some privacy."),
+                "resume_text":        getattr(getattr(svc, "_cfg", None), "resume_text", ""),
             }
 
         @app.put("/api/settings/privacy")
         async def api_put_privacy_settings(body: dict):
-            if self.bus and "enabled" in body:
-                self.bus.publish("privacy.set_enabled", {"enabled": bool(body["enabled"])})
+            if self.bus:
+                if "enabled" in body:
+                    self.bus.publish("privacy.set_enabled", {"enabled": bool(body["enabled"])})
+                runtime_patch = {
+                    k: body[k]
+                    for k in (
+                        "enabled", "rate_hz", "threshold", "look_away_angle_deg",
+                        "cooldown_s", "clear_frames", "announce", "announce_text", "resume_text",
+                    )
+                    if k in body
+                }
+                if runtime_patch:
+                    self.bus.publish("privacy.set_config", runtime_patch)
             try:
                 import yaml as _yaml
                 _cfg_path = _ASSISTANT_CONFIG_PATH
@@ -1927,7 +2085,7 @@ class WebService:
                 return {
                     "state": "stopped", "song": {}, "stations": [],
                     "configured": False, "elapsed_sec": 0, "duration_sec": 0,
-                    "volume": -1, "eq_preset": "flat",
+                    "volume": -1, "muted": False, "eq_preset": "flat",
                 }
             song = self._music_svc.current_song
             return {
@@ -1938,6 +2096,7 @@ class WebService:
                 "elapsed_sec":  song.get("elapsed_sec", 0),
                 "duration_sec": song.get("duration_sec", 0),
                 "volume":       self._music_svc.volume,
+                "muted":        self._music_svc.muted,
                 "eq_preset":    self._music_svc.eq_preset,
             }
 
@@ -1952,6 +2111,26 @@ class WebService:
             if self._music_svc:
                 self._music_svc.set_volume(body.level)
             return {"ok": True, "level": body.level}
+
+        @app.get("/api/audio/input-gain")
+        async def api_audio_input_gain_get():
+            from src.audio import hw_mixer as _hw_mixer
+
+            level = _hw_mixer.get_capture_gain_percent()
+            if level is None:
+                return {"ok": False, "available": False, "level": None}
+            return {"ok": True, "available": True, "level": int(level)}
+
+        @app.put("/api/audio/input-gain")
+        async def api_audio_input_gain_set(body: _InputGainBody):
+            from src.audio import hw_mixer as _hw_mixer
+
+            level = int(body.level)
+            if level < 0 or level > 100:
+                raise HTTPException(422, "level must be between 0 and 100")
+            if not _hw_mixer.set_capture_gain_percent(level):
+                raise HTTPException(503, "reSpeaker input gain control unavailable")
+            return {"ok": True, "level": level}
 
         @app.get("/api/music/eq")
         async def api_music_eq_get():

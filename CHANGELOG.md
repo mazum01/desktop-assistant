@@ -6,6 +6,79 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.5] - 2026-06-19
+### Added
+- Process list available across all interfaces:
+  - **Web GUI:** System Resources card now includes a process table (under the
+    CPU/memory sparklines) showing vera-core (main), child processes (pw-record,
+    etc.), and companion services (PipeWire, WirePlumber, pianobar). Auto-refreshes
+    every 10 seconds with a manual ↺ button.
+  - **CLI:** `vera system processes` — tabular listing with role, status, CPU%, Mem MB,
+    and thread count. Updated `vera help system` to include the new subcommand.
+  - **OpenClaw system-status skill:** accepts optional `processes` argument
+    (`system_status.py processes`) returning structured JSON for LLM consumption.
+- New REST endpoint: `GET /api/processes` — returns the process list as JSON.
+
+### Changed
+- `system-status` skill description updated to mention process listing capability.
+
+## [1.41.4] - 2026-06-13
+### Added
+- Privacy controls across all requested interfaces:
+  - **Web GUI:** new **Privacy Mode** card on the System tab with enable/disable
+    and tunables (rate, threshold, look-away angle, cooldown, clear-frames,
+    announce toggle, announce/resume text).
+  - **CLI:** added `vera privacy set` with flags for runtime/privacy tuning.
+  - **OpenClaw:** added new `privacy` skill with status/enable/disable/set.
+
+### Changed
+- Privacy runtime updates are now live:
+  - `PUT /api/settings/privacy` now publishes `privacy.set_config` for runtime
+    tuning updates (in addition to `privacy.set_enabled` compatibility).
+  - `GET /api/settings/privacy` now returns `clear_frames`, `announce_text`,
+    and `resume_text` for full UI/skill round-trip support.
+- `PrivacyService` now subscribes to `privacy.set_config` and applies tuning
+  immediately without restart.
+
+## [1.41.3] - 2026-06-12
+### Added
+- Global mute and repeat controls across interfaces:
+  - **Web GUI:** Audio tab now includes a mute/unmute button, and Overview now
+    has a **Repeat** button next to “Last spoken”.
+  - **CLI:** Added `vera audio mute [on|off]` and `vera audio repeat`.
+  - **OpenClaw audio skill:** Added `mute [on|off]` and `repeat` commands.
+- New API endpoints:
+  - `GET/PUT /api/audio/mute`
+  - `POST /api/audio/repeat`
+
+### Changed
+- `AVService` now tracks the last spoken phrase and can replay it via
+  `repeat_last_spoken()` and bus topic `av.repeat_last`.
+- Music status now reports mute state (`muted`) so UI controls stay in sync.
+- `MusicService` now exposes sink mute state and mute/unmute control through
+  PipeWire (`wpctl set-mute`).
+
+### Fixed
+- Relative volume bus handling in `MusicService` now uses the correct current
+  volume property (was calling a non-existent `get_volume()` helper).
+
+## [1.41.2] - 2026-06-12
+### Changed
+- Web GUI audio consolidation:
+  - Added a dedicated **Audio** tab.
+  - Moved volume, EQ preset/custom EQ, microphone input gain, and audio backend
+    device configuration into the Audio tab.
+  - Kept Music tab focused on Pandora playback controls.
+- CLI audio consolidation under `vera audio`:
+  - Added `audio volume [level]`, `audio input-gain [level]`,
+    `audio eq [preset]`, and `audio eq-custom <band...>`.
+  - Removed top-level `eq` command and removed `music volume`/`music eq`
+    subcommands so audio tuning lives under one root command.
+- OpenClaw skills updated to match:
+  - Added a new `audio` skill (`.github/skills/audio/`) for volume, EQ,
+    input gain, and backend controls.
+  - Updated `music` skill and docs to focus on playback/stations only.
+
 ## [1.41.1] - 2026-06-12
 ### Fixed
 - Stale/flaky `tests/test_services.py` AV tests, and the underlying race they

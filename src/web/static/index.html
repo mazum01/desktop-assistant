@@ -24,7 +24,7 @@
 </div>
 <div class="badge badge-unknown" id="health-badge">⬤ connecting</div>
 </header>
-<nav class="tab-nav"><button class="tab-btn" data-tab="overview" onclick="switchTab('overview')">🏠 Overview</button><button class="tab-btn" data-tab="perception" onclick="switchTab('perception')">🎭 Perception</button><button class="tab-btn" data-tab="smart-home" onclick="switchTab('smart-home')">🏡 Smart Home</button><button class="tab-btn" data-tab="controls" onclick="switchTab('controls')">🎵 Music</button><button class="tab-btn" data-tab="system" onclick="switchTab('system')">⚙️ System</button></nav>
+<nav class="tab-nav"><button class="tab-btn" data-tab="overview" onclick="switchTab('overview')">🏠 Overview</button><button class="tab-btn" data-tab="perception" onclick="switchTab('perception')">🎭 Perception</button><button class="tab-btn" data-tab="smart-home" onclick="switchTab('smart-home')">🏡 Smart Home</button><button class="tab-btn" data-tab="controls" onclick="switchTab('controls')">🎵 Music</button><button class="tab-btn" data-tab="audio" onclick="switchTab('audio')">🔊 Audio</button><button class="tab-btn" data-tab="system" onclick="switchTab('system')">⚙️ System</button></nav>
 </div>
 <main>
 <!-- ══ TAB: OVERVIEW ════════════════════════════════════════ -->
@@ -115,6 +115,8 @@
 <div class="spoken-line">
 <span class="stat-label">Last spoken: </span>
 <span class="spoken-text" id="stat-spoken">—</span>
+<button class="btn btn-sm btn-secondary" disabled="" id="repeat-spoken-btn" onclick="repeatLastSpoken()" style="margin-left:8px" type="button">🔁 Repeat</button>
+<span class="qh-status" id="repeat-spoken-status"></span>
 </div>
 </section>
 <section class="card" id="card-resources">
@@ -132,6 +134,28 @@
 </div>
 <canvas class="resource-canvas" height="60" id="mem-graph" width="400"></canvas>
 </div>
+</div>
+<div id="processes-wrap" style="margin-top:10px">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+<span style="font-size:0.85em;color:var(--text-muted);font-weight:600;letter-spacing:.04em">PROCESSES</span>
+<button class="btn btn-sm btn-secondary" onclick="loadProcesses()" style="padding:1px 7px;font-size:0.78em">↺</button>
+</div>
+<table id="processes-table" style="width:100%;border-collapse:collapse;font-size:0.82em">
+<thead>
+<tr style="color:var(--text-muted);text-align:left">
+<th style="padding:2px 6px">Name</th>
+<th style="padding:2px 6px">PID</th>
+<th style="padding:2px 6px">Role</th>
+<th style="padding:2px 6px">Status</th>
+<th style="padding:2px 6px;text-align:right">CPU%</th>
+<th style="padding:2px 6px;text-align:right">Mem MB</th>
+<th style="padding:2px 6px;text-align:right">Threads</th>
+</tr>
+</thead>
+<tbody id="processes-tbody">
+<tr><td class="empty-row" colspan="7" style="padding:4px 6px;color:var(--text-muted)">Loading…</td></tr>
+</tbody>
+</table>
 </div>
 </section>
 <section class="card" id="card-services">
@@ -326,47 +350,6 @@
 </select>
 <span id="music-status" style="font-size:0.85em;color:var(--green)"></span>
 </div>
-<!-- Volume control -->
-<div class="music-volume-row">
-<label style="font-size:0.85em;min-width:56px">🔊 Vol</label>
-<input id="music-volume-slider" max="100" min="0" oninput="musicSetVolume(this.value)" style="flex:1" type="range" value="50"/>
-<span id="music-volume-label" style="font-size:0.85em;min-width:36px;text-align:right">50%</span>
-</div>
-<!-- EQ preset -->
-<div style="display:flex;gap:8px;align-items:center;margin-top:8px">
-<label style="font-size:0.85em;min-width:56px">🎚 EQ (voice)</label>
-<select id="music-eq-select" onchange="musicSetEq(this.value)" style="flex:1">
-<option value="flat">Flat</option>
-<option value="bass_boost">Bass Boost</option>
-<option value="treble_boost">Treble Boost</option>
-<option value="vocal">Vocal</option>
-<option value="loudness">Loudness</option>
-<option value="warm">Warm</option>
-<option value="custom">Custom…</option>
-</select>
-</div>
-<!-- Custom EQ bands — shown only when "Custom" is selected -->
-<div id="custom-eq-panel" style="display:none;margin-top:12px;padding:10px;
-           border:1px solid var(--border);border-radius:6px">
-<div style="font-size:0.85em;font-weight:600;margin-bottom:8px">Custom EQ Bands (voice TTS only)</div>
-<table id="custom-eq-table" style="width:100%;font-size:0.8em;border-collapse:collapse">
-<thead>
-<tr>
-<th style="text-align:left;padding:2px 6px">Band</th>
-<th style="text-align:left;padding:2px 6px">Hz</th>
-<th style="text-align:left;padding:2px 6px">Gain (dB)</th>
-<th style="text-align:left;padding:2px 6px">Q</th>
-<th></th>
-</tr>
-</thead>
-<tbody id="custom-eq-rows"></tbody>
-</table>
-<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-<button class="btn btn-secondary btn-sm" onclick="customEqAddBand()">+ Band</button>
-<button class="btn btn-primary btn-sm" onclick="customEqSave()">Apply</button>
-<span class="qh-status" id="custom-eq-status"></span>
-</div>
-</div>
 </section>
 <section class="card" id="card-greeting">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>💬 Greeting Settings</h2>
@@ -432,6 +415,187 @@
 <input class="text-input" id="utterance-input" placeholder="Type an utterance to test…" style="flex:1" type="text"/>
 <button class="btn btn-primary" onclick="sendUtterance()">Dispatch</button>
 </div>
+</div>
+</section>
+</div>
+<!-- ══ TAB: AUDIO ═══════════════════════════════════════════ -->
+<div class="tab-pane" id="tab-audio">
+<section class="card" id="card-audio-runtime">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🔊 Audio Controls</h2>
+<div class="control-group">
+<label>Output Volume</label>
+<div class="music-volume-row">
+<label style="font-size:0.85em;min-width:56px">🔊 Vol</label>
+<input id="music-volume-slider" max="100" min="0" oninput="musicSetVolume(this.value)" style="flex:1" type="range" value="50"/>
+<span id="music-volume-label" style="font-size:0.85em;min-width:36px;text-align:right">50%</span>
+<button class="btn btn-secondary btn-sm" id="audio-mute-btn" onclick="audioToggleMute()" style="margin-left:8px" type="button">🔇 Mute</button>
+<span class="qh-status" id="audio-mute-status"></span>
+</div>
+</div>
+<div class="control-group">
+<label>Equalizer Preset</label>
+<div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+<label style="font-size:0.85em;min-width:56px">🎚 EQ</label>
+<select id="music-eq-select" onchange="musicSetEq(this.value)" style="flex:1">
+<option value="flat">Flat</option>
+<option value="bass_boost">Bass Boost</option>
+<option value="treble_boost">Treble Boost</option>
+<option value="vocal">Vocal</option>
+<option value="loudness">Loudness</option>
+<option value="warm">Warm</option>
+<option value="custom">Custom…</option>
+</select>
+</div>
+</div>
+<div class="control-group">
+<label>Microphone Input Gain</label>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+<label style="font-size:0.85em;min-width:56px">🎙 Gain</label>
+<input id="audio-input-gain-slider" max="100" min="0" oninput="audioSetInputGain(this.value)" style="flex:1" type="range" value="80"/>
+<span id="audio-input-gain-label" style="font-size:0.85em;min-width:36px;text-align:right">80%</span>
+<span class="qh-status" id="audio-input-gain-status"></span>
+</div>
+</div>
+<!-- Custom EQ bands — shown only when "Custom" is selected -->
+<div id="custom-eq-panel" style="display:none;margin-top:12px;padding:10px;
+           border:1px solid var(--border);border-radius:6px">
+<div style="font-size:0.85em;font-weight:600;margin-bottom:8px">Custom EQ Bands (voice TTS only)</div>
+<table id="custom-eq-table" style="width:100%;font-size:0.8em;border-collapse:collapse">
+<thead>
+<tr>
+<th style="text-align:left;padding:2px 6px">Band</th>
+<th style="text-align:left;padding:2px 6px">Hz</th>
+<th style="text-align:left;padding:2px 6px">Gain (dB)</th>
+<th style="text-align:left;padding:2px 6px">Q</th>
+<th></th>
+</tr>
+</thead>
+<tbody id="custom-eq-rows"></tbody>
+</table>
+<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn btn-secondary btn-sm" onclick="customEqAddBand()">+ Band</button>
+<button class="btn btn-primary btn-sm" onclick="customEqSave()">Apply</button>
+<span class="qh-status" id="custom-eq-status"></span>
+</div>
+</div>
+</section>
+
+<section class="card" id="card-audio">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎙 Audio Backend</h2>
+
+<div class="control-group">
+  <label for="audio-backend-select">Hardware Backend</label>
+  <select id="audio-backend-select" onchange="onAudioBackendChange()" style="width:100%;max-width:320px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
+    <option value="default">Default (built-in mic + aplay → PipeWire)</option>
+    <option value="respeaker_flex">ReSpeaker Flex Linear USB array</option>
+  </select>
+  <p id="audio-backend-note" style="font-size:0.82em;color:var(--text-muted);margin:6px 0 0 0">
+    A service restart is required for backend changes to take effect.
+  </p>
+</div>
+
+<!-- Default backend settings -->
+<div id="audio-section-default" class="audio-backend-section">
+  <hr style="margin:12px 0;border-color:var(--border)">
+  <h3 style="font-size:0.9em;color:var(--text-muted);margin:0 0 10px 0">Default Backend Settings</h3>
+  <div class="control-group">
+    <label>Input Device Name <small style="color:var(--text-muted)">(empty = OS default)</small></label>
+    <input id="audio-default-input-device" type="text" placeholder="e.g. USB Audio" style="width:100%;max-width:320px"/>
+  </div>
+  <div class="control-group">
+    <label>Input Sample Rate (Hz)</label>
+    <input id="audio-default-input-rate" type="number" min="8000" max="192000" step="100" style="width:130px"/>
+  </div>
+  <div class="control-group">
+    <label>Output ALSA Device</label>
+    <input id="audio-default-output-alsa" type="text" placeholder="pulse" style="width:100%;max-width:320px"/>
+  </div>
+  <div class="control-group">
+    <label>Output Sample Rate (Hz)</label>
+    <input id="audio-default-output-rate" type="number" min="8000" max="192000" step="100" style="width:130px"/>
+  </div>
+  <div class="control-group">
+    <label>Loudness Boost <small style="color:var(--text-muted)">(1.0 = off, 2–4 = boosted)</small></label>
+    <input id="audio-default-loudness" type="number" min="0" max="10" step="0.1" style="width:100px"/>
+  </div>
+  <div class="control-group">
+    <label>EQ Preset</label>
+    <select id="audio-default-eq" style="width:200px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
+      <option value="flat">flat</option>
+      <option value="bass_boost">bass_boost</option>
+      <option value="treble_boost">treble_boost</option>
+      <option value="vocal">vocal</option>
+      <option value="loudness">loudness</option>
+      <option value="warm">warm</option>
+      <option value="custom">custom</option>
+    </select>
+  </div>
+</div>
+
+<!-- ReSpeaker Flex settings -->
+<div id="audio-section-respeaker_flex" class="audio-backend-section" style="display:none">
+  <hr style="margin:12px 0;border-color:var(--border)">
+  <h3 style="font-size:0.9em;color:var(--text-muted);margin:0 0 10px 0">ReSpeaker Flex Linear Settings</h3>
+  <div class="control-group">
+    <label>Input Device Name <small style="color:var(--text-muted)">(ALSA substring match)</small></label>
+    <input id="audio-rs-input-device" type="text" placeholder="ReSpeaker" style="width:100%;max-width:320px"/>
+  </div>
+  <div class="control-group">
+    <label>Input Sample Rate (Hz) <small style="color:var(--text-muted)">(native: 16000)</small></label>
+    <input id="audio-rs-input-rate" type="number" min="8000" max="192000" step="100" style="width:130px"/>
+  </div>
+  <div class="control-group">
+    <label>Raw Input Channels <small style="color:var(--text-muted)">(4 mic + 2 ref = 6)</small></label>
+    <input id="audio-rs-raw-ch" type="number" min="1" max="16" step="1" style="width:80px"/>
+  </div>
+  <div class="control-group">
+    <label>Processed Channel Index <small style="color:var(--text-muted)">(AEC/beamformed, usually 0)</small></label>
+    <input id="audio-rs-proc-ch" type="number" min="0" max="15" step="1" style="width:80px"/>
+  </div>
+  <div class="control-group">
+    <label>Output ALSA Device <small style="color:var(--text-muted)">("pulse" to mix, "plughw:ReSpeaker,0" for direct)</small></label>
+    <input id="audio-rs-output-alsa" type="text" placeholder="pulse" style="width:100%;max-width:320px"/>
+  </div>
+  <div class="control-group">
+    <label>Output Sample Rate (Hz)</label>
+    <input id="audio-rs-output-rate" type="number" min="8000" max="192000" step="100" style="width:130px"/>
+  </div>
+  <div class="control-group">
+    <label>Loudness Boost <small style="color:var(--text-muted)">(1.0 = off, 2–4 = boosted)</small></label>
+    <input id="audio-rs-loudness" type="number" min="0" max="10" step="0.1" style="width:100px"/>
+  </div>
+  <div class="control-group">
+    <label>EQ Preset</label>
+    <select id="audio-rs-eq" style="width:200px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
+      <option value="flat">flat</option>
+      <option value="bass_boost">bass_boost</option>
+      <option value="treble_boost">treble_boost</option>
+      <option value="vocal">vocal</option>
+      <option value="loudness">loudness</option>
+      <option value="warm">warm</option>
+      <option value="custom">custom</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label>
+      <input id="audio-rs-led" type="checkbox"/>
+      <span>LED ring enabled <small style="color:var(--text-muted)">(requires pip install usb-pixel-ring-v2)</small></span>
+    </label>
+  </div>
+</div>
+
+<!-- Available input devices -->
+<details style="margin-top:10px">
+  <summary style="cursor:pointer;font-size:0.85em;color:var(--text-muted)">Available input devices</summary>
+  <ul id="audio-devices-list" style="font-size:0.82em;padding-left:16px;margin:6px 0 0 0;color:var(--text-muted)">
+    <li>Loading…</li>
+  </ul>
+</details>
+
+<div style="margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+  <button class="btn btn-primary btn-sm" onclick="saveAudioSettings()">Save</button>
+  <button class="btn btn-secondary btn-sm" onclick="loadAudioSettings()">Reload</button>
+  <span class="qh-status" id="audio-status"></span>
 </div>
 </section>
 </div>
@@ -585,6 +749,55 @@
 </div>
 </section>
 
+<section class="card" id="card-privacy-settings">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Privacy Mode</h2>
+<div class="control-group">
+<label class="qh-toggle" style="margin:0">
+<input id="privacy-enabled" type="checkbox"/>
+<span>Enable nudity detection and look-away behavior</span>
+</label>
+</div>
+<div class="control-group">
+<label>Detection Rate (Hz)</label>
+<input id="privacy-rate-hz" min="0.1" step="0.1" type="number" value="1.0"/>
+</div>
+<div class="control-group">
+<label>Threshold (0.0–1.0)</label>
+<input id="privacy-threshold" max="1.0" min="0.0" step="0.05" type="number" value="0.6"/>
+</div>
+<div class="control-group">
+<label>Look-away Angle (deg)</label>
+<input id="privacy-look-away-deg" step="1" type="number" value="45"/>
+</div>
+<div class="control-group">
+<label>Cooldown (seconds)</label>
+<input id="privacy-cooldown-s" min="0" step="0.5" type="number" value="10"/>
+</div>
+<div class="control-group">
+<label>Clear Frames</label>
+<input id="privacy-clear-frames" min="1" step="1" type="number" value="3"/>
+</div>
+<div class="control-group">
+<label class="qh-toggle" style="margin:0">
+<input id="privacy-announce" type="checkbox"/>
+<span>Speak when privacy mode engages</span>
+</label>
+</div>
+<div class="control-group">
+<label>Announce Text</label>
+<input id="privacy-announce-text" placeholder="I'll give you some privacy." type="text"/>
+</div>
+<div class="control-group">
+<label>Resume Text (optional)</label>
+<input id="privacy-resume-text" placeholder="" type="text"/>
+</div>
+<div class="row-input" style="margin-top:8px;gap:8px;flex-wrap:wrap">
+<button class="btn btn-primary btn-sm" onclick="savePrivacySettings()">Save</button>
+<button class="btn btn-secondary btn-sm" onclick="loadPrivacySettings()">Reload</button>
+<span class="qh-status" id="privacy-status"></span>
+</div>
+</section>
+
 <section class="card" id="card-fan-curve">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Fan Control Points</h2>
 
@@ -622,125 +835,6 @@
     <button class="btn btn-secondary btn-sm" onclick="loadFanControlPoints()">Reload</button>
     <span class="qh-status" id="fan-curve-status"></span>
   </div>
-</div>
-</section>
-
-<section class="card" id="card-audio">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎙 Audio Backend</h2>
-
-<div class="control-group">
-  <label for="audio-backend-select">Hardware Backend</label>
-  <select id="audio-backend-select" onchange="onAudioBackendChange()" style="width:100%;max-width:320px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
-    <option value="default">Default (built-in mic + aplay → PipeWire)</option>
-    <option value="respeaker_flex">ReSpeaker Flex Linear USB array</option>
-  </select>
-  <p id="audio-backend-note" style="font-size:0.82em;color:var(--text-muted);margin:6px 0 0 0">
-    A service restart is required for backend changes to take effect.
-  </p>
-</div>
-
-<!-- Default backend settings -->
-<div id="audio-section-default" class="audio-backend-section">
-  <hr style="margin:12px 0;border-color:var(--border)">
-  <h3 style="font-size:0.9em;color:var(--text-muted);margin:0 0 10px 0">Default Backend Settings</h3>
-  <div class="control-group">
-    <label>Input Device Name <small style="color:var(--text-muted)">(empty = OS default)</small></label>
-    <input id="audio-default-input-device" type="text" placeholder="e.g. USB Audio" style="width:100%;max-width:320px"/>
-  </div>
-  <div class="control-group">
-    <label>Input Sample Rate (Hz)</label>
-    <input id="audio-default-input-rate" type="number" min="8000" max="192000" step="100" style="width:130px"/>
-  </div>
-  <div class="control-group">
-    <label>Output ALSA Device</label>
-    <input id="audio-default-output-alsa" type="text" placeholder="pulse" style="width:100%;max-width:320px"/>
-  </div>
-  <div class="control-group">
-    <label>Output Sample Rate (Hz)</label>
-    <input id="audio-default-output-rate" type="number" min="8000" max="192000" step="100" style="width:130px"/>
-  </div>
-  <div class="control-group">
-    <label>Loudness Boost <small style="color:var(--text-muted)">(1.0 = off, 2–4 = boosted)</small></label>
-    <input id="audio-default-loudness" type="number" min="0" max="10" step="0.1" style="width:100px"/>
-  </div>
-  <div class="control-group">
-    <label>EQ Preset</label>
-    <select id="audio-default-eq" style="width:200px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
-      <option value="flat">flat</option>
-      <option value="bass_boost">bass_boost</option>
-      <option value="treble_boost">treble_boost</option>
-      <option value="vocal">vocal</option>
-      <option value="loudness">loudness</option>
-      <option value="warm">warm</option>
-      <option value="custom">custom</option>
-    </select>
-  </div>
-</div>
-
-<!-- ReSpeaker Flex settings -->
-<div id="audio-section-respeaker_flex" class="audio-backend-section" style="display:none">
-  <hr style="margin:12px 0;border-color:var(--border)">
-  <h3 style="font-size:0.9em;color:var(--text-muted);margin:0 0 10px 0">ReSpeaker Flex Linear Settings</h3>
-  <div class="control-group">
-    <label>Input Device Name <small style="color:var(--text-muted)">(ALSA substring match)</small></label>
-    <input id="audio-rs-input-device" type="text" placeholder="ReSpeaker" style="width:100%;max-width:320px"/>
-  </div>
-  <div class="control-group">
-    <label>Input Sample Rate (Hz) <small style="color:var(--text-muted)">(native: 16000)</small></label>
-    <input id="audio-rs-input-rate" type="number" min="8000" max="192000" step="100" style="width:130px"/>
-  </div>
-  <div class="control-group">
-    <label>Raw Input Channels <small style="color:var(--text-muted)">(4 mic + 2 ref = 6)</small></label>
-    <input id="audio-rs-raw-ch" type="number" min="1" max="16" step="1" style="width:80px"/>
-  </div>
-  <div class="control-group">
-    <label>Processed Channel Index <small style="color:var(--text-muted)">(AEC/beamformed, usually 0)</small></label>
-    <input id="audio-rs-proc-ch" type="number" min="0" max="15" step="1" style="width:80px"/>
-  </div>
-  <div class="control-group">
-    <label>Output ALSA Device <small style="color:var(--text-muted)">("pulse" to mix, "plughw:ReSpeaker,0" for direct)</small></label>
-    <input id="audio-rs-output-alsa" type="text" placeholder="pulse" style="width:100%;max-width:320px"/>
-  </div>
-  <div class="control-group">
-    <label>Output Sample Rate (Hz)</label>
-    <input id="audio-rs-output-rate" type="number" min="8000" max="192000" step="100" style="width:130px"/>
-  </div>
-  <div class="control-group">
-    <label>Loudness Boost <small style="color:var(--text-muted)">(1.0 = off, 2–4 = boosted)</small></label>
-    <input id="audio-rs-loudness" type="number" min="0" max="10" step="0.1" style="width:100px"/>
-  </div>
-  <div class="control-group">
-    <label>EQ Preset</label>
-    <select id="audio-rs-eq" style="width:200px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
-      <option value="flat">flat</option>
-      <option value="bass_boost">bass_boost</option>
-      <option value="treble_boost">treble_boost</option>
-      <option value="vocal">vocal</option>
-      <option value="loudness">loudness</option>
-      <option value="warm">warm</option>
-      <option value="custom">custom</option>
-    </select>
-  </div>
-  <div class="control-group">
-    <label>
-      <input id="audio-rs-led" type="checkbox"/>
-      <span>LED ring enabled <small style="color:var(--text-muted)">(requires pip install usb-pixel-ring-v2)</small></span>
-    </label>
-  </div>
-</div>
-
-<!-- Available input devices -->
-<details style="margin-top:10px">
-  <summary style="cursor:pointer;font-size:0.85em;color:var(--text-muted)">Available input devices</summary>
-  <ul id="audio-devices-list" style="font-size:0.82em;padding-left:16px;margin:6px 0 0 0;color:var(--text-muted)">
-    <li>Loading…</li>
-  </ul>
-</details>
-
-<div style="margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-  <button class="btn btn-primary btn-sm" onclick="saveAudioSettings()">Save</button>
-  <button class="btn btn-secondary btn-sm" onclick="loadAudioSettings()">Reload</button>
-  <span class="qh-status" id="audio-status"></span>
 </div>
 </section>
 
@@ -787,6 +881,12 @@
 <tr><td><code>da music thumbs-up / thumbs-down</code></td><td>Love or ban current song</td></tr>
 <tr><td><code>da music stations</code></td><td>List available stations</td></tr>
 <tr><td><code>da music status</code></td><td>Show current playback state</td></tr>
+<tr><td><code>da audio volume [0-100]</code></td><td>Get or set output volume</td></tr>
+<tr><td><code>da audio mute [on|off]</code></td><td>Mute or unmute audio output</td></tr>
+<tr><td><code>da audio eq [preset]</code></td><td>Get or set equalizer preset</td></tr>
+<tr><td><code>da audio repeat</code></td><td>Repeat the last spoken phrase</td></tr>
+<tr><td><code>da audio input-gain [0-100]</code></td><td>Get or set mic input gain</td></tr>
+<tr><td><code>da audio set-backend &lt;name&gt;</code></td><td>Switch audio backend config</td></tr>
 <tr><td><code>da skills list</code></td><td>List all voice skills with enabled state</td></tr>
 <tr><td><code>da skills enable &lt;name&gt;</code></td><td>Enable a skill</td></tr>
 <tr><td><code>da skills disable &lt;name&gt;</code></td><td>Disable a skill</td></tr>

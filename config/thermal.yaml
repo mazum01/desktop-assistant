@@ -19,9 +19,9 @@ thresholds:
   fan_min_duty: 0.0
   fan_max_duty: 100.0
   control_points:
-  - temp_c: 50.0
+  - temp_c: 45.0
     duty: 10.0
-  - temp_c: 51.0
+  - temp_c: 50.0
     duty: 20.0
   - temp_c: 65.0
     duty: 70.0
