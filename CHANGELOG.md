@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.6] - 2026-06-19
+### Fixed
+- `vera system processes` / `/api/processes` showed wildly incorrect CPU% (e.g. 209%)
+  due to two compounding issues:
+  1. `cpu_percent(interval=0)` on a fresh `psutil.Process` object returns usage
+     since the process *started*, not since last sample — giving inflated values
+     on startup-heavy processes.
+  2. Linux psutil reports raw multi-core CPU% (can exceed 100%).
+  Fix: introduced a module-level `_proc_cache` of `psutil.Process` objects; the
+  cache is primed on first access so subsequent calls return an accurate delta.
+  Values are normalised by `psutil.cpu_count()` so the range is always 0–100,
+  matching `top`'s default display mode.
+
 ## [1.41.5] - 2026-06-19
 ### Added
 - Process list available across all interfaces:

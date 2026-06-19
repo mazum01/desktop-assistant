@@ -109,6 +109,40 @@ _COMPANION_NAMES = frozenset({
     "pianobar", "pw-record", "pw-cat", "pw-play",
 })
 
+# Cache of psutil.Process objects keyed by PID so cpu_percent(interval=None)
+# measures the delta since the previous poll rather than since process start.
+_proc_cache: dict[int, psutil.Process] = {}
+_CPU_COUNT = max(1, psutil.cpu_count() or 1)
+
+
+def _cpu_pct_normalized(proc: psutil.Process) -> float:
+    """Return CPU% normalised to a single core (0–100 scale).
+
+    Calls cpu_percent(interval=None) which measures the delta since the last
+    call on this Process object.  On first call it returns 0.0, which is safe.
+    Divides by CPU count so multi-core usage is reported in the same 0-100
+    range that `top` uses by default.
+    """
+    raw = proc.cpu_percent(interval=None)
+    return round(raw / _CPU_COUNT, 1)
+
+
+def _get_proc(pid: int) -> psutil.Process:
+    """Return a cached Process object, priming cpu_percent on first access."""
+    if pid not in _proc_cache:
+        p = psutil.Process(pid)
+        p.cpu_percent(interval=None)  # prime — first call always returns 0.0
+        _proc_cache[pid] = p
+    return _proc_cache[pid]
+
+
+def _evict_dead_procs() -> None:
+    """Remove stale PIDs from the cache to avoid memory leaks."""
+    live = {p.pid for p in psutil.process_iter(["pid"])}
+    for pid in list(_proc_cache):
+        if pid not in live:
+            del _proc_cache[pid]
+
 
 def _get_vera_processes() -> list[dict]:
     """Return a structured list of vera-core and its companions.
@@ -118,8 +152,10 @@ def _get_vera_processes() -> list[dict]:
       - All child processes of that process.
       - Companion system services (PipeWire, WirePlumber, pianobar …).
 
-    Each entry: pid, name, role, status, cpu_pct, mem_mb, threads (main only).
+    Each entry: pid, name, role, status, cpu_pct (0-100 normalised), mem_mb,
+    threads (main process only).
     """
+    _evict_dead_procs()
     entries: list[dict] = []
     seen: set[int] = set()
 
@@ -135,21 +171,22 @@ def _get_vera_processes() -> list[dict]:
 
     if vera_proc is not None:
         try:
-            with vera_proc.oneshot():
-                cpu = vera_proc.cpu_percent(interval=0)
-                mem_mb = round(vera_proc.memory_info().rss / 1024 / 1024, 1)
-                threads = vera_proc.num_threads()
-                status = vera_proc.status()
+            cached = _get_proc(vera_proc.pid)
+            with cached.oneshot():
+                cpu    = _cpu_pct_normalized(cached)
+                mem_mb = round(cached.memory_info().rss / 1024 / 1024, 1)
+                threads = cached.num_threads()
+                status  = cached.status()
             entries.append({
-                "pid":      vera_proc.pid,
+                "pid":      cached.pid,
                 "name":     "vera-core",
                 "role":     "main",
                 "status":   status,
-                "cpu_pct":  round(cpu, 1),
+                "cpu_pct":  cpu,
                 "mem_mb":   mem_mb,
                 "threads":  threads,
             })
-            seen.add(vera_proc.pid)
+            seen.add(cached.pid)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
 
@@ -158,20 +195,21 @@ def _get_vera_processes() -> list[dict]:
                 if child.pid in seen:
                     continue
                 try:
-                    with child.oneshot():
-                        name    = child.name()
-                        cpu     = child.cpu_percent(interval=0)
-                        mem_mb  = round(child.memory_info().rss / 1024 / 1024, 1)
-                        status  = child.status()
+                    cached = _get_proc(child.pid)
+                    with cached.oneshot():
+                        name    = cached.name()
+                        cpu     = _cpu_pct_normalized(cached)
+                        mem_mb  = round(cached.memory_info().rss / 1024 / 1024, 1)
+                        status  = cached.status()
                     entries.append({
-                        "pid":      child.pid,
+                        "pid":      cached.pid,
                         "name":     name,
                         "role":     "child",
                         "status":   status,
-                        "cpu_pct":  round(cpu, 1),
+                        "cpu_pct":  cpu,
                         "mem_mb":   mem_mb,
                     })
-                    seen.add(child.pid)
+                    seen.add(cached.pid)
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
         except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -183,20 +221,21 @@ def _get_vera_processes() -> list[dict]:
         try:
             name = (proc.info.get("name") or "").lower()
             if any(name == c or name.startswith(c) for c in _COMPANION_NAMES):
-                with proc.oneshot():
-                    display = proc.info.get("name", name)
-                    cpu     = proc.cpu_percent(interval=0)
-                    mem_mb  = round(proc.memory_info().rss / 1024 / 1024, 1)
+                cached  = _get_proc(proc.pid)
+                with cached.oneshot():
+                    display = cached.name()
+                    cpu     = _cpu_pct_normalized(cached)
+                    mem_mb  = round(cached.memory_info().rss / 1024 / 1024, 1)
                     status  = proc.info.get("status", "?")
                 entries.append({
-                    "pid":      proc.pid,
+                    "pid":      cached.pid,
                     "name":     display,
                     "role":     "companion",
                     "status":   status,
-                    "cpu_pct":  round(cpu, 1),
+                    "cpu_pct":  cpu,
                     "mem_mb":   mem_mb,
                 })
-                seen.add(proc.pid)
+                seen.add(cached.pid)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
 
