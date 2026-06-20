@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.13] - 2026-06-20
+### Fixed
+- Nest thermostat IoT degradation now surfaces actionable OAuth diagnostics:
+  - Detects Google `invalid_grant` token refresh failures explicitly.
+  - Reports clear guidance that the refresh token is expired/revoked and must be replaced.
+
+### Added
+- Nest IoT recovery actions to make re-auth easier from existing interfaces:
+  - `iot action nest_thermostat auth` now returns a Google OAuth authorize URL.
+  - `iot action nest_thermostat exchange_code --params '{"code":"..."}'` exchanges
+    an auth code for a new refresh token and provides the exact config command to save it.
+
 ## [1.41.12] - 2026-06-20
 ### Added
 - Podcast playback scrubbing controls in the web GUI:

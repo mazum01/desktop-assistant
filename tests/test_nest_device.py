@@ -110,6 +110,25 @@ def test_execute_action_degraded_returns_error():
     assert result.get("message") or result.get("error")
 
 
+def test_execute_action_auth_returns_url():
+    dev = NestDevice(cfg={})
+    dev._svc = MagicMock()
+    dev._svc.build_auth_url.return_value = "https://accounts.google.com/o/oauth2/v2/auth?..."
+    out = dev.execute_action("auth")
+    assert out["ok"] is True
+    assert "auth_url" in out
+
+
+def test_execute_action_exchange_code_returns_refresh_token_message():
+    dev = NestDevice(cfg={})
+    dev._svc = MagicMock()
+    dev._svc.exchange_auth_code.return_value = (True, {"refresh_token": "rtok-123"})
+    out = dev.execute_action("exchange_code", {"code": "abc"})
+    assert out["ok"] is True
+    assert "refresh_token" in out
+    assert "vera iot config nest_thermostat refresh_token=" in out["message"]
+
+
 # ── announce ──────────────────────────────────────────────────────────────────
 
 def test_announce_no_data_returns_string():

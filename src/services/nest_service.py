@@ -7,9 +7,9 @@ set_cool, and set_mode actions.
 Setup (one-time):
   1. Create a project at console.nest.google.com ($5 one-time fee).
   2. Enable the SDM API in Google Cloud; create an OAuth2 client ID/secret.
-  3. Authorise via browser and obtain a refresh_token:
+  3. Generate an auth URL and exchange code for a refresh token:
        vera iot action nest_thermostat auth
-     (or manually via: https://developers.google.com/nest/device-access/authorize)
+       vera iot action nest_thermostat exchange_code --params '{"code":"..."}'
   4. Add the device via:
        vera iot add nest_thermostat
 
@@ -42,6 +42,8 @@ _SDM_BASE = "https://smartdevicemanagement.googleapis.com/v1"
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _POLL_DEFAULT = 60
 _TOKEN_REFRESH_MARGIN_S = 120   # Refresh access token this many seconds early
+_SDM_SCOPE = "https://www.googleapis.com/auth/sdm.service"
+_DEFAULT_REDIRECT_URI = "https://www.google.com"
 
 
 def _c_to_f(c: float) -> float:
@@ -143,6 +145,57 @@ class NestService:
             "sdm.devices.commands.Fan.SetTimer",
             {"timerMode": "ON", "duration": f"{minutes * 60}s"},
         )
+
+    def build_auth_url(self, redirect_uri: str = _DEFAULT_REDIRECT_URI) -> str:
+        """Return OAuth authorize URL for obtaining a fresh auth code."""
+        params = urllib.parse.urlencode({
+            "client_id": self._client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": _SDM_SCOPE,
+            "access_type": "offline",
+            "prompt": "consent",
+        })
+        return f"https://accounts.google.com/o/oauth2/v2/auth?{params}"
+
+    def exchange_auth_code(
+        self,
+        auth_code: str,
+        redirect_uri: str = _DEFAULT_REDIRECT_URI,
+    ) -> tuple[bool, dict]:
+        """Exchange OAuth authorization code for refresh token."""
+        code = (auth_code or "").strip()
+        if not code:
+            return False, {"error": "authorization code is required"}
+        payload = urllib.parse.urlencode({
+            "code": code,
+            "client_id": self._client_id,
+            "client_secret": self._client_secret,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        }).encode()
+        req = urllib.request.Request(
+            _TOKEN_URL,
+            data=payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                data = json.loads(resp.read().decode())
+            refresh_token = (data.get("refresh_token") or "").strip()
+            if not refresh_token:
+                return False, {"error": "Google response did not include refresh_token", "raw": data}
+            return True, {"refresh_token": refresh_token}
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode(errors="replace")
+            try:
+                payload = json.loads(body)
+            except Exception:
+                payload = {"error": body[:300]}
+            return False, {"error": payload.get("error") or "oauth_error", "detail": payload.get("error_description", "")}
+        except Exception as exc:
+            return False, {"error": str(exc)}
 
     # ── Internal polling ──────────────────────────────────────────────────────
 
@@ -304,11 +357,32 @@ class NestService:
                 self._token_expires_at = time.time() + int(data.get("expires_in", 3600))
                 log.debug("NestService: access token refreshed")
                 return True
+            except urllib.error.HTTPError as exc:
+                body = exc.read().decode(errors="replace")
+                try:
+                    data = json.loads(body)
+                except Exception:
+                    data = {}
+                err = str(data.get("error") or exc)
+                desc = str(data.get("error_description") or "").strip()
+                log.warning("NestService: token refresh failed (%s): %s", err, desc or body[:300])
+                self.degraded = True
+                if err == "invalid_grant":
+                    self._degraded_reason = (
+                        "Nest OAuth refresh token is expired or revoked. "
+                        "Generate a new refresh token and update "
+                        "`refresh_token` for nest_thermostat."
+                    )
+                else:
+                    details = f"{err}: {desc}" if desc else err
+                    self._degraded_reason = f"OAuth2 token refresh failed: {details}"
+                return False
             except Exception as exc:
                 log.warning("NestService: token refresh failed: %s", exc)
                 self.degraded = True
                 self._degraded_reason = f"OAuth2 token refresh failed: {exc}"
                 return False
+
 
     def _sdm_get(self, url: str) -> dict | None:
         if not self._ensure_access_token():

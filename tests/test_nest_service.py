@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+import urllib.error
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -192,6 +193,35 @@ def test_ensure_access_token_refreshes_expired():
 
     assert result is True
     assert svc._access_token == "new-tok"
+
+
+def test_ensure_access_token_invalid_grant_sets_actionable_reason():
+    cfg = {
+        "project_id": "p",
+        "client_id": "c",
+        "client_secret": "s",
+        "refresh_token": "r",
+    }
+    svc = NestService(cfg=cfg)
+    svc._token_expires_at = 0.0
+    err_body = json.dumps({
+        "error": "invalid_grant",
+        "error_description": "Token has been expired or revoked.",
+    }).encode()
+    http_err = urllib.error.HTTPError(
+        url="https://oauth2.googleapis.com/token",
+        code=400,
+        msg="Bad Request",
+        hdrs=None,
+        fp=None,
+    )
+    http_err.read = MagicMock(return_value=err_body)  # type: ignore[attr-defined]
+
+    with patch("urllib.request.urlopen", side_effect=http_err):
+        ok = svc._ensure_access_token()
+    assert ok is False
+    assert svc.degraded is True
+    assert "expired or revoked" in svc._degraded_reason.lower()
 
 
 # ── run_fan ───────────────────────────────────────────────────────────────────

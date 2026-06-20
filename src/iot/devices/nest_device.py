@@ -221,14 +221,51 @@ class NestDevice(IoTDevice):
             "input_prompt":   "Run fan for how many minutes?",
             "input_param":    "minutes",
         })
+        actions.append({"id": "auth", "label": "OAuth URL", "icon": "🔑", "color": "#ff9800"})
+        actions.append({
+            "id":             "exchange_code",
+            "label":          "Exchange Auth Code",
+            "icon":           "🔐",
+            "color":          "#9c27b0",
+            "requires_input": True,
+            "input_prompt":   "Paste Google auth code:",
+            "input_param":    "code",
+        })
         return actions
 
     def execute_action(self, action: str, params: dict | None = None) -> dict:
+        p = params or {}
+
+        if action == "auth":
+            if self._svc is None:
+                return {"ok": False, "message": "Service not started"}
+            url = self._svc.build_auth_url()
+            return {"ok": True, "message": url, "auth_url": url}
+
+        if action == "exchange_code":
+            if self._svc is None:
+                return {"ok": False, "message": "Service not started"}
+            ok, out = self._svc.exchange_auth_code(str(p.get("code", "")))
+            if not ok:
+                detail = out.get("detail")
+                msg = out.get("error", "Code exchange failed")
+                if detail:
+                    msg = f"{msg}: {detail}"
+                return {"ok": False, "message": msg}
+            token = out.get("refresh_token", "")
+            return {
+                "ok": True,
+                "message": (
+                    "Received refresh token. Run "
+                    f"`vera iot config nest_thermostat refresh_token={token}` "
+                    "to save it."
+                ),
+                "refresh_token": token,
+            }
+
         if self._svc is None or self._svc.degraded:
             reason = getattr(self._svc, "_degraded_reason", "Service unavailable") if self._svc else "Service not started"
             return {"ok": False, "message": reason}
-
-        p = params or {}
 
         if action == "set_heat":
             try:
