@@ -6,6 +6,27 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.17] - 2026-06-20
+### Fixed
+- Stabilized `TestWatchdogCooldown.test_first_failure_triggers_restart` by
+  explicitly setting `last_restart_ts` older than the cooldown window, removing
+  CI flakiness caused by runner uptime being less than 5 minutes.
+
+## [1.41.16] - 2026-06-20
+### Fixed
+- IoT config updates now merge with existing device config instead of replacing
+  it, preventing partial updates (like only `refresh_token`) from wiping Nest
+  credentials.
+- Updating `/api/iot/{id}` now immediately restarts that device and persists the
+  merged config, so Nest configuration changes from CLI/web UI apply without
+  waiting for a daemon restart.
+
+## [1.41.15] - 2026-06-20
+### Fixed
+- Restored the IoT REST routes used by the CLI and web UI, including
+  `/api/iot/{id}/action`, so Nest re-auth now reaches the device plugin instead
+  of failing with a 404.
+
 ## [1.41.14] - 2026-06-20
 ### Added
 - Per-tile IoT sparkline history controls:

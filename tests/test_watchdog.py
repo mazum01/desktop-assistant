@@ -116,6 +116,8 @@ class TestWatchdogCooldown:
 
     def test_first_failure_triggers_restart(self):
         svc = self._make_unhealthy_svc()
+        # Avoid dependence on host uptime: ensure cooldown has already elapsed.
+        svc.last_restart_ts = time.monotonic() - 301
         wd = Watchdog([svc], check_interval_s=1, restart_cooldown_s=300,
                       telegram_notify=False)
         wd._check_one(svc)
