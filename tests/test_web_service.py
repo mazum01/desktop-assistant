@@ -313,6 +313,46 @@ def test_put_privacy_settings_publishes_runtime_config(app_client):
     assert events[-1]["announce"] is False
 
 
+def test_podcast_list_and_status_endpoints(app_client):
+    client, bus, svc = app_client
+
+    class _FakePodcast:
+        subscriptions = [{"id": "p1", "title": "Daily", "author": "News"}]
+
+        def status(self):
+            return {"ok": True, "state": "stopped", "subscriptions": 1, "player": None}
+
+    svc._podcast_svc = _FakePodcast()
+
+    r = client.get("/api/podcasts")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["subscriptions"][0]["id"] == "p1"
+
+    r2 = client.get("/api/podcasts/status")
+    assert r2.status_code == 200
+    assert r2.json()["state"] == "stopped"
+
+
+def test_podcast_play_endpoint_calls_service(app_client):
+    client, bus, svc = app_client
+    called = {}
+
+    class _FakePodcast:
+        def play(self, podcast_id, episode_index):
+            called["podcast_id"] = podcast_id
+            called["episode_index"] = episode_index
+            return {"ok": True, "state": "playing", "podcast_title": "Daily", "episode_title": "Ep1"}
+
+    svc._podcast_svc = _FakePodcast()
+    r = client.post("/api/podcasts/play", json={"podcast_id": "p1", "episode_index": 2})
+    assert r.status_code == 200
+    assert called["podcast_id"] == "p1"
+    assert called["episode_index"] == 2
+    assert r.json()["state"] == "playing"
+
+
 # ── Status API ────────────────────────────────────────────────────────────────
 
 def test_status_returns_version(app_client):

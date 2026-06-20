@@ -351,6 +351,43 @@
 <span id="music-status" style="font-size:0.85em;color:var(--green)"></span>
 </div>
 </section>
+<section class="card" id="card-podcasts">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎙 Apple Podcasts</h2>
+<div class="control-group">
+<label>Search or subscribe</label>
+<div class="row-input" style="gap:8px;flex-wrap:wrap">
+<input id="podcast-query" placeholder="Podcast name or RSS feed URL" style="flex:1;min-width:220px" type="text"/>
+<button class="btn btn-secondary btn-sm" onclick="podcastSearch()">Search</button>
+<button class="btn btn-primary btn-sm" onclick="podcastSubscribe()">Subscribe</button>
+</div>
+<div id="podcast-search-results" style="margin-top:8px;font-size:0.85em;color:var(--text-muted)"></div>
+</div>
+<div class="control-group">
+<label>Subscriptions</label>
+<div class="row-input" style="gap:8px;flex-wrap:wrap">
+<select id="podcast-sub-select" onchange="podcastLoadEpisodes()" style="flex:1;min-width:220px">
+<option value="">— no subscriptions —</option>
+</select>
+<button class="btn btn-sm" onclick="podcastRefresh()">↺ Refresh</button>
+<button class="btn btn-danger btn-sm" onclick="podcastUnsubscribe()">Unsubscribe</button>
+</div>
+</div>
+<div class="control-group">
+<label>Episodes</label>
+<div class="row-input" style="gap:8px;flex-wrap:wrap">
+<select id="podcast-episode-select" style="flex:1;min-width:220px">
+<option value="0">— latest episode —</option>
+</select>
+</div>
+</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+<button class="btn btn-primary btn-sm" onclick="podcastPlay()">▶ Play</button>
+<button class="btn btn-sm" onclick="podcastPause()">⏸ Pause</button>
+<button class="btn btn-sm" onclick="podcastResume()">▶ Resume</button>
+<button class="btn btn-sm" onclick="podcastStop()">■ Stop</button>
+</div>
+<div id="podcast-status" style="font-size:0.85em;color:var(--text-muted)">No podcast playback</div>
+</section>
 <section class="card" id="card-greeting">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>💬 Greeting Settings</h2>
 <div class="qh-form">

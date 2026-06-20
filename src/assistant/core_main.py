@@ -24,6 +24,7 @@ from src.services.ipc_bridge import IPCBridge
 from src.services.iot_service import IoTService
 from src.services.motion_service import MotionService
 from src.services.music_service import MusicService
+from src.services.podcast_service import PodcastService
 from src.services.object_service import ObjectService, ObjectConfig
 from src.services.perception_service import PerceptionService, PerceptionConfig
 from src.services.raw_camera_service import RawCameraService, RawCameraConfig
@@ -318,6 +319,13 @@ def main() -> int:
         announce_song_changes=bool(_music_cfg.get("announce_song_changes", False)),
     )
 
+    _podcast_cfg = _cfg.get("podcasts", {})
+    podcast_svc = PodcastService(
+        bus=bus,
+        enabled=bool(_podcast_cfg.get("enabled", True)),
+        auto_refresh_on_start=bool(_podcast_cfg.get("auto_refresh_on_start", False)),
+    )
+
     # Second camera (optional — gracefully absent if not configured or detected)
     _cam2_cfg_raw = _cfg.get("camera2", {})
     cam2_svc = None
@@ -364,6 +372,7 @@ def main() -> int:
             guest_intro_delay_min=0.0,  # gate is now in PerceptionService
         ),
         music_svc,
+        podcast_svc,
     ]
     skills_svc = SkillsService(bus=bus, quiet_hours=_qh)
     services.append(skills_svc)
@@ -479,6 +488,7 @@ def main() -> int:
         web_svc = WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
                              quiet_hours=_qh, motion_service=motion_svc,
                              tracking_service=tracking_svc, music_service=music_svc,
+                             podcast_service=podcast_svc,
                              camera2_service=cam2_svc, object_service=obj_svc,
                              skills_service=skills_svc, perception_service=perc_svc,
                              dense_stereo_service=dense_stereo_svc,

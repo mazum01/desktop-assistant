@@ -32,6 +32,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import quote_plus
 
 try:
     import zmq
@@ -1701,6 +1702,18 @@ def cmd_help(args) -> int:
                             "                  music thumbs-down           Ban the current song (skips it).\n"
                             "                  music stations              List available Pandora stations.\n"
                             "                  music status                Show playback state and current song.",
+        "podcast":          "Apple Podcasts subscriptions and playback. Sub-commands:\n"
+                            "                  podcast search <query>      Search Apple Podcasts.\n"
+                            "                  podcast subscribe <query|url> Subscribe to a podcast.\n"
+                            "                  podcast list                List subscribed podcasts.\n"
+                            "                  podcast episodes <id>       List episodes for a subscription.\n"
+                            "                  podcast play <id> [index]   Play episode by index (default 0 = newest).\n"
+                            "                  podcast pause               Pause podcast playback.\n"
+                            "                  podcast resume              Resume podcast playback.\n"
+                            "                  podcast stop                Stop podcast playback.\n"
+                            "                  podcast status              Show current podcast playback state.\n"
+                            "                  podcast refresh <id>        Refresh episodes from RSS.\n"
+                            "                  podcast unsubscribe <id>    Remove a subscription.",
         "quiet-hours":      "Quiet-hours (TTS silence window) configuration. Sub-commands:\n"
                             "                  quiet-hours status               Show current state and hours.\n"
                             "                  quiet-hours enable               Enable quiet hours.\n"
@@ -2675,6 +2688,127 @@ def cmd_music_status(_args) -> int:
     return 0
 
 
+def cmd_podcast(args) -> int:
+    action = getattr(args, "podcast_action", "status") or "status"
+
+    try:
+        if action == "search":
+            q = " ".join(getattr(args, "query", [])).strip()
+            if not q:
+                print("Usage: vera podcast search <query>", file=sys.stderr)
+                return 1
+            data = _http_get(f"/api/podcasts/search?q={quote_plus(q)}&limit=10")
+            results = data.get("results", [])
+            if not results:
+                print("No results.")
+                return 0
+            print(f"\n  {'ID':<6} {'Title':<44} Author")
+            print("  " + "-" * 92)
+            for i, r in enumerate(results, start=1):
+                title = (r.get("title") or "")[:44]
+                author = r.get("author") or ""
+                feed = r.get("feed_url") or ""
+                print(f"  {i:<6} {title:<44} {author}")
+                print(f"         {feed}")
+            print()
+            return 0
+
+        if action == "subscribe":
+            q = " ".join(getattr(args, "query_or_url", [])).strip()
+            if not q:
+                print("Usage: vera podcast subscribe <query|feed-url>", file=sys.stderr)
+                return 1
+            data = _http_post("/api/podcasts/subscribe", {"query_or_url": q})
+            sub = data.get("subscription", {})
+            print(f"Subscribed: {sub.get('title', 'n/a')}  (id={sub.get('id', 'n/a')})")
+            return 0
+
+        if action == "list":
+            data = _http_get("/api/podcasts")
+            subs = data.get("subscriptions", [])
+            if not subs:
+                print("No podcast subscriptions yet.")
+                return 0
+            print(f"\n  {'ID':<14} {'Title':<42} {'Episodes':>8}  Author")
+            print("  " + "-" * 92)
+            for s in subs:
+                print(f"  {str(s.get('id','')):<14} {(s.get('title','') or '')[:42]:<42} {int(s.get('episode_count',0)):>8}  {(s.get('author','') or '')[:24]}")
+            print()
+            return 0
+
+        if action == "episodes":
+            pid = getattr(args, "podcast_id", "")
+            data = _http_get(f"/api/podcasts/{pid}/episodes?limit=25")
+            eps = data.get("episodes", [])
+            if not eps:
+                print("No episodes available.")
+                return 0
+            print(f"\n  Episodes for {pid}")
+            print("  " + "-" * 72)
+            for i, ep in enumerate(eps):
+                title = (ep.get("title") or "")[:64]
+                dur = ep.get("duration") or ""
+                pub = ep.get("published") or ""
+                print(f"  [{i:02d}] {title}")
+                if pub or dur:
+                    print(f"       {pub}  {dur}")
+            print()
+            return 0
+
+        if action == "play":
+            pid = getattr(args, "podcast_id", "")
+            idx = int(getattr(args, "episode_index", 0))
+            st = _http_post("/api/podcasts/play", {"podcast_id": pid, "episode_index": idx})
+            print(f"Playing: {st.get('podcast_title', '')} - {st.get('episode_title', '')}")
+            return 0
+
+        if action == "pause":
+            _http_post("/api/podcasts/pause", {})
+            print("Podcast paused.")
+            return 0
+
+        if action == "resume":
+            _http_post("/api/podcasts/resume", {})
+            print("Podcast resumed.")
+            return 0
+
+        if action == "stop":
+            _http_post("/api/podcasts/stop", {})
+            print("Podcast stopped.")
+            return 0
+
+        if action == "status":
+            st = _http_get("/api/podcasts/status")
+            print(f"\n  State    : {st.get('state', 'stopped')}")
+            if st.get("podcast_title"):
+                print(f"  Podcast  : {st.get('podcast_title')}")
+            if st.get("episode_title"):
+                print(f"  Episode  : {st.get('episode_title')}")
+            print(f"  Player   : {st.get('player') or '-'}")
+            print(f"  Subs     : {st.get('subscriptions', 0)}")
+            print()
+            return 0
+
+        if action == "refresh":
+            pid = getattr(args, "podcast_id", "")
+            out = _http_post(f"/api/podcasts/{pid}/refresh", {})
+            print(f"Refreshed {pid}: {out.get('episode_count', 0)} episodes")
+            return 0
+
+        if action == "unsubscribe":
+            pid = getattr(args, "podcast_id", "")
+            out = _http_delete(f"/api/podcasts/{pid}")
+            print(f"Unsubscribed {pid}: deleted={out.get('deleted', 0)}")
+            return 0
+
+        print(f"Unknown podcast sub-command: {action!r}", file=sys.stderr)
+        return 1
+
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
 def main() -> int:
     p = argparse.ArgumentParser(
         prog="vera",
@@ -2782,6 +2916,43 @@ def main() -> int:
     mus_sub.add_parser("thumbs-down", help="Ban the current song (skips it)").set_defaults(func=cmd_music_thumbs_down)
     mus_sub.add_parser("stations",    help="List available Pandora stations").set_defaults(func=cmd_music_stations)
     mus_sub.add_parser("status",      help="Show playback state and current song").set_defaults(func=cmd_music_status)
+
+    # -- podcast subcommand group --------------------------------------
+    pod_sp = sub.add_parser("podcast", help="Apple Podcasts subscriptions and playback")
+    pod_sub = pod_sp.add_subparsers(dest="podcast_action", metavar="<subcommand>")
+    pod_sub.required = True
+
+    ssp = pod_sub.add_parser("search", help="Search Apple Podcasts")
+    ssp.add_argument("query", nargs="+", help="Search query")
+    ssp.set_defaults(func=cmd_podcast)
+
+    ssp = pod_sub.add_parser("subscribe", help="Subscribe by query text or feed URL")
+    ssp.add_argument("query_or_url", nargs="+", help="Query text or https://... feed URL")
+    ssp.set_defaults(func=cmd_podcast)
+
+    pod_sub.add_parser("list", help="List subscribed podcasts").set_defaults(func=cmd_podcast)
+
+    ssp = pod_sub.add_parser("episodes", help="List episodes for a subscription")
+    ssp.add_argument("podcast_id", help="Subscription ID")
+    ssp.set_defaults(func=cmd_podcast)
+
+    ssp = pod_sub.add_parser("play", help="Play podcast episode by index")
+    ssp.add_argument("podcast_id", help="Subscription ID")
+    ssp.add_argument("episode_index", nargs="?", type=int, default=0, help="Episode index (default 0)")
+    ssp.set_defaults(func=cmd_podcast)
+
+    pod_sub.add_parser("pause", help="Pause podcast playback").set_defaults(func=cmd_podcast)
+    pod_sub.add_parser("resume", help="Resume podcast playback").set_defaults(func=cmd_podcast)
+    pod_sub.add_parser("stop", help="Stop podcast playback").set_defaults(func=cmd_podcast)
+    pod_sub.add_parser("status", help="Show podcast playback status").set_defaults(func=cmd_podcast)
+
+    ssp = pod_sub.add_parser("refresh", help="Refresh episodes from RSS")
+    ssp.add_argument("podcast_id", help="Subscription ID")
+    ssp.set_defaults(func=cmd_podcast)
+
+    ssp = pod_sub.add_parser("unsubscribe", help="Remove a podcast subscription")
+    ssp.add_argument("podcast_id", help="Subscription ID")
+    ssp.set_defaults(func=cmd_podcast)
 
     sub.add_parser("topics", help="List subscribed topics").set_defaults(func=cmd_topics)
     sub.add_parser("ping", help="Round-trip latency check (shortcut for 'system ping')").set_defaults(func=cmd_ping)

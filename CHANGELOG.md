@@ -6,6 +6,26 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.10] - 2026-06-20
+### Added
+- Apple Podcasts support across interfaces:
+  - New `PodcastService` (`src/services/podcast_service.py`) for Apple Podcasts
+    discovery (iTunes search), subscriptions, RSS episode parsing, and playback
+    control (`play/pause/resume/stop/status`).
+  - New web API endpoints under `/api/podcasts/*` for search, subscribe/list,
+    episode listing/refresh, playback control, and status.
+  - New CLI command group: `vera podcast` with subcommands for search, subscribe,
+    list, episodes, play, pause/resume, stop, status, refresh, and unsubscribe.
+  - New OpenClaw `podcast` skill (`.github/skills/podcast/`) and skills index
+    updates so podcasts can be invoked in natural language workflows.
+  - New Podcasts card in the web GUI Music tab for subscribe/search, episode
+    selection, and playback controls.
+
+### Changed
+- `core_main` now wires `PodcastService` into the running service list and injects
+  it into `WebService` for HTTP/UI access.
+- Added test coverage stubs for podcast service and podcast web endpoints.
+
 ## [1.41.9] - 2026-06-19
 ### Changed
 - Privacy outline label placement on Cam 1 now prefers the **left side** of each

@@ -2473,6 +2473,8 @@ document.addEventListener("DOMContentLoaded", () => {
   loadObjectDetectionEnabled();
   loadPrivacySettings();
   loadMusicStatus();
+  loadPodcasts();
+  loadPodcastStatus();
   loadProcesses();
   loadDepthSettings();
   connectWS();
@@ -2509,6 +2511,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Refresh face registry every 30s; music status every 2s; depth maps every 3s
   setInterval(loadFaces, 30000);
   setInterval(loadMusicStatus, 2000);
+  setInterval(loadPodcastStatus, 2000);
+  setInterval(loadPodcasts, 30000);
   setInterval(loadAudioInputGain, 30000);
   setInterval(() => {
     const dense = el("depth-dense-enabled") && el("depth-dense-enabled").checked;
@@ -2795,6 +2799,214 @@ async function customEqSave() {
     if (st) { st.textContent = "Error"; st.style.color = "var(--red)"; }
   }
   setTimeout(() => { if (st) st.textContent = ""; }, 3000);
+}
+
+// ── Podcasts (Apple Podcasts) ─────────────────────────────────────
+
+function _setPodcastStatus(msg, ok = true) {
+  const st = el("podcast-status");
+  if (!st) return;
+  st.textContent = msg;
+  st.style.color = ok ? "var(--text-muted)" : "var(--red)";
+}
+
+async function loadPodcasts() {
+  const sel = el("podcast-sub-select");
+  if (!sel) return;
+  try {
+    const d = await fetch("/api/podcasts").then(r => r.json());
+    const subs = d.subscriptions || [];
+    const prev = sel.value;
+    sel.innerHTML = "";
+    if (!subs.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "— no subscriptions —";
+      sel.appendChild(opt);
+      _setPodcastStatus("No podcast subscriptions yet.");
+      _renderPodcastEpisodes([]);
+      return;
+    }
+    for (const s of subs) {
+      const opt = document.createElement("option");
+      opt.value = String(s.id);
+      opt.textContent = `${s.title || s.id}${s.author ? ` — ${s.author}` : ""}`;
+      sel.appendChild(opt);
+    }
+    if (prev && [...sel.options].some(o => o.value === prev)) {
+      sel.value = prev;
+    }
+    await podcastLoadEpisodes();
+  } catch (_e) {
+    _setPodcastStatus("Podcast service unavailable.", false);
+  }
+}
+
+async function loadPodcastStatus() {
+  try {
+    const s = await fetch("/api/podcasts/status").then(r => r.json());
+    const state = s.state || "stopped";
+    if (state === "playing" || state === "paused") {
+      const icon = state === "playing" ? "▶" : "⏸";
+      _setPodcastStatus(
+        `${icon} ${s.podcast_title || "Podcast"} — ${s.episode_title || "Episode"}`,
+        true
+      );
+    } else {
+      _setPodcastStatus("No podcast playback");
+    }
+  } catch (_e) {
+    _setPodcastStatus("Podcast status unavailable.", false);
+  }
+}
+
+function _renderPodcastSearchResults(results) {
+  const out = el("podcast-search-results");
+  if (!out) return;
+  if (!results || !results.length) {
+    out.textContent = "No Apple Podcasts results.";
+    return;
+  }
+  out.innerHTML = results.slice(0, 5).map(r =>
+    `<div style="margin:2px 0">• <b>${esc(r.title || "")}</b>${r.author ? ` — ${esc(r.author)}` : ""}</div>`
+  ).join("");
+}
+
+async function podcastSearch() {
+  const q = (el("podcast-query")?.value || "").trim();
+  if (!q) {
+    _renderPodcastSearchResults([]);
+    return;
+  }
+  try {
+    const d = await fetch(`/api/podcasts/search?q=${encodeURIComponent(q)}&limit=10`).then(r => r.json());
+    _renderPodcastSearchResults(d.results || []);
+  } catch (_e) {
+    _setPodcastStatus("Podcast search failed.", false);
+  }
+}
+
+async function podcastSubscribe() {
+  const q = (el("podcast-query")?.value || "").trim();
+  if (!q) return;
+  try {
+    const r = await fetch("/api/podcasts/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query_or_url: q }),
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) {
+      throw new Error(d.detail || d.error || `HTTP ${r.status}`);
+    }
+    _setPodcastStatus(`Subscribed: ${d.subscription?.title || "podcast"}`);
+    await loadPodcasts();
+  } catch (_e) {
+    _setPodcastStatus("Subscribe failed.", false);
+  }
+}
+
+function _renderPodcastEpisodes(episodes) {
+  const sel = el("podcast-episode-select");
+  if (!sel) return;
+  sel.innerHTML = "";
+  if (!episodes.length) {
+    const opt = document.createElement("option");
+    opt.value = "0";
+    opt.textContent = "— latest episode —";
+    sel.appendChild(opt);
+    return;
+  }
+  episodes.forEach((ep, idx) => {
+    const opt = document.createElement("option");
+    opt.value = String(idx);
+    opt.textContent = `${idx}. ${ep.title || "Episode"}`;
+    sel.appendChild(opt);
+  });
+}
+
+async function podcastLoadEpisodes() {
+  const pid = el("podcast-sub-select")?.value || "";
+  if (!pid) {
+    _renderPodcastEpisodes([]);
+    return;
+  }
+  try {
+    const d = await fetch(`/api/podcasts/${encodeURIComponent(pid)}/episodes?limit=25`).then(r => r.json());
+    _renderPodcastEpisodes(d.episodes || []);
+  } catch (_e) {
+    _setPodcastStatus("Failed loading episodes.", false);
+  }
+}
+
+async function podcastPlay() {
+  const pid = el("podcast-sub-select")?.value || "";
+  if (!pid) return;
+  const idx = parseInt(el("podcast-episode-select")?.value || "0", 10);
+  try {
+    const r = await fetch("/api/podcasts/play", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ podcast_id: pid, episode_index: idx }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    await loadPodcastStatus();
+  } catch (_e) {
+    _setPodcastStatus("Play failed.", false);
+  }
+}
+
+async function podcastPause() {
+  try {
+    await fetch("/api/podcasts/pause", { method: "POST" });
+    await loadPodcastStatus();
+  } catch (_e) {
+    _setPodcastStatus("Pause failed.", false);
+  }
+}
+
+async function podcastResume() {
+  try {
+    await fetch("/api/podcasts/resume", { method: "POST" });
+    await loadPodcastStatus();
+  } catch (_e) {
+    _setPodcastStatus("Resume failed.", false);
+  }
+}
+
+async function podcastStop() {
+  try {
+    await fetch("/api/podcasts/stop", { method: "POST" });
+    await loadPodcastStatus();
+  } catch (_e) {
+    _setPodcastStatus("Stop failed.", false);
+  }
+}
+
+async function podcastRefresh() {
+  const pid = el("podcast-sub-select")?.value || "";
+  if (!pid) return;
+  try {
+    const r = await fetch(`/api/podcasts/${encodeURIComponent(pid)}/refresh`, { method: "POST" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    await podcastLoadEpisodes();
+    _setPodcastStatus("Episodes refreshed.");
+  } catch (_e) {
+    _setPodcastStatus("Refresh failed.", false);
+  }
+}
+
+async function podcastUnsubscribe() {
+  const pid = el("podcast-sub-select")?.value || "";
+  if (!pid) return;
+  try {
+    const r = await fetch(`/api/podcasts/${encodeURIComponent(pid)}`, { method: "DELETE" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    await loadPodcasts();
+    _setPodcastStatus("Subscription removed.");
+  } catch (_e) {
+    _setPodcastStatus("Unsubscribe failed.", false);
+  }
 }
 
 // ── Utils ─────────────────────────────────────────────────────────

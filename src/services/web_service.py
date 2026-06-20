@@ -315,6 +315,15 @@ class _MusicEqBody(BaseModel):
     preset: str
 
 
+class _PodcastSubscribeBody(BaseModel):
+    query_or_url: str
+
+
+class _PodcastPlayBody(BaseModel):
+    podcast_id: str
+    episode_index: int = 0
+
+
 class _InputGainBody(BaseModel):
     level: int
 
@@ -598,6 +607,7 @@ class WebService:
         motion_service=None,
         tracking_service=None,
         music_service=None,
+        podcast_service=None,
         camera2_service=None,
         object_service=None,
         skills_service=None,
@@ -619,6 +629,7 @@ class WebService:
         self._motion_svc = motion_service
         self._tracking_svc = tracking_service
         self._music_svc = music_service
+        self._podcast_svc = podcast_service
         self._camera2_svc = camera2_service
         self._object_svc = object_service
         self._skills_svc = skills_service
@@ -2264,5 +2275,99 @@ class WebService:
             if self.bus:
                 self.bus.publish("music.set_station", {"station_id": body.station_id})
             return {"ok": True}
+
+        # ── Apple Podcasts ─────────────────────────────────────────────
+
+        @app.get("/api/podcasts")
+        async def api_podcasts_list():
+            if not self._podcast_svc:
+                return {"ok": True, "subscriptions": []}
+            return {"ok": True, "subscriptions": self._podcast_svc.subscriptions}
+
+        @app.get("/api/podcasts/search")
+        async def api_podcasts_search(q: str, limit: int = 10):
+            if not self._podcast_svc:
+                raise HTTPException(503, "podcast service unavailable")
+            try:
+                results = self._podcast_svc.search(q, limit=limit)
+            except Exception as exc:
+                raise HTTPException(400, str(exc))
+            return {"ok": True, "results": results}
+
+        @app.post("/api/podcasts/subscribe")
+        async def api_podcasts_subscribe(body: _PodcastSubscribeBody):
+            if not self._podcast_svc:
+                raise HTTPException(503, "podcast service unavailable")
+            try:
+                return self._podcast_svc.subscribe(body.query_or_url)
+            except Exception as exc:
+                raise HTTPException(400, str(exc))
+
+        @app.delete("/api/podcasts/{podcast_id}")
+        async def api_podcasts_unsubscribe(podcast_id: str):
+            if not self._podcast_svc:
+                raise HTTPException(503, "podcast service unavailable")
+            try:
+                return self._podcast_svc.unsubscribe(podcast_id)
+            except Exception as exc:
+                raise HTTPException(400, str(exc))
+
+        @app.get("/api/podcasts/{podcast_id}/episodes")
+        async def api_podcasts_episodes(podcast_id: str, limit: int = 20):
+            if not self._podcast_svc:
+                raise HTTPException(503, "podcast service unavailable")
+            try:
+                episodes = self._podcast_svc.episodes(podcast_id, limit=limit)
+            except Exception as exc:
+                raise HTTPException(400, str(exc))
+            return {"ok": True, "episodes": episodes}
+
+        @app.post("/api/podcasts/{podcast_id}/refresh")
+        async def api_podcasts_refresh(podcast_id: str):
+            if not self._podcast_svc:
+                raise HTTPException(503, "podcast service unavailable")
+            try:
+                return self._podcast_svc.refresh(podcast_id)
+            except Exception as exc:
+                raise HTTPException(400, str(exc))
+
+        @app.post("/api/podcasts/play")
+        async def api_podcasts_play(body: _PodcastPlayBody):
+            if not self._podcast_svc:
+                raise HTTPException(503, "podcast service unavailable")
+            try:
+                return self._podcast_svc.play(body.podcast_id, body.episode_index)
+            except Exception as exc:
+                raise HTTPException(400, str(exc))
+
+        @app.post("/api/podcasts/stop")
+        async def api_podcasts_stop():
+            if not self._podcast_svc:
+                raise HTTPException(503, "podcast service unavailable")
+            return self._podcast_svc.stop()
+
+        @app.post("/api/podcasts/pause")
+        async def api_podcasts_pause():
+            if not self._podcast_svc:
+                raise HTTPException(503, "podcast service unavailable")
+            try:
+                return self._podcast_svc.pause()
+            except Exception as exc:
+                raise HTTPException(400, str(exc))
+
+        @app.post("/api/podcasts/resume")
+        async def api_podcasts_resume():
+            if not self._podcast_svc:
+                raise HTTPException(503, "podcast service unavailable")
+            try:
+                return self._podcast_svc.resume()
+            except Exception as exc:
+                raise HTTPException(400, str(exc))
+
+        @app.get("/api/podcasts/status")
+        async def api_podcasts_status():
+            if not self._podcast_svc:
+                return {"ok": True, "state": "stopped", "subscriptions": 0, "player": None}
+            return self._podcast_svc.status()
 
         return app
