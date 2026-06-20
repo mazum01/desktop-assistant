@@ -294,6 +294,13 @@ const _iotHistories = {};
 // Track which IoT cards were rendered from the registry (vs. hard-wired)
 const _iotRegisteredCards = new Set();
 
+function _fmtIotInterval(seconds) {
+  const s = Math.max(1, Number(seconds || 0));
+  if (s >= 3600) return `${Math.round(s / 3600)}h`;
+  if (s >= 60) return `${Math.round(s / 60)}m`;
+  return `${Math.round(s)}s`;
+}
+
 function renderIoTDevices(iot) {
   const pane = el("tab-smart-home");
   if (!pane) return;
@@ -338,6 +345,7 @@ function renderIoTDevices(iot) {
           <span class="pill iot-badge-row"></span>
           <span class="iot-detail" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
         </div>
+        <div class="iot-sparkline-meta" style="font-size:11px;color:var(--text-muted);margin:4px 0 2px 0"></div>
         <canvas class="resource-canvas iot-sparkline" id="iot-graph-${deviceId}" height="60" width="400"></canvas>
         <div class="iot-metrics"></div>
         <div class="iot-actions" style="display:none;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
@@ -360,14 +368,19 @@ function renderIoTDevices(iot) {
     const unitEl    = card.querySelector(".iot-primary-unit");
     const badgeEl   = card.querySelector(".iot-badge-row");
     const detailEl  = card.querySelector(".iot-detail");
+    const sparkMetaEl = card.querySelector(".iot-sparkline-meta");
     const metricsEl = card.querySelector(".iot-metrics");
     const actionsEl = card.querySelector(".iot-actions");
+    const horizonMin = Math.max(1, Number(snap.history_horizon_min || 120));
+    const updateS = Math.max(1, Number(snap.history_update_s || 60));
+    const historyLabel = snap.history_label || "History";
 
     if (!available) {
       if (valueEl) valueEl.textContent = "—";
       if (unitEl)  unitEl.textContent = "";
       if (badgeEl) { badgeEl.textContent = snap.error || "unavailable"; badgeEl.style.cssText = "background:#f8514933;color:#f85149;border:1px solid #f8514966"; }
       if (detailEl) detailEl.textContent = "";
+      if (sparkMetaEl) sparkMetaEl.textContent = `${historyLabel} · ${horizonMin}m horizon · ${_fmtIotInterval(updateS)} update`;
       if (metricsEl) metricsEl.innerHTML = "";
       if (actionsEl) { actionsEl.innerHTML = ""; actionsEl.style.display = "none"; }
     } else {
@@ -389,6 +402,7 @@ function renderIoTDevices(iot) {
       }
 
       if (detailEl) detailEl.textContent = detail;
+      if (sparkMetaEl) sparkMetaEl.textContent = `${historyLabel} · ${horizonMin}m horizon · ${_fmtIotInterval(updateS)} update`;
 
       // Metrics grid
       if (metricsEl) {

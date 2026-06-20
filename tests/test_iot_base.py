@@ -124,6 +124,16 @@ class TestIoTDeviceABC:
         dev = _TemperatureDevice(cfg={"host": "192.168.1.1"})
         assert dev._cfg["host"] == "192.168.1.1"
 
+    def test_history_defaults(self):
+        dev = _TemperatureDevice()
+        assert dev.history_horizon_min() == 120
+        assert dev.history_update_s() == 60
+
+    def test_history_cfg_overrides(self):
+        dev = _TemperatureDevice(cfg={"history_horizon_min": 45, "history_update_s": 15})
+        assert dev.history_horizon_min() == 45
+        assert dev.history_update_s() == 15
+
 
 # ── IoTRegistry ───────────────────────────────────────────────────────────────
 
@@ -203,6 +213,8 @@ class TestIoTRegistry:
         assert snap["device_id"]   == "temperature"
         assert snap["device_name"] == "Temperature Sensor"
         assert snap["device_icon"] == "🌡️"
+        assert snap["history_horizon_min"] == 120
+        assert snap["history_update_s"] == 60
 
     def test_get_device_list(self):
         reg = IoTRegistry()

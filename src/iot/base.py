@@ -54,6 +54,11 @@ class IoTDevice(ABC):
         self.bus   = bus
         self._cfg  = cfg or {}
 
+    # ── History sampling defaults (per-device overridable via config) ─────────
+
+    DEFAULT_HISTORY_HORIZON_MIN: int = 120
+    DEFAULT_HISTORY_UPDATE_S: int = 60
+
     # ── Required interface ────────────────────────────────────────────────────
 
     @abstractmethod
@@ -94,6 +99,24 @@ class IoTDevice(ABC):
         The default returns an empty list (no actions).
         """
         return []
+
+    def history_horizon_min(self) -> int:
+        """Retention horizon in minutes for this tile's sparkline history."""
+        raw = self._cfg.get("history_horizon_min", self.DEFAULT_HISTORY_HORIZON_MIN)
+        try:
+            out = int(raw)
+        except Exception:
+            out = self.DEFAULT_HISTORY_HORIZON_MIN
+        return max(1, out)
+
+    def history_update_s(self) -> int:
+        """Minimum sampling interval in seconds for stored sparkline points."""
+        raw = self._cfg.get("history_update_s", self.DEFAULT_HISTORY_UPDATE_S)
+        try:
+            out = int(raw)
+        except Exception:
+            out = self.DEFAULT_HISTORY_UPDATE_S
+        return max(1, out)
 
     def announce(self) -> str:
         """Return a TTS-friendly status string for this device.

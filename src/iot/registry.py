@@ -86,13 +86,25 @@ class IoTRegistry:
                 snap["device_id"]   = device.device_id
                 snap["device_name"] = device.device_name
                 snap["device_icon"] = device.device_icon
+                horizon_min = device.history_horizon_min()
+                update_s = device.history_update_s()
 
                 # Persist and expand history through the store
                 if self._history_store is not None:
                     incoming = snap.get("history") or []
                     if incoming:
-                        self._history_store.push(device_id, incoming)
-                    snap["history"] = self._history_store.get(device_id)
+                        self._history_store.push(
+                            device_id,
+                            incoming,
+                            horizon_s=horizon_min * 60,
+                            sample_interval_s=update_s,
+                        )
+                    snap["history"] = self._history_store.get(
+                        device_id,
+                        horizon_s=horizon_min * 60,
+                    )
+                snap["history_horizon_min"] = horizon_min
+                snap["history_update_s"] = update_s
 
                 result[device_id] = snap
             except Exception:

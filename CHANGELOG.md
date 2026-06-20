@@ -6,6 +6,26 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.14] - 2026-06-20
+### Added
+- Per-tile IoT sparkline history controls:
+  - `history_horizon_min` (retention window, minutes) can now be configured per
+    IoT device tile.
+  - `history_update_s` (sampling frequency, seconds) can now be configured per
+    IoT device tile.
+- Smart Home tile sparklines now show a meta line with:
+  - history label,
+  - configured time horizon,
+  - configured update frequency.
+
+### Changed
+- `IoTHistoryStore` now stores timestamped history points (with backward
+  compatibility for older value-only history files) and trims by per-device
+  horizon in addition to a hard max buffer cap.
+- `IoTRegistry` now applies per-device sampling/retention policy when persisting
+  history and includes `history_horizon_min` / `history_update_s` in snapshot
+  payloads for the web GUI.
+
 ## [1.41.13] - 2026-06-20
 ### Fixed
 - Nest thermostat IoT degradation now surfaces actionable OAuth diagnostics:
