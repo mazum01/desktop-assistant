@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.11] - 2026-06-20
+### Fixed
+- Podcast search button in the web GUI could appear to do nothing after deploys
+  due to stale cached JavaScript (`app.js`) while new HTML controls were loaded.
+- Updated static asset cache-busting query strings in `index.html` so browsers
+  fetch the latest `app.js`/`style.css` immediately after release.
+
 ## [1.41.10] - 2026-06-20
 ### Added
 - Apple Podcasts support across interfaces:
