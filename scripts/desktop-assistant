@@ -1711,6 +1711,10 @@ def cmd_help(args) -> int:
                             "                  podcast pause               Pause podcast playback.\n"
                             "                  podcast resume              Resume podcast playback.\n"
                             "                  podcast stop                Stop podcast playback.\n"
+                            "                  podcast seek <seconds>      Jump to absolute time in current episode.\n"
+                            "                  podcast skip <delta>        Jump by +/- seconds (e.g. -15, 30).\n"
+                            "                  podcast back15              Jump backward 15 seconds.\n"
+                            "                  podcast fwd30               Jump forward 30 seconds.\n"
                             "                  podcast status              Show current podcast playback state.\n"
                             "                  podcast refresh <id>        Refresh episodes from RSS.\n"
                             "                  podcast unsubscribe <id>    Remove a subscription.",
@@ -2784,9 +2788,35 @@ def cmd_podcast(args) -> int:
                 print(f"  Podcast  : {st.get('podcast_title')}")
             if st.get("episode_title"):
                 print(f"  Episode  : {st.get('episode_title')}")
+            if st.get("duration_sec") is not None:
+                pos = float(st.get("position_sec") or 0.0)
+                dur = float(st.get("duration_sec") or 0.0)
+                print(f"  Position : {int(pos)}s / {int(dur)}s")
             print(f"  Player   : {st.get('player') or '-'}")
             print(f"  Subs     : {st.get('subscriptions', 0)}")
             print()
+            return 0
+
+        if action == "seek":
+            sec = float(getattr(args, "seconds", 0.0))
+            st = _http_post("/api/podcasts/seek", {"position_sec": sec})
+            print(f"Seeked to {int(float(st.get('position_sec') or sec))}s")
+            return 0
+
+        if action == "skip":
+            delta = float(getattr(args, "delta_sec", 0.0))
+            st = _http_post("/api/podcasts/skip", {"delta_sec": delta})
+            print(f"Position: {int(float(st.get('position_sec') or 0.0))}s")
+            return 0
+
+        if action == "back15":
+            st = _http_post("/api/podcasts/skip", {"delta_sec": -15.0})
+            print(f"Position: {int(float(st.get('position_sec') or 0.0))}s")
+            return 0
+
+        if action == "fwd30":
+            st = _http_post("/api/podcasts/skip", {"delta_sec": 30.0})
+            print(f"Position: {int(float(st.get('position_sec') or 0.0))}s")
             return 0
 
         if action == "refresh":
@@ -2944,6 +2974,14 @@ def main() -> int:
     pod_sub.add_parser("pause", help="Pause podcast playback").set_defaults(func=cmd_podcast)
     pod_sub.add_parser("resume", help="Resume podcast playback").set_defaults(func=cmd_podcast)
     pod_sub.add_parser("stop", help="Stop podcast playback").set_defaults(func=cmd_podcast)
+    ssp = pod_sub.add_parser("seek", help="Jump to absolute time (seconds)")
+    ssp.add_argument("seconds", type=float, help="Target time in seconds")
+    ssp.set_defaults(func=cmd_podcast)
+    ssp = pod_sub.add_parser("skip", help="Jump by delta seconds (+/-)")
+    ssp.add_argument("delta_sec", type=float, help="Delta seconds (e.g. -15 or 30)")
+    ssp.set_defaults(func=cmd_podcast)
+    pod_sub.add_parser("back15", help="Jump backward 15 seconds").set_defaults(func=cmd_podcast)
+    pod_sub.add_parser("fwd30", help="Jump forward 30 seconds").set_defaults(func=cmd_podcast)
     pod_sub.add_parser("status", help="Show podcast playback status").set_defaults(func=cmd_podcast)
 
     ssp = pod_sub.add_parser("refresh", help="Refresh episodes from RSS")

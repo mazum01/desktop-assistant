@@ -6,6 +6,24 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.12] - 2026-06-20
+### Added
+- Podcast playback scrubbing controls in the web GUI:
+  - Seek bar now shows elapsed and total time for the active episode.
+  - Dragging/releasing the seek bar jumps playback to the selected time.
+  - Added quick jump buttons for **-15s** and **+30s**.
+- New podcast API controls:
+  - `POST /api/podcasts/seek` with `{position_sec}`
+  - `POST /api/podcasts/skip` with `{delta_sec}`
+- CLI/OpenClaw podcast controls now include seek/skip shortcuts:
+  - `vera podcast seek`, `vera podcast skip`, `vera podcast back15`, `vera podcast fwd30`
+  - `podcast.py seek`, `podcast.py skip`, `podcast.py back15`, `podcast.py fwd30`
+
+### Changed
+- `PodcastService` now tracks playback position and duration in status payloads
+  and supports restart-at-offset seeking across supported players (`mpv`,
+  `ffplay`, `cvlc`).
+
 ## [1.41.11] - 2026-06-20
 ### Fixed
 - Podcast search button in the web GUI could appear to do nothing after deploys

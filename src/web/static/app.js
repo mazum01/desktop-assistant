@@ -2802,6 +2802,7 @@ async function customEqSave() {
 }
 
 // ── Podcasts (Apple Podcasts) ─────────────────────────────────────
+let _podcastScrubbing = false;
 
 function _setPodcastStatus(msg, ok = true) {
   const st = el("podcast-status");
@@ -2846,14 +2847,31 @@ async function loadPodcastStatus() {
   try {
     const s = await fetch("/api/podcasts/status").then(r => r.json());
     const state = s.state || "stopped";
+    const pos = Math.max(0, Number(s.position_sec || 0));
+    const dur = Math.max(0, Number(s.duration_sec || 0));
+    const bar = el("podcast-progress-bar");
+    if (bar && !_podcastScrubbing) {
+      bar.max = dur > 0 ? dur : 100;
+      bar.value = Math.min(pos, Number(bar.max));
+    }
+    const elapsedEl = el("podcast-elapsed");
+    const durEl = el("podcast-duration");
+    if (elapsedEl) elapsedEl.textContent = _fmtSec(pos);
+    if (durEl) durEl.textContent = _fmtSec(dur);
     if (state === "playing" || state === "paused") {
       const icon = state === "playing" ? "▶" : "⏸";
       _setPodcastStatus(
-        `${icon} ${s.podcast_title || "Podcast"} — ${s.episode_title || "Episode"}`,
+        `${icon} ${s.podcast_title || "Podcast"} — ${s.episode_title || "Episode"} · ${_fmtSec(pos)} / ${_fmtSec(dur)}`,
         true
       );
     } else {
       _setPodcastStatus("No podcast playback");
+      if (bar && !_podcastScrubbing) {
+        bar.max = 100;
+        bar.value = 0;
+      }
+      if (elapsedEl) elapsedEl.textContent = "0:00";
+      if (durEl) durEl.textContent = "0:00";
     }
   } catch (_e) {
     _setPodcastStatus("Podcast status unavailable.", false);
@@ -2980,6 +2998,43 @@ async function podcastStop() {
     await loadPodcastStatus();
   } catch (_e) {
     _setPodcastStatus("Stop failed.", false);
+  }
+}
+
+function podcastPreviewSeek(value) {
+  _podcastScrubbing = true;
+  const val = Math.max(0, Number(value || 0));
+  const elapsedEl = el("podcast-elapsed");
+  if (elapsedEl) elapsedEl.textContent = _fmtSec(val);
+}
+
+async function podcastCommitSeek(value) {
+  _podcastScrubbing = false;
+  const target = Math.max(0, Number(value || 0));
+  try {
+    const r = await fetch("/api/podcasts/seek", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ position_sec: target }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    await loadPodcastStatus();
+  } catch (_e) {
+    _setPodcastStatus("Seek failed.", false);
+  }
+}
+
+async function podcastSkip(deltaSec) {
+  try {
+    const r = await fetch("/api/podcasts/skip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ delta_sec: Number(deltaSec) }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    await loadPodcastStatus();
+  } catch (_e) {
+    _setPodcastStatus("Skip failed.", false);
   }
 }
 

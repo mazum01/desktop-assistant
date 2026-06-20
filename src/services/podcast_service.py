@@ -64,7 +64,12 @@ class PodcastService(Service):
             "podcast_title": None,
             "episode_id": None,
             "episode_title": None,
+            "episode_index": 0,
             "audio_url": None,
+            "duration_sec": None,
+            "position_sec": 0.0,
+            "seek_sec": 0.0,
+            "resumed_at_mono": None,
             "started_at": None,
             "paused": False,
         }
@@ -99,6 +104,9 @@ class PodcastService(Service):
                 self._playback.update({
                     "state": "stopped",
                     "paused": False,
+                    "position_sec": 0.0,
+                    "seek_sec": 0.0,
+                    "resumed_at_mono": None,
                 })
         self.bus.publish("podcast.playback", self.status())
 
@@ -127,6 +135,7 @@ class PodcastService(Service):
     def status(self) -> dict:
         with self._lock:
             out = dict(self._playback)
+            out["position_sec"] = self._position_sec_locked()
             out["ok"] = True
             out["player"] = self._player_name
             out["subscriptions"] = len(self._subscriptions)
@@ -287,20 +296,9 @@ class PodcastService(Service):
         if not audio_url:
             raise ValueError("Episode has no audio URL")
 
-        player_name, cmd = self._build_player_command(audio_url)
-
         self.stop()
-
-        try:
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-                close_fds=True,
-            )
-        except Exception as exc:
-            raise RuntimeError(f"Failed to start {player_name}: {exc}") from exc
+        duration_sec = self._duration_to_seconds(ep.get("duration"))
+        player_name, proc = self._spawn_player(audio_url=audio_url, start_offset_sec=0.0)
 
         with self._lock:
             self._player_proc = proc
@@ -311,7 +309,12 @@ class PodcastService(Service):
                 "podcast_title": sub.get("title"),
                 "episode_id": ep.get("id"),
                 "episode_title": ep.get("title"),
+                "episode_index": idx,
                 "audio_url": audio_url,
+                "duration_sec": duration_sec,
+                "position_sec": 0.0,
+                "seek_sec": 0.0,
+                "resumed_at_mono": time.monotonic(),
                 "started_at": time.time(),
                 "paused": False,
             })
@@ -325,7 +328,13 @@ class PodcastService(Service):
             proc = self._player_proc
             self._player_proc = None
             self._player_name = None
-            self._playback.update({"state": "stopped", "paused": False})
+            self._playback.update({
+                "state": "stopped",
+                "paused": False,
+                "position_sec": 0.0,
+                "seek_sec": 0.0,
+                "resumed_at_mono": None,
+            })
 
         if proc is not None:
             try:
@@ -348,9 +357,12 @@ class PodcastService(Service):
                 raise ValueError("No active podcast playback")
             if self._playback.get("paused"):
                 return self.status()
+            self._playback["seek_sec"] = self._position_sec_locked()
+            self._playback["resumed_at_mono"] = None
             os.kill(proc.pid, signal.SIGSTOP)
             self._playback["paused"] = True
             self._playback["state"] = "paused"
+            self._playback["position_sec"] = self._playback["seek_sec"]
         status = self.status()
         self.bus.publish("podcast.playback", status)
         return status
@@ -365,9 +377,53 @@ class PodcastService(Service):
             os.kill(proc.pid, signal.SIGCONT)
             self._playback["paused"] = False
             self._playback["state"] = "playing"
+            self._playback["resumed_at_mono"] = time.monotonic()
         status = self.status()
         self.bus.publish("podcast.playback", status)
         return status
+
+    def seek(self, position_sec: float) -> dict:
+        with self._lock:
+            proc = self._player_proc
+            if proc is None or proc.poll() is not None:
+                raise ValueError("No active podcast playback")
+            audio_url = str(self._playback.get("audio_url") or "")
+            if not audio_url:
+                raise ValueError("No active podcast audio URL")
+            was_paused = bool(self._playback.get("paused"))
+            duration_sec = self._duration_to_seconds(self._playback.get("duration_sec"))
+            target = max(0.0, float(position_sec))
+            if duration_sec is not None:
+                target = min(target, max(duration_sec - 0.25, 0.0))
+
+        player_name, new_proc = self._spawn_player(audio_url=audio_url, start_offset_sec=target)
+        self._terminate_proc(proc)
+
+        with self._lock:
+            self._player_proc = new_proc
+            self._player_name = player_name
+            self._playback["seek_sec"] = target
+            self._playback["position_sec"] = target
+            self._playback["resumed_at_mono"] = time.monotonic()
+            self._playback["paused"] = False
+            self._playback["state"] = "playing"
+            if was_paused:
+                os.kill(new_proc.pid, signal.SIGSTOP)
+                self._playback["paused"] = True
+                self._playback["state"] = "paused"
+                self._playback["resumed_at_mono"] = None
+
+        status = self.status()
+        self.bus.publish("podcast.playback", status)
+        return status
+
+    def skip(self, delta_sec: float) -> dict:
+        with self._lock:
+            proc = self._player_proc
+            if proc is None or proc.poll() is not None:
+                raise ValueError("No active podcast playback")
+            current = self._position_sec_locked()
+        return self.seek(current + float(delta_sec))
 
     # ── Internals ─────────────────────────────────────────────────────
 
@@ -430,6 +486,7 @@ class PodcastService(Service):
             guid = _txt(item.find("guid"))
             pub = _txt(item.find("pubDate"))
             duration = _txt(item.find(f"{_ITUNES_NS}duration"))
+            duration_sec = self._duration_to_seconds(duration)
 
             enclosure = item.find("enclosure")
             audio_url = enclosure.attrib.get("url", "") if enclosure is not None else ""
@@ -445,6 +502,7 @@ class PodcastService(Service):
                 "title": ep_title,
                 "published": pub,
                 "duration": duration,
+                "duration_sec": duration_sec,
                 "audio_url": audio_url,
             })
 
@@ -455,11 +513,87 @@ class PodcastService(Service):
             "episodes": episodes,
         }
 
-    def _build_player_command(self, audio_url: str) -> tuple[str, list[str]]:
+    def _build_player_command(self, audio_url: str, start_offset_sec: float = 0.0) -> tuple[str, list[str]]:
+        start_offset_sec = max(0.0, float(start_offset_sec))
+        start_flag = f"{start_offset_sec:.3f}"
         if shutil.which("mpv"):
-            return "mpv", ["mpv", "--no-video", "--really-quiet", "--no-terminal", audio_url]
+            cmd = ["mpv", "--no-video", "--really-quiet", "--no-terminal"]
+            if start_offset_sec > 0:
+                cmd.append(f"--start={start_flag}")
+            cmd.append(audio_url)
+            return "mpv", cmd
         if shutil.which("ffplay"):
-            return "ffplay", ["ffplay", "-nodisp", "-autoexit", "-loglevel", "error", audio_url]
+            cmd = ["ffplay", "-nodisp", "-autoexit", "-loglevel", "error"]
+            if start_offset_sec > 0:
+                cmd.extend(["-ss", start_flag])
+            cmd.append(audio_url)
+            return "ffplay", cmd
         if shutil.which("cvlc"):
-            return "cvlc", ["cvlc", "--intf", "dummy", "--play-and-exit", audio_url]
+            cmd = ["cvlc", "--intf", "dummy", "--play-and-exit"]
+            if start_offset_sec > 0:
+                cmd.extend(["--start-time", str(int(start_offset_sec))])
+            cmd.append(audio_url)
+            return "cvlc", cmd
         raise RuntimeError("No supported podcast player found (install mpv, ffplay, or vlc)")
+
+    def _spawn_player(self, audio_url: str, start_offset_sec: float = 0.0) -> tuple[str, subprocess.Popen]:
+        player_name, cmd = self._build_player_command(audio_url=audio_url, start_offset_sec=start_offset_sec)
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+                close_fds=True,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"Failed to start {player_name}: {exc}") from exc
+        return player_name, proc
+
+    @staticmethod
+    def _terminate_proc(proc: Optional[subprocess.Popen]) -> None:
+        if proc is None:
+            return
+        try:
+            proc.terminate()
+            proc.wait(timeout=3)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    def _position_sec_locked(self) -> float:
+        seek = float(self._playback.get("seek_sec") or 0.0)
+        resumed_at = self._playback.get("resumed_at_mono")
+        paused = bool(self._playback.get("paused"))
+        pos = seek
+        if not paused and resumed_at is not None:
+            pos = seek + max(0.0, time.monotonic() - float(resumed_at))
+        dur = self._duration_to_seconds(self._playback.get("duration_sec"))
+        if dur is not None:
+            pos = min(pos, max(dur, 0.0))
+        return max(0.0, pos)
+
+    @staticmethod
+    def _duration_to_seconds(raw: object) -> Optional[float]:
+        if raw is None:
+            return None
+        if isinstance(raw, (int, float)):
+            val = float(raw)
+            return val if val >= 0 else None
+        txt = str(raw).strip()
+        if not txt:
+            return None
+        if txt.isdigit():
+            return float(int(txt))
+        parts = txt.split(":")
+        try:
+            nums = [int(p) for p in parts]
+        except Exception:
+            return None
+        if len(nums) == 3:
+            return float(nums[0] * 3600 + nums[1] * 60 + nums[2])
+        if len(nums) == 2:
+            return float(nums[0] * 60 + nums[1])
+        return None

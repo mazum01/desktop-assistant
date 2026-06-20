@@ -38,7 +38,7 @@ systemctl --user restart openclaw-gateway.service
 | `say`               | Speak any text via TTS                                    | "Say good morning", "Announce dinner is ready"       |
 | `describe-scene`    | Describe what the camera sees, spoken aloud               | "What do you see?", "Describe the room"              |
 | `music`             | Pandora: play/stop/skip/pause/thumbs/stations             | "Play jazz", "Skip this song", "What's playing?"     |
-| `podcast`           | Apple Podcasts: search/subscribe/episodes/playback         | "Subscribe to The Daily", "Play latest episode"       |
+| `podcast`           | Apple Podcasts: search/subscribe/episodes/playback/seek    | "Subscribe to The Daily", "Skip forward 30 seconds"   |
 | `audio`             | Volume/EQ/input-gain/mute/repeat/backend controls         | "Mute audio", "Repeat that", "Set EQ vocal"           |
 | `privacy`           | Privacy mode enable/disable and tuning controls           | "Enable privacy mode", "Set threshold to 0.7"         |
 | `face-tracking`     | Enable/disable auto face-following servo                  | "Follow me", "Hold still", "Is tracking on?"        |

@@ -353,6 +353,31 @@ def test_podcast_play_endpoint_calls_service(app_client):
     assert r.json()["state"] == "playing"
 
 
+def test_podcast_seek_and_skip_endpoints_call_service(app_client):
+    client, bus, svc = app_client
+    called = {}
+
+    class _FakePodcast:
+        def seek(self, position_sec):
+            called["seek"] = float(position_sec)
+            return {"ok": True, "state": "playing", "position_sec": float(position_sec)}
+
+        def skip(self, delta_sec):
+            called["skip"] = float(delta_sec)
+            return {"ok": True, "state": "playing", "position_sec": 42.0}
+
+    svc._podcast_svc = _FakePodcast()
+
+    r = client.post("/api/podcasts/seek", json={"position_sec": 123.5})
+    assert r.status_code == 200
+    assert called["seek"] == pytest.approx(123.5)
+    assert r.json()["position_sec"] == pytest.approx(123.5)
+
+    r2 = client.post("/api/podcasts/skip", json={"delta_sec": -15})
+    assert r2.status_code == 200
+    assert called["skip"] == pytest.approx(-15.0)
+
+
 # ── Status API ────────────────────────────────────────────────────────────────
 
 def test_status_returns_version(app_client):

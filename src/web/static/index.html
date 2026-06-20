@@ -10,7 +10,7 @@
 <link href="/static/favicon-32.png" rel="icon" sizes="32x32" type="image/png"/>
 <link href="/static/favicon-16.png" rel="icon" sizes="16x16" type="image/png"/>
 <link href="/static/favicon-192.png" rel="apple-touch-icon" sizes="192x192"/>
-<link href="/static/style.css?v=1.41.11" rel="stylesheet"/>
+<link href="/static/style.css?v=1.41.12" rel="stylesheet"/>
 </head>
 <body>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -385,6 +385,13 @@
 <button class="btn btn-sm" onclick="podcastPause()">⏸ Pause</button>
 <button class="btn btn-sm" onclick="podcastResume()">▶ Resume</button>
 <button class="btn btn-sm" onclick="podcastStop()">■ Stop</button>
+<button class="btn btn-sm" onclick="podcastSkip(-15)">↺ 15s</button>
+<button class="btn btn-sm" onclick="podcastSkip(30)">↻ 30s</button>
+</div>
+<div class="music-progress-row" style="margin-top:4px">
+<span id="podcast-elapsed" style="font-size:0.8em;color:var(--text-muted);min-width:38px">0:00</span>
+<input class="music-progress-bar" id="podcast-progress-bar" max="100" min="0" oninput="podcastPreviewSeek(this.value)" onchange="podcastCommitSeek(this.value)" type="range" value="0"/>
+<span id="podcast-duration" style="font-size:0.8em;color:var(--text-muted);min-width:38px;text-align:right">0:00</span>
 </div>
 <div id="podcast-status" style="font-size:0.85em;color:var(--text-muted)">No podcast playback</div>
 </section>
@@ -960,7 +967,7 @@
 </section>
 </div>
 </main>
-<script src="/static/app.js?v=1.41.11"></script>
+<script src="/static/app.js?v=1.41.12"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

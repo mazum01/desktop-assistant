@@ -32,6 +32,9 @@ Control Apple Podcasts subscriptions and playback.
 | `episodes <id>` | List episodes for a subscription |
 | `play <id> [index]` | Play episode by index (default 0 newest) |
 | `pause` / `resume` / `stop` | Playback control |
+| `seek <sec>` | Jump to absolute time in current episode |
+| `skip <delta>` | Jump by +/- seconds |
+| `back15` / `fwd30` | Quick jumps: -15s / +30s |
 | `status` | Current playback state |
 | `refresh <id>` | Refresh episodes from RSS |
 | `unsubscribe <id>` | Remove subscription |

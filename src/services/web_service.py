@@ -324,6 +324,14 @@ class _PodcastPlayBody(BaseModel):
     episode_index: int = 0
 
 
+class _PodcastSeekBody(BaseModel):
+    position_sec: float
+
+
+class _PodcastSkipBody(BaseModel):
+    delta_sec: float
+
+
 class _InputGainBody(BaseModel):
     level: int
 
@@ -2361,6 +2369,24 @@ class WebService:
                 raise HTTPException(503, "podcast service unavailable")
             try:
                 return self._podcast_svc.resume()
+            except Exception as exc:
+                raise HTTPException(400, str(exc))
+
+        @app.post("/api/podcasts/seek")
+        async def api_podcasts_seek(body: _PodcastSeekBody):
+            if not self._podcast_svc:
+                raise HTTPException(503, "podcast service unavailable")
+            try:
+                return self._podcast_svc.seek(body.position_sec)
+            except Exception as exc:
+                raise HTTPException(400, str(exc))
+
+        @app.post("/api/podcasts/skip")
+        async def api_podcasts_skip(body: _PodcastSkipBody):
+            if not self._podcast_svc:
+                raise HTTPException(503, "podcast service unavailable")
+            try:
+                return self._podcast_svc.skip(body.delta_sec)
             except Exception as exc:
                 raise HTTPException(400, str(exc))
 

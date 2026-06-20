@@ -9,7 +9,8 @@ import sys
 
 BASE_URL = "http://localhost:8080"
 COMMANDS = (
-    "search", "subscribe", "list", "episodes", "play", "pause", "resume", "stop", "status", "refresh", "unsubscribe"
+    "search", "subscribe", "list", "episodes", "play", "pause", "resume", "stop",
+    "seek", "skip", "back15", "fwd30", "status", "refresh", "unsubscribe"
 )
 
 
@@ -92,6 +93,28 @@ def main() -> None:
 
         if cmd == "stop":
             print(json.dumps(_post("/api/podcasts/stop", {})))
+            return
+
+        if cmd == "seek":
+            if len(sys.argv) < 3:
+                raise ValueError("Usage: podcast.py seek <seconds>")
+            sec = float(sys.argv[2])
+            print(json.dumps(_post("/api/podcasts/seek", {"position_sec": sec})))
+            return
+
+        if cmd == "skip":
+            if len(sys.argv) < 3:
+                raise ValueError("Usage: podcast.py skip <delta_sec>")
+            delta = float(sys.argv[2])
+            print(json.dumps(_post("/api/podcasts/skip", {"delta_sec": delta})))
+            return
+
+        if cmd == "back15":
+            print(json.dumps(_post("/api/podcasts/skip", {"delta_sec": -15.0})))
+            return
+
+        if cmd == "fwd30":
+            print(json.dumps(_post("/api/podcasts/skip", {"delta_sec": 30.0})))
             return
 
         if cmd == "status":
