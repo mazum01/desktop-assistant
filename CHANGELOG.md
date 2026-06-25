@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.32] - 2026-06-25
+### Changed
+- Slowed the Audio Analyzer Test sweep so each tone is held longer, making bin response visibly trackable on the live spectrum analyzer.
+
 ## [1.41.31] - 2026-06-25
 ### Added
 - Added an **Audio Analyzer Test** button to the web Audio tab that plays a tone sweep mapped to the current spectrum analyzer bins.

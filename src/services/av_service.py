@@ -818,14 +818,16 @@ class AVService(Service):
         if top_hz <= 0:
             top_hz = float(sr / 2.0)
 
+        note_duration = 0.22
+        gap = 0.04
         step_hz = top_hz / float(n_bins)
         notes = tuple(max(40.0, (i + 0.5) * step_hz) for i in range(n_bins))
         self._enqueue(
             lambda n=notes: self._do_chime(
                 {
                     "notes": n,
-                    "note_duration": 0.055,
-                    "gap": 0.012,
+                    "note_duration": note_duration,
+                    "gap": gap,
                     "amplitude": 0.45,
                 }
             ),
@@ -836,7 +838,7 @@ class AVService(Service):
             "bins": n_bins,
             "sample_rate": sr,
             "max_hz": round(top_hz, 2),
-            "duration_s": round(n_bins * (0.055 + 0.012), 2),
+            "duration_s": round(n_bins * (note_duration + gap), 2),
         }
 
     def get_voice_output_gain(self) -> float:
