@@ -109,7 +109,13 @@ class AudioCaptureService(Service):
 
         # Window + rFFT for stable visual bars.
         window = np.hanning(x.size)
-        mag = np.abs(np.fft.rfft(x * window))
+        window_sum = float(np.sum(window))
+        if window_sum <= 0.0:
+            return None
+
+        spec = np.fft.rfft(x * window)
+        # Amplitude-normalized FFT so dB maps to true full-scale behavior.
+        mag = np.abs(spec) * (2.0 / window_sum)
         if mag.size <= 2:
             return None
 
@@ -119,13 +125,19 @@ class AudioCaptureService(Service):
         n_bins = min(n_bins, mag.size)
         edges = np.linspace(0, mag.size, n_bins + 1, dtype=int)
 
+        # Keep quiet rooms visually quiet and scale with measured signal level.
+        rms = float(np.sqrt(np.mean(x * x))) if x.size else 0.0
+        room_dbfs = 20.0 * math.log10(rms) if rms > 1e-9 else -120.0
+        floor_db = -85.0 if room_dbfs < -55.0 else -75.0
+        denom = max(1e-9, -floor_db)
+
         out = []
         for i in range(n_bins):
             seg = mag[edges[i]:edges[i + 1]]
             level = float(np.sqrt(np.mean(seg * seg))) if seg.size else 0.0
-            db = 20.0 * math.log10(level + 1e-9)
-            db = max(-90.0, min(0.0, db))
-            out.append((db + 90.0) / 90.0)
+            db = 20.0 * math.log10(level + 1e-12)
+            db = max(floor_db, min(0.0, db))
+            out.append((db - floor_db) / denom)
 
         return {
             "bins": out,

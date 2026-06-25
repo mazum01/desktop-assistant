@@ -1802,6 +1802,26 @@ async function loadAudioInputGain() {
   }
 }
 
+async function loadAudioVoiceGain() {
+  const slider = el("audio-voice-gain-slider");
+  const label = el("audio-voice-gain-label");
+  const st = el("audio-voice-gain-status");
+  if (!slider || !label) return;
+  try {
+    const d = await fetch("/api/audio/voice-gain").then(r => r.json());
+    if (d && d.level !== null && d.level !== undefined) {
+      slider.value = d.level;
+      label.textContent = `${d.level}%`;
+      if (st) st.textContent = "";
+    }
+  } catch (_e) {
+    if (st) {
+      st.textContent = "Error";
+      st.style.color = "var(--red)";
+    }
+  }
+}
+
 function _setVal(id, val) {
   const e = el(id);
   if (!e) return;
@@ -2556,6 +2576,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadFanControlPoints();
   loadAudioSettings();
   loadAudioInputGain();
+  loadAudioVoiceGain();
   loadServoEnabled();
   loadServoLimits();
   loadFaceTrackingEnabled();
@@ -2609,6 +2630,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(loadPodcastStatus, 2000);
   setInterval(loadPodcasts, 30000);
   setInterval(loadAudioInputGain, 30000);
+  setInterval(loadAudioVoiceGain, 30000);
   setInterval(() => {
     const dense = el("depth-dense-enabled") && el("depth-dense-enabled").checked;
     const mono  = el("depth-mono-enabled")  && el("depth-mono-enabled").checked;
@@ -2774,6 +2796,37 @@ async function audioSetInputGain(level) {
   _inputGainTimer = setTimeout(async () => {
     try {
       const r = await fetch("/api/audio/input-gain", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ level: pct }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (st) {
+        st.textContent = "Saved";
+        st.style.color = "var(--green)";
+      }
+    } catch (_e) {
+      if (st) {
+        st.textContent = "Error";
+        st.style.color = "var(--red)";
+      }
+    }
+    setTimeout(() => {
+      if (st) st.textContent = "";
+    }, 1500);
+  }, 250);
+}
+
+
+let _voiceGainTimer = null;
+async function audioSetVoiceGain(level) {
+  const pct = parseInt(level, 10);
+  const label = el("audio-voice-gain-label");
+  const st = el("audio-voice-gain-status");
+  if (label) label.textContent = `${pct}%`;
+  clearTimeout(_voiceGainTimer);
+  _voiceGainTimer = setTimeout(async () => {
+    try {
+      const r = await fetch("/api/audio/voice-gain", {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ level: pct }),
       });

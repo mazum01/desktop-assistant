@@ -336,6 +336,10 @@ class _InputGainBody(BaseModel):
     level: int
 
 
+class _VoiceGainBody(BaseModel):
+    level: int
+
+
 class _CustomEqBand(BaseModel):
     hz: float
     gain_db: float
@@ -584,6 +588,32 @@ def _write_audio_config(body: dict) -> None:
     with open(_ASSISTANT_CONFIG_PATH, "w") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
 
+
+
+
+def _read_tts_output_gain() -> float:
+    import yaml
+
+    try:
+        with open(_ASSISTANT_CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception:
+        return 1.0
+    tts_cfg = cfg.get("tts", {}) if isinstance(cfg, dict) else {}
+    return max(0.1, min(4.0, float(tts_cfg.get("output_gain", 1.0))))
+
+
+def _write_tts_output_gain(gain: float) -> float:
+    import yaml
+
+    clamped = max(0.1, min(4.0, float(gain)))
+    with open(_ASSISTANT_CONFIG_PATH) as f:
+        cfg = yaml.safe_load(f) or {}
+    tts_cfg = cfg.setdefault("tts", {})
+    tts_cfg["output_gain"] = round(clamped, 3)
+    with open(_ASSISTANT_CONFIG_PATH, "w") as f:
+        yaml.safe_dump(cfg, f, sort_keys=False)
+    return clamped
 
 def _list_audio_input_devices() -> list[dict]:
     """Return a list of available sounddevice input devices (best-effort)."""
@@ -2335,6 +2365,30 @@ class WebService:
             if not _hw_mixer.set_capture_gain_percent(level):
                 raise HTTPException(503, "reSpeaker input gain control unavailable")
             return {"ok": True, "level": level}
+
+
+        @app.get("/api/audio/voice-gain")
+        async def api_audio_voice_gain_get():
+            av_svc = self._get_service_by_name("av")
+            runtime_gain = (
+                float(av_svc.get_voice_output_gain())
+                if av_svc is not None and hasattr(av_svc, "get_voice_output_gain")
+                else _read_tts_output_gain()
+            )
+            level = int(round(runtime_gain * 100.0))
+            return {"ok": True, "level": level}
+
+        @app.put("/api/audio/voice-gain")
+        async def api_audio_voice_gain_set(body: _VoiceGainBody):
+            level = int(body.level)
+            if level < 10 or level > 400:
+                raise HTTPException(422, "level must be between 10 and 400")
+            gain = float(level) / 100.0
+            persisted = _write_tts_output_gain(gain)
+            av_svc = self._get_service_by_name("av")
+            if av_svc is not None and hasattr(av_svc, "set_voice_output_gain"):
+                await asyncio.to_thread(av_svc.set_voice_output_gain, persisted)
+            return {"ok": True, "level": int(round(persisted * 100.0))}
 
         @app.get("/api/music/eq")
         async def api_music_eq_get():

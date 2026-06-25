@@ -10,7 +10,7 @@
 <link href="/static/favicon-32.png" rel="icon" sizes="32x32" type="image/png"/>
 <link href="/static/favicon-16.png" rel="icon" sizes="16x16" type="image/png"/>
 <link href="/static/favicon-192.png" rel="apple-touch-icon" sizes="192x192"/>
-<link href="/static/style.css?v=1.41.29" rel="stylesheet"/>
+<link href="/static/style.css?v=1.41.30" rel="stylesheet"/>
 </head>
 <body>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -500,6 +500,15 @@
 </div>
 </div>
 <div class="control-group">
+<label>Voice Output Volume</label>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+<label style="font-size:0.85em;min-width:56px">🗣 Voice</label>
+<input id="audio-voice-gain-slider" max="400" min="10" oninput="audioSetVoiceGain(this.value)" style="flex:1" type="range" value="100"/>
+<span id="audio-voice-gain-label" style="font-size:0.85em;min-width:42px;text-align:right">100%</span>
+<span class="qh-status" id="audio-voice-gain-status"></span>
+</div>
+</div>
+<div class="control-group">
 <label>Microphone Input Gain</label>
 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
 <label style="font-size:0.85em;min-width:56px">🎙 Gain</label>
@@ -980,7 +989,7 @@
 </section>
 </div>
 </main>
-<script src="/static/app.js?v=1.41.29"></script>
+<script src="/static/app.js?v=1.41.30"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

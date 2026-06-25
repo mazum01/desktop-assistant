@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.30] - 2026-06-25
+### Added
+- Added a dedicated **Voice Output Volume** control in the web Audio tab, with live runtime updates and persisted `tts.output_gain` in `config/assistant.yaml`.
+
+### Fixed
+- Calibrated the live audio spectrum analyzer with amplitude-normalized FFT scaling and a quiet-room noise floor clamp, so bars stay low in near-silence.
+
 ## [1.41.29] - 2026-06-25
 ### Added
 - Audio input pipeline now publishes real-time analyzer telemetry:

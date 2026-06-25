@@ -227,6 +227,24 @@ def test_audio_capture_vad_state_changes_with_level():
     assert any(v.get("active") is True for v in vads)
 
 
+
+
+def test_audio_capture_spectrum_quiet_room_stays_low():
+    bus = MessageBus()
+    mic = _FakeMic(level=1e-4)
+    svc = AudioCaptureService(bus=bus, mic=mic, chunk_seconds=0.02)
+
+    spectrums = []
+    bus.subscribe("audio.spectrum", lambda t, p: spectrums.append(p))
+
+    svc.start()
+    time.sleep(0.1)
+    svc.stop()
+
+    assert spectrums
+    bins = spectrums[-1]["bins"]
+    assert float(max(bins)) < 0.2
+
 # ── IPC bridge ───────────────────────────────────────────────────────────
 
 zmq = pytest.importorskip("zmq")

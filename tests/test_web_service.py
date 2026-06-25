@@ -275,6 +275,43 @@ def test_audio_mute_get_and_set(app_client):
     assert svc._music_svc.muted is True
 
 
+
+
+def test_audio_voice_gain_get_and_set_persists_and_applies_runtime(app_client, tmp_path, monkeypatch):
+    client, bus, svc = app_client
+
+    cfg_path = tmp_path / "assistant.yaml"
+    cfg_path.write_text("tts:\n  output_gain: 1.0\n")
+    monkeypatch.setattr(web_service, "_ASSISTANT_CONFIG_PATH", cfg_path)
+
+    class _FakeAV:
+        name = "av"
+
+        def __init__(self):
+            self.gain = 1.0
+
+        def get_voice_output_gain(self):
+            return self.gain
+
+        def set_voice_output_gain(self, gain: float):
+            self.gain = float(gain)
+            return self.gain
+
+    fake_av = _FakeAV()
+    svc._all_services = [fake_av]
+
+    r = client.get("/api/audio/voice-gain")
+    assert r.status_code == 200
+    assert r.json()["level"] == 100
+
+    r2 = client.put("/api/audio/voice-gain", json={"level": 150})
+    assert r2.status_code == 200
+    assert r2.json()["level"] == 150
+    assert fake_av.gain == pytest.approx(1.5)
+
+    txt = cfg_path.read_text()
+    assert "output_gain: 1.5" in txt
+
 def test_audio_repeat_endpoint_calls_av_service(app_client):
     client, bus, svc = app_client
 

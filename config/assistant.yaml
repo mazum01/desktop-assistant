@@ -163,6 +163,7 @@ telegram:
   - It is now
   - The time is
 tts:
+  output_gain: 1.0
   piper_length_scale: 1.15
   piper_noise_scale: 0.3
   piper_noise_w: 0.5

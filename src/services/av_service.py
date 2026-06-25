@@ -804,3 +804,13 @@ class AVService(Service):
             return {"ok": False, "error": "no spoken phrase available"}
         self._submit_say(text)
         return {"ok": True, "text": text}
+
+    def get_voice_output_gain(self) -> float:
+        """Return current TTS output gain multiplier."""
+        return float(self._tts_output_gain)
+
+    def set_voice_output_gain(self, gain: float) -> float:
+        """Set runtime TTS output gain multiplier (clamped)."""
+        self._tts_output_gain = max(0.1, min(4.0, float(gain)))
+        log.info("AVService: voice output gain set to %.2f", self._tts_output_gain)
+        return self._tts_output_gain
