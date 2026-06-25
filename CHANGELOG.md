@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.38] - 2026-06-25
+### Fixed
+- Analyzer test mode now publishes a synthetic reference spectrum (`audio.spectrum_test_reference`) per tone and the web UI renders it while the test is active, so test-tone visuals no longer depend on room mic pickup or echo-cancel behavior.
+
 ## [1.41.37] - 2026-06-25
 ### Fixed
 - Increased Audio Analyzer Test tone playback amplitude so tones are easier to hear and more likely to be visible in the mic-based analyzer.

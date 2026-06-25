@@ -222,12 +222,18 @@ function updateDashboard(data) {
     }
   }
 
-  const spectrum = last["audio.spectrum"];
-  if (spectrum && Array.isArray(spectrum.bins)) {
-    drawAudioSpectrum(spectrum);
+  const testSpectrum = last["audio.spectrum_test_reference"];
+  const liveSpectrum = last["audio.spectrum"];
+  const spectrumSource = (
+    testSpectrum && testSpectrum.active === true && Array.isArray(testSpectrum.bins)
+  ) ? testSpectrum : liveSpectrum;
+  if (spectrumSource && Array.isArray(spectrumSource.bins)) {
+    drawAudioSpectrum(spectrumSource);
   }
   const toneNow = el("audio-spectrum-tone-now");
-  const tone = last["av.spectrum_test_tone"];
+  const tone = (
+    testSpectrum && testSpectrum.active === true ? testSpectrum : last["av.spectrum_test_tone"]
+  );
   if (toneNow) {
     if (
       tone &&

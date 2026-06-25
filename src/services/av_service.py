@@ -25,6 +25,8 @@ Topics published:
     av.version_announced  {"version": str}
     av.spectrum_test_tone {"active": bool, "hz": float, "index": int, "total": int,
                            "note_duration": float, "gap": float, "ends_ts": float}
+    audio.spectrum_test_reference {"active": bool, "bins": [float], "sample_rate": int,
+                                   "max_hz": float, "hz": float, "index": int, "total": int}
 """
 
 from __future__ import annotations
@@ -836,7 +838,9 @@ class AVService(Service):
         step_hz = top_hz / float(n_bins)
         notes = tuple(max(40.0, (i + 0.5) * step_hz) for i in range(n_bins))
         self._enqueue(
-            lambda n=notes, nd=note_duration, g=gap: self._do_spectrum_test(n, nd, g),
+            lambda n=notes, nd=note_duration, g=gap, s=sr, m=top_hz: self._do_spectrum_test(
+                n, nd, g, s, m
+            ),
             label="spectrum_test",
         )
         return {
@@ -854,11 +858,15 @@ class AVService(Service):
         notes: tuple[float, ...],
         note_duration: float,
         gap: float,
+        sample_rate: int,
+        max_hz: float,
     ) -> None:
         """Play analyzer test tones and publish the currently playing frequency."""
         total = len(notes)
         for i, freq in enumerate(notes):
             ts = time.time()
+            bins = [0.0] * total
+            bins[i] = 1.0
             self.bus.publish(
                 "av.spectrum_test_tone",
                 {
@@ -872,12 +880,38 @@ class AVService(Service):
                     "ends_ts": ts + note_duration,
                 },
             )
+            self.bus.publish(
+                "audio.spectrum_test_reference",
+                {
+                    "active": True,
+                    "bins": bins,
+                    "sample_rate": int(sample_rate),
+                    "max_hz": float(max_hz),
+                    "hz": float(freq),
+                    "index": i + 1,
+                    "total": total,
+                    "ts": ts,
+                    "ends_ts": ts + note_duration,
+                },
+            )
             self._do_beep(float(freq), note_duration, amplitude=0.9)
             if gap > 0 and i < total - 1:
                 time.sleep(gap)
         self.bus.publish(
             "av.spectrum_test_tone",
             {"active": False, "index": total, "total": total, "ts": time.time()},
+        )
+        self.bus.publish(
+            "audio.spectrum_test_reference",
+            {
+                "active": False,
+                "bins": [0.0] * total,
+                "sample_rate": int(sample_rate),
+                "max_hz": float(max_hz),
+                "index": total,
+                "total": total,
+                "ts": time.time(),
+            },
         )
 
     def get_voice_output_gain(self) -> float:

@@ -348,7 +348,9 @@ def test_av_service_spectrum_test_publishes_current_tone():
     bus = MessageBus()
     svc, audio, _, _ = _make_av(bus)
     tones = []
+    refs = []
     bus.subscribe("av.spectrum_test_tone", lambda t, p: tones.append(p))
+    bus.subscribe("audio.spectrum_test_reference", lambda t, p: refs.append(p))
     svc.start()
     try:
         result = svc.play_spectrum_test(
@@ -366,6 +368,11 @@ def test_av_service_spectrum_test_publishes_current_tone():
         assert tones[-1]["active"] is False
         first_active = next(p for p in tones if p.get("active") is True)
         assert first_active["hz"] == pytest.approx(50.0, abs=0.01)
+        assert refs and any(p.get("active") is True for p in refs)
+        first_ref = next(p for p in refs if p.get("active") is True)
+        assert first_ref["bins"][0] == pytest.approx(1.0)
+        assert first_ref["sample_rate"] == 16000
+        assert refs[-1]["active"] is False
     finally:
         svc.stop()
 
