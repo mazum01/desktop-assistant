@@ -344,6 +344,32 @@ def test_av_service_chime_with_overrides():
         svc.stop()
 
 
+def test_av_service_spectrum_test_publishes_current_tone():
+    bus = MessageBus()
+    svc, audio, _, _ = _make_av(bus)
+    tones = []
+    bus.subscribe("av.spectrum_test_tone", lambda t, p: tones.append(p))
+    svc.start()
+    try:
+        result = svc.play_spectrum_test(
+            bins=8,
+            sample_rate=16000,
+            max_hz=800.0,
+            note_duration=0.01,
+            gap=0.0,
+        )
+        svc.wait_idle()
+        assert result["ok"] is True
+        assert result["bins"] == 8
+        assert audio.beep.call_count == 8
+        assert tones and any(p.get("active") is True for p in tones)
+        assert tones[-1]["active"] is False
+        first_active = next(p for p in tones if p.get("active") is True)
+        assert first_active["hz"] == pytest.approx(50.0, abs=0.01)
+    finally:
+        svc.stop()
+
+
 def test_av_service_say_ignores_empty():
     bus = MessageBus()
     svc, _, tts, _ = _make_av(bus)

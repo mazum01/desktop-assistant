@@ -23,6 +23,8 @@ Topics published:
     av.spoke              {"text": str}
     av.chimed             {}
     av.version_announced  {"version": str}
+    av.spectrum_test_tone {"active": bool, "hz": float, "index": int, "total": int,
+                           "note_duration": float, "gap": float, "ends_ts": float}
 """
 
 from __future__ import annotations
@@ -810,6 +812,8 @@ class AVService(Service):
         bins: int = 48,
         sample_rate: int = 16000,
         max_hz: float | None = None,
+        note_duration: float = 1.5,
+        gap: float = 0.25,
     ) -> dict:
         """Play a short sweep with one tone per analyzer bin center frequency."""
         n_bins = max(8, int(bins))
@@ -818,19 +822,12 @@ class AVService(Service):
         if top_hz <= 0:
             top_hz = float(sr / 2.0)
 
-        note_duration = 1.5
-        gap = 0.25
+        note_duration = max(0.05, float(note_duration))
+        gap = max(0.0, float(gap))
         step_hz = top_hz / float(n_bins)
         notes = tuple(max(40.0, (i + 0.5) * step_hz) for i in range(n_bins))
         self._enqueue(
-            lambda n=notes: self._do_chime(
-                {
-                    "notes": n,
-                    "note_duration": note_duration,
-                    "gap": gap,
-                    "amplitude": 0.45,
-                }
-            ),
+            lambda n=notes, nd=note_duration, g=gap: self._do_spectrum_test(n, nd, g),
             label="spectrum_test",
         )
         return {
@@ -838,8 +835,41 @@ class AVService(Service):
             "bins": n_bins,
             "sample_rate": sr,
             "max_hz": round(top_hz, 2),
+            "note_duration": round(note_duration, 3),
+            "gap": round(gap, 3),
             "duration_s": round(n_bins * (note_duration + gap), 2),
         }
+
+    def _do_spectrum_test(
+        self,
+        notes: tuple[float, ...],
+        note_duration: float,
+        gap: float,
+    ) -> None:
+        """Play analyzer test tones and publish the currently playing frequency."""
+        total = len(notes)
+        for i, freq in enumerate(notes):
+            ts = time.time()
+            self.bus.publish(
+                "av.spectrum_test_tone",
+                {
+                    "active": True,
+                    "hz": float(freq),
+                    "index": i + 1,
+                    "total": total,
+                    "note_duration": note_duration,
+                    "gap": gap,
+                    "ts": ts,
+                    "ends_ts": ts + note_duration,
+                },
+            )
+            self._do_beep(float(freq), note_duration)
+            if gap > 0 and i < total - 1:
+                time.sleep(gap)
+        self.bus.publish(
+            "av.spectrum_test_tone",
+            {"active": False, "index": total, "total": total, "ts": time.time()},
+        )
 
     def get_voice_output_gain(self) -> float:
         """Return current TTS output gain multiplier."""

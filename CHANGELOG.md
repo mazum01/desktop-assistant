@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.35] - 2026-06-25
+### Added
+- The Audio tab now shows the **current test tone frequency** (`Now playing: <Hz>`) while analyzer test tones are being played.
+
+### Changed
+- Analyzer test playback now emits per-tone runtime events (`av.spectrum_test_tone`) so the UI can track the active frequency in real time.
+
 ## [1.41.34] - 2026-06-25
 ### Changed
 - Updated the Audio Analyzer Test sweep timing to a much slower cadence (`note_duration=1.5`, `gap=0.25`) so each test tone is easier to observe on the live analyzer.

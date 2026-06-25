@@ -226,6 +226,22 @@ function updateDashboard(data) {
   if (spectrum && Array.isArray(spectrum.bins)) {
     drawAudioSpectrum(spectrum);
   }
+  const toneNow = el("audio-spectrum-tone-now");
+  const tone = last["av.spectrum_test_tone"];
+  if (toneNow) {
+    if (
+      tone &&
+      tone.active === true &&
+      typeof tone.hz === "number" &&
+      (typeof tone.ends_ts !== "number" || (Date.now() / 1000) <= tone.ends_ts)
+    ) {
+      toneNow.textContent = `Now playing: ${Math.round(tone.hz)} Hz`;
+      toneNow.style.color = "var(--yellow)";
+    } else {
+      toneNow.textContent = "Now playing: —";
+      toneNow.style.color = "var(--text-dim)";
+    }
+  }
 
   const spoke = last["av.spoke"];
   if (spoke && spoke.text) {

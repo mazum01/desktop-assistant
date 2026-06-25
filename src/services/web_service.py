@@ -890,7 +890,7 @@ class WebService:
             "audio.level", "audio.spectrum", "audio.vad", "audio.capture_stats",
             "perception.faces", "face.identified",
             "perception.objects",
-            "av.spoke",
+            "av.spoke", "av.spectrum_test_tone",
         )
         last = {}
         for t in snapshot_topics:
