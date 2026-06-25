@@ -15,7 +15,13 @@ av.say                {"text": str}   — polite announcement (once per event)
 
 Behaviour
 ---------
-While enabled the service samples frames at ``rate_hz`` (default 1 Hz).
+While enabled the service adapts its sampling frequency:
+* ``rate_hz`` when a person is present (or while already looking away)
+* ``idle_rate_hz`` when no person has been seen recently
+
+When ``require_person`` is true (default), nudity checks run only when a person
+was seen recently via ``perception.objects``/``perception.faces``.
+
 On first positive detection it:
   1. Commands the servo to ``look_away_angle_deg`` via ``motion.pan_to``.
   2. Optionally says a polite phrase via TTS.
@@ -33,7 +39,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from src.core.bus import MessageBus
@@ -53,10 +59,13 @@ _DEFAULT_CLEAR_FRAMES = 3
 class PrivacyConfig:
     enabled: bool = True
     rate_hz: float = 1.0
+    idle_rate_hz: float = 0.25
     threshold: float = 0.6
     look_away_angle_deg: float = _DEFAULT_LOOK_AWAY_DEG
     cooldown_s: float = 10.0
     clear_frames: int = _DEFAULT_CLEAR_FRAMES
+    require_person: bool = True
+    person_hold_s: float = 8.0
     announce: bool = True
     announce_text: str = "I'll give you some privacy."
     resume_text: str = ""   # empty = no resume announcement
@@ -87,6 +96,7 @@ class PrivacyService(Service):
         self._looking_away: bool = False
         self._clear_streak: int = 0
         self._cooldown_until: float = 0.0
+        self._last_person_seen_ts: float = 0.0
 
     # ── Lifecycle ────────────────────────────────────────────────────────
 
@@ -102,14 +112,25 @@ class PrivacyService(Service):
             self._unsubs.append(
                 self.bus.subscribe("privacy.set_config", self._on_set_config)
             )
+            self._unsubs.append(
+                self.bus.subscribe("perception.objects", self._on_objects)
+            )
+            self._unsubs.append(
+                self.bus.subscribe("perception.faces", self._on_faces)
+            )
         self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._run_loop, name="privacy-detect", daemon=True
         )
         self._thread.start()
         log.info(
-            "PrivacyService started — enabled=%s, %.1f Hz, threshold=%.2f, hw=%s",
-            self._enabled, self._cfg.rate_hz, self._cfg.threshold,
+            "PrivacyService started — enabled=%s active_rate=%.2fHz idle_rate=%.2fHz require_person=%s hold=%.1fs threshold=%.2f hw=%s",
+            self._enabled,
+            self._cfg.rate_hz,
+            self._cfg.idle_rate_hz,
+            self._cfg.require_person,
+            self._cfg.person_hold_s,
+            self._cfg.threshold,
             self._detector.hardware_ready,
         )
 
@@ -138,6 +159,8 @@ class PrivacyService(Service):
             self._enabled = bool(payload["enabled"])
         if "rate_hz" in payload:
             self._cfg.rate_hz = max(0.1, float(payload["rate_hz"]))
+        if "idle_rate_hz" in payload:
+            self._cfg.idle_rate_hz = max(0.05, float(payload["idle_rate_hz"]))
         if "threshold" in payload:
             self._cfg.threshold = max(0.0, min(1.0, float(payload["threshold"])))
             if self._detector is not None:
@@ -152,6 +175,10 @@ class PrivacyService(Service):
             self._cfg.cooldown_s = max(0.0, float(payload["cooldown_s"]))
         if "clear_frames" in payload:
             self._cfg.clear_frames = max(1, int(payload["clear_frames"]))
+        if "require_person" in payload:
+            self._cfg.require_person = bool(payload["require_person"])
+        if "person_hold_s" in payload:
+            self._cfg.person_hold_s = max(0.5, float(payload["person_hold_s"]))
         if "announce" in payload:
             self._cfg.announce = bool(payload["announce"])
         if "announce_text" in payload:
@@ -161,9 +188,12 @@ class PrivacyService(Service):
         if not self._enabled and self._looking_away:
             self._resume()
         log.info(
-            "PrivacyService: config updated enabled=%s rate=%.2f threshold=%.2f look=%.1f cooldown=%.1f clear=%d announce=%s",
+            "PrivacyService: config updated enabled=%s active_rate=%.2f idle_rate=%.2f require_person=%s hold=%.1fs threshold=%.2f look=%.1f cooldown=%.1f clear=%d announce=%s",
             self._enabled,
             self._cfg.rate_hz,
+            self._cfg.idle_rate_hz,
+            self._cfg.require_person,
+            self._cfg.person_hold_s,
             self._cfg.threshold,
             self._cfg.look_away_angle_deg,
             self._cfg.cooldown_s,
@@ -175,10 +205,49 @@ class PrivacyService(Service):
     def hardware_ready(self) -> bool:
         return self._detector is not None and self._detector.hardware_ready
 
+    def _effective_rate_hz(self, now: float) -> float:
+        active = max(0.1, float(self._cfg.rate_hz))
+        idle = min(active, max(0.05, float(self._cfg.idle_rate_hz)))
+        if self._looking_away or self._has_recent_person(now):
+            return active
+        return idle
+
+    def _has_recent_person(self, now: float) -> bool:
+        if self._last_person_seen_ts <= 0:
+            return False
+        return (now - self._last_person_seen_ts) <= self._cfg.person_hold_s
+
+    def _should_run_detection(self, now: float) -> bool:
+        if self._looking_away:
+            return True
+        if not self._cfg.require_person:
+            return True
+        return self._has_recent_person(now)
+
+    def _on_objects(self, _topic, payload) -> None:
+        if not isinstance(payload, dict):
+            return
+        objects = payload.get("objects") or []
+        if not isinstance(objects, list):
+            return
+        for obj in objects:
+            if not isinstance(obj, dict):
+                continue
+            label = str(obj.get("label") or obj.get("name") or "").strip().lower()
+            if label == "person":
+                self._last_person_seen_ts = time.monotonic()
+                return
+
+    def _on_faces(self, _topic, payload) -> None:
+        if not isinstance(payload, dict):
+            return
+        faces = payload.get("faces") or []
+        if isinstance(faces, list) and faces:
+            self._last_person_seen_ts = time.monotonic()
+
     # ── Detection loop ───────────────────────────────────────────────────
 
     def _run_loop(self) -> None:
-        interval = max(0.2, 1.0 / max(0.1, self._cfg.rate_hz))
         while not self._stop_event.is_set():
             if not self._enabled:
                 self._stop_event.wait(timeout=0.5)
@@ -190,11 +259,15 @@ class PrivacyService(Service):
             except Exception:
                 log.debug("PrivacyService: frame check error", exc_info=True)
             elapsed = time.monotonic() - t0
+            interval = max(0.2, 1.0 / self._effective_rate_hz(time.monotonic()))
             remaining = interval - elapsed
             if remaining > 0:
                 self._stop_event.wait(timeout=remaining)
 
     def _check_frame(self) -> None:
+        now = time.monotonic()
+        if not self._should_run_detection(now):
+            return
         if self._vision_svc is None:
             return
         try:

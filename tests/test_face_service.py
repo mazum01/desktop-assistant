@@ -1,4 +1,6 @@
 """Tests for FaceService — greeting logic, cooldown, absence detection, phrases."""
+import json
+import subprocess
 import time
 import pytest
 
@@ -149,6 +151,106 @@ def test_known_face_not_greeted_within_cooldown(bus, svc):
     _wait()
 
     assert not any("Bob" in s for s in spoken), "should not re-greet so soon"
+
+
+def test_known_face_uses_openclaw_generated_greeting(bus):
+    spoken = []
+    bus.subscribe("av.say", lambda t, p: spoken.append(p.get("text", "")))
+
+    reg = _mock_registry()
+    reg.needs_greeting.return_value = True
+    service = FaceService(
+        bus=bus,
+        registry=reg,
+        guest_intro_delay_min=0.0,
+        openclaw_greetings_enabled=True,
+        openclaw_greeting_timeout_s=1.0,
+        openclaw_cli_path="openclaw",
+    )
+    service.start()
+
+    def _fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout=json.dumps(
+                {"outputs": [{"text": "Good to see you again, Alice. Hope your day is going well."}]}
+            ),
+            stderr="",
+        )
+
+    from unittest.mock import patch
+    with patch("subprocess.run", side_effect=_fake_run):
+        face = _make_face(face_id="f2", name="Alice", is_new=False, score=0.7)
+        bus.publish("perception.faces", _faces_payload(face))
+        _wait()
+
+    service.stop()
+    assert any("Alice" in s and "Good to see you again" in s for s in spoken), spoken
+
+
+def test_openclaw_timeout_falls_back_to_static_phrase(bus):
+    spoken = []
+    bus.subscribe("av.say", lambda t, p: spoken.append(p.get("text", "")))
+
+    reg = _mock_registry()
+    reg.needs_greeting.return_value = True
+    service = FaceService(
+        bus=bus,
+        registry=reg,
+        guest_intro_delay_min=0.0,
+        openclaw_greetings_enabled=True,
+        openclaw_greeting_timeout_s=0.5,
+        openclaw_cli_path="openclaw",
+    )
+    service.start()
+
+    from unittest.mock import patch
+    with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="openclaw", timeout=0.5)):
+        face = _make_face(face_id="f3", name="Bob", is_new=False, score=0.7)
+        bus.publish("perception.faces", _faces_payload(face))
+        _wait()
+
+    service.stop()
+    assert any("Bob" in s for s in spoken), spoken
+
+
+def test_openclaw_prepends_cli_dir_to_path_for_daemon_env(bus):
+    spoken = []
+    bus.subscribe("av.say", lambda t, p: spoken.append(p.get("text", "")))
+
+    reg = _mock_registry()
+    reg.needs_greeting.return_value = True
+    service = FaceService(
+        bus=bus,
+        registry=reg,
+        guest_intro_delay_min=0.0,
+        openclaw_greetings_enabled=True,
+        openclaw_greeting_timeout_s=1.0,
+        openclaw_cli_path="/home/starter/.nvm/versions/node/v24.15.0/bin/openclaw",
+    )
+
+    from unittest.mock import patch
+    with patch.object(service, "_resolve_openclaw_cli_path", return_value="/home/starter/.nvm/versions/node/v24.15.0/bin/openclaw"):
+        service.start()
+
+    def _fake_run(*args, **kwargs):
+        path = kwargs.get("env", {}).get("PATH", "")
+        assert "/home/starter/.nvm/versions/node/v24.15.0/bin" in path.split(":")
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout=json.dumps({"outputs": [{"text": "Great to see you again, Alice!"}]}),
+            stderr="",
+        )
+
+    with patch("subprocess.run", side_effect=_fake_run):
+        face = _make_face(face_id="f8", name="Alice", is_new=False, score=0.7)
+        bus.publish("perception.faces", _faces_payload(face))
+        _wait()
+
+    service.stop()
+    assert any("Alice" in s for s in spoken), spoken
 
 
 # ── Absence detection + debounce ─────────────────────────────────────────────

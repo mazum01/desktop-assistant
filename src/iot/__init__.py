@@ -27,6 +27,10 @@ The web service automatically exposes:
   GET  /api/iot               — list all registered devices
   GET  /api/iot/{id}          — snapshot for a specific device
   POST /api/iot/{id}/announce — speak status via TTS
+  POST /api/iot/{id}/action    — execute a device action
+  PUT  /api/iot/{id}           — update device config
+  POST /api/iot                — add a device
+  DELETE /api/iot/{id}         — remove a device
 
 The frontend auto-renders a card in the Smart Home tab for every registered device.
 """

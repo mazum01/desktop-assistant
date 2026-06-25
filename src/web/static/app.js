@@ -167,10 +167,20 @@ function updateDashboard(data) {
   // Telemetry
   const temp = last["thermal.temp"];
   if (temp) {
-    const c = num(temp.celsius, 1);
-    const f = num(temp.fahrenheit, 1);
-    el("stat-temp").textContent = `${c} °C / ${f} °F`;
-    el("stat-temp").style.color = temp.ok === false ? "var(--red)" : "var(--blue)";
+    const renderTemp = (elemId, celsius) => {
+      if (celsius == null || Number.isNaN(Number(celsius))) {
+        el(elemId).textContent = "—";
+      } else {
+        const c = num(celsius, 1);
+        const f = num((Number(celsius) * 9) / 5 + 32, 1);
+        el(elemId).textContent = `${c} °C / ${f} °F`;
+      }
+      el(elemId).style.color = temp.ok === false ? "var(--red)" : "var(--blue)";
+    };
+
+    renderTemp("stat-temp-case", temp.case_celsius);
+    renderTemp("stat-temp-soc", temp.cpu_celsius);
+    renderTemp("stat-temp-blended", temp.blended_celsius ?? temp.celsius);
   }
 
   const fan = last["thermal.fan"];
@@ -255,11 +265,11 @@ function updateDashboard(data) {
   // System resource graphs
   if (data.cpu_history != null) {
     el("stat-cpu").textContent = `${Math.round(data.cpu_percent ?? 0)}%`;
-    drawSparkline("cpu-graph", data.cpu_history, "#58a6ff");
+    drawSparkline("cpu-graph", data.cpu_history, "#58a6ff", { min: 0, max: 100 });
   }
   if (data.mem_history != null) {
     el("stat-mem").textContent = `${Math.round(data.mem_percent ?? 0)}%`;
-    drawSparkline("mem-graph", data.mem_history, "#3fb950");
+    drawSparkline("mem-graph", data.mem_history, "#3fb950", { min: 0, max: 100 });
   }
 
   // Music state/song updates from bus events
@@ -777,7 +787,7 @@ function updateRoomDetail(d) {
 }
 
 
-function drawSparkline(canvasId, values, color) {
+function drawSparkline(canvasId, values, color, opts = {}) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
@@ -798,20 +808,27 @@ function drawSparkline(canvasId, values, color) {
   const graphH = h - pad * 2;
   const step = graphW / (values.length - 1);
 
-  // Auto-scale Y axis to the data range so small variations are visible.
-  // Apply a 10% padding around the range; when all values are identical
-  // (truly flat) centre the line at 50% height.
-  let minVal = Math.min(...values);
-  let maxVal = Math.max(...values);
-  const range = maxVal - minVal;
-  if (range < 1e-9) {
-    // Flat data — draw a centred line
-    minVal = minVal - 1;
-    maxVal = maxVal + 1;
+  let minVal;
+  let maxVal;
+  if (Number.isFinite(opts.min) && Number.isFinite(opts.max) && opts.max > opts.min) {
+    // Fixed range keeps comparable vertical scale across related graphs.
+    minVal = Number(opts.min);
+    maxVal = Number(opts.max);
   } else {
-    const pad10 = range * 0.10;
-    minVal -= pad10;
-    maxVal += pad10;
+    // Auto-scale Y axis to the data range so small variations are visible.
+    // Apply a 10% padding around the range; when all values are identical
+    // (truly flat) centre the line at 50% height.
+    minVal = Math.min(...values);
+    maxVal = Math.max(...values);
+    const range = maxVal - minVal;
+    if (range < 1e-9) {
+      minVal = minVal - 1;
+      maxVal = maxVal + 1;
+    } else {
+      const pad10 = range * 0.10;
+      minVal -= pad10;
+      maxVal += pad10;
+    }
   }
   const scale = maxVal - minVal;
   const toY = v => pad + graphH - ((v - minVal) / scale) * graphH;

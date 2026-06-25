@@ -115,8 +115,11 @@ privacy:
   clear_frames: 4
   cooldown_s: 5.0
   enabled: true
+  idle_rate_hz: 0.25
   look_away_angle_deg: 45
-  rate_hz: 1
+  person_hold_s: 8.0
+  rate_hz: 1.0
+  require_person: true
   resume_text: Are you decent?
   threshold: 0.7
 quiet_hours:

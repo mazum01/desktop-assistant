@@ -69,6 +69,7 @@ class AVService(Service):
         self._mic = audio_input
         self._announcer = announcer
         self._announce_on_start = announce_on_start
+        self._tts_output_gain: float = 1.0
         self._unsubs = []
         # Pre-synthesized version phrase cache: populated during prewarm so the
         # version button plays instantly instead of waiting ~10s for Piper.
@@ -114,17 +115,19 @@ class AVService(Service):
         if self._audio is None:
             from src.audio.output import AudioOutput
             self._audio = AudioOutput()
+        from pathlib import Path
+        import yaml as _yaml
+        _cfg_path = Path(__file__).parents[2] / "config" / "assistant.yaml"
+        _tts_cfg = {}
+        if _cfg_path.exists():
+            try:
+                _tts_cfg = _yaml.safe_load(_cfg_path.read_text()).get("tts", {})
+            except Exception:
+                pass
+        self._tts_output_gain = max(0.1, float(_tts_cfg.get("output_gain", 1.0)))
+
         if self._tts is None:
             from src.audio.tts import TextToSpeech, TTSConfig
-            from pathlib import Path
-            import yaml as _yaml
-            _cfg_path = Path(__file__).parents[2] / "config" / "assistant.yaml"
-            _tts_cfg = {}
-            if _cfg_path.exists():
-                try:
-                    _tts_cfg = _yaml.safe_load(_cfg_path.read_text()).get("tts", {})
-                except Exception:
-                    pass
             tts_config = TTSConfig(
                 piper_voice_name=_tts_cfg.get("piper_voice_name", TTSConfig.piper_voice_name),
                 piper_length_scale=float(_tts_cfg.get("piper_length_scale", TTSConfig.piper_length_scale)),
@@ -342,6 +345,7 @@ class AVService(Service):
         def _synth_then_enqueue() -> None:
             try:
                 samples, sr = self._tts.render(text)
+                samples = self._apply_tts_output_gain(samples)
             except Exception:
                 log.exception("TTS synthesis failed for %r", text)
                 return
@@ -522,6 +526,14 @@ class AVService(Service):
         except Exception:
             log.exception("play_samples(%r) failed", text)
 
+    def _apply_tts_output_gain(self, samples):
+        """Apply configured TTS gain before output-stage processing."""
+        gain = float(self._tts_output_gain)
+        if abs(gain - 1.0) < 1e-6:
+            return samples
+        import numpy as np
+        return np.clip(samples * gain, -1.0, 1.0)
+
     def _do_beep(self, freq: float, duration: float) -> None:
         try:
             self._audio.beep(frequency=freq, duration=duration)
@@ -572,6 +584,7 @@ class AVService(Service):
             phrase = "VERA starting, " + spoken_version()
             t1 = time.monotonic()
             samples, sr = self._tts.render(phrase)
+            samples = self._apply_tts_output_gain(samples)
             log.info(
                 "Startup phrase pre-synthesized in %.1f s (%.2fs audio)",
                 time.monotonic() - t1,
@@ -588,6 +601,7 @@ class AVService(Service):
             try:
                 ver_phrase = "I am running " + spoken_version()
                 ver_samples, ver_sr = self._tts.render(ver_phrase)
+                ver_samples = self._apply_tts_output_gain(ver_samples)
                 self._version_samples = (ver_samples, ver_sr)
                 log.info("Version phrase pre-synthesized (%.2fs audio)", len(ver_samples) / ver_sr)
             except Exception:
@@ -610,6 +624,7 @@ class AVService(Service):
         def _synth_then_enqueue() -> None:
             try:
                 samples, sr = self._tts.render(phrase)
+                samples = self._apply_tts_output_gain(samples)
             except Exception:
                 log.exception("Startup announcement synthesis failed")
                 return

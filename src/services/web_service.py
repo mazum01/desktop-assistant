@@ -1964,10 +1964,13 @@ class WebService:
                 "enabled":            getattr(svc, "_enabled", True) if svc else True,
                 "hardware_ready":     getattr(svc, "hardware_ready", False) if svc else False,
                 "rate_hz":            getattr(getattr(svc, "_cfg", None), "rate_hz", 1.0),
+                "idle_rate_hz":       getattr(getattr(svc, "_cfg", None), "idle_rate_hz", 0.25),
                 "threshold":          getattr(getattr(svc, "_cfg", None), "threshold", 0.6),
                 "look_away_angle_deg":getattr(getattr(svc, "_cfg", None), "look_away_angle_deg", 45.0),
                 "cooldown_s":         getattr(getattr(svc, "_cfg", None), "cooldown_s", 10.0),
                 "clear_frames":       getattr(getattr(svc, "_cfg", None), "clear_frames", 3),
+                "require_person":     getattr(getattr(svc, "_cfg", None), "require_person", True),
+                "person_hold_s":      getattr(getattr(svc, "_cfg", None), "person_hold_s", 8.0),
                 "announce":           getattr(getattr(svc, "_cfg", None), "announce", True),
                 "announce_text":      getattr(getattr(svc, "_cfg", None), "announce_text", "I'll give you some privacy."),
                 "resume_text":        getattr(getattr(svc, "_cfg", None), "resume_text", ""),
@@ -1981,8 +1984,9 @@ class WebService:
                 runtime_patch = {
                     k: body[k]
                     for k in (
-                        "enabled", "rate_hz", "threshold", "look_away_angle_deg",
-                        "cooldown_s", "clear_frames", "announce", "announce_text", "resume_text",
+                        "enabled", "rate_hz", "idle_rate_hz", "threshold", "look_away_angle_deg",
+                        "cooldown_s", "clear_frames", "require_person", "person_hold_s",
+                        "announce", "announce_text", "resume_text",
                     )
                     if k in body
                 }
@@ -1995,8 +1999,9 @@ class WebService:
                     _cfg = _yaml.safe_load(_f) or {}
                 if "privacy" not in _cfg:
                     _cfg["privacy"] = {}
-                for key in ("enabled", "rate_hz", "threshold", "look_away_angle_deg",
-                            "cooldown_s", "clear_frames", "announce", "announce_text", "resume_text"):
+                for key in ("enabled", "rate_hz", "idle_rate_hz", "threshold", "look_away_angle_deg",
+                            "cooldown_s", "clear_frames", "require_person", "person_hold_s",
+                            "announce", "announce_text", "resume_text"):
                     if key in body:
                         _cfg["privacy"][key] = body[key]
                 with open(_cfg_path, "w") as _f:
@@ -2004,6 +2009,146 @@ class WebService:
             except Exception as _exc:
                 log.warning("privacy settings: could not persist to YAML: %s", _exc)
             return {"ok": True}
+
+        # ── IoT device management ───────────────────────────────────────
+
+        @app.get("/api/iot")
+        async def api_iot_list():
+            if not self._iot_registry:
+                return {"ok": True, "devices": [], "snapshots": {}}
+            return {
+                "ok": True,
+                "devices": self._iot_registry.get_device_list(),
+                "snapshots": self._iot_registry.get_all_snapshots(),
+            }
+
+        @app.get("/api/iot/types")
+        async def api_iot_types():
+            from src.iot import loader as iot_loader
+            return {"ok": True, "types": iot_loader.get_type_list()}
+
+        @app.post("/api/iot")
+        async def api_iot_add(body: dict):
+            if not self._iot_registry:
+                raise HTTPException(503, "iot registry unavailable")
+            from src.iot import loader as iot_loader
+
+            type_id = str((body or {}).get("type_id") or "").strip()
+            cfg = (body or {}).get("config") or {}
+            if not type_id:
+                raise HTTPException(400, "type_id is required")
+            if not isinstance(cfg, dict):
+                raise HTTPException(400, "config must be an object")
+
+            try:
+                dev = iot_loader.create_device(type_id, cfg, bus=self.bus)
+                self._iot_registry.register(dev)
+                dev.start()
+                iot_loader.save_persisted(self._iot_registry)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc))
+            except Exception as exc:
+                raise HTTPException(400, str(exc))
+
+            return {
+                "ok": True,
+                "device_id": dev.device_id,
+                "device_name": dev.device_name,
+                "device_icon": dev.device_icon,
+            }
+
+        @app.get("/api/iot/{device_id}")
+        async def api_iot_get(device_id: str):
+            if not self._iot_registry:
+                raise HTTPException(503, "iot registry unavailable")
+            dev = self._iot_registry.get(device_id)
+            if not dev:
+                raise HTTPException(404, "device not found")
+            try:
+                snap = dev.get_snapshot()
+            except Exception as exc:
+                raise HTTPException(400, str(exc))
+            return {
+                "ok": True,
+                "device_id": dev.device_id,
+                "device_name": dev.device_name,
+                "device_icon": dev.device_icon,
+                "config": dict(getattr(dev, "_cfg", {}) or {}),
+                "actions": dev.get_actions(),
+                "snapshot": snap,
+            }
+
+        @app.put("/api/iot/{device_id}")
+        async def api_iot_update(device_id: str, body: dict):
+            if not self._iot_registry:
+                raise HTTPException(503, "iot registry unavailable")
+            from src.iot import loader as iot_loader
+
+            dev = self._iot_registry.get(device_id)
+            if not dev:
+                raise HTTPException(404, "device not found")
+
+            cfg_patch = (body or {}).get("config")
+            if not isinstance(cfg_patch, dict):
+                raise HTTPException(400, "config object is required")
+
+            merged = dict(getattr(dev, "_cfg", {}) or {})
+            merged.update(cfg_patch)
+
+            dev.stop()
+            dev._cfg = merged
+            dev.start()
+            iot_loader.save_persisted(self._iot_registry)
+            return {"ok": True, "device_id": device_id, "config": merged}
+
+        @app.delete("/api/iot/{device_id}")
+        async def api_iot_delete(device_id: str):
+            if not self._iot_registry:
+                raise HTTPException(503, "iot registry unavailable")
+            from src.iot import loader as iot_loader
+
+            dev = self._iot_registry.get(device_id)
+            if not dev:
+                raise HTTPException(404, "device not found")
+            self._iot_registry.unregister(device_id)
+            iot_loader.save_persisted(self._iot_registry)
+            return {"ok": True}
+
+        @app.post("/api/iot/{device_id}/announce")
+        async def api_iot_announce(device_id: str):
+            if not self._iot_registry:
+                raise HTTPException(503, "iot registry unavailable")
+            dev = self._iot_registry.get(device_id)
+            if not dev:
+                raise HTTPException(404, "device not found")
+            text = dev.announce()
+            if self.bus and text:
+                self.bus.publish("av.say", {"text": text})
+            return {"ok": True, "text": text}
+
+        @app.post("/api/iot/{device_id}/action")
+        async def api_iot_action(device_id: str, body: dict):
+            if not self._iot_registry:
+                raise HTTPException(503, "iot registry unavailable")
+            dev = self._iot_registry.get(device_id)
+            if not dev:
+                raise HTTPException(404, "device not found")
+
+            action = str((body or {}).get("action") or "").strip()
+            params = (body or {}).get("params") or {}
+            if not action:
+                raise HTTPException(400, "action is required")
+            if not isinstance(params, dict):
+                raise HTTPException(400, "params must be an object")
+
+            try:
+                result = dev.execute_action(action, params=params)
+            except Exception as exc:
+                raise HTTPException(400, str(exc))
+
+            if isinstance(result, dict):
+                return result
+            return {"ok": True, "result": result}
 
         # ── Depth query ─────────────────────────────────────────────────
 

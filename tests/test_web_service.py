@@ -299,17 +299,25 @@ def test_put_privacy_settings_publishes_runtime_config(app_client):
 
     r = client.put("/api/settings/privacy", json={
         "enabled": True,
+        "rate_hz": 1.0,
+        "idle_rate_hz": 0.25,
         "threshold": 0.7,
         "cooldown_s": 5.0,
         "clear_frames": 4,
+        "require_person": True,
+        "person_hold_s": 8.0,
         "announce": False,
     })
     assert r.status_code == 200
     assert r.json()["ok"] is True
     assert events
     assert events[-1]["threshold"] == pytest.approx(0.7)
+    assert events[-1]["rate_hz"] == pytest.approx(1.0)
+    assert events[-1]["idle_rate_hz"] == pytest.approx(0.25)
     assert events[-1]["cooldown_s"] == pytest.approx(5.0)
     assert events[-1]["clear_frames"] == 4
+    assert events[-1]["require_person"] is True
+    assert events[-1]["person_hold_s"] == pytest.approx(8.0)
     assert events[-1]["announce"] is False
 
 
@@ -412,6 +420,75 @@ def test_status_includes_iot_snapshots(app_client):
     assert "iot" in data
     assert "radon" in data["iot"]
     assert data["iot"]["radon"]["device_name"] == "Radon Monitor"
+
+
+def test_iot_action_route_dispatches_to_device(app_client):
+    client, bus, svc = app_client
+
+    class _FakeDevice:
+        device_id = "nest_thermostat"
+        device_name = "Nest Thermostat"
+        device_icon = "🌡️"
+
+        def execute_action(self, action, params=None):
+            assert action == "auth"
+            return {"ok": True, "message": "https://example.invalid/auth", "auth_url": "https://example.invalid/auth"}
+
+    class _FakeIoTRegistry:
+        def get(self, device_id):
+            return _FakeDevice() if device_id == "nest_thermostat" else None
+
+    svc._iot_registry = _FakeIoTRegistry()
+    r = client.post("/api/iot/nest_thermostat/action", json={"action": "auth", "params": {}})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["auth_url"] == "https://example.invalid/auth"
+
+
+def test_iot_config_route_merges_and_restarts_device(app_client, monkeypatch):
+    client, bus, svc = app_client
+    calls = {"stop": 0, "start": 0}
+
+    class _FakeDevice:
+        device_id = "nest_thermostat"
+        device_name = "Nest Thermostat"
+        device_icon = "🌡️"
+
+        def __init__(self):
+            self._cfg = {
+                "project_id": "proj",
+                "client_id": "cid",
+                "client_secret": "secret",
+            }
+
+        def stop(self):
+            calls["stop"] += 1
+
+        def start(self):
+            calls["start"] += 1
+
+    dev = _FakeDevice()
+
+    class _FakeIoTRegistry:
+        def get(self, device_id):
+            return dev if device_id == "nest_thermostat" else None
+
+    saved = {"count": 0}
+    import src.iot.loader as iot_loader
+
+    monkeypatch.setattr(iot_loader, "save_persisted", lambda registry: saved.__setitem__("count", saved["count"] + 1))
+
+    svc._iot_registry = _FakeIoTRegistry()
+    r = client.put("/api/iot/nest_thermostat", json={"config": {"refresh_token": "newtoken"}})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["config"]["project_id"] == "proj"
+    assert data["config"]["refresh_token"] == "newtoken"
+    assert calls["stop"] == 1
+    assert calls["start"] == 1
+    assert saved["count"] == 1
 
 
 # ── Dashboard HTML ────────────────────────────────────────────────────────────

@@ -77,3 +77,72 @@ Smoke-test scripts for each component (`scripts/test_<device>.py` exits 0).
       (`PipeWireMicInput`): a non-blocking `pw-record` subprocess feeds the
       AudioCaptureService. Clean, bounded shutdown (restart ~4s). Config:
       `audio.default.input_device_name: pipewire`.
+
+---
+
+## Security & Privacy (Public-Deployment Hardening)
+
+Items required before VERA could be safely exposed outside a trusted home network.
+
+### 🔴 Critical
+
+- [ ] **TLS / HTTPS** — API key and camera streams travel in plaintext. Deploy an
+  nginx reverse proxy with Let's Encrypt (or a self-signed cert for LAN) in front
+  of the FastAPI service. All HTTP → HTTPS redirect; WSS for WebSocket streams.
+  `?key=` in URLs will still appear in logs — move to cookie or Authorization header
+  once TLS is in place.
+
+- [ ] **Brute-force / rate-limit protection** — no lockout on the auth middleware.
+  Add per-IP request rate limiting (e.g. `slowapi`) and a lockout after N failed
+  key attempts. Log failures.
+
+- [ ] **Replace single API key with session auth** — one shared secret means no
+  per-user accountability and no revocation granularity. Replace with
+  username+password login → short-lived JWT (or secure httpOnly cookie).
+  Eliminates the localStorage XSS risk.
+
+### 🟠 High
+
+- [ ] **Biometric data consent & retention policy** — face embeddings, thumbnails,
+  and photos are stored indefinitely with no consent mechanism, retention window,
+  or GDPR/CCPA right-to-delete workflow. Add configurable auto-expiry and a
+  documented deletion path for bystander faces.
+
+- [ ] **RBAC (read vs admin roles)** — all authenticated users currently have full
+  access including hardware control (servo), face deletion, and system reboot.
+  Define at minimum a `viewer` role (camera + face list read-only) and an `admin`
+  role (all operations).
+
+- [ ] **Audit logging** — no record of who accessed what, when, or from where.
+  Log all authenticated requests (timestamp, IP, route, HTTP status) to a
+  tamper-evident append-only log file. Essential for breach detection.
+
+- [ ] **Telegram bot command confirmation** — destructive commands (reboot,
+  shutdown, face-clear) issued via Telegram have no secondary confirmation.
+  Require a confirmation reply before executing.
+
+### 🟡 Medium
+
+- [ ] **OpenClaw API key storage** — `~/.openclaw/api-keys.env` is readable by any
+  process running as `starter`. Move to a secrets manager or at minimum into the
+  same `/etc/desktop-assistant/secrets.env` (mode 600) pattern used for VERA keys.
+
+- [ ] **WebSocket idle timeout** — authenticated WebSocket connections have no
+  server-side idle timeout. Add a server-side ping/pong timeout (~5 min) to
+  close abandoned connections.
+
+- [ ] **CORS policy** — no explicit CORS headers. Lock `Access-Control-Allow-Origin`
+  to the specific trusted origin(s) rather than leaving it open.
+
+- [ ] **Sudoers `kill` scope** — current whitelist allows `kill` broadly. Restrict
+  to specific PIDs or service-restart patterns only.
+
+### 🔵 Low / Operational
+
+- [ ] **API key rotation tooling** — key was generated once at install with no
+  rotation mechanism. Add a `vera key rotate` CLI command that generates a new
+  key, updates `secrets.env`, restarts services, and prints the new key.
+
+- [ ] **Suppress version disclosure** — TTS boot announcement and `/health` endpoint
+  expose the exact version string. Minor information disclosure; easy to gate behind
+  auth or make configurable.

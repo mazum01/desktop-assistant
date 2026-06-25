@@ -39,7 +39,11 @@ face.greeted        ``{face_id, name, text, event_type}``  — Telegram / audit
 from __future__ import annotations
 
 import logging
+import json
+import os
 import random
+import shutil
+import subprocess
 import time
 from datetime import datetime
 from typing import Optional
@@ -123,6 +127,13 @@ _CONTRITE_PHRASES = [
     "Oops — I mixed you up with someone else. {name}! Sorry about that, good to see you!",
 ]
 
+# ── OpenClaw greeting generation defaults ─────────────────────────────────────
+_DEFAULT_OPENCLAW_GREETINGS_ENABLED = False
+_DEFAULT_OPENCLAW_GREETING_MODEL = "anthropic/claude-sonnet-4-6"
+_DEFAULT_OPENCLAW_GREETING_TIMEOUT_S = 45.0
+_DEFAULT_OPENCLAW_CLI_PATH = ""
+_NVM_OPENCLAW_FALLBACK = "/home/starter/.nvm/versions/node/v24.15.0/bin/openclaw"
+
 
 def _time_bucket() -> str:
     """Return morning / afternoon / evening / night based on local time."""
@@ -157,6 +168,10 @@ class FaceService(Service):
         confidence_threshold: float = _DEFAULT_CONFIDENCE,
         quiet_hours: Optional[QuietHours] = None,
         guest_intro_delay_min: float = _DEFAULT_GUEST_INTRO_DELAY,
+        openclaw_greetings_enabled: bool = _DEFAULT_OPENCLAW_GREETINGS_ENABLED,
+        openclaw_greeting_model: str = _DEFAULT_OPENCLAW_GREETING_MODEL,
+        openclaw_greeting_timeout_s: float = _DEFAULT_OPENCLAW_GREETING_TIMEOUT_S,
+        openclaw_cli_path: str = _DEFAULT_OPENCLAW_CLI_PATH,
     ) -> None:
         super().__init__(bus=bus)
         self._registry = registry
@@ -173,6 +188,11 @@ class FaceService(Service):
         self._absent_counter: dict[str, int] = {} # face_id → consecutive absent-frame count
         # face_id → monotonic time when first seen as unrecognized (Guest)
         self._guest_first_seen: dict[str, float] = {}
+        self._openclaw_greetings_enabled = bool(openclaw_greetings_enabled)
+        self._openclaw_greeting_model = (openclaw_greeting_model or "").strip()
+        self._openclaw_greeting_timeout_s = max(0.5, float(openclaw_greeting_timeout_s))
+        self._openclaw_cli_path_cfg = str(openclaw_cli_path or "").strip()
+        self._openclaw_cli_path: str | None = None
 
     def on_start(self) -> None:
         if self._registry is None:
@@ -192,11 +212,18 @@ class FaceService(Service):
         self._unsubs.append(self.bus.subscribe("face.guests_cleared", self._on_faces_cleared))
         self._unsubs.append(self.bus.subscribe("face.registry_cleared", self._on_faces_cleared))
         self._unsubs.append(self.bus.subscribe("face.refresh", self._on_face_refresh))
+        self._openclaw_cli_path = self._resolve_openclaw_cli_path()
+        if self._openclaw_greetings_enabled and not self._openclaw_cli_path:
+            log.warning(
+                "FaceService: OpenClaw greetings enabled but CLI not found; using static greetings. "
+                "Set face_recognition.openclaw_cli_path in assistant.yaml."
+            )
         log.info(
             "FaceService started (cooldown=%.0f min ±%.0f%%, min_absence=%.0f s, "
-            "guest_intro_delay=%.1f min)",
+            "guest_intro_delay=%.1f min, openclaw_greetings=%s)",
             self._cooldown_min, self._jitter_pct, self._min_absence_s,
             self._guest_intro_delay_s / 60.0,
+            "on" if self._openclaw_greetings_enabled else "off",
         )
 
     def on_stop(self) -> None:
@@ -427,7 +454,15 @@ class FaceService(Service):
             return
         self._registry.mark_greeted(face_id)
         phrase = random.choice(_NEW_FACE_PHRASES)
-        log.info("Greeting new face %s (%s)", face_id[:8], name)
+        source = "static"
+        generated = self._generate_openclaw_greeting(
+            event_type="new",
+            name=name,
+        )
+        if generated:
+            phrase = generated
+            source = "openclaw"
+        log.info("Greeting new face %s (%s) via %s", face_id[:8], name, source)
         self.bus.publish("av.say", {"text": phrase})
         self.bus.publish("face.greeted", {
             "face_id": face_id, "name": name, "text": phrase, "event_type": "new",
@@ -447,14 +482,23 @@ class FaceService(Service):
         if stabilization_changed and initial_name:
             phrase = random.choice(_CONTRITE_PHRASES).format(name=name)
             event_type = "returning_corrected"
+            source = "static"
             log.info(
-                "Contrite re-greeting %s (%s, was %r): %r",
-                face_id[:8], name, initial_name, phrase,
+                "Contrite re-greeting %s (%s, was %r) via %s: %r",
+                face_id[:8], name, initial_name, source, phrase,
             )
         else:
             phrase = self._pick_phrase(name)
+            source = "static"
+            generated = self._generate_openclaw_greeting(
+                event_type="returning",
+                name=name,
+            )
+            if generated:
+                phrase = generated
+                source = "openclaw"
             event_type = "returning"
-            log.info("Re-greeting %s (%s): %r", face_id[:8], name, phrase)
+            log.info("Re-greeting %s (%s) via %s: %r", face_id[:8], name, source, phrase)
         self.bus.publish("av.say", {"text": phrase})
         self.bus.publish("face.greeted", {
             "face_id": face_id, "name": name, "text": phrase, "event_type": event_type,
@@ -476,3 +520,111 @@ class FaceService(Service):
         template = random.choice(candidates)
         self._last_phrase = template
         return template.format(name=name)
+
+    def _generate_openclaw_greeting(self, event_type: str, name: str) -> str | None:
+        """Generate a natural greeting via OpenClaw; return None on any failure."""
+        if not self._openclaw_greetings_enabled:
+            return None
+        if not self._openclaw_cli_path:
+            return None
+
+        if event_type == "new":
+            prompt = (
+                "You are VERA, a friendly home desktop assistant. "
+                "Write one short, natural spoken greeting for a new person you don't know yet. "
+                "Do not ask multiple questions. Keep it warm and conversational. "
+                "Use 1 sentence, max 16 words. Mention you are VERA."
+            )
+        else:
+            bucket = _time_bucket()
+            prompt = (
+                f"You are VERA, greeting {name} who just returned. "
+                f"Write one natural {bucket}-appropriate spoken greeting. "
+                "Use exactly one sentence, max 14 words, and include the person's name."
+            )
+
+        cmd = [
+            self._openclaw_cli_path,
+            "infer",
+            "model",
+            "run",
+            "--gateway",
+            "--json",
+            "--thinking",
+            "off",
+            "--prompt",
+            prompt,
+        ]
+        if self._openclaw_greeting_model:
+            cmd.extend(["--model", self._openclaw_greeting_model])
+
+        try:
+            env = self._openclaw_env()
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self._openclaw_greeting_timeout_s,
+                env=env,
+            )
+        except OSError:
+            log.debug("FaceService: OpenClaw greeting exec failed (cli missing or not executable)")
+            return None
+        except subprocess.TimeoutExpired:
+            log.debug(
+                "FaceService: OpenClaw greeting timed out after %.1fs; falling back to static phrase",
+                self._openclaw_greeting_timeout_s,
+            )
+            return None
+
+        if proc.returncode != 0:
+            log.warning(
+                "FaceService: OpenClaw greeting failed: rc=%s stderr=%s",
+                proc.returncode,
+                (proc.stderr or "").strip(),
+            )
+            return None
+
+        try:
+            payload = json.loads(proc.stdout or "{}")
+        except json.JSONDecodeError:
+            log.debug("FaceService: OpenClaw greeting returned non-JSON output")
+            return None
+
+        outputs = payload.get("outputs")
+        if not isinstance(outputs, list) or not outputs:
+            return None
+        first = outputs[0] if isinstance(outputs[0], dict) else {}
+        text = str(first.get("text") or "").strip()
+        if not text:
+            return None
+        text = " ".join(text.split())
+        text = text.strip("\"'")
+        if len(text) > 180:
+            text = text[:180].rstrip(" ,.;:!?")
+        if event_type == "returning" and name.lower() not in text.lower():
+            text = f"{name}! {text}"
+        return text or None
+
+    def _openclaw_env(self) -> dict[str, str]:
+        """Build env for OpenClaw subprocess with daemon-safe PATH."""
+        env = dict(os.environ)
+        if self._openclaw_cli_path:
+            cli_dir = os.path.dirname(self._openclaw_cli_path)
+            if cli_dir:
+                current = env.get("PATH", "")
+                parts = current.split(os.pathsep) if current else []
+                if cli_dir not in parts:
+                    env["PATH"] = f"{cli_dir}{os.pathsep}{current}" if current else cli_dir
+        return env
+
+    def _resolve_openclaw_cli_path(self) -> str | None:
+        """Resolve the OpenClaw CLI path for daemon-safe execution."""
+        if self._openclaw_cli_path_cfg:
+            return self._openclaw_cli_path_cfg if shutil.which(self._openclaw_cli_path_cfg) else None
+        found = shutil.which("openclaw")
+        if found:
+            return found
+        if shutil.which(_NVM_OPENCLAW_FALLBACK):
+            return _NVM_OPENCLAW_FALLBACK
+        return None

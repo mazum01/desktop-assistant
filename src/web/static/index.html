@@ -10,7 +10,7 @@
 <link href="/static/favicon-32.png" rel="icon" sizes="32x32" type="image/png"/>
 <link href="/static/favicon-16.png" rel="icon" sizes="16x16" type="image/png"/>
 <link href="/static/favicon-192.png" rel="apple-touch-icon" sizes="192x192"/>
-<link href="/static/style.css?v=1.41.14" rel="stylesheet"/>
+<link href="/static/style.css?v=1.41.28" rel="stylesheet"/>
 </head>
 <body>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -59,10 +59,18 @@
 </section>
 <section class="card" id="card-telemetry">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Telemetry</h2>
-<div class="grid-4">
+<div class="grid-6">
 <div class="stat-box">
-<div class="stat-label">Temperature</div>
-<div class="stat-value" id="stat-temp">—</div>
+<div class="stat-label">Case Temp</div>
+<div class="stat-value" id="stat-temp-case">—</div>
+</div>
+<div class="stat-box">
+<div class="stat-label">SoC Temp</div>
+<div class="stat-value" id="stat-temp-soc">—</div>
+</div>
+<div class="stat-box">
+<div class="stat-label">Blended Temp</div>
+<div class="stat-value" id="stat-temp-blended">—</div>
 </div>
 <div class="stat-box">
 <div class="stat-label">Fan</div>
@@ -944,7 +952,7 @@
 <h3>Dashboard Sections</h3>
 <ul class="help-list">
 <li><strong>Camera Feed</strong> — Live MJPEG stream with face ovals (green) and object boxes (cyan).</li>
-<li><strong>Telemetry</strong> — Temperature, fan duty, servo angle, microphone level, and last spoken text.</li>
+<li><strong>Telemetry</strong> — Case/SoC/blended temperature, fan duty, servo angle, microphone level, and last spoken text.</li>
 <li><strong>Services</strong> — Live status of each internal service. Use ⟳ to restart the daemon.</li>
 <li><strong>Face Registry</strong> — Known faces with thumbnails, seen counts, and merge/delete actions. Click a thumbnail to enlarge.</li>
 <li><strong>Controls</strong> — Say text, pan servo, toggle tracking, adjust travel limits, speak version, describe scene.</li>
@@ -967,7 +975,7 @@
 </section>
 </div>
 </main>
-<script src="/static/app.js?v=1.41.14"></script>
+<script src="/static/app.js?v=1.41.28"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

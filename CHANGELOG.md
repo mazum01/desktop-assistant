@@ -6,6 +6,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.28] - 2026-06-25
+### Fixed
+- Restored web GUI regressions caused by rollback drift:
+  - Telemetry card once again shows Case, SoC, and Blended temperatures.
+  - CPU% and memory sparklines now share a fixed 0–100% range for consistent scale.
+  - Reintroduced IoT REST routes used by the dashboard (`/api/iot`, `/api/iot/types`, add/update/delete, announce, action).
+
+## [1.41.27] - 2026-06-23
+### Changed
+- Privacy checking now uses an adaptive scan rate: high frequency when people are present or while looking away, and a lower idle frequency when the scene is empty.
+- Privacy nudity checks are now person-gated by recent `perception.objects`/`perception.faces` activity, reducing unnecessary inference when no one is in view.
+
 ## [1.41.17] - 2026-06-20
 ### Fixed
 - Stabilized `TestWatchdogCooldown.test_first_failure_triggers_restart` by

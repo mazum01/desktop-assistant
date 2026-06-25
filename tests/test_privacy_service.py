@@ -169,10 +169,13 @@ class TestPrivacyServiceSetConfig:
             svc._on_set_config("privacy.set_config", {
                 "enabled": False,
                 "rate_hz": 2.0,
+                "idle_rate_hz": 0.5,
                 "threshold": 0.7,
                 "look_away_angle_deg": 60.0,
                 "cooldown_s": 5.0,
                 "clear_frames": 4,
+                "require_person": True,
+                "person_hold_s": 6.0,
                 "announce": False,
                 "announce_text": "privacy mode",
                 "resume_text": "all clear",
@@ -180,10 +183,13 @@ class TestPrivacyServiceSetConfig:
 
             assert svc._enabled is False
             assert svc._cfg.rate_hz == pytest.approx(2.0)
+            assert svc._cfg.idle_rate_hz == pytest.approx(0.5)
             assert svc._cfg.threshold == pytest.approx(0.7)
             assert svc._cfg.look_away_angle_deg == pytest.approx(60.0)
             assert svc._cfg.cooldown_s == pytest.approx(5.0)
             assert svc._cfg.clear_frames == 4
+            assert svc._cfg.require_person is True
+            assert svc._cfg.person_hold_s == pytest.approx(6.0)
             assert svc._cfg.announce is False
             assert svc._cfg.announce_text == "privacy mode"
             assert svc._cfg.resume_text == "all clear"
@@ -195,11 +201,45 @@ class TestPrivacyServiceSetConfig:
         svc = PrivacyService(bus=bus, config=PrivacyConfig(enabled=True))
         svc._on_set_config("privacy.set_config", {
             "rate_hz": 0.0,
+            "idle_rate_hz": 0.0,
             "threshold": 9.0,
             "cooldown_s": -1.0,
             "clear_frames": 0,
+            "person_hold_s": 0.0,
         })
         assert svc._cfg.rate_hz == pytest.approx(0.1)
+        assert svc._cfg.idle_rate_hz == pytest.approx(0.05)
         assert svc._cfg.threshold == pytest.approx(1.0)
         assert svc._cfg.cooldown_s == pytest.approx(0.0)
         assert svc._cfg.clear_frames == 1
+        assert svc._cfg.person_hold_s == pytest.approx(0.5)
+
+
+class TestPrivacyServiceEfficiency:
+    def test_requires_recent_person_when_enabled(self):
+        from src.services.privacy_service import PrivacyService, PrivacyConfig
+        cfg = PrivacyConfig(enabled=True, require_person=True, person_hold_s=5.0)
+        svc = PrivacyService(bus=MagicMock(), vision_service=MagicMock(), config=cfg)
+        svc._last_person_seen_ts = 0.0
+        assert svc._should_run_detection(now=100.0) is False
+
+    def test_runs_when_person_recent(self):
+        from src.services.privacy_service import PrivacyService, PrivacyConfig
+        cfg = PrivacyConfig(enabled=True, require_person=True, person_hold_s=5.0)
+        svc = PrivacyService(bus=MagicMock(), vision_service=MagicMock(), config=cfg)
+        svc._last_person_seen_ts = 97.0
+        assert svc._should_run_detection(now=100.0) is True
+
+    def test_effective_rate_uses_idle_without_recent_person(self):
+        from src.services.privacy_service import PrivacyService, PrivacyConfig
+        cfg = PrivacyConfig(enabled=True, rate_hz=1.0, idle_rate_hz=0.25, require_person=True, person_hold_s=5.0)
+        svc = PrivacyService(bus=MagicMock(), vision_service=MagicMock(), config=cfg)
+        svc._last_person_seen_ts = 0.0
+        assert svc._effective_rate_hz(now=100.0) == pytest.approx(0.25)
+
+    def test_effective_rate_uses_active_with_recent_person(self):
+        from src.services.privacy_service import PrivacyService, PrivacyConfig
+        cfg = PrivacyConfig(enabled=True, rate_hz=1.0, idle_rate_hz=0.25, require_person=True, person_hold_s=5.0)
+        svc = PrivacyService(bus=MagicMock(), vision_service=MagicMock(), config=cfg)
+        svc._last_person_seen_ts = 99.0
+        assert svc._effective_rate_hz(now=100.0) == pytest.approx(1.0)

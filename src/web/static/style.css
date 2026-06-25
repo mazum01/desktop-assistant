@@ -212,6 +212,12 @@ main {
   gap: 10px;
   margin-bottom: 12px;
 }
+.grid-6 {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
 .stat-box {
   background: var(--bg3);
   border: 1px solid var(--border);
@@ -643,6 +649,7 @@ main {
 @media (max-width: 720px) {
   main { grid-template-columns: 1fr; }
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-6 { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ── Quiet Hours ──────────────────────────────────────────────── */
