@@ -818,8 +818,8 @@ class AVService(Service):
         if top_hz <= 0:
             top_hz = float(sr / 2.0)
 
-        note_duration = 0.4
-        gap = 0.08
+        note_duration = 1.5
+        gap = 0.25
         step_hz = top_hz / float(n_bins)
         notes = tuple(max(40.0, (i + 0.5) * step_hz) for i in range(n_bins))
         self._enqueue(

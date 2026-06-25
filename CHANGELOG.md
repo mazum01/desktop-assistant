@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.34] - 2026-06-25
+### Changed
+- Updated the Audio Analyzer Test sweep timing to a much slower cadence (`note_duration=1.5`, `gap=0.25`) so each test tone is easier to observe on the live analyzer.
+
 ## [1.41.33] - 2026-06-25
 ### Changed
 - Slowed the Audio Analyzer Test sweep again (longer note hold and inter-tone gap) to improve analyzer stability when input updates are intermittent.
