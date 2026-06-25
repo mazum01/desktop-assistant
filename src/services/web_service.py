@@ -26,6 +26,7 @@ POST /api/audio/playback  Play latest/specified WAV body: {"path": str?}
 GET  /api/audio/mute      Get output mute state
 PUT  /api/audio/mute      Set output mute state body: {"muted": bool}
 POST /api/audio/repeat    Repeat the last spoken phrase
+POST /api/audio/spectrum-test  Play one tone per analyzer frequency bin
 POST /api/pan             Pan servo    body: {"angle": 180.0}
 GET  /api/snapshot            Full-resolution JPEG snapshot from camera 1
 GET  /api/snapshot2           Full-resolution JPEG snapshot from camera 2
@@ -70,6 +71,8 @@ GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
 GET  /api/audio/input-gain Get current reSpeaker mic input gain percentage
 PUT  /api/audio/input-gain Set reSpeaker mic input gain percentage body: {"level": int}
+GET  /api/audio/voice-gain Get current TTS voice output gain percentage
+PUT  /api/audio/voice-gain Set TTS voice output gain percentage body: {"level": int}
 GET  /api/settings/audio   Get audio backend + all per-backend settings + available devices
 PUT  /api/settings/audio   Set audio backend and/or per-backend settings  body: {"backend": str, "default"?: {...}, "respeaker_flex"?: {...}}
 """
@@ -1633,6 +1636,31 @@ class WebService:
             if not result.get("ok", False):
                 raise HTTPException(404, result.get("error", "no spoken phrase available"))
             return result
+
+        @app.post("/api/audio/spectrum-test")
+        async def api_audio_spectrum_test():
+            av_svc = self._get_service_by_name("av")
+            if av_svc is None or not hasattr(av_svc, "play_spectrum_test"):
+                raise HTTPException(503, "av service unavailable")
+            latest = self.bus.last("audio.spectrum") if self.bus else None
+            bins = 48
+            sample_rate = 16000
+            max_hz = float(sample_rate / 2.0)
+            if isinstance(latest, dict):
+                payload_bins = latest.get("bins")
+                if isinstance(payload_bins, list) and payload_bins:
+                    bins = len(payload_bins)
+                sample_rate = int(latest.get("sample_rate", sample_rate))
+                max_hz = float(latest.get("max_hz", sample_rate / 2.0))
+            try:
+                return await asyncio.to_thread(
+                    av_svc.play_spectrum_test,
+                    bins=bins,
+                    sample_rate=sample_rate,
+                    max_hz=max_hz,
+                )
+            except Exception as exc:
+                raise HTTPException(500, f"spectrum test failed: {exc}")
 
         # ── Skills ────────────────────────────────────────────────────
 

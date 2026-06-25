@@ -312,6 +312,35 @@ def test_audio_voice_gain_get_and_set_persists_and_applies_runtime(app_client, t
     txt = cfg_path.read_text()
     assert "output_gain: 1.5" in txt
 
+
+def test_audio_spectrum_test_endpoint_calls_av_service_with_latest_spectrum(app_client):
+    client, bus, svc = app_client
+
+    class _FakeAV:
+        name = "av"
+
+        def __init__(self):
+            self.calls = []
+
+        def play_spectrum_test(self, bins=48, sample_rate=16000, max_hz=8000.0):
+            self.calls.append(
+                {"bins": bins, "sample_rate": sample_rate, "max_hz": max_hz}
+            )
+            return {"ok": True, "bins": bins, "sample_rate": sample_rate, "max_hz": max_hz}
+
+    fake_av = _FakeAV()
+    svc._all_services = [fake_av]
+    bus.publish("audio.spectrum", {"bins": [0.0] * 24, "sample_rate": 16000, "max_hz": 8000.0})
+
+    r = client.post("/api/audio/spectrum-test")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["bins"] == 24
+    assert fake_av.calls[-1]["sample_rate"] == 16000
+    assert fake_av.calls[-1]["max_hz"] == pytest.approx(8000.0)
+
+
 def test_audio_repeat_endpoint_calls_av_service(app_client):
     client, bus, svc = app_client
 

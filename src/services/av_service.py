@@ -805,6 +805,40 @@ class AVService(Service):
         self._submit_say(text)
         return {"ok": True, "text": text}
 
+    def play_spectrum_test(
+        self,
+        bins: int = 48,
+        sample_rate: int = 16000,
+        max_hz: float | None = None,
+    ) -> dict:
+        """Play a short sweep with one tone per analyzer bin center frequency."""
+        n_bins = max(8, int(bins))
+        sr = max(8000, int(sample_rate))
+        top_hz = float(max_hz) if max_hz is not None else float(sr / 2.0)
+        if top_hz <= 0:
+            top_hz = float(sr / 2.0)
+
+        step_hz = top_hz / float(n_bins)
+        notes = tuple(max(40.0, (i + 0.5) * step_hz) for i in range(n_bins))
+        self._enqueue(
+            lambda n=notes: self._do_chime(
+                {
+                    "notes": n,
+                    "note_duration": 0.055,
+                    "gap": 0.012,
+                    "amplitude": 0.45,
+                }
+            ),
+            label="spectrum_test",
+        )
+        return {
+            "ok": True,
+            "bins": n_bins,
+            "sample_rate": sr,
+            "max_hz": round(top_hz, 2),
+            "duration_s": round(n_bins * (0.055 + 0.012), 2),
+        }
+
     def get_voice_output_gain(self) -> float:
         """Return current TTS output gain multiplier."""
         return float(self._tts_output_gain)

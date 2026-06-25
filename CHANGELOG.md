@@ -6,6 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.31] - 2026-06-25
+### Added
+- Added an **Audio Analyzer Test** button to the web Audio tab that plays a tone sweep mapped to the current spectrum analyzer bins.
+- Added `POST /api/audio/spectrum-test` to trigger the analyzer-matched tone sweep from the web UI.
+
 ## [1.41.30] - 2026-06-25
 ### Added
 - Added a dedicated **Voice Output Volume** control in the web Audio tab, with live runtime updates and persisted `tts.output_gain` in `config/assistant.yaml`.

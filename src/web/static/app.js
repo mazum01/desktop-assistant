@@ -2034,6 +2034,26 @@ async function repeatLastSpoken() {
   setTimeout(() => { if (st) st.textContent = ""; }, 2000);
 }
 
+async function audioPlaySpectrumTest() {
+  const st = el("audio-spectrum-test-status");
+  if (st) {
+    st.textContent = "Playing…";
+    st.style.color = "var(--green)";
+  }
+  try {
+    const r = await fetch("/api/audio/spectrum-test", { method: "POST" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    if (st) st.textContent = `Playing ${d.bins} tones`;
+  } catch (_e) {
+    if (st) {
+      st.textContent = "Error";
+      st.style.color = "var(--red)";
+    }
+  }
+  setTimeout(() => { if (st) st.textContent = ""; }, 2500);
+}
+
 async function loadCamRotation() {
   try {
     const r = await fetch("/api/settings/camera/rotation");
