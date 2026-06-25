@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.33] - 2026-06-25
+### Changed
+- Slowed the Audio Analyzer Test sweep again (longer note hold and inter-tone gap) to improve analyzer stability when input updates are intermittent.
+
 ## [1.41.32] - 2026-06-25
 ### Changed
 - Slowed the Audio Analyzer Test sweep so each tone is held longer, making bin response visibly trackable on the live spectrum analyzer.
