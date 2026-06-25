@@ -6,6 +6,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.36] - 2026-06-25
+### Changed
+- Increased dashboard WebSocket status push rate from ~1 Hz to 4 Hz (`250 ms`) so live analyzer visuals and current-tone text update more reliably during test sweeps.
+
 ## [1.41.35] - 2026-06-25
 ### Added
 - The Audio tab now shows the **current test tone frequency** (`Now playing: <Hz>`) while analyzer test tones are being played.

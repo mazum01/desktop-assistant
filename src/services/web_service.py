@@ -7,7 +7,7 @@ Endpoints
 ---------
 GET  /                    Main dashboard HTML
 GET  /stream              MJPEG camera stream (from bus vision.jpeg_ready frames)
-WS   /ws                  Live JSON status + event tail (pushes every ~1 s)
+WS   /ws                  Live JSON status + event tail (pushes every ~250 ms)
 GET  /health                 Liveness check {"ok":true}
 GET  /api/status          One-shot status snapshot
 GET  /api/faces           List all known faces
@@ -1081,7 +1081,7 @@ class WebService:
                     snapshot = self._build_status_snapshot()
                     snapshot["events"] = self._event_log[-20:]
                     await ws.send_text(json.dumps(snapshot, default=str))
-                    await asyncio.sleep(1.0)
+                    await asyncio.sleep(0.25)
             except (WebSocketDisconnect, Exception):
                 pass
             finally:
