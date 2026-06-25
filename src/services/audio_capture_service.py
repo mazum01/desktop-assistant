@@ -68,6 +68,7 @@ class AudioCaptureService(Service):
         self._speaking = False
         self._speaking_until = 0.0
         self._last_stats_ts = 0.0
+        self._spectrum_prev: Optional[list[float]] = None
 
     def on_start(self) -> None:
         if self._mic is None:
@@ -138,6 +139,19 @@ class AudioCaptureService(Service):
             db = 20.0 * math.log10(level + 1e-12)
             db = max(floor_db, min(0.0, db))
             out.append((db - floor_db) / denom)
+
+        # For mic-only capture, keep low-level content readable in noisy rooms
+        # while preserving near-silence behavior.
+        if room_dbfs > -65.0:
+            out = [min(1.0, v * 1.8) for v in out]
+        elif room_dbfs < -80.0:
+            out = [max(0.0, v - 0.02) for v in out]
+
+        # Smooth frame-to-frame to reduce flicker from ambient mic noise.
+        prev = self._spectrum_prev
+        if prev is not None and len(prev) == len(out):
+            out = [0.65 * pv + 0.35 * ov for pv, ov in zip(prev, out)]
+        self._spectrum_prev = out
 
         return {
             "bins": out,

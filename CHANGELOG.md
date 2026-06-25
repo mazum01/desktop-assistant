@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.39] - 2026-06-25
+### Changed
+- Kept analyzer on **mic input only** and tuned spectrum rendering for better visibility with real-world ambient pickup:
+  - modest sensitivity lift for non-silent mic levels
+  - frame smoothing to reduce flicker/noise
+  - quiet-room clamp retained to avoid false “always-on” bars
+
 ## [1.41.38] - 2026-06-25
 ### Fixed
 - Analyzer test mode now publishes a synthetic reference spectrum (`audio.spectrum_test_reference`) per tone and the web UI renders it while the test is active, so test-tone visuals no longer depend on room mic pickup or echo-cancel behavior.
