@@ -67,16 +67,23 @@ def create_audio_input(backend: str, cfg: dict | None = None) -> Any:
 
     if backend == BACKEND_RESPEAKER_FLEX:
         from src.audio.respeaker_flex import ReSpeakerFlexInput, ReSpeakerFlexInputConfig
+        processing_enabled = bool(cfg.get("input_processing_enabled", True))
+        selected_channel = int(
+            cfg.get(
+                "input_processed_channel" if processing_enabled else "input_raw_mic_channel",
+                0 if processing_enabled else 1,
+            )
+        )
         input_cfg = ReSpeakerFlexInputConfig(
             device_name=str(cfg.get("input_device_name", "ReSpeaker")),
             sample_rate=int(cfg.get("input_sample_rate", 16000)),
             raw_channels=int(cfg.get("input_raw_channels", 6)),
-            processed_channel=int(cfg.get("input_processed_channel", 0)),
+            processed_channel=selected_channel,
         )
         log.info(
-            "Audio backend: respeaker_flex — input device=%r rate=%d raw_ch=%d proc_ch=%d",
+            "Audio backend: respeaker_flex — input device=%r rate=%d raw_ch=%d channel=%d processing=%s",
             input_cfg.device_name, input_cfg.sample_rate,
-            input_cfg.raw_channels, input_cfg.processed_channel,
+            input_cfg.raw_channels, input_cfg.processed_channel, processing_enabled,
         )
         return ReSpeakerFlexInput(input_cfg)
 

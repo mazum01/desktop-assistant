@@ -341,6 +341,57 @@ def test_audio_spectrum_test_endpoint_calls_av_service_with_latest_spectrum(app_
     assert fake_av.calls[-1]["max_hz"] == pytest.approx(8000.0)
 
 
+def test_audio_settings_respeaker_processing_toggle_persists(app_client, tmp_path, monkeypatch):
+    client, _bus, _svc = app_client
+    cfg_path = tmp_path / "assistant.yaml"
+    cfg_path.write_text(
+        "audio:\n"
+        "  backend: respeaker_flex\n"
+        "  default: {}\n"
+        "  respeaker_flex:\n"
+        "    input_device_name: ReSpeaker\n"
+        "    input_sample_rate: 16000\n"
+        "    input_raw_channels: 6\n"
+        "    input_processing_enabled: true\n"
+        "    input_processed_channel: 0\n"
+        "    input_raw_mic_channel: 1\n"
+        "    output_alsa_device: pulse\n"
+        "    output_sample_rate: 16000\n"
+        "    loudness_boost: 2.5\n"
+        "    eq_preset: flat\n"
+        "    led_enabled: false\n"
+    )
+    monkeypatch.setattr(web_service, "_ASSISTANT_CONFIG_PATH", cfg_path)
+
+    r = client.put(
+        "/api/settings/audio",
+        json={
+            "backend": "respeaker_flex",
+            "respeaker_flex": {
+                "input_device_name": "ReSpeaker",
+                "input_sample_rate": 16000,
+                "input_raw_channels": 6,
+                "input_processing_enabled": False,
+                "input_processed_channel": 0,
+                "input_raw_mic_channel": 2,
+                "output_alsa_device": "pulse",
+                "output_sample_rate": 16000,
+                "loudness_boost": 2.5,
+                "eq_preset": "flat",
+                "led_enabled": False,
+            },
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["respeaker_flex"]["input_processing_enabled"] is False
+    assert data["respeaker_flex"]["input_raw_mic_channel"] == 2
+
+    text = cfg_path.read_text()
+    assert "input_processing_enabled: false" in text
+    assert "input_raw_mic_channel: 2" in text
+
+
 def test_audio_repeat_endpoint_calls_av_service(app_client):
     client, bus, svc = app_client
 

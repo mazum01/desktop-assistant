@@ -10,7 +10,7 @@
 <link href="/static/favicon-32.png" rel="icon" sizes="32x32" type="image/png"/>
 <link href="/static/favicon-16.png" rel="icon" sizes="16x16" type="image/png"/>
 <link href="/static/favicon-192.png" rel="apple-touch-icon" sizes="192x192"/>
-<link href="/static/style.css?v=1.41.38" rel="stylesheet"/>
+<link href="/static/style.css?v=1.41.40" rel="stylesheet"/>
 </head>
 <body>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -620,8 +620,18 @@
     <input id="audio-rs-raw-ch" type="number" min="1" max="16" step="1" style="width:80px"/>
   </div>
   <div class="control-group">
-    <label>Processed Channel Index <small style="color:var(--text-muted)">(AEC/beamformed, usually 0)</small></label>
+    <label>
+      <input id="audio-rs-proc-enabled" type="checkbox"/>
+      <span>Input processing enabled <small style="color:var(--text-muted)">(AEC/beamformed)</small></span>
+    </label>
+  </div>
+  <div class="control-group">
+    <label>Processed Channel Index <small style="color:var(--text-muted)">(used when processing is ON, usually 0)</small></label>
     <input id="audio-rs-proc-ch" type="number" min="0" max="15" step="1" style="width:80px"/>
+  </div>
+  <div class="control-group">
+    <label>Raw Mic Channel Index <small style="color:var(--text-muted)">(used when processing is OFF, try 1)</small></label>
+    <input id="audio-rs-raw-mic-ch" type="number" min="0" max="15" step="1" style="width:80px"/>
   </div>
   <div class="control-group">
     <label>Output ALSA Device <small style="color:var(--text-muted)">("pulse" to mix, "plughw:ReSpeaker,0" for direct)</small></label>
@@ -994,7 +1004,7 @@
 </section>
 </div>
 </main>
-<script src="/static/app.js?v=1.41.38"></script>
+<script src="/static/app.js?v=1.41.40"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

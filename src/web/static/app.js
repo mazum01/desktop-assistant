@@ -1775,7 +1775,9 @@ async function loadAudioSettings() {
     _setVal("audio-rs-input-device", rs.input_device_name ?? "ReSpeaker");
     _setVal("audio-rs-input-rate",   rs.input_sample_rate ?? 16000);
     _setVal("audio-rs-raw-ch",       rs.input_raw_channels ?? 6);
+    _setVal("audio-rs-proc-enabled", rs.input_processing_enabled !== false);
     _setVal("audio-rs-proc-ch",      rs.input_processed_channel ?? 0);
+    _setVal("audio-rs-raw-mic-ch",   rs.input_raw_mic_channel ?? 1);
     _setVal("audio-rs-output-alsa",  rs.output_alsa_device ?? "pulse");
     _setVal("audio-rs-output-rate",  rs.output_sample_rate ?? 44100);
     _setVal("audio-rs-loudness",     rs.loudness_boost ?? 2.0);
@@ -1871,7 +1873,9 @@ async function saveAudioSettings() {
       input_device_name: el("audio-rs-input-device").value,
       input_sample_rate: parseInt(el("audio-rs-input-rate").value, 10),
       input_raw_channels: parseInt(el("audio-rs-raw-ch").value, 10),
+      input_processing_enabled: el("audio-rs-proc-enabled").checked,
       input_processed_channel: parseInt(el("audio-rs-proc-ch").value, 10),
+      input_raw_mic_channel: parseInt(el("audio-rs-raw-mic-ch").value, 10),
       output_alsa_device: el("audio-rs-output-alsa").value,
       output_sample_rate: parseInt(el("audio-rs-output-rate").value, 10),
       loudness_boost: parseFloat(el("audio-rs-loudness").value),

@@ -12,7 +12,9 @@ audio:
     eq_preset: custom
     input_device_name: ReSpeaker
     input_processed_channel: 0
+    input_processing_enabled: true
     input_raw_channels: 6
+    input_raw_mic_channel: 1
     input_sample_rate: 16000
     led_enabled: false
     loudness_boost: 2.5
@@ -163,7 +165,7 @@ telegram:
   - It is now
   - The time is
 tts:
-  output_gain: 1.0
+  output_gain: 1.32
   piper_length_scale: 1.15
   piper_noise_scale: 0.3
   piper_noise_w: 0.5

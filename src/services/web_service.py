@@ -400,7 +400,9 @@ class _AudioReSpeakerSettings(BaseModel):
     input_device_name: str = "ReSpeaker"
     input_sample_rate: int = 16000
     input_raw_channels: int = 6
+    input_processing_enabled: bool = True
     input_processed_channel: int = 0
+    input_raw_mic_channel: int = 1
     output_alsa_device: str = "pulse"
     output_sample_rate: int = 44100
     loudness_boost: float = 2.0
@@ -556,7 +558,9 @@ def _read_audio_config() -> dict:
         "input_device_name": "ReSpeaker",
         "input_sample_rate": 16000,
         "input_raw_channels": 6,
+        "input_processing_enabled": True,
         "input_processed_channel": 0,
+        "input_raw_mic_channel": 1,
         "output_alsa_device": "pulse",
         "output_sample_rate": 44100,
         "loudness_boost": 2.0,

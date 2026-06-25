@@ -6,6 +6,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.40] - 2026-06-25
+### Added
+- Added a ReSpeaker input-processing toggle in Audio settings so AEC/beamformed filtering can be turned on/off without manual YAML edits.
+
+### Changed
+- ReSpeaker input config now supports separate channel selection for processed vs raw mic capture (`input_processing_enabled`, `input_processed_channel`, `input_raw_mic_channel`).
+
 ## [1.41.39] - 2026-06-25
 ### Changed
 - Kept analyzer on **mic input only** and tuned spectrum rendering for better visibility with real-world ambient pickup:
