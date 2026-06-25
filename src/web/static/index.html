@@ -10,7 +10,7 @@
 <link href="/static/favicon-32.png" rel="icon" sizes="32x32" type="image/png"/>
 <link href="/static/favicon-16.png" rel="icon" sizes="16x16" type="image/png"/>
 <link href="/static/favicon-192.png" rel="apple-touch-icon" sizes="192x192"/>
-<link href="/static/style.css?v=1.41.28" rel="stylesheet"/>
+<link href="/static/style.css?v=1.41.29" rel="stylesheet"/>
 </head>
 <body>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -508,6 +508,11 @@
 <span class="qh-status" id="audio-input-gain-status"></span>
 </div>
 </div>
+<div class="control-group" id="audio-analyzer-group">
+<label>Live Input Analyzer <span id="audio-vad-state" style="font-size:0.85em;color:var(--text-dim);margin-left:8px">Idle</span></label>
+<canvas class="resource-canvas" id="audio-spectrum-canvas" width="400" height="90"></canvas>
+<div id="audio-spectrum-meta" style="font-size:0.8em;color:var(--text-muted);margin-top:6px">Waiting for input…</div>
+</div>
 <!-- Custom EQ bands — shown only when "Custom" is selected -->
 <div id="custom-eq-panel" style="display:none;margin-top:12px;padding:10px;
            border:1px solid var(--border);border-radius:6px">
@@ -975,7 +980,7 @@
 </section>
 </div>
 </main>
-<script src="/static/app.js?v=1.41.28"></script>
+<script src="/static/app.js?v=1.41.29"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

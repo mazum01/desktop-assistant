@@ -799,6 +799,11 @@ main {
   display: block;
 }
 
+#audio-spectrum-canvas {
+  height: 90px;
+  margin-top: 6px;
+}
+
 /* ── Skill toggle switch ─────────────────────────────────────── */
 .toggle-label {
   position: relative;

@@ -18,6 +18,12 @@ audio:
     loudness_boost: 2.5
     output_alsa_device: pulse
     output_sample_rate: 16000
+audio_capture:
+  chunk_seconds: 0.25
+  emit_spectrum: true
+  spectrum_bins: 48
+  vad_hang_s: 0.8
+  vad_threshold_dbfs: -42.0
 camera:
   af_mode: continuous
   framerate: 30

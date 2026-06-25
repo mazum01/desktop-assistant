@@ -9,7 +9,7 @@
 
 Smoke-test scripts for each component (`scripts/test_<device>.py` exits 0).
 
-- [ ] Dual microphones — record + level meter smoke test
+- [x] Dual microphones — obsolete: reSpeaker now handles mic inputs and output path
 - [ ] Sabrent USB audio — playback smoke test script
 
 > DS3218 servo, NF-A6x25 fan, TMP117, stereo cameras, and Hailo-8 bring-up

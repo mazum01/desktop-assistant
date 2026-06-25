@@ -213,6 +213,20 @@ function updateDashboard(data) {
     el("stat-audio").title = `rms=${num(audio.rms, 4)}`;
   }
 
+  const vad = last["audio.vad"];
+  if (vad) {
+    const vadEl = el("audio-vad-state");
+    if (vadEl) {
+      vadEl.textContent = vad.active ? "Speaking" : "Idle";
+      vadEl.style.color = vad.active ? "var(--green)" : "var(--text-dim)";
+    }
+  }
+
+  const spectrum = last["audio.spectrum"];
+  if (spectrum && Array.isArray(spectrum.bins)) {
+    drawAudioSpectrum(spectrum);
+  }
+
   const spoke = last["av.spoke"];
   if (spoke && spoke.text) {
     const snip = spoke.text.length > 60 ? spoke.text.slice(0, 60) + "…" : spoke.text;
@@ -866,6 +880,56 @@ function drawSparkline(canvasId, values, color, opts = {}) {
   ctx.lineTo(pad + graphW, midY);
   ctx.stroke();
   ctx.setLineDash([]);
+}
+
+function drawAudioSpectrum(payload) {
+  const canvas = el("audio-spectrum-canvas");
+  if (!canvas || !payload || !Array.isArray(payload.bins)) return;
+  const bins = payload.bins;
+  const meta = el("audio-spectrum-meta");
+
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 400;
+  const h = canvas.clientHeight || 90;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  // Background + grid
+  ctx.fillStyle = "rgba(13,17,23,0.35)";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "rgba(139,148,158,0.25)";
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 3; i++) {
+    const y = Math.round((h * i) / 4);
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+
+  if (bins.length === 0) return;
+  const barW = w / bins.length;
+  for (let i = 0; i < bins.length; i++) {
+    const mag = Math.max(0, Math.min(1, Number(bins[i]) || 0));
+    const bh = mag * (h - 2);
+    const x = i * barW;
+    const y = h - bh;
+    const hue = 200 - Math.round(140 * mag); // blue -> green/yellow
+    ctx.fillStyle = `hsl(${hue} 85% 55%)`;
+    ctx.fillRect(x + 0.5, y, Math.max(1, barW - 1), bh);
+  }
+
+  if (meta) {
+    const sr = Number(payload.sample_rate || 16000);
+    const maxHz = Number(payload.max_hz || sr / 2);
+    meta.textContent = `FFT: ${bins.length} bins · 0–${Math.round(maxHz)} Hz`;
+  }
 }
 
 // ── Health badge ──────────────────────────────────────────────────

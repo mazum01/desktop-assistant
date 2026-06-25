@@ -168,6 +168,65 @@ def test_audio_capture_handles_record_error():
     assert errs and errs[0]["reason"] == "record_failed"
 
 
+def test_audio_capture_publishes_spectrum_and_vad():
+    bus = MessageBus()
+
+    class _ToneMic(_FakeMic):
+        def record(self, seconds):
+            n = int(seconds * 16000)
+            t = np.arange(n, dtype=np.float32) / 16000.0
+            return 0.2 * np.sin(2 * np.pi * 440.0 * t).astype(np.float32)
+
+    mic = _ToneMic(level=0.0)
+    svc = AudioCaptureService(bus=bus, mic=mic, chunk_seconds=0.02)
+
+    spectrums, vads = [], []
+    bus.subscribe("audio.spectrum", lambda t, p: spectrums.append(p))
+    bus.subscribe("audio.vad", lambda t, p: vads.append(p))
+
+    svc.start()
+    time.sleep(0.12)
+    svc.stop()
+
+    assert spectrums, "expected audio.spectrum events"
+    assert isinstance(spectrums[-1].get("bins"), list)
+    assert len(spectrums[-1]["bins"]) >= 8
+    assert all(0.0 <= float(v) <= 1.0 for v in spectrums[-1]["bins"])
+
+    assert vads, "expected audio.vad events"
+    assert "active" in vads[-1]
+    assert "threshold_dbfs" in vads[-1]
+
+
+def test_audio_capture_vad_state_changes_with_level():
+    bus = MessageBus()
+
+    class _SwitchMic(_FakeMic):
+        def __init__(self):
+            super().__init__(level=0.0)
+            self._calls = 0
+
+        def record(self, seconds):
+            self._calls += 1
+            lvl = 0.0 if self._calls < 3 else 0.3
+            n = int(seconds * 16000)
+            return np.full(n, lvl, dtype=np.float32)
+
+    mic = _SwitchMic()
+    svc = AudioCaptureService(bus=bus, mic=mic, chunk_seconds=0.02)
+
+    vads = []
+    bus.subscribe("audio.vad", lambda t, p: vads.append(p))
+
+    svc.start()
+    time.sleep(0.14)
+    svc.stop()
+
+    assert vads
+    assert any(v.get("state_changed") for v in vads)
+    assert any(v.get("active") is True for v in vads)
+
+
 # ── IPC bridge ───────────────────────────────────────────────────────────
 
 zmq = pytest.importorskip("zmq")

@@ -1,15 +1,19 @@
 """
 Audio capture service.
 
-Continuously samples the microphone in small chunks, computes signal
-level (dBFS), and exposes the most recent chunk to in-process callers.
-This is the foundation for VAD / wake-word / STT in Phase 3 — it just
-keeps the mic running and hands fresh audio to whoever asks.
+Continuously samples the microphone in small chunks, computes signal level
+(dBFS), voice-activity state, and a compact FFT spectrum for the web analyzer,
+and exposes the most recent chunk to in-process callers.
 
 Topics published:
-    audio.level   {"dbfs": float, "rms": float, "ts": float}
-    audio.chunk   {"index": int, "samples": int, "rate": int}
-    audio.error   {"reason": str}
+    audio.level          {"dbfs": float, "rms": float, "ts": float, "speaking": bool}
+    audio.chunk          {"index": int, "samples": int, "rate": int}
+    audio.spectrum       {"bins": [float], "sample_rate": int, "max_hz": float, "ts": float}
+    audio.vad            {"active": bool, "dbfs": float, "threshold_dbfs": float,
+                           "state_changed": bool, "ts": float}
+    audio.capture_stats  {"chunk_index": int, "consecutive_failures": int,
+                           "hardware_ready": bool, "ts": float}
+    audio.error          {"reason": str}
 
 Public accessor (in-process callers):
     svc.latest_chunk() → np.ndarray | None    (float32, mono)
@@ -21,6 +25,7 @@ import logging
 import math
 import threading
 import time
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -29,6 +34,15 @@ from src.core.bus import MessageBus
 from src.core.service import Service
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class AudioCaptureConfig:
+    chunk_seconds: float = 0.25
+    spectrum_bins: int = 48
+    emit_spectrum: bool = True
+    vad_threshold_dbfs: float = -42.0
+    vad_hang_s: float = 0.8
 
 
 class AudioCaptureService(Service):
@@ -40,42 +54,120 @@ class AudioCaptureService(Service):
         bus: Optional[MessageBus] = None,
         mic=None,
         chunk_seconds: float = 0.25,
+        config: Optional[AudioCaptureConfig] = None,
     ) -> None:
         super().__init__(bus=bus)
         self._mic = mic
-        self._chunk_seconds = float(chunk_seconds)
-        self.tick_seconds = self._chunk_seconds   # chunk drives cadence
+        self._cfg = config or AudioCaptureConfig(chunk_seconds=float(chunk_seconds))
+        self._chunk_seconds = float(self._cfg.chunk_seconds)
+        self.tick_seconds = self._chunk_seconds
         self._latest: Optional[np.ndarray] = None
         self._index = 0
         self._lock = threading.Lock()
+        self._consecutive_failures = 0
+        self._speaking = False
+        self._speaking_until = 0.0
+        self._last_stats_ts = 0.0
 
     def on_start(self) -> None:
         if self._mic is None:
             from src.audio.input import AudioInput, AudioInputConfig
             self._mic = AudioInput(AudioInputConfig())
         log.info(
-            "AudioCaptureService started; hardware_ready=%s chunk=%.2fs",
+            "AudioCaptureService started; hardware_ready=%s chunk=%.2fs vad=%.1fdBfs hang=%.2fs",
             getattr(self._mic, "hardware_ready", False),
             self._chunk_seconds,
+            self._cfg.vad_threshold_dbfs,
+            self._cfg.vad_hang_s,
         )
 
     @property
     def hardware_ready(self) -> bool:
         return bool(getattr(self._mic, "hardware_ready", False))
 
+    def _sample_rate(self) -> int:
+        cfg = getattr(self._mic, "_cfg", None)
+        rate = getattr(cfg, "sample_rate", None)
+        try:
+            return int(rate) if rate else 16000
+        except Exception:
+            return 16000
+
+    def _compute_spectrum(self, mono: np.ndarray) -> Optional[dict]:
+        if not self._cfg.emit_spectrum or mono.size < 32:
+            return None
+
+        x = mono.astype(np.float64)
+        if not np.any(x):
+            bins = [0.0] * max(8, int(self._cfg.spectrum_bins))
+            return {
+                "bins": bins,
+                "sample_rate": self._sample_rate(),
+                "max_hz": float(self._sample_rate() / 2.0),
+                "ts": time.time(),
+            }
+
+        # Window + rFFT for stable visual bars.
+        window = np.hanning(x.size)
+        mag = np.abs(np.fft.rfft(x * window))
+        if mag.size <= 2:
+            return None
+
+        # Drop DC so low-bin flicker doesn't dominate the graph.
+        mag = mag[1:]
+        n_bins = max(8, int(self._cfg.spectrum_bins))
+        n_bins = min(n_bins, mag.size)
+        edges = np.linspace(0, mag.size, n_bins + 1, dtype=int)
+
+        out = []
+        for i in range(n_bins):
+            seg = mag[edges[i]:edges[i + 1]]
+            level = float(np.sqrt(np.mean(seg * seg))) if seg.size else 0.0
+            db = 20.0 * math.log10(level + 1e-9)
+            db = max(-90.0, min(0.0, db))
+            out.append((db + 90.0) / 90.0)
+
+        return {
+            "bins": out,
+            "sample_rate": self._sample_rate(),
+            "max_hz": float(self._sample_rate() / 2.0),
+            "ts": time.time(),
+        }
+
+    def _compute_vad(self, dbfs: float, now_mono: float) -> tuple[bool, bool]:
+        if dbfs >= self._cfg.vad_threshold_dbfs:
+            self._speaking_until = now_mono + self._cfg.vad_hang_s
+        active = now_mono < self._speaking_until
+        changed = active != self._speaking
+        self._speaking = active
+        return active, changed
+
+    def _publish_stats(self, ts: float) -> None:
+        if ts - self._last_stats_ts < 1.0:
+            return
+        self._last_stats_ts = ts
+        self.bus.publish(
+            "audio.capture_stats",
+            {
+                "chunk_index": self._index,
+                "consecutive_failures": self._consecutive_failures,
+                "hardware_ready": self.hardware_ready,
+                "ts": ts,
+            },
+        )
+
     def run_tick(self) -> None:
         if self._mic is None:
             return
         # If we've already failed many times in a row, back off to avoid
-        # hammering PortAudio (which can wedge the shared output stream
-        # when the input stream keeps erroring). Bring-up: mic isn't
-        # always wired yet.
-        if getattr(self, "_consecutive_failures", 0) >= 3:
+        # hammering the input backend when the mic path is unavailable.
+        if self._consecutive_failures >= 3:
+            self._publish_stats(time.time())
             return
         try:
             chunk = self._mic.record(self._chunk_seconds)
         except Exception:
-            self._consecutive_failures = getattr(self, "_consecutive_failures", 0) + 1
+            self._consecutive_failures += 1
             if self._consecutive_failures <= 3:
                 log.exception("mic.record failed")
             if self._consecutive_failures == 3:
@@ -85,6 +177,7 @@ class AudioCaptureService(Service):
                     "sample-rate mismatch)"
                 )
             self.bus.publish("audio.error", {"reason": "record_failed"})
+            self._publish_stats(time.time())
             return
         self._consecutive_failures = 0
 
@@ -103,16 +196,35 @@ class AudioCaptureService(Service):
             self._index += 1
             idx = self._index
 
-        ts = time.time()
-        self.bus.publish("audio.level", {"dbfs": dbfs, "rms": rms, "ts": ts})
+        now_wall = time.time()
+        now_mono = time.monotonic()
+        speaking, changed = self._compute_vad(dbfs, now_mono)
+
+        self.bus.publish("audio.level", {"dbfs": dbfs, "rms": rms, "ts": now_wall, "speaking": speaking})
         self.bus.publish(
             "audio.chunk",
             {
                 "index": idx,
                 "samples": int(mono.size),
-                "rate": getattr(self._mic, "_cfg", None) and self._mic._cfg.sample_rate,
+                "rate": self._sample_rate(),
             },
         )
+
+        spectrum = self._compute_spectrum(mono)
+        if spectrum is not None:
+            self.bus.publish("audio.spectrum", spectrum)
+
+        self.bus.publish(
+            "audio.vad",
+            {
+                "active": speaking,
+                "dbfs": dbfs,
+                "threshold_dbfs": float(self._cfg.vad_threshold_dbfs),
+                "state_changed": changed,
+                "ts": now_wall,
+            },
+        )
+        self._publish_stats(now_wall)
 
     def on_stop(self) -> None:
         # Release the mic backend (e.g. terminate the pw-record subprocess)

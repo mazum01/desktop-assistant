@@ -16,7 +16,7 @@ import sys
 
 from src.assistant.runner import run_services
 from src.core.bus import MessageBus
-from src.services.audio_capture_service import AudioCaptureService
+from src.services.audio_capture_service import AudioCaptureService, AudioCaptureConfig
 from src.services.av_service import AVService
 from src.services.clock_service import ClockService
 from src.services.face_service import FaceService
@@ -271,6 +271,7 @@ def main() -> int:
     _audio_backend_cfg = _audio_cfg.get(_audio_backend, {})
     _audio_out = create_audio_output(_audio_backend, _audio_backend_cfg)
     _audio_in  = create_audio_input(_audio_backend, _audio_backend_cfg)
+    _audio_capture_cfg = _cfg.get("audio_capture", {})
 
     # Optional LED ring — only instantiated for respeaker_flex backend
     _led: "object | None" = None
@@ -339,7 +340,17 @@ def main() -> int:
 
     obj_svc = ObjectService(bus=bus, vision_service=vis, config=_obj_cfg)
     perc_svc = PerceptionService(bus=bus, vision_service=vis, config=_perc_cfg)
-    capture_svc = AudioCaptureService(bus=bus, mic=_audio_in)
+    capture_svc = AudioCaptureService(
+        bus=bus,
+        mic=_audio_in,
+        config=AudioCaptureConfig(
+            chunk_seconds=float(_audio_capture_cfg.get("chunk_seconds", 0.25)),
+            spectrum_bins=int(_audio_capture_cfg.get("spectrum_bins", 48)),
+            emit_spectrum=bool(_audio_capture_cfg.get("emit_spectrum", True)),
+            vad_threshold_dbfs=float(_audio_capture_cfg.get("vad_threshold_dbfs", -42.0)),
+            vad_hang_s=float(_audio_capture_cfg.get("vad_hang_s", 0.8)),
+        ),
+    )
     # Let AVService record clips from the already-running capture stream
     # instead of opening a second (conflicting) input device.
     av.set_capture_service(capture_svc)

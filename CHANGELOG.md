@@ -6,6 +6,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.41.29] - 2026-06-25
+### Added
+- Audio input pipeline now publishes real-time analyzer telemetry:
+  - `audio.spectrum` FFT bins for browser visualization
+  - `audio.vad` speaking/idle state with configurable threshold and hang time
+  - `audio.capture_stats` health counters for capture diagnostics
+- Web Audio tab now includes a live spectrum analyzer with speaking/idle VAD status.
+
+### Changed
+- Audio capture is now configurable via `audio_capture` settings in `assistant.yaml`
+  (`chunk_seconds`, `emit_spectrum`, `spectrum_bins`, `vad_threshold_dbfs`, `vad_hang_s`).
+- Updated TODO hardware bring-up item to reflect that reSpeaker now handles mic input/output.
+
 ## [1.41.28] - 2026-06-25
 ### Fixed
 - Restored web GUI regressions caused by rollback drift:

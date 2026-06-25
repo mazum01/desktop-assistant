@@ -854,7 +854,7 @@ class WebService:
             "thermal.temp", "thermal.fan", "thermal.rpm",
             "motion.position",
             "vision.frame_ready", "vision.error",
-            "audio.level",
+            "audio.level", "audio.spectrum", "audio.vad", "audio.capture_stats",
             "perception.faces", "face.identified",
             "perception.objects",
             "av.spoke",
