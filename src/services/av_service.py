@@ -6,7 +6,7 @@ Owns: AudioOutput, TextToSpeech, VersionAnnouncer.
 
 Topics subscribed:
     av.say                {"text": str}            — speak the given text
-    av.beep               {"freq": float, "duration": float}  (optional)
+    av.beep               {"freq": float, "duration": float, "amplitude": float?}  (optional)
     av.chime              {} or {notes/note_duration/gap/amplitude} —
                            plays the boot arpeggio (C5-E5-G5 by default)
     av.utterance          {"text": str}            — user said something;
@@ -365,7 +365,9 @@ class AVService(Service):
             return
         freq = float(payload.get("freq", 880.0))
         duration = float(payload.get("duration", 0.2))
-        self._enqueue(lambda: self._do_beep(freq, duration), label="beep")
+        amp_raw = payload.get("amplitude")
+        amplitude = float(amp_raw) if amp_raw is not None else None
+        self._enqueue(lambda: self._do_beep(freq, duration, amplitude), label="beep")
 
     def _on_chime(self, _topic, payload) -> None:
         kwargs = {}
@@ -536,9 +538,16 @@ class AVService(Service):
         import numpy as np
         return np.clip(samples * gain, -1.0, 1.0)
 
-    def _do_beep(self, freq: float, duration: float) -> None:
+    def _do_beep(self, freq: float, duration: float, amplitude: float | None = None) -> None:
         try:
-            self._audio.beep(frequency=freq, duration=duration)
+            if amplitude is None:
+                self._audio.beep(frequency=freq, duration=duration)
+            else:
+                self._audio.beep(
+                    frequency=freq,
+                    duration=duration,
+                    amplitude=max(0.01, min(1.0, float(amplitude))),
+                )
         except Exception:
             log.exception("beep failed")
 
@@ -863,7 +872,7 @@ class AVService(Service):
                     "ends_ts": ts + note_duration,
                 },
             )
-            self._do_beep(float(freq), note_duration)
+            self._do_beep(float(freq), note_duration, amplitude=0.9)
             if gap > 0 and i < total - 1:
                 time.sleep(gap)
         self.bus.publish(
