@@ -106,6 +106,18 @@ def test_respeaker_output_delegates_properties():
     assert out.device_info is None
 
 
+def test_respeaker_output_beep_delegates_amplitude():
+    out = ReSpeakerFlexOutput()
+    calls = []
+
+    def _fake_beep(*, frequency, duration, amplitude):
+        calls.append((frequency, duration, amplitude))
+
+    out._out.beep = _fake_beep
+    out.beep(frequency=880.0, duration=0.3, amplitude=0.9)
+    assert calls == [(880.0, 0.3, 0.9)]
+
+
 # ── ReSpeakerFlexLED ──────────────────────────────────────────────────────────
 
 def test_led_set_state_no_crash_when_library_absent():

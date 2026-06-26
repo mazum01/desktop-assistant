@@ -307,8 +307,13 @@ class ReSpeakerFlexOutput:
     def stop(self) -> None:
         self._out.stop()
 
-    def beep(self, frequency: float = 440.0, duration: float = 0.2) -> None:
-        self._out.beep(frequency=frequency, duration=duration)
+    def beep(
+        self,
+        frequency: float = 440.0,
+        duration: float = 0.2,
+        amplitude: float = 0.2,
+    ) -> None:
+        self._out.beep(frequency=frequency, duration=duration, amplitude=amplitude)
 
     def chime(
         self,

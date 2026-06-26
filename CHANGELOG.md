@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.41.44] - 2026-06-26
+### Fixed
+- ReSpeaker backend tone playback bug: `ReSpeakerFlexOutput.beep()` now accepts and forwards `amplitude`, fixing silent analyzer test tones caused by `TypeError` in `AVService._do_beep`.
+
 ## [1.41.43] - 2026-06-26
 ### Fixed
 - Audio analyzer tone test now enforces ReSpeaker mic-isolation precondition: when `respeaker_flex` input processing is enabled, `/api/audio/spectrum-test` returns a clear error so tones are not run in a mode where the mic analyzer cannot see them.
