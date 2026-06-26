@@ -150,7 +150,7 @@ class AudioCaptureService(Service):
         # Smooth frame-to-frame to reduce flicker from ambient mic noise.
         prev = self._spectrum_prev
         if prev is not None and len(prev) == len(out):
-            out = [0.65 * pv + 0.35 * ov for pv, ov in zip(prev, out)]
+            out = [0.3 * pv + 0.7 * ov for pv, ov in zip(prev, out)]
         self._spectrum_prev = out
 
         return {

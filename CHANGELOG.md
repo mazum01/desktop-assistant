@@ -6,7 +6,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [1.41.40] - 2026-06-25
+## [1.41.41] - 2026-06-25
+### Fixed
+- Reduced audio analyzer lag: chunk size 250ms → 80ms, smoothing weight flipped to favour current frame (0.7) over previous (0.3).
+
+
 ### Added
 - Added a ReSpeaker input-processing toggle in Audio settings so AEC/beamformed filtering can be turned on/off without manual YAML edits.
 
