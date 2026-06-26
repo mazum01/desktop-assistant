@@ -222,18 +222,12 @@ function updateDashboard(data) {
     }
   }
 
-  const testSpectrum = last["audio.spectrum_test_reference"];
   const liveSpectrum = last["audio.spectrum"];
-  const spectrumSource = (
-    testSpectrum && testSpectrum.active === true && Array.isArray(testSpectrum.bins)
-  ) ? testSpectrum : liveSpectrum;
-  if (spectrumSource && Array.isArray(spectrumSource.bins)) {
-    drawAudioSpectrum(spectrumSource);
+  if (liveSpectrum && Array.isArray(liveSpectrum.bins)) {
+    drawAudioSpectrum(liveSpectrum);
   }
   const toneNow = el("audio-spectrum-tone-now");
-  const tone = (
-    testSpectrum && testSpectrum.active === true ? testSpectrum : last["av.spectrum_test_tone"]
-  );
+  const tone = last["av.spectrum_test_tone"];
   if (toneNow) {
     if (
       tone &&
@@ -2068,16 +2062,19 @@ async function audioPlaySpectrumTest() {
   }
   try {
     const r = await fetch("/api/audio/spectrum-test", { method: "POST" });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
+    if (!r.ok) {
+      const msg = (d && d.detail) ? String(d.detail) : `HTTP ${r.status}`;
+      throw new Error(msg);
+    }
     if (st) st.textContent = `Playing ${d.bins} tones`;
-  } catch (_e) {
+  } catch (e) {
     if (st) {
-      st.textContent = "Error";
+      st.textContent = e?.message || "Error";
       st.style.color = "var(--red)";
     }
   }
-  setTimeout(() => { if (st) st.textContent = ""; }, 2500);
+  setTimeout(() => { if (st) st.textContent = ""; }, 4500);
 }
 
 async function loadCamRotation() {

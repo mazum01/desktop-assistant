@@ -823,8 +823,8 @@ class AVService(Service):
         bins: int = 48,
         sample_rate: int = 16000,
         max_hz: float | None = None,
-        note_duration: float = 1.5,
-        gap: float = 0.25,
+        note_duration: float = 2.0,
+        gap: float = 0.333,
     ) -> dict:
         """Play a short sweep with one tone per analyzer bin center frequency."""
         n_bins = max(8, int(bins))

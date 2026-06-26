@@ -1647,6 +1647,17 @@ class WebService:
             av_svc = self._get_service_by_name("av")
             if av_svc is None or not hasattr(av_svc, "play_spectrum_test"):
                 raise HTTPException(503, "av service unavailable")
+            audio_cfg = _read_audio_config()
+            if (
+                audio_cfg.get("backend") == _AUDIO_BACKEND_RESPEAKER
+                and bool(audio_cfg.get("respeaker_flex", {}).get("input_processing_enabled", True))
+            ):
+                raise HTTPException(
+                    409,
+                    "ReSpeaker mic isolation is enabled. Turn off input processing "
+                    "in Audio Settings and restart the service before running "
+                    "analyzer test tones.",
+                )
             latest = self.bus.last("audio.spectrum") if self.bus else None
             bins = 48
             sample_rate = 16000

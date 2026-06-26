@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.41.43] - 2026-06-26
+### Fixed
+- Audio analyzer tone test now enforces ReSpeaker mic-isolation precondition: when `respeaker_flex` input processing is enabled, `/api/audio/spectrum-test` returns a clear error so tones are not run in a mode where the mic analyzer cannot see them.
+- Slowed analyzer test sweep by ~33% (`note_duration` 1.5→2.0, `gap` 0.25→0.333) for easier analyzer tracking.
+
+### Changed
+- Removed synthetic spectrum overlay during analyzer tone test; the web UI now always renders live `audio.spectrum` so bars reflect real mic pickup only.
+- Kept live “Now playing: <Hz>” tone text from `av.spectrum_test_tone`, and improved test-button error feedback to show backend precondition messages.
+
 ## [1.41.42] - 2026-06-25
 ### Fixed
 - `respeaker_flex` and `default` backends had `output_sample_rate: 16000` (mic rate) instead of 44100; corrected to 44100 so speaker output is not silent/garbled.

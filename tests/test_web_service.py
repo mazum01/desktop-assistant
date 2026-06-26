@@ -341,6 +341,48 @@ def test_audio_spectrum_test_endpoint_calls_av_service_with_latest_spectrum(app_
     assert fake_av.calls[-1]["max_hz"] == pytest.approx(8000.0)
 
 
+def test_audio_spectrum_test_requires_respeaker_processing_disabled(app_client, tmp_path, monkeypatch):
+    client, _bus, svc = app_client
+
+    cfg_path = tmp_path / "assistant.yaml"
+    cfg_path.write_text(
+        "audio:\n"
+        "  backend: respeaker_flex\n"
+        "  default: {}\n"
+        "  respeaker_flex:\n"
+        "    input_device_name: ReSpeaker\n"
+        "    input_sample_rate: 16000\n"
+        "    input_raw_channels: 6\n"
+        "    input_processing_enabled: true\n"
+        "    input_processed_channel: 0\n"
+        "    input_raw_mic_channel: 1\n"
+        "    output_alsa_device: pulse\n"
+        "    output_sample_rate: 44100\n"
+        "    loudness_boost: 2.5\n"
+        "    eq_preset: flat\n"
+        "    led_enabled: false\n"
+    )
+    monkeypatch.setattr(web_service, "_ASSISTANT_CONFIG_PATH", cfg_path)
+
+    class _FakeAV:
+        name = "av"
+
+        def __init__(self):
+            self.called = False
+
+        def play_spectrum_test(self, bins=48, sample_rate=16000, max_hz=8000.0):
+            self.called = True
+            return {"ok": True, "bins": bins, "sample_rate": sample_rate, "max_hz": max_hz}
+
+    fake_av = _FakeAV()
+    svc._all_services = [fake_av]
+
+    r = client.post("/api/audio/spectrum-test")
+    assert r.status_code == 409
+    assert "mic isolation is enabled" in r.json()["detail"]
+    assert fake_av.called is False
+
+
 def test_audio_settings_respeaker_processing_toggle_persists(app_client, tmp_path, monkeypatch):
     client, _bus, _svc = app_client
     cfg_path = tmp_path / "assistant.yaml"
