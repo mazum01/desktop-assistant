@@ -7,7 +7,7 @@ audio:
     input_source_match: reSpeaker
     loudness_boost: 2.5
     output_alsa_device: pulse
-    output_sample_rate: 16000
+    output_sample_rate: 44100
   respeaker_flex:
     eq_preset: custom
     input_device_name: ReSpeaker
@@ -19,7 +19,7 @@ audio:
     led_enabled: false
     loudness_boost: 2.5
     output_alsa_device: pulse
-    output_sample_rate: 16000
+    output_sample_rate: 44100
 audio_capture:
   chunk_seconds: 0.08
   emit_spectrum: true
