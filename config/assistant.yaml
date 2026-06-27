@@ -12,9 +12,9 @@ audio:
     eq_preset: custom
     input_device_name: ReSpeaker
     input_processed_channel: 0
-    input_processing_enabled: true
+    input_processing_enabled: false
     input_raw_channels: 6
-    input_raw_mic_channel: 1
+    input_raw_mic_channel: 2
     input_sample_rate: 16000
     led_enabled: false
     loudness_boost: 2.5
@@ -121,12 +121,12 @@ privacy:
   announce: false
   announce_text: I'll give you some privacy.
   clear_frames: 4
-  cooldown_s: 5.0
-  enabled: true
+  cooldown_s: 5
+  enabled: false
   idle_rate_hz: 0.25
   look_away_angle_deg: 45
   person_hold_s: 8.0
-  rate_hz: 1.0
+  rate_hz: 1
   require_person: true
   resume_text: Are you decent?
   threshold: 0.7
@@ -156,9 +156,9 @@ servo:
 telegram:
   bot_token: ''
   chat_id: ''
-  emoji_named: 🏷️
-  emoji_new_face: 👋
-  emoji_returning: 👤
+  emoji_named: "\U0001F3F7\uFE0F"
+  emoji_new_face: "\U0001F44B"
+  emoji_returning: "\U0001F464"
   enabled: true
   forward_tts: true
   tts_skip_patterns:
