@@ -1374,6 +1374,23 @@ def cmd_audio(args) -> int:
         with urllib.request.urlopen(req, timeout=5) as resp:
             return _json.loads(resp.read())
 
+    def _voice_get():
+        import urllib.request
+        with urllib.request.urlopen(f"{_BASE_URL}/api/settings/voice", timeout=5) as resp:
+            return _json.loads(resp.read())
+
+    def _voice_put(payload):
+        import urllib.request
+        data = _json.dumps(payload).encode()
+        req = urllib.request.Request(
+            f"{_BASE_URL}/api/settings/voice",
+            data=data,
+            method="PUT",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return _json.loads(resp.read())
+
     if action == "status":
         try:
             d = _api_get()
@@ -1614,6 +1631,76 @@ def cmd_audio(args) -> int:
         print()
         return 0
 
+    if action == "stt-status":
+        try:
+            d = _voice_get()
+            print()
+            print(f"  {BLD}Voice STT{RST}")
+            print(f"    Enabled                : {GRN if d.get('enabled') else YLW}{d.get('enabled', False)}{RST}")
+            print(f"    STT backend            : {d.get('stt_backend', 'shell')}")
+            print(f"    STT language           : {d.get('stt_language', 'en')}")
+            print(f"    STT command            : {d.get('stt_command', '') or '(not set)'}")
+            print(f"    Sample rate            : {d.get('sample_rate', 16000)}")
+            print(f"    STT timeout (s)        : {d.get('stt_timeout_s', 20.0)}")
+            print(f"    Wake threshold (dBFS)  : {d.get('wake_threshold_dbfs', -38.0)}")
+            print(f"    Wake cooldown (s)      : {d.get('wake_cooldown_s', 1.5)}")
+            print()
+            return 0
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+    if action in ("stt-enable", "stt-disable"):
+        enabled = action == "stt-enable"
+        try:
+            _voice_put({"enabled": enabled})
+            print(f"STT {'enabled' if enabled else 'disabled'}.")
+            return 0
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+    if action == "stt-set":
+        pairs = getattr(args, "settings", []) or []
+        if not pairs:
+            print(
+                "Usage: vera audio stt-set key=value ... "
+                "(keys: enabled,poll_seconds,sample_rate,wake_cooldown_s,"
+                "wake_threshold_dbfs,wake_consecutive_frames,command_min_s,"
+                "command_max_s,silence_end_s,stt_backend,stt_command,"
+                "stt_language,stt_timeout_s,dialog_timeout_s)",
+                file=sys.stderr,
+            )
+            return 1
+        patch = {}
+        for pair in pairs:
+            if "=" not in pair:
+                print(f"Bad key=value pair: {pair!r}  (expected key=value)", file=sys.stderr)
+                return 1
+            k, _, v = pair.partition("=")
+            k = k.strip()
+            v = v.strip()
+            if v.lower() in ("true", "false"):
+                patch[k] = v.lower() == "true"
+            else:
+                try:
+                    patch[k] = int(v)
+                except ValueError:
+                    try:
+                        patch[k] = float(v)
+                    except ValueError:
+                        patch[k] = v
+        try:
+            d = _voice_put(patch)
+            if not d.get("ok", False):
+                print(f"Error: {d}", file=sys.stderr)
+                return 1
+            print("STT settings updated.")
+            return 0
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
     return 1
 
 
@@ -1768,7 +1855,7 @@ def cmd_help(args) -> int:
                             "                  fan-tach status               Show tach enabled state and current RPM.\n"
                             "                  fan-tach enable               Enable GPIO edge-callback tach; restart thermal.\n"
                             "                  fan-tach disable              Disable GPIO edge-callback tach; restart thermal.",
-        "audio":            "Audio controls and backend configuration. Sub-commands:\n"
+        "audio":            "Audio controls (backend, EQ/volume, and voice STT settings). Sub-commands:\n"
                             "                  audio status                  Show active backend and all settings.\n"
                             "                  audio set-backend <name>      Switch to a different backend (default|respeaker_flex).\n"
                             "                  audio set [--backend <b>] k=v ...  Update one or more settings for a backend.\n"
@@ -1779,6 +1866,10 @@ def cmd_help(args) -> int:
                             "                  audio eq [PRESET]             Get or set EQ preset.\n"
                             "                  audio eq-custom <band...>     Apply custom per-band EQ.\n"
                             "                  audio repeat                  Repeat the last spoken phrase.\n"
+                            "                  audio stt-status              Show current voice STT configuration.\n"
+                            "                  audio stt-enable              Enable voice STT pipeline.\n"
+                            "                  audio stt-disable             Disable voice STT pipeline.\n"
+                            "                  audio stt-set k=v ...         Update voice STT settings (backend, command, language, wake tuning).\n"
                             "                  Note: backend changes require a service restart to take effect.",
         "privacy":          "Nudity detection look-away service. Sub-commands:\n"
                             "                  privacy status                Show enabled state, hardware readiness, and settings.\n"
@@ -3122,7 +3213,7 @@ def main() -> int:
     ft_sub2.add_parser("disable", help="Disable fan tach GPIO edge-callback, restart thermal").set_defaults(func=cmd_fan_tach)
 
     # ── Audio backend subcommand group ────────────────────────────────
-    audio_sp = sub.add_parser("audio", help="Audio backend configuration (default or respeaker_flex)")
+    audio_sp = sub.add_parser("audio", help="Audio controls (backend, EQ/volume, and voice STT settings)")
     audio_sub = audio_sp.add_subparsers(dest="audio_action", metavar="<subcommand>")
     audio_sp.set_defaults(func=cmd_audio)
 
@@ -3162,6 +3253,14 @@ def main() -> int:
 
     ssp = audio_sub.add_parser("eq-custom", help="Apply custom per-band EQ (hz=<Hz>,gain=<dB>,q=<Q> or <Hz>:<dB>:<Q>)")
     ssp.add_argument("band", nargs="+", help="Band spec: hz=1000,gain=3.5,q=1.0  or  1000:3.5:1.0")
+    ssp.set_defaults(func=cmd_audio)
+
+    audio_sub.add_parser("stt-status", help="Show voice STT pipeline settings").set_defaults(func=cmd_audio)
+    audio_sub.add_parser("stt-enable", help="Enable voice STT pipeline").set_defaults(func=cmd_audio)
+    audio_sub.add_parser("stt-disable", help="Disable voice STT pipeline").set_defaults(func=cmd_audio)
+    ssp = audio_sub.add_parser("stt-set", help="Update voice STT settings (key=value ...)")
+    ssp.add_argument("settings", nargs="+", metavar="key=value",
+                     help="Voice settings to update, e.g. enabled=true stt_backend=shell stt_command='whisper ... {wav_path}'")
     ssp.set_defaults(func=cmd_audio)
 
     # ── Privacy (nudity look-away) ────────────────────────────────────

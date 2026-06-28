@@ -1797,6 +1797,52 @@ async function loadAudioSettings() {
   }
 }
 
+async function loadVoiceSettings() {
+  const st = el("voice-status");
+  try {
+    const d = await fetch("/api/settings/voice").then(r => r.json());
+    _setVal("voice-enabled", d.enabled === true);
+    _setVal("voice-stt-backend", d.stt_backend ?? "shell");
+    _setVal("voice-stt-command", d.stt_command ?? "");
+    _setVal("voice-stt-language", d.stt_language ?? "en");
+    _setVal("voice-stt-timeout", d.stt_timeout_s ?? 20.0);
+    _setVal("voice-wake-threshold", d.wake_threshold_dbfs ?? -38.0);
+    _setVal("voice-wake-cooldown", d.wake_cooldown_s ?? 1.5);
+    if (st) st.textContent = "";
+  } catch (e) {
+    if (st) { st.className = "qh-status error"; st.textContent = e.message || "Load failed"; }
+  }
+}
+
+async function saveVoiceSettings() {
+  const st = el("voice-status");
+  const body = {
+    enabled: el("voice-enabled").checked,
+    stt_backend: el("voice-stt-backend").value,
+    stt_command: el("voice-stt-command").value,
+    stt_language: el("voice-stt-language").value || "en",
+    stt_timeout_s: parseFloat(el("voice-stt-timeout").value),
+    wake_threshold_dbfs: parseFloat(el("voice-wake-threshold").value),
+    wake_cooldown_s: parseFloat(el("voice-wake-cooldown").value),
+  };
+  try {
+    const r = await fetch("/api/settings/voice", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || "Save failed");
+    if (st) {
+      st.className = "qh-status";
+      st.textContent = "Saved ✓";
+    }
+  } catch (e) {
+    if (st) { st.className = "qh-status error"; st.textContent = e.message || "Error"; }
+  }
+  setTimeout(() => { if (st) st.textContent = ""; }, 5000);
+}
+
 async function loadAudioInputGain() {
   const slider = el("audio-input-gain-slider");
   const label = el("audio-input-gain-label");
@@ -2618,6 +2664,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadQuietHours();
   loadFanControlPoints();
   loadAudioSettings();
+  loadVoiceSettings();
   loadAudioInputGain();
   loadAudioVoiceGain();
   loadServoEnabled();

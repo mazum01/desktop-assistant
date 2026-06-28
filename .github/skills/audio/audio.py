@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Control VERA audio settings (volume, EQ, input gain, mute, repeat, backend)."""
+"""Control VERA audio settings (volume, EQ, input gain, mute, repeat, backend, STT)."""
 
 import json
 import sys
@@ -8,7 +8,7 @@ import urllib.request
 
 BASE_URL = "http://localhost:8080"
 EQ_PRESETS = ("flat", "bass_boost", "treble_boost", "vocal", "loudness", "warm", "custom")
-COMMANDS = ("status", "volume", "mute", "repeat", "eq", "input-gain", "backend")
+COMMANDS = ("status", "volume", "mute", "repeat", "eq", "input-gain", "backend", "stt")
 
 
 def _get(path: str) -> dict:
@@ -134,6 +134,55 @@ def main() -> None:
                     "backend": backend,
                     "message": "Backend saved. Restart daemon to apply.",
                 }))
+
+        elif cmd == "stt":
+            if len(sys.argv) < 3:
+                d = _get("/api/settings/voice")
+                print(json.dumps({
+                    "ok": True,
+                    "enabled": d.get("enabled", False),
+                    "stt_backend": d.get("stt_backend", "shell"),
+                    "stt_language": d.get("stt_language", "en"),
+                    "stt_command": d.get("stt_command", ""),
+                }))
+            else:
+                arg = sys.argv[2].lower()
+                if arg in ("on", "off"):
+                    enabled = arg == "on"
+                    d = _put("/api/settings/voice", {"enabled": enabled})
+                    print(json.dumps({
+                        "ok": True,
+                        "enabled": d.get("enabled", enabled),
+                    }))
+                else:
+                    patch = {}
+                    for item in sys.argv[2:]:
+                        if "=" not in item:
+                            raise ValueError(
+                                "stt set mode uses key=value pairs "
+                                "(e.g. stt_backend=shell stt_language=en)"
+                            )
+                        key, value = item.split("=", 1)
+                        key = key.strip()
+                        value = value.strip()
+                        if value.lower() in ("true", "false"):
+                            patch[key] = value.lower() == "true"
+                        else:
+                            try:
+                                patch[key] = int(value)
+                            except ValueError:
+                                try:
+                                    patch[key] = float(value)
+                                except ValueError:
+                                    patch[key] = value
+                    d = _put("/api/settings/voice", patch)
+                    print(json.dumps({
+                        "ok": True,
+                        "enabled": d.get("enabled", False),
+                        "stt_backend": d.get("stt_backend", "shell"),
+                        "stt_language": d.get("stt_language", "en"),
+                        "stt_command": d.get("stt_command", ""),
+                    }))
 
     except urllib.error.URLError as exc:
         print(json.dumps({"ok": False, "error": f"Cannot reach assistant: {exc}"}))

@@ -434,6 +434,55 @@ def test_audio_settings_respeaker_processing_toggle_persists(app_client, tmp_pat
     assert "input_raw_mic_channel: 2" in text
 
 
+def test_voice_settings_get_and_put_persist_and_publish(app_client, tmp_path, monkeypatch):
+    client, bus, _svc = app_client
+    cfg_path = tmp_path / "assistant.yaml"
+    cfg_path.write_text(
+        "voice_commands:\n"
+        "  enabled: false\n"
+        "  stt_backend: shell\n"
+        "  stt_command: \"\"\n"
+        "  stt_language: en\n"
+        "  stt_timeout_s: 20.0\n"
+    )
+    monkeypatch.setattr(web_service, "_ASSISTANT_CONFIG_PATH", cfg_path)
+    events = []
+    bus.subscribe("voice.set_config", lambda _t, p: events.append(p))
+
+    r = client.get("/api/settings/voice")
+    assert r.status_code == 200
+    assert r.json()["enabled"] is False
+    assert "shell" in r.json()["available_stt_backends"]
+
+    r2 = client.put(
+        "/api/settings/voice",
+        json={
+            "enabled": True,
+            "stt_backend": "shell",
+            "stt_language": "en",
+            "stt_command": "echo hello",
+            "stt_timeout_s": 12.5,
+        },
+    )
+    assert r2.status_code == 200
+    body = r2.json()
+    assert body["enabled"] is True
+    assert body["stt_command"] == "echo hello"
+    assert body["runtime_applied"] is True
+    assert events
+    assert events[-1]["enabled"] is True
+
+    text = cfg_path.read_text()
+    assert "enabled: true" in text
+    assert "stt_command: echo hello" in text
+
+
+def test_voice_settings_reject_invalid_backend(app_client):
+    client, _bus, _svc = app_client
+    r = client.put("/api/settings/voice", json={"stt_backend": "bad_backend"})
+    assert r.status_code == 422
+
+
 def test_audio_repeat_endpoint_calls_av_service(app_client):
     client, bus, svc = app_client
 

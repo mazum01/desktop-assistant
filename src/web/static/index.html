@@ -665,6 +665,47 @@
   </div>
 </div>
 
+<hr style="margin:12px 0;border-color:var(--border)">
+<h3 style="font-size:0.9em;color:var(--text-muted);margin:0 0 10px 0">Voice STT Settings</h3>
+<div class="control-group">
+  <label>
+    <input id="voice-enabled" type="checkbox"/>
+    <span>Voice command pipeline enabled</span>
+  </label>
+</div>
+<div class="control-group">
+  <label>STT Backend</label>
+  <select id="voice-stt-backend" style="width:200px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
+    <option value="shell">shell</option>
+    <option value="null">null (disable transcription)</option>
+  </select>
+</div>
+<div class="control-group">
+  <label>STT Command <small style="color:var(--text-muted)">(uses <code>{wav_path}</code>, <code>{sample_rate}</code>, <code>{language}</code>)</small></label>
+  <input id="voice-stt-command" type="text" placeholder="e.g. whisper-cli ... -f {wav_path}" style="width:100%"/>
+</div>
+<div class="control-group">
+  <label>Language</label>
+  <input id="voice-stt-language" type="text" placeholder="en" style="width:110px"/>
+</div>
+<div class="control-group">
+  <label>STT Timeout (seconds)</label>
+  <input id="voice-stt-timeout" type="number" min="1" max="120" step="0.5" style="width:110px"/>
+</div>
+<div class="control-group">
+  <label>Wake Threshold (dBFS)</label>
+  <input id="voice-wake-threshold" type="number" min="-120" max="0" step="0.5" style="width:110px"/>
+</div>
+<div class="control-group">
+  <label>Wake Cooldown (seconds)</label>
+  <input id="voice-wake-cooldown" type="number" min="0" max="30" step="0.1" style="width:110px"/>
+</div>
+<div style="margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+  <button class="btn btn-primary btn-sm" onclick="saveVoiceSettings()">Save Voice STT</button>
+  <button class="btn btn-secondary btn-sm" onclick="loadVoiceSettings()">Reload Voice STT</button>
+  <span class="qh-status" id="voice-status"></span>
+</div>
+
 <!-- Available input devices -->
 <details style="margin-top:10px">
   <summary style="cursor:pointer;font-size:0.85em;color:var(--text-muted)">Available input devices</summary>

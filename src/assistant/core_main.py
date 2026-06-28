@@ -34,6 +34,7 @@ from src.services.telemetry_service import TelemetryService
 from src.services.skills_service import SkillsService
 from src.services.tracking_service import TrackingService
 from src.services.vision_service import VisionService
+from src.services.voice_command_service import VoiceCommandService, VoiceCommandConfig
 from src.core.quiet_hours import QuietHours
 from src.services.web_service import WebService
 from src.core.runtime_state import load as _load_runtime, save as _save_runtime
@@ -272,6 +273,7 @@ def main() -> int:
     _audio_out = create_audio_output(_audio_backend, _audio_backend_cfg)
     _audio_in  = create_audio_input(_audio_backend, _audio_backend_cfg)
     _audio_capture_cfg = _cfg.get("audio_capture", {})
+    _voice_cfg_raw = _cfg.get("voice_commands", {})
 
     # Optional LED ring — only instantiated for respeaker_flex backend
     _led: "object | None" = None
@@ -351,6 +353,27 @@ def main() -> int:
             vad_hang_s=float(_audio_capture_cfg.get("vad_hang_s", 0.8)),
         ),
     )
+    voice_svc = VoiceCommandService(
+        bus=bus,
+        capture_service=capture_svc,
+        led=_led,
+        config=VoiceCommandConfig(
+            enabled=bool(_voice_cfg_raw.get("enabled", False)),
+            poll_seconds=float(_voice_cfg_raw.get("poll_seconds", 0.08)),
+            sample_rate=int(_voice_cfg_raw.get("sample_rate", 16000)),
+            wake_cooldown_s=float(_voice_cfg_raw.get("wake_cooldown_s", 1.5)),
+            wake_threshold_dbfs=float(_voice_cfg_raw.get("wake_threshold_dbfs", -38.0)),
+            wake_consecutive_frames=int(_voice_cfg_raw.get("wake_consecutive_frames", 2)),
+            command_min_s=float(_voice_cfg_raw.get("command_min_s", 0.35)),
+            command_max_s=float(_voice_cfg_raw.get("command_max_s", 6.0)),
+            silence_end_s=float(_voice_cfg_raw.get("silence_end_s", 0.8)),
+            stt_backend=str(_voice_cfg_raw.get("stt_backend", "shell")),
+            stt_command=str(_voice_cfg_raw.get("stt_command", "")),
+            stt_language=str(_voice_cfg_raw.get("stt_language", "en")),
+            stt_timeout_s=float(_voice_cfg_raw.get("stt_timeout_s", 20.0)),
+            dialog_timeout_s=float(_voice_cfg_raw.get("dialog_timeout_s", 20.0)),
+        ),
+    )
     # Let AVService record clips from the already-running capture stream
     # instead of opening a second (conflicting) input device.
     av.set_capture_service(capture_svc)
@@ -358,6 +381,7 @@ def main() -> int:
         motion_svc,
         vis,
         capture_svc,
+        voice_svc,
         av,
         perc_svc,
         obj_svc,

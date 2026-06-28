@@ -384,6 +384,7 @@ class IPCBridge(Service):
             "motion.position",
             "vision.frame_ready", "vision.error",
             "audio.level", "audio.error",
+            "voice.state", "voice.wake", "voice.intent", "voice.transcript",
             "telemetry.flush",
         )
         last = {t: self.bus.last(t) for t in snapshot_topics}

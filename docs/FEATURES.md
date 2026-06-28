@@ -58,7 +58,8 @@ This document tracks which features are accessible via each interface:
 | Record audio | ✅ `vera record` | ❌ | ✅ record |
 | Play back recording | ✅ `vera playback` | ❌ | ✅ playback |
 | EQ preset | ✅ `vera eq set` | ✅ Audio panel | ❌ |
-| Audio backend config | ✅ `vera audio` | ✅ Audio panel | ❌ |
+| Audio backend config | ✅ `vera audio` | ✅ Audio panel | ✅ audio |
+| Voice STT setup/enable | ✅ `vera audio stt-*` | ✅ Audio panel | ✅ audio |
 | Volume | ✅ `vera music volume` | ✅ Music panel | ✅ music |
 
 ---

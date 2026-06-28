@@ -37,6 +37,9 @@ Control VERA's consolidated audio controls.
 | `eq [preset]`       | Get or set EQ preset |
 | `input-gain [0-100]`| Get or set microphone gain |
 | `backend [name]`    | Get or set backend (`default`, `respeaker_flex`) |
+| `stt`               | Show voice STT status |
+| `stt on|off`        | Enable or disable voice STT pipeline |
+| `stt key=value...`  | Update STT settings (e.g., backend/language/command) |
 
 ## How to invoke
 
@@ -53,6 +56,9 @@ python3 ~/.openclaw/workspace/skills/audio/audio.py repeat
 python3 ~/.openclaw/workspace/skills/audio/audio.py eq vocal
 python3 ~/.openclaw/workspace/skills/audio/audio.py input-gain 70
 python3 ~/.openclaw/workspace/skills/audio/audio.py backend respeaker_flex
+python3 ~/.openclaw/workspace/skills/audio/audio.py stt
+python3 ~/.openclaw/workspace/skills/audio/audio.py stt on
+python3 ~/.openclaw/workspace/skills/audio/audio.py stt stt_backend=shell stt_language=en stt_command='whisper-cli -m /models/base.en.bin -f {wav_path} -l {language}'
 ```
 
 Relay the returned JSON in natural language.

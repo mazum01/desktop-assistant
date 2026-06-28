@@ -75,6 +75,8 @@ GET  /api/audio/voice-gain Get current TTS voice output gain percentage
 PUT  /api/audio/voice-gain Set TTS voice output gain percentage body: {"level": int}
 GET  /api/settings/audio   Get audio backend + all per-backend settings + available devices
 PUT  /api/settings/audio   Set audio backend and/or per-backend settings  body: {"backend": str, "default"?: {...}, "respeaker_flex"?: {...}}
+GET  /api/settings/voice   Get voice command (wake/STT/dialog) settings
+PUT  /api/settings/voice   Update voice command settings body: {"enabled"?: bool, ...}
 """
 
 import asyncio
@@ -416,6 +418,23 @@ class _AudioSettingsBody(BaseModel):
     respeaker_flex: Optional[_AudioReSpeakerSettings] = None
 
 
+class _VoiceSettingsBody(BaseModel):
+    enabled: Optional[bool] = None
+    poll_seconds: Optional[float] = None
+    sample_rate: Optional[int] = None
+    wake_cooldown_s: Optional[float] = None
+    wake_threshold_dbfs: Optional[float] = None
+    wake_consecutive_frames: Optional[int] = None
+    command_min_s: Optional[float] = None
+    command_max_s: Optional[float] = None
+    silence_end_s: Optional[float] = None
+    stt_backend: Optional[str] = None
+    stt_command: Optional[str] = None
+    stt_language: Optional[str] = None
+    stt_timeout_s: Optional[float] = None
+    dialog_timeout_s: Optional[float] = None
+
+
 def _normalise_fan_control_points(points: list[dict]) -> list[dict[str, float]]:
     if len(points) < 2:
         raise ValueError("At least two control points are required")
@@ -591,6 +610,56 @@ def _write_audio_config(body: dict) -> None:
         if backend_key in body and isinstance(body[backend_key], dict):
             section = audio.setdefault(backend_key, {})
             section.update(body[backend_key])
+
+    with open(_ASSISTANT_CONFIG_PATH, "w") as f:
+        yaml.safe_dump(cfg, f, sort_keys=False)
+
+
+_VOICE_VALID_STT_BACKENDS = ("shell", "null")
+
+
+def _read_voice_config() -> dict:
+    """Return the ``voice_commands:`` section from assistant.yaml with defaults."""
+    import yaml
+
+    defaults = {
+        "enabled": False,
+        "poll_seconds": 0.08,
+        "sample_rate": 16000,
+        "wake_cooldown_s": 1.5,
+        "wake_threshold_dbfs": -38.0,
+        "wake_consecutive_frames": 2,
+        "command_min_s": 0.35,
+        "command_max_s": 6.0,
+        "silence_end_s": 0.8,
+        "stt_backend": "shell",
+        "stt_command": "",
+        "stt_language": "en",
+        "stt_timeout_s": 20.0,
+        "dialog_timeout_s": 20.0,
+    }
+    try:
+        with open(_ASSISTANT_CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception:
+        cfg = {}
+    voice = cfg.get("voice_commands", {})
+    out = {**defaults, **(voice if isinstance(voice, dict) else {})}
+    out["stt_backend"] = str(out.get("stt_backend", "shell")).lower()
+    if out["stt_backend"] not in _VOICE_VALID_STT_BACKENDS:
+        out["stt_backend"] = "shell"
+    return out
+
+
+def _write_voice_config(patch: dict) -> None:
+    """Merge *patch* into the ``voice_commands:`` section of assistant.yaml."""
+    import yaml
+
+    with open(_ASSISTANT_CONFIG_PATH) as f:
+        cfg = yaml.safe_load(f) or {}
+
+    voice = cfg.setdefault("voice_commands", {})
+    voice.update(patch)
 
     with open(_ASSISTANT_CONFIG_PATH, "w") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
@@ -772,6 +841,7 @@ class WebService:
         for topic in (
             "perception.faces", "face.identified", "av.spoke",
             "motion.position", "thermal.temp", "thermal.fan",
+            "voice.state", "voice.wake", "voice.intent",
         ):
             self._unsubs.append(
                 self.bus.subscribe(topic, lambda t, p, _t=topic: self._on_event(_t, p))
@@ -893,6 +963,7 @@ class WebService:
             "vision.frame_ready", "vision.error",
             "audio.level", "audio.spectrum", "audio.spectrum_test_reference",
             "audio.vad", "audio.capture_stats",
+            "voice.state", "voice.wake", "voice.intent", "voice.transcript",
             "perception.faces", "face.identified",
             "perception.objects",
             "av.spoke", "av.spectrum_test_tone",
@@ -1542,6 +1613,57 @@ class WebService:
                 "respeaker_flex": updated["respeaker_flex"],
                 "restart_required": True,
                 "message": "Audio backend change takes effect after service restart.",
+            }
+
+        @app.get("/api/settings/voice")
+        async def api_get_voice():
+            try:
+                voice = _read_voice_config()
+            except Exception as exc:
+                raise HTTPException(500, f"Unable to read voice config: {exc}")
+            return {
+                "ok": True,
+                **voice,
+                "available_stt_backends": list(_VOICE_VALID_STT_BACKENDS),
+            }
+
+        @app.put("/api/settings/voice")
+        async def api_put_voice(body: _VoiceSettingsBody):
+            patch = body.model_dump(exclude_none=True)
+            if "stt_backend" in patch:
+                patch["stt_backend"] = str(patch["stt_backend"]).lower()
+                if patch["stt_backend"] not in _VOICE_VALID_STT_BACKENDS:
+                    raise HTTPException(
+                        422,
+                        f"Unknown stt_backend {patch['stt_backend']!r}. "
+                        f"Valid: {list(_VOICE_VALID_STT_BACKENDS)}",
+                    )
+            if "sample_rate" in patch and int(patch["sample_rate"]) <= 0:
+                raise HTTPException(422, "sample_rate must be > 0")
+            if "poll_seconds" in patch and float(patch["poll_seconds"]) <= 0:
+                raise HTTPException(422, "poll_seconds must be > 0")
+            if "command_min_s" in patch and float(patch["command_min_s"]) < 0:
+                raise HTTPException(422, "command_min_s must be >= 0")
+            if "command_max_s" in patch and float(patch["command_max_s"]) <= 0:
+                raise HTTPException(422, "command_max_s must be > 0")
+            if "stt_timeout_s" in patch and float(patch["stt_timeout_s"]) <= 0:
+                raise HTTPException(422, "stt_timeout_s must be > 0")
+
+            try:
+                _write_voice_config(patch)
+            except Exception as exc:
+                raise HTTPException(500, f"Unable to save voice config: {exc}")
+
+            if self.bus and patch:
+                self.bus.publish("voice.set_config", patch)
+
+            updated = _read_voice_config()
+            return {
+                "ok": True,
+                **updated,
+                "available_stt_backends": list(_VOICE_VALID_STT_BACKENDS),
+                "runtime_applied": bool(self.bus),
+                "restart_required": False,
             }
 
         # ── REST: greeting settings ───────────────────────────────────

@@ -16,7 +16,7 @@ audio:
     input_raw_channels: 6
     input_raw_mic_channel: 2
     input_sample_rate: 16000
-    led_enabled: false
+    led_    enabled: true
     loudness_boost: 2.5
     output_alsa_device: pulse
     output_sample_rate: 44100
@@ -170,6 +170,24 @@ tts:
   piper_noise_scale: 0.3
   piper_noise_w: 0.5
   piper_voice_name: en_US-lessac-medium
+voice_commands:
+  command_max_s: 6.0
+  command_min_s: 0.35
+  dialog_timeout_s: 20.0
+  enabled: true
+  poll_seconds: 0.08
+  sample_rate: 16000
+  silence_end_s: 0.8
+  stt_backend: shell
+  stt_command: python3 -c "from faster_whisper import WhisperModel; import sys; m=WhisperModel('tiny.en',
+    device='cpu', compute_type='int8'); seg,_=m.transcribe(sys.argv[1], language=(sys.argv[2]
+    if len(sys.argv) > 2 else 'en')); print(' '.join(s.text.strip() for s in seg).strip())"
+    {wav_path} {language}
+  stt_language: en
+  stt_timeout_s: 20.0
+  wake_consecutive_frames: 2
+  wake_cooldown_s: 1.5
+  wake_threshold_dbfs: -38.0
 watchdog:
   check_interval_s: 30
   enabled: true

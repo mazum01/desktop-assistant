@@ -4,6 +4,31 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.42.0] - 2026-06-28
+### Added
+- Added a full voice-command pipeline built around `VoiceCommandService`, including:
+  - wake/listen/think state management from live mic chunks and VAD
+  - routed voice events (`voice.state`, `voice.wake`, `voice.transcript`, `voice.intent`)
+  - intent routing and lightweight dialog confirmation context
+  - pluggable STT helpers under `src/voice/`.
+- Added REST voice-settings API:
+  - `GET /api/settings/voice` to read `voice_commands` config with defaults
+  - `PUT /api/settings/voice` to update wake/STT/dialog settings and apply at runtime.
+- Added web dashboard controls for voice STT setup/enable (`enabled`, backend, command, language, timeout, wake threshold/cooldown) in the Audio panel.
+- Added CLI STT management commands under `vera audio`:
+  - `stt-status`, `stt-enable`, `stt-disable`, `stt-set key=value ...`.
+- Added OpenClaw `audio` skill support for STT management:
+  - `stt`, `stt on|off`, and `stt key=value...`.
+- Added unit tests for the voice stack and voice settings runtime updates (`tests/test_voice_backends.py`, `tests/test_voice_intent_router.py`, `tests/test_dialog_manager.py`, `tests/test_voice_command_service.py`, `tests/test_web_service.py`).
+
+### Changed
+- Enabled the voice command pipeline in `config/assistant.yaml` (`voice_commands.enabled: true`).
+- Set a working default `voice_commands.stt_command` using local `faster_whisper` (`tiny.en`, CPU/int8) so STT is usable without manually crafting a command template.
+- `VoiceCommandService` now accepts live config updates via `voice.set_config` and republishes `voice.config`.
+- Extended web/IPC status snapshots to include voice pipeline topics for observability.
+- Updated feature parity docs and TODO tracking for STT setup availability across CLI/Web/OpenClaw.
+- Updated architecture source/rendered outputs (`docs/architecture/architecture.dot/.pdf/.svg/.png`) for the new voice service and `/api/settings/voice` interface.
+
 ## [1.41.44] - 2026-06-26
 ### Fixed
 - ReSpeaker backend tone playback bug: `ReSpeakerFlexOutput.beep()` now accepts and forwards `amplitude`, fixing silent analyzer test tones caused by `TypeError` in `AVService._do_beep`.

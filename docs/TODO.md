@@ -21,9 +21,9 @@ Smoke-test scripts for each component (`scripts/test_<device>.py` exits 0).
 
 ## Phase 3 — Perception
 
-- [ ] **VAD (Voice Activity Detection)** — detect when someone is speaking
-- [ ] **Wake-word detection** — trigger phrase ("Hey Assistant" or similar)
-- [ ] **Streaming STT (Speech-to-Text)** — convert mic audio to text in real time
+- [x] **VAD (Voice Activity Detection)** — detect when someone is speaking
+- [x] **Wake-word detection** — trigger phrase ("Hey Assistant" or similar)
+- [x] **Streaming STT (Speech-to-Text)** — convert mic audio to text in real time
 
 > Face/person detection (Hailo-8 SCRFD) and stereo depth localization are
 > complete. Audio perception is blocked on reliable microphone input — verify
@@ -35,9 +35,9 @@ Smoke-test scripts for each component (`scripts/test_<device>.py` exits 0).
 
 ## Phase 4 — Assistant Logic
 
-- [ ] **Intent router** — classify utterance into action category
-- [ ] **Dialog / state manager** — track conversation context, multi-turn flow
-- [ ] **End-to-end voice round-trip** — wake → STT → intent → response → TTS
+- [x] **Intent router** — classify utterance into action category
+- [x] **Dialog / state manager** — track conversation context, multi-turn flow
+- [x] **End-to-end voice round-trip** — wake → STT → intent → response → TTS
 
 > TTS pipeline and Sabrent audio out are complete (Phase 2 `av_service`).
 > This phase is blocked on Phase 3 audio perception.
