@@ -65,3 +65,28 @@ def test_buffer_to_samples_conversion(monkeypatch):
     out = mic.record(0.1)
     assert out.shape == (1600,)
     assert np.allclose(out, 16384 / 32768.0, atol=1e-4)
+
+
+def test_buffer_to_selected_channel_conversion(monkeypatch):
+    """Multi-channel decode can extract a configured mono channel."""
+    monkeypatch.setattr(pw_input, "_PW_RECORD", None)
+    mic = PipeWireMicInput(PipeWireMicConfig(sample_rate=16000, channels=3, select_channel=1))
+    mic._sim = False
+
+    class _FakeProc:
+        def poll(self):
+            return None
+
+    mic._proc = _FakeProc()  # type: ignore
+
+    frames = np.array(
+        [
+            [0, 1000, 2000],
+            [3000, 4000, 5000],
+        ],
+        dtype=np.int16,
+    )
+    mic._buf.extend(frames.tobytes())
+    out = mic.record(2 / 16000)
+    assert out.shape == (2,)
+    assert np.allclose(out, np.array([1000, 4000], dtype=np.float32) / 32768.0, atol=1e-4)

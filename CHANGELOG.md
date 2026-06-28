@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.42.1] - 2026-06-28
+### Fixed
+- Switched `respeaker_flex` microphone capture to the existing PipeWire `pw-record` path instead of PortAudio/sounddevice, which was intermittently exposing the ReSpeaker as a zero-input device and breaking live voice command capture.
+- Preserved processed/raw ReSpeaker channel selection on the PipeWire path so `input_processing_enabled`, `input_processed_channel`, and `input_raw_mic_channel` still control which mic stream feeds VERA speech recognition.
+
 ## [1.42.0] - 2026-06-28
 ### Added
 - Added a full voice-command pipeline built around `VoiceCommandService`, including:

@@ -38,6 +38,10 @@ _PW_RECORD = shutil.which("pw-record")
 class PipeWireMicConfig:
     sample_rate: int = 16000
     channels: int = 1
+    # If set, extract just this channel from multi-channel capture and return
+    # a mono array. This lets ReSpeaker use PipeWire capture while preserving
+    # its processed/raw channel selection behavior.
+    select_channel: Optional[int] = None
     # Substring used to pick the PipeWire source by node.name.  Empty → use the
     # default source (which is the reSpeaker on this system).
     source_match: str = "reSpeaker"
@@ -201,4 +205,7 @@ class PipeWireMicInput:
         samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
         if self._cfg.channels > 1:
             samples = samples.reshape(-1, self._cfg.channels)
+            if self._cfg.select_channel is not None:
+                ch = max(0, min(int(self._cfg.select_channel), self._cfg.channels - 1))
+                samples = samples[:, ch].copy()
         return samples

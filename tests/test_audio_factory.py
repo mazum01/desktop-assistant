@@ -15,6 +15,7 @@ from src.audio.factory import (
 )
 from src.audio.input import AudioInput
 from src.audio.output import AudioOutput
+from src.audio.pw_input import PipeWireMicInput
 from src.audio.respeaker_flex import (
     ReSpeakerFlexInput,
     ReSpeakerFlexInputConfig,
@@ -35,7 +36,7 @@ def test_create_input_default_returns_audio_input():
 
 def test_create_input_respeaker_returns_respeaker_input():
     obj = create_audio_input(BACKEND_RESPEAKER_FLEX, {})
-    assert isinstance(obj, ReSpeakerFlexInput)
+    assert isinstance(obj, PipeWireMicInput)
 
 
 def test_create_input_unknown_falls_back_to_default():
@@ -156,11 +157,20 @@ def test_led_disabled_does_not_publish():
 
 # ── Config passthrough ────────────────────────────────────────────────────────
 
-def test_factory_input_passes_device_name():
-    cfg = {"input_device_name": "TestDevice", "input_sample_rate": 16000}
+def test_factory_input_passes_pipewire_channel_selection():
+    cfg = {
+        "input_sample_rate": 16000,
+        "input_raw_channels": 6,
+        "input_source_match": "reSpeaker",
+        "input_processing_enabled": False,
+        "input_processed_channel": 0,
+        "input_raw_mic_channel": 2,
+    }
     obj = create_audio_input(BACKEND_RESPEAKER_FLEX, cfg)
-    assert obj._cfg.device_name == "TestDevice"
+    assert obj._cfg.source_match == "reSpeaker"
     assert obj._cfg.sample_rate == 16000
+    assert obj._cfg.channels == 6
+    assert obj._cfg.select_channel == 2
 
 
 def test_factory_output_passes_alsa_device():
