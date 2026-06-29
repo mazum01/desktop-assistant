@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.42.4] - 2026-06-29
+### Fixed
+- Removed the unconditional API-key overlay trigger in `app.js`. The overlay was displayed immediately on page load whenever no key was stored in `localStorage`, blocking the entire web dashboard even though no `VERA_API_KEY` is configured server-side. The overlay now only appears reactively when the server returns HTTP 401. Updated `app.js` cache-busting version in `index.html` to `v1.42.4` so browsers invalidate any stale cached script.
+
 ## [1.42.2] - 2026-06-28
 ### Fixed
 - Replaced per-utterance shell STT execution with a persistent in-process `faster_whisper` backend to avoid repeated model-load timeouts during live voice commands.

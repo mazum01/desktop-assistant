@@ -21,9 +21,10 @@ function initTabs() {
 }
 
 // ── API key management ────────────────────────────────────────────────────
-// The dashboard requires an API key (set via VERA_API_KEY in secrets.env).
-// On first visit the login overlay is shown; the key is stored in
-// localStorage so subsequent loads connect automatically.
+// If VERA_API_KEY is set in secrets.env the server enforces authentication.
+// The overlay is shown reactively (by the fetch patcher below) only when the
+// server actually returns 401 — not preemptively. This way the dashboard
+// works out-of-the-box when no key is configured.
 
 const VERA_API_KEY = localStorage.getItem('vera_api_key') || '';
 
@@ -72,8 +73,6 @@ function _saveApiKey() {
     location.reload();
   }
 }
-
-if (!VERA_API_KEY) _showKeyOverlay();
 
 const WS_URL = `ws://${location.host}/ws?key=${encodeURIComponent(VERA_API_KEY)}`;
 
