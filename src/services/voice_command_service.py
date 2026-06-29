@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 import logging
 import time
 from dataclasses import dataclass
@@ -13,6 +14,8 @@ from src.core.service import Service
 from src.voice.backends import (
     EnergyWakeWordDetector,
     EnergyWakeWordDetectorConfig,
+    FasterWhisperSTT,
+    FasterWhisperSTTConfig,
     NullStreamingSTT,
     ShellCommandSTT,
     ShellCommandSTTConfig,
@@ -26,7 +29,7 @@ log = logging.getLogger(__name__)
 STATE_IDLE = "idle"
 STATE_COMMAND_LISTEN = "command_listen"
 STATE_THINKING = "thinking"
-_VALID_STT_BACKENDS = {"shell", "null"}
+_VALID_STT_BACKENDS = {"faster_whisper", "shell", "null"}
 
 
 @dataclass
@@ -40,10 +43,13 @@ class VoiceCommandConfig:
     command_min_s: float = 0.35
     command_max_s: float = 6.0
     silence_end_s: float = 0.8
-    stt_backend: str = "shell"
+    stt_backend: str = "faster_whisper"
     stt_command: str = ""
     stt_language: str = "en"
     stt_timeout_s: float = 20.0
+    stt_model: str = "base.en"
+    stt_device: str = "cpu"
+    stt_compute_type: str = "int8"
     dialog_timeout_s: float = 20.0
 
 
@@ -78,17 +84,8 @@ class VoiceCommandService(Service):
         )
         if stt_backend is not None:
             self._stt = stt_backend
-        elif self._cfg.stt_backend == "shell":
-            self._stt = ShellCommandSTT(
-                ShellCommandSTTConfig(
-                    command=self._cfg.stt_command,
-                    sample_rate=int(self._cfg.sample_rate),
-                    language=self._cfg.stt_language,
-                    timeout_s=float(self._cfg.stt_timeout_s),
-                )
-            )
         else:
-            self._stt = NullStreamingSTT()
+            self._stt = self._build_stt_backend()
         self._router = intent_router or IntentRouter()
         self._dialog = dialog_manager or DialogManager(
             DialogManagerConfig(session_timeout_s=float(self._cfg.dialog_timeout_s))
@@ -102,9 +99,26 @@ class VoiceCommandService(Service):
         self._last_voice_mono = 0.0
         self._last_chunk_index = 0
         self._unsubs = []
+        self._pre_roll_chunks: deque[np.ndarray] = deque()
+        self._refresh_pre_roll_buffer()
+
+    def _refresh_pre_roll_buffer(self) -> None:
+        max_chunks = max(1, int(round(0.4 / max(0.02, float(self.tick_seconds)))))
+        retained = list(self._pre_roll_chunks)[-max_chunks:]
+        self._pre_roll_chunks = deque(retained, maxlen=max_chunks)
 
     def _build_stt_backend(self) -> StreamingSTTBackend:
         backend = str(self._cfg.stt_backend).lower()
+        if backend == "faster_whisper":
+            return FasterWhisperSTT(
+                FasterWhisperSTTConfig(
+                    sample_rate=int(self._cfg.sample_rate),
+                    language=self._cfg.stt_language,
+                    model=str(self._cfg.stt_model),
+                    device=str(self._cfg.stt_device),
+                    compute_type=str(self._cfg.stt_compute_type),
+                )
+            )
         if backend == "shell":
             return ShellCommandSTT(
                 ShellCommandSTTConfig(
@@ -124,6 +138,9 @@ class VoiceCommandService(Service):
         prev_cmd = str(self._cfg.stt_command)
         prev_lang = str(self._cfg.stt_language)
         prev_timeout = float(self._cfg.stt_timeout_s)
+        prev_model = str(self._cfg.stt_model)
+        prev_device = str(self._cfg.stt_device)
+        prev_compute = str(self._cfg.stt_compute_type)
 
         for key, value in patch.items():
             if not hasattr(self._cfg, key):
@@ -143,6 +160,7 @@ class VoiceCommandService(Service):
                 self.tick_seconds = max(0.02, float(self._cfg.poll_seconds))
             except (TypeError, ValueError):
                 self.tick_seconds = max(0.02, self.tick_seconds)
+            self._refresh_pre_roll_buffer()
 
         changed = (
             backend != prev_backend
@@ -150,6 +168,9 @@ class VoiceCommandService(Service):
             or str(self._cfg.stt_command) != prev_cmd
             or str(self._cfg.stt_language) != prev_lang
             or float(self._cfg.stt_timeout_s) != prev_timeout
+            or str(self._cfg.stt_model) != prev_model
+            or str(self._cfg.stt_device) != prev_device
+            or str(self._cfg.stt_compute_type) != prev_compute
         )
         if changed:
             try:
@@ -241,6 +262,9 @@ class VoiceCommandService(Service):
         self._last_wake_mono = now_mono
         self._cmd_started_mono = now_mono
         self._last_voice_mono = now_mono
+        for chunk in self._pre_roll_chunks:
+            self._stt.accept_chunk(chunk, int(self._cfg.sample_rate))
+        self._pre_roll_chunks.clear()
         self._set_state(STATE_COMMAND_LISTEN, reason="wake_detected")
         self.bus.publish(
             "voice.wake",
@@ -322,6 +346,7 @@ class VoiceCommandService(Service):
 
         now = time.monotonic()
         if self._state == STATE_IDLE:
+            self._pre_roll_chunks.append(chunk.astype(np.float32, copy=True))
             cooldown_elapsed = (now - self._last_wake_mono) >= float(self._cfg.wake_cooldown_s)
             if cooldown_elapsed and self._wake.process(chunk, int(self._cfg.sample_rate)):
                 self._start_command_window(now)

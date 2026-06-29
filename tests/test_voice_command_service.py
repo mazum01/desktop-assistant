@@ -83,6 +83,7 @@ def test_voice_command_service_dispatches_av_utterance_from_transcript():
     assert utterances
     assert utterances[0]["text"] == "tell me a joke"
     assert utterances[0]["source"] == "voice"
+    assert stt.chunks == 2
 
 
 def test_voice_command_service_handles_empty_transcript_without_dispatch():

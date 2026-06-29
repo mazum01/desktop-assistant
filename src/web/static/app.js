@@ -1802,7 +1802,7 @@ async function loadVoiceSettings() {
   try {
     const d = await fetch("/api/settings/voice").then(r => r.json());
     _setVal("voice-enabled", d.enabled === true);
-    _setVal("voice-stt-backend", d.stt_backend ?? "shell");
+    _setVal("voice-stt-backend", d.stt_backend ?? "faster_whisper");
     _setVal("voice-stt-command", d.stt_command ?? "");
     _setVal("voice-stt-language", d.stt_language ?? "en");
     _setVal("voice-stt-timeout", d.stt_timeout_s ?? 20.0);

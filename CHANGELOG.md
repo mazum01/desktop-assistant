@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.42.2] - 2026-06-28
+### Fixed
+- Replaced per-utterance shell STT execution with a persistent in-process `faster_whisper` backend to avoid repeated model-load timeouts during live voice commands.
+- Added a short voice pre-roll buffer so the beginning of spoken commands is preserved when the energy-based wake detector fires, improving short-phrase transcription accuracy.
+
 ## [1.42.1] - 2026-06-28
 ### Fixed
 - Switched `respeaker_flex` microphone capture to the existing PipeWire `pw-record` path instead of PortAudio/sounddevice, which was intermittently exposing the ReSpeaker as a zero-input device and breaking live voice command capture.

@@ -452,6 +452,7 @@ def test_voice_settings_get_and_put_persist_and_publish(app_client, tmp_path, mo
     r = client.get("/api/settings/voice")
     assert r.status_code == 200
     assert r.json()["enabled"] is False
+    assert "faster_whisper" in r.json()["available_stt_backends"]
     assert "shell" in r.json()["available_stt_backends"]
 
     r2 = client.put(

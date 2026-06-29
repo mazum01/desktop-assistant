@@ -432,6 +432,9 @@ class _VoiceSettingsBody(BaseModel):
     stt_command: Optional[str] = None
     stt_language: Optional[str] = None
     stt_timeout_s: Optional[float] = None
+    stt_model: Optional[str] = None
+    stt_device: Optional[str] = None
+    stt_compute_type: Optional[str] = None
     dialog_timeout_s: Optional[float] = None
 
 
@@ -615,7 +618,7 @@ def _write_audio_config(body: dict) -> None:
         yaml.safe_dump(cfg, f, sort_keys=False)
 
 
-_VOICE_VALID_STT_BACKENDS = ("shell", "null")
+_VOICE_VALID_STT_BACKENDS = ("faster_whisper", "shell", "null")
 
 
 def _read_voice_config() -> dict:
@@ -632,10 +635,13 @@ def _read_voice_config() -> dict:
         "command_min_s": 0.35,
         "command_max_s": 6.0,
         "silence_end_s": 0.8,
-        "stt_backend": "shell",
+        "stt_backend": "faster_whisper",
         "stt_command": "",
         "stt_language": "en",
         "stt_timeout_s": 20.0,
+        "stt_model": "base.en",
+        "stt_device": "cpu",
+        "stt_compute_type": "int8",
         "dialog_timeout_s": 20.0,
     }
     try:
@@ -645,9 +651,9 @@ def _read_voice_config() -> dict:
         cfg = {}
     voice = cfg.get("voice_commands", {})
     out = {**defaults, **(voice if isinstance(voice, dict) else {})}
-    out["stt_backend"] = str(out.get("stt_backend", "shell")).lower()
+    out["stt_backend"] = str(out.get("stt_backend", "faster_whisper")).lower()
     if out["stt_backend"] not in _VOICE_VALID_STT_BACKENDS:
-        out["stt_backend"] = "shell"
+        out["stt_backend"] = "faster_whisper"
     return out
 
 
