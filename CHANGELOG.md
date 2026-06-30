@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.43.1] - 2026-06-30
+### Fixed
+- Added post-transcription punctuation filter in `FasterWhisperSTT.finalize()`: transcripts that contain no word characters (e.g. `". . . . . . ."`) are discarded as Whisper hallucinations. These occur when a noise transient (keyboard, door, click) crosses the wake threshold but doesn't contain intelligible speech.
+
 ## [1.43.0] - 2026-06-30
 ### Fixed
 - Simplified `FasterWhisperSTT.warm_up()` to only pre-load the model on a background thread; removed the follow-up silent inference. Under high system load the silent inference held `_infer_lock` for 19+ s, blocking any real command that fired during that window. Now the lock is only held during actual user-utterance transcriptions.

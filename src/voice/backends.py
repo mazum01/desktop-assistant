@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import shlex
 import subprocess
 import tempfile
@@ -16,6 +17,8 @@ from pathlib import Path
 import numpy as np
 
 log = logging.getLogger(__name__)
+
+_PUNCT_ONLY_RE = re.compile(r"^[\W_]+$")  # no word characters → hallucinated punctuation
 
 
 @dataclass
@@ -271,4 +274,7 @@ class FasterWhisperSTT(StreamingSTTBackend):
             log.warning("FasterWhisperSTT transcription failed: %s", exc)
             return ""
         log.info("FasterWhisperSTT: %.1f dBFS -> %r", dbfs, result)
+        if _PUNCT_ONLY_RE.match(result):
+            log.debug("FasterWhisperSTT: discarding punctuation-only hallucination %r", result)
+            return ""
         return result
