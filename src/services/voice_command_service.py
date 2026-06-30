@@ -197,6 +197,8 @@ class VoiceCommandService(Service):
             log.info("VoiceCommandService: disabled by config")
         else:
             log.info("VoiceCommandService enabled (stt_backend=%s)", self._cfg.stt_backend)
+            if hasattr(self._stt, "warm_up"):
+                self._stt.warm_up()
 
     def on_stop(self) -> None:
         for unsub in self._unsubs:

@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.42.6] - 2026-06-30
+### Fixed
+- Removed `vad_filter=True` from `FasterWhisperSTT.finalize()`. Silero VAD (used internally by faster_whisper) was stripping the entire audio buffer before Whisper could decode it — the microphone signal level on the ReSpeaker is too low for Silero's default thresholds. The service's own energy-based VAD (`audio.vad` bus topic, −42 dBFS) handles silence detection correctly without a second VAD pass.
+- Reduced `silence_end_s` from 0.8 s to 0.5 s so commands are submitted to the STT engine half a second sooner after the speaker stops.
+- Added `FasterWhisperSTT.warm_up()` which pre-loads the model and runs one silent inference on a background daemon thread at service startup, eliminating the ~3 s model-load penalty on the first spoken command.
+- Reduced default `beam_size` from 5 to 3 for a modest per-utterance speed improvement with negligible accuracy loss on short voice commands.
+
 ## [1.42.5] - 2026-06-30
 ### Fixed
 - Switched `stt_backend` in `config/assistant.yaml` from `shell` to `faster_whisper`. The shell backend spawned a fresh Python process and re-loaded the Whisper model on every utterance (~20 s), reliably exceeding the 20-second timeout and producing no transcripts. The `faster_whisper` backend keeps the model loaded in-process and reuses it across calls.

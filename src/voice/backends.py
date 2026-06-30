@@ -167,7 +167,7 @@ class FasterWhisperSTTConfig:
     model: str = "base.en"
     device: str = "cpu"
     compute_type: str = "int8"
-    beam_size: int = 5
+    beam_size: int = 3
 
 
 class FasterWhisperSTT(StreamingSTTBackend):
@@ -213,6 +213,26 @@ class FasterWhisperSTT(StreamingSTTBackend):
         )
         return self._model
 
+    def warm_up(self) -> None:
+        """Pre-load the model in a background thread so the first real command is fast."""
+        import threading
+
+        def _load():
+            model = self._ensure_model()
+            if model is not None:
+                # Run one silent inference to JIT-compile the decoder path.
+                try:
+                    list(model.transcribe(
+                        np.zeros(1600, dtype=np.float32),
+                        language=self._cfg.language,
+                        beam_size=1,
+                    )[0])
+                except Exception:  # noqa: BLE001
+                    pass
+
+        t = threading.Thread(target=_load, daemon=True, name="fw-stt-warmup")
+        t.start()
+
     def finalize(self) -> str:
         if not self._chunks:
             return ""
@@ -229,7 +249,6 @@ class FasterWhisperSTT(StreamingSTTBackend):
                 language=self._cfg.language,
                 beam_size=int(self._cfg.beam_size),
                 condition_on_previous_text=False,
-                vad_filter=True,
             )
         except (RuntimeError, ValueError, OSError) as exc:
             log.warning("FasterWhisperSTT transcription failed: %s", exc)

@@ -177,7 +177,7 @@ voice_commands:
   enabled: true
   poll_seconds: 0.08
   sample_rate: 16000
-  silence_end_s: 0.8
+  silence_end_s: 0.5
   stt_backend: faster_whisper
   stt_model: base.en
   stt_device: cpu
