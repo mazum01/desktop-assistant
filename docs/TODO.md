@@ -67,6 +67,36 @@ Smoke-test scripts for each component (`scripts/test_<device>.py` exits 0).
 
 ## Future Upgrades
 
+- [ ] **Train custom "Hey VERA" wake word** — replace the bundled `hey_jarvis_v0.1`
+  model with a model trained on the phrase "vera" or "hey vera".
+
+  **Why:** "Hey Jarvis" works but is an awkward activation phrase for a robot named VERA.
+  A custom model trained on VERA's acoustic environment will also have fewer false triggers.
+
+  **Approach (hybrid — recommended):**
+  1. Record 5–10 short WAV clips of "hey vera" spoken naturally on the Pi:
+     `da record 10` (say the phrase 2–3× per clip, vary speed and inflection).
+  2. On a dev machine (GPU preferred, CPU workable), install training deps:
+     `pip install openwakeword[train]`
+  3. Train with real clips + synthetic augmentation:
+     ```
+     python -m openwakeword.train \
+       --phrase "hey vera" \
+       --positive_reference_clips ./my_recordings/ \
+       --output_dir ./hey_vera_model \
+       --n_samples 5000
+     ```
+  4. Copy the output `.onnx` to:
+     `~/.local/lib/python3.x/site-packages/openwakeword/resources/models/hey_vera_v0.1.onnx`
+  5. Update `config/assistant.yaml`: `oww_model: hey_vera_v0.1`
+  6. Restart the daemon: `sudo systemctl restart desktop-assistant-core`
+
+  **Fallback:** Synthetic-only training (omit `--positive_reference_clips`) takes
+  ~20 min and produces a usable model without any recordings. Accuracy ~80–90%.
+
+  **Alternative phrases also available without training:** `hey_marvin_v0.1`,
+  `hey_mycroft_v0.1` (already bundled). Switch by changing `oww_model` in config.
+
 - [ ] **Silent servo replacement** — swap DS3218 for Feetech STS3032 or Dynamixel
   XL430-W250 (half-duplex TTL UART, near-silent, position feedback built in).
   Requires `src/hardware/servo.py` rewrite + Pi hardware UART freed up.
