@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.42.5] - 2026-06-30
+### Fixed
+- Switched `stt_backend` in `config/assistant.yaml` from `shell` to `faster_whisper`. The shell backend spawned a fresh Python process and re-loaded the Whisper model on every utterance (~20 s), reliably exceeding the 20-second timeout and producing no transcripts. The `faster_whisper` backend keeps the model loaded in-process and reuses it across calls.
+- Added explicit `stt_model: base.en`, `stt_device: cpu`, and `stt_compute_type: int8` to the `voice_commands` config block for clarity; removed the now-unused `stt_command` multi-line shell snippet.
+- Optimised `FasterWhisperSTT.finalize()` to pass the audio buffer as a NumPy `float32` array directly to `model.transcribe()`, eliminating the intermediate temporary WAV write/read cycle and reducing per-utterance overhead.
+- Added `vad_filter=True` to `model.transcribe()` calls so Silero VAD filters out non-speech frames before decoding, preventing Whisper hallucinations on silence or ambient noise.
+
 ## [1.42.4] - 2026-06-29
 ### Fixed
 - Removed the unconditional API-key overlay trigger in `app.js`. The overlay was displayed immediately on page load whenever no key was stored in `localStorage`, blocking the entire web dashboard even though no `VERA_API_KEY` is configured server-side. The overlay now only appears reactively when the server returns HTTP 401. Updated `app.js` cache-busting version in `index.html` to `v1.42.4` so browsers invalidate any stale cached script.

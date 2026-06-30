@@ -223,23 +223,15 @@ class FasterWhisperSTT(StreamingSTTBackend):
 
         audio = np.concatenate(self._chunks, axis=0)
         self._chunks.clear()
-        with tempfile.TemporaryDirectory(prefix="vera-stt-") as tmpdir:
-            wav_path = Path(tmpdir) / "utterance.wav"
-            pcm16 = np.clip(audio, -1.0, 1.0)
-            pcm16 = (pcm16 * 32767.0).astype(np.int16)
-            with wave.open(str(wav_path), "wb") as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(int(self._cfg.sample_rate))
-                wf.writeframes(pcm16.tobytes())
-            try:
-                segments, _info = model.transcribe(
-                    str(wav_path),
-                    language=self._cfg.language,
-                    beam_size=int(self._cfg.beam_size),
-                    condition_on_previous_text=False,
-                )
-            except (RuntimeError, ValueError, OSError) as exc:
-                log.warning("FasterWhisperSTT transcription failed: %s", exc)
-                return ""
-            return " ".join(seg.text.strip() for seg in segments).strip()
+        try:
+            segments, _info = model.transcribe(
+                audio,
+                language=self._cfg.language,
+                beam_size=int(self._cfg.beam_size),
+                condition_on_previous_text=False,
+                vad_filter=True,
+            )
+        except (RuntimeError, ValueError, OSError) as exc:
+            log.warning("FasterWhisperSTT transcription failed: %s", exc)
+            return ""
+        return " ".join(seg.text.strip() for seg in segments).strip()
