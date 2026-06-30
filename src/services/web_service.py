@@ -425,6 +425,10 @@ class _VoiceSettingsBody(BaseModel):
     wake_cooldown_s: Optional[float] = None
     wake_threshold_dbfs: Optional[float] = None
     wake_consecutive_frames: Optional[int] = None
+    wake_backend: Optional[str] = None
+    oww_model: Optional[str] = None
+    oww_threshold: Optional[float] = None
+    oww_refractory_s: Optional[float] = None
     command_min_s: Optional[float] = None
     command_max_s: Optional[float] = None
     silence_end_s: Optional[float] = None
@@ -619,6 +623,7 @@ def _write_audio_config(body: dict) -> None:
 
 
 _VOICE_VALID_STT_BACKENDS = ("faster_whisper", "shell", "null")
+_VOICE_VALID_WAKE_BACKENDS = ("energy", "openwakeword")
 
 
 def _read_voice_config() -> dict:
@@ -632,6 +637,10 @@ def _read_voice_config() -> dict:
         "wake_cooldown_s": 1.5,
         "wake_threshold_dbfs": -38.0,
         "wake_consecutive_frames": 2,
+        "wake_backend": "energy",
+        "oww_model": "hey_jarvis_v0.1",
+        "oww_threshold": 0.5,
+        "oww_refractory_s": 2.0,
         "command_min_s": 0.35,
         "command_max_s": 6.0,
         "silence_end_s": 0.8,
@@ -654,6 +663,9 @@ def _read_voice_config() -> dict:
     out["stt_backend"] = str(out.get("stt_backend", "faster_whisper")).lower()
     if out["stt_backend"] not in _VOICE_VALID_STT_BACKENDS:
         out["stt_backend"] = "faster_whisper"
+    out["wake_backend"] = str(out.get("wake_backend", "energy")).lower()
+    if out["wake_backend"] not in _VOICE_VALID_WAKE_BACKENDS:
+        out["wake_backend"] = "energy"
     return out
 
 
@@ -1631,6 +1643,7 @@ class WebService:
                 "ok": True,
                 **voice,
                 "available_stt_backends": list(_VOICE_VALID_STT_BACKENDS),
+                "available_wake_backends": list(_VOICE_VALID_WAKE_BACKENDS),
             }
 
         @app.put("/api/settings/voice")
@@ -1643,6 +1656,14 @@ class WebService:
                         422,
                         f"Unknown stt_backend {patch['stt_backend']!r}. "
                         f"Valid: {list(_VOICE_VALID_STT_BACKENDS)}",
+                    )
+            if "wake_backend" in patch:
+                patch["wake_backend"] = str(patch["wake_backend"]).lower()
+                if patch["wake_backend"] not in _VOICE_VALID_WAKE_BACKENDS:
+                    raise HTTPException(
+                        422,
+                        f"Unknown wake_backend {patch['wake_backend']!r}. "
+                        f"Valid: {list(_VOICE_VALID_WAKE_BACKENDS)}",
                     )
             if "sample_rate" in patch and int(patch["sample_rate"]) <= 0:
                 raise HTTPException(422, "sample_rate must be > 0")
@@ -1668,6 +1689,7 @@ class WebService:
                 "ok": True,
                 **updated,
                 "available_stt_backends": list(_VOICE_VALID_STT_BACKENDS),
+                "available_wake_backends": list(_VOICE_VALID_WAKE_BACKENDS),
                 "runtime_applied": bool(self.bus),
                 "restart_required": False,
             }

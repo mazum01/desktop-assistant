@@ -18,6 +18,8 @@ from src.voice.backends import (
     FasterWhisperSTT,
     FasterWhisperSTTConfig,
     NullStreamingSTT,
+    OpenWakeWordDetector,
+    OpenWakeWordDetectorConfig,
     ShellCommandSTT,
     ShellCommandSTTConfig,
     StreamingSTTBackend,
@@ -31,6 +33,7 @@ STATE_IDLE = "idle"
 STATE_COMMAND_LISTEN = "command_listen"
 STATE_THINKING = "thinking"
 _VALID_STT_BACKENDS = {"faster_whisper", "shell", "null"}
+_VALID_WAKE_BACKENDS = {"energy", "openwakeword"}
 
 
 @dataclass
@@ -41,6 +44,10 @@ class VoiceCommandConfig:
     wake_cooldown_s: float = 1.5
     wake_threshold_dbfs: float = -38.0
     wake_consecutive_frames: int = 2
+    wake_backend: str = "energy"
+    oww_model: str = "hey_jarvis_v0.1"
+    oww_threshold: float = 0.5
+    oww_refractory_s: float = 2.0
     command_min_s: float = 0.35
     command_max_s: float = 6.0
     silence_end_s: float = 0.8
@@ -78,12 +85,7 @@ class VoiceCommandService(Service):
         self._cfg = config or VoiceCommandConfig()
         self.tick_seconds = float(self._cfg.poll_seconds)
 
-        self._wake = wake_detector or EnergyWakeWordDetector(
-            EnergyWakeWordDetectorConfig(
-                threshold_dbfs=float(self._cfg.wake_threshold_dbfs),
-                consecutive_frames=int(self._cfg.wake_consecutive_frames),
-            )
-        )
+        self._wake = wake_detector or self._build_wake_detector()
         if stt_backend is not None:
             self._stt = stt_backend
         else:
@@ -109,6 +111,27 @@ class VoiceCommandService(Service):
         max_chunks = max(1, int(round(0.4 / max(0.02, float(self.tick_seconds)))))
         retained = list(self._pre_roll_chunks)[-max_chunks:]
         self._pre_roll_chunks = deque(retained, maxlen=max_chunks)
+
+    def _build_wake_detector(self):
+        """Construct a wake detector from current config."""
+        backend = str(self._cfg.wake_backend).lower()
+        if backend == "openwakeword":
+            return OpenWakeWordDetector(
+                OpenWakeWordDetectorConfig(
+                    model_name=str(self._cfg.oww_model),
+                    threshold=float(self._cfg.oww_threshold),
+                    refractory_s=float(self._cfg.oww_refractory_s),
+                    fallback_to_energy=True,
+                    energy_threshold_dbfs=float(self._cfg.wake_threshold_dbfs),
+                    energy_consecutive_frames=int(self._cfg.wake_consecutive_frames),
+                )
+            )
+        return EnergyWakeWordDetector(
+            EnergyWakeWordDetectorConfig(
+                threshold_dbfs=float(self._cfg.wake_threshold_dbfs),
+                consecutive_frames=int(self._cfg.wake_consecutive_frames),
+            )
+        )
 
     def _build_stt_backend(self) -> StreamingSTTBackend:
         backend = str(self._cfg.stt_backend).lower()
@@ -137,7 +160,7 @@ class VoiceCommandService(Service):
     def _apply_config_patch(self, patch: dict[str, Any]) -> None:
         if not patch:
             return
-        prev_backend = str(self._cfg.stt_backend).lower()
+        prev_stt_backend = str(self._cfg.stt_backend).lower()
         prev_rate = int(self._cfg.sample_rate)
         prev_cmd = str(self._cfg.stt_command)
         prev_lang = str(self._cfg.stt_language)
@@ -145,6 +168,9 @@ class VoiceCommandService(Service):
         prev_model = str(self._cfg.stt_model)
         prev_device = str(self._cfg.stt_device)
         prev_compute = str(self._cfg.stt_compute_type)
+        prev_wake_backend = str(self._cfg.wake_backend).lower()
+        prev_oww_model = str(self._cfg.oww_model)
+        prev_oww_threshold = float(self._cfg.oww_threshold)
 
         for key, value in patch.items():
             if not hasattr(self._cfg, key):
@@ -153,11 +179,19 @@ class VoiceCommandService(Service):
 
         backend = str(self._cfg.stt_backend).lower()
         if backend not in _VALID_STT_BACKENDS:
-            log.warning("VoiceCommandService: invalid stt_backend %r; keeping %r", backend, prev_backend)
-            self._cfg.stt_backend = prev_backend
-            backend = prev_backend
+            log.warning("VoiceCommandService: invalid stt_backend %r; keeping %r", backend, prev_stt_backend)
+            self._cfg.stt_backend = prev_stt_backend
+            backend = prev_stt_backend
         else:
             self._cfg.stt_backend = backend
+
+        wake_backend = str(self._cfg.wake_backend).lower()
+        if wake_backend not in _VALID_WAKE_BACKENDS:
+            log.warning("VoiceCommandService: invalid wake_backend %r; keeping %r", wake_backend, prev_wake_backend)
+            self._cfg.wake_backend = prev_wake_backend
+            wake_backend = prev_wake_backend
+        else:
+            self._cfg.wake_backend = wake_backend
 
         if "poll_seconds" in patch:
             try:
@@ -166,8 +200,8 @@ class VoiceCommandService(Service):
                 self.tick_seconds = max(0.02, self.tick_seconds)
             self._refresh_pre_roll_buffer()
 
-        changed = (
-            backend != prev_backend
+        stt_changed = (
+            backend != prev_stt_backend
             or int(self._cfg.sample_rate) != prev_rate
             or str(self._cfg.stt_command) != prev_cmd
             or str(self._cfg.stt_language) != prev_lang
@@ -176,12 +210,22 @@ class VoiceCommandService(Service):
             or str(self._cfg.stt_device) != prev_device
             or str(self._cfg.stt_compute_type) != prev_compute
         )
-        if changed:
+        if stt_changed:
             try:
                 self._stt.close()
             except (RuntimeError, OSError, ValueError):
                 log.debug("voice stt backend close failed", exc_info=True)
             self._stt = self._build_stt_backend()
+
+        wake_changed = (
+            wake_backend != prev_wake_backend
+            or str(self._cfg.oww_model) != prev_oww_model
+            or float(self._cfg.oww_threshold) != prev_oww_threshold
+        )
+        if wake_changed:
+            self._wake = self._build_wake_detector()
+            if hasattr(self._wake, "warm_up"):
+                self._wake.warm_up()
 
     def _on_set_config(self, _topic: str, payload: dict) -> None:
         if not isinstance(payload, dict):
@@ -200,7 +244,13 @@ class VoiceCommandService(Service):
         elif not self._cfg.enabled:
             log.info("VoiceCommandService: disabled by config")
         else:
-            log.info("VoiceCommandService enabled (stt_backend=%s)", self._cfg.stt_backend)
+            log.info(
+                "VoiceCommandService enabled (stt_backend=%s wake_backend=%s)",
+                self._cfg.stt_backend,
+                self._cfg.wake_backend,
+            )
+            if hasattr(self._wake, "warm_up"):
+                self._wake.warm_up()
             if hasattr(self._stt, "warm_up"):
                 self._stt.warm_up()
 
@@ -274,7 +324,7 @@ class VoiceCommandService(Service):
         self._set_state(STATE_COMMAND_LISTEN, reason="wake_detected")
         self.bus.publish(
             "voice.wake",
-            {"ts": time.time(), "backend": "energy"},
+            {"ts": time.time(), "backend": str(self._cfg.wake_backend)},
         )
 
     def _dispatch_transcript(self, transcript: str, elapsed_s: float) -> None:

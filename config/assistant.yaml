@@ -156,9 +156,9 @@ servo:
 telegram:
   bot_token: ''
   chat_id: ''
-  emoji_named: 🏷️
-  emoji_new_face: 👋
-  emoji_returning: 👤
+  emoji_named: "\U0001F3F7\uFE0F"
+  emoji_new_face: "\U0001F44B"
+  emoji_returning: "\U0001F464"
   enabled: true
   forward_tts: true
   tts_skip_patterns:
@@ -185,9 +185,13 @@ voice_commands:
   stt_cpu_threads: 2
   stt_language: en
   stt_timeout_s: 60.0
+  wake_backend: openwakeword
   wake_consecutive_frames: 2
   wake_cooldown_s: 1.5
   wake_threshold_dbfs: -35.0
+  oww_model: hey_jarvis_v0.1
+  oww_threshold: 0.5
+  oww_refractory_s: 2.0
 watchdog:
   check_interval_s: 30
   enabled: true

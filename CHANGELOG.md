@@ -4,6 +4,28 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.44.0] - 2026-06-30
+### Added
+- `OpenWakeWordDetector` class in `src/voice/backends.py` — ONNX-based neural
+  wake phrase detector (Apache-licensed `openwakeword` library, ~12ms per 80ms
+  chunk on Pi 5, zero false triggers on ambient noise in testing).
+- `OpenWakeWordDetectorConfig` dataclass: `model_name`, `threshold`,
+  `refractory_s`, `fallback_to_energy`, and energy fallback fields.
+- `VoiceCommandConfig` fields: `wake_backend` ("energy" or "openwakeword"),
+  `oww_model`, `oww_threshold`, `oww_refractory_s`.
+- `_build_wake_detector()` factory in `VoiceCommandService` — constructs the
+  correct detector from config and falls back to energy detection gracefully
+  if openWakeWord is unavailable or the model file is missing.
+- Wake backend warm-up on service start (loads ONNX model on background thread).
+- Hot-swap: changing `wake_backend`, `oww_model`, or `oww_threshold` via
+  `voice.set_config` or the API rebuilds the detector at runtime without restart.
+- `available_wake_backends` field in `GET /api/settings/voice` response.
+- `wake_backend`, `oww_model`, `oww_threshold`, `oww_refractory_s` fields in
+  `PUT /api/settings/voice` request body.
+- `voice.wake` bus event now reports actual `backend` name ("energy" or "openwakeword").
+- `config/assistant.yaml`: `wake_backend: openwakeword` with `hey_jarvis_v0.1`
+  at threshold 0.5 — replaces energy-only wake detection as default.
+
 ## [1.43.1] - 2026-06-30
 ### Fixed
 - Added post-transcription punctuation filter in `FasterWhisperSTT.finalize()`: transcripts that contain no word characters (e.g. `". . . . . . ."`) are discarded as Whisper hallucinations. These occur when a noise transient (keyboard, door, click) crosses the wake threshold but doesn't contain intelligible speech.
