@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -46,10 +47,11 @@ class VoiceCommandConfig:
     stt_backend: str = "faster_whisper"
     stt_command: str = ""
     stt_language: str = "en"
-    stt_timeout_s: float = 20.0
+    stt_timeout_s: float = 60.0
     stt_model: str = "base.en"
     stt_device: str = "cpu"
     stt_compute_type: str = "int8"
+    stt_cpu_threads: int = 2
     dialog_timeout_s: float = 20.0
 
 
@@ -99,6 +101,7 @@ class VoiceCommandService(Service):
         self._last_voice_mono = 0.0
         self._last_chunk_index = 0
         self._unsubs = []
+        self._finalize_thread: Optional[threading.Thread] = None
         self._pre_roll_chunks: deque[np.ndarray] = deque()
         self._refresh_pre_roll_buffer()
 
@@ -117,6 +120,7 @@ class VoiceCommandService(Service):
                     model=str(self._cfg.stt_model),
                     device=str(self._cfg.stt_device),
                     compute_type=str(self._cfg.stt_compute_type),
+                    cpu_threads=int(self._cfg.stt_cpu_threads),
                 )
             )
         if backend == "shell":
@@ -319,23 +323,42 @@ class VoiceCommandService(Service):
 
     def _finish_command_window(self, now_mono: float) -> None:
         self._set_state(STATE_THINKING, reason="stt_finalize")
-        transcript = self._stt.finalize().strip()
         elapsed = max(0.0, now_mono - self._cmd_started_mono)
-        if transcript:
-            self._dispatch_transcript(transcript, elapsed)
-        else:
-            self.bus.publish(
-                "voice.intent",
-                {
-                    "intent": "empty",
-                    "route": "none",
-                    "confidence": 1.0,
-                    "text": "",
-                    "dialog": self._dialog.snapshot(),
-                    "ts": time.time(),
-                },
-            )
-        self._set_state(STATE_IDLE, reason="command_complete")
+        timeout_s = float(self._cfg.stt_timeout_s)
+
+        def _transcribe() -> None:
+            transcript = self._stt.finalize().strip()
+            if transcript:
+                self._dispatch_transcript(transcript, elapsed)
+            else:
+                self.bus.publish(
+                    "voice.intent",
+                    {
+                        "intent": "empty",
+                        "route": "none",
+                        "confidence": 1.0,
+                        "text": "",
+                        "dialog": self._dialog.snapshot(),
+                        "ts": time.time(),
+                    },
+                )
+            self._set_state(STATE_IDLE, reason="command_complete")
+
+        def _run_with_timeout() -> None:
+            t = threading.Thread(target=_transcribe, daemon=True, name="vera-stt-finalize")
+            t.start()
+            t.join(timeout=timeout_s)
+            if t.is_alive():
+                log.warning(
+                    "VoiceCommandService: STT finalize timed out after %.1fs; returning to idle",
+                    timeout_s,
+                )
+                self._set_state(STATE_IDLE, reason="stt_timeout")
+
+        self._finalize_thread = threading.Thread(
+            target=_run_with_timeout, daemon=True, name="vera-stt-timeout-guard"
+        )
+        self._finalize_thread.start()
 
     def run_tick(self) -> None:
         if not self._cfg.enabled:

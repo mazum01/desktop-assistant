@@ -4,6 +4,34 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.43.0] - 2026-06-30
+### Fixed
+- Simplified `FasterWhisperSTT.warm_up()` to only pre-load the model on a background thread; removed the follow-up silent inference. Under high system load the silent inference held `_infer_lock` for 19+ s, blocking any real command that fired during that window. Now the lock is only held during actual user-utterance transcriptions.
+- Raised default `stt_timeout_s` from 30 s to 60 s to accommodate slow model loads on a loaded system (model loading on an overloaded Pi 5 can take 10–40 s before inference begins).
+
+## [1.42.9] - 2026-06-30
+### Fixed
+- Added STT finalize timeout guard: a wrapper thread now calls `t.join(timeout=stt_timeout_s)` on the transcription thread. If Whisper doesn't complete within the timeout it logs a warning and transitions `voice.state` back to `idle` (prevents the service being permanently stuck in `thinking` under high system load).
+- Added `cpu_threads: 2` parameter to `FasterWhisperSTT` / `WhisperModel`. ctranslate2 defaults to using all available CPU cores; on the Pi 5 with other services running (vision, tracking, Hailo inference) this caused thread contention that made inference 10–20× slower than expected. Limiting to 2 threads leaves 2 cores for other services and reduces scheduling thrash.
+- Wired `stt_cpu_threads` through `VoiceCommandConfig` dataclass and `_build_stt_backend()` so it can be tuned via `config/assistant.yaml`.
+- Raised default `stt_timeout_s` from 20 s to 30 s to give inference more time before giving up.
+- Reverted `input_processing_enabled: true` back to `false` (accidental change in v1.42.7).
+
+## [1.42.8] - 2026-06-30
+### Fixed
+- Fixed thread-safety race in `FasterWhisperSTT._ensure_model()`: without a load-guard lock, the warm-up thread and any concurrently-started finalize thread each loaded their own `WhisperModel` instance simultaneously (confirmed by two "loaded model" log lines within 1 s of each other). Added double-checked locking (`_model_lock`) so the model is loaded exactly once regardless of how many threads call `_ensure_model()`.
+- Added `local_files_only=True` to `WhisperModel(...)` so startup skips the HuggingFace revision-check HTTP round-trip. Falls back to network download only if the local cache is missing.
+- Split the single `_lock` into `_model_lock` (loading) and `_infer_lock` (inference), so warm-up and finalize never block each other during model loading while still preventing concurrent `model.transcribe()` calls.
+- Changed `FasterWhisperSTT` transcript log from DEBUG to INFO so successful transcriptions are visible in `journalctl` without needing debug verbosity.
+
+## [1.42.7] - 2026-06-30
+### Fixed
+- `_finish_command_window()` now spawns a daemon thread for the Whisper transcription call instead of blocking the service tick loop. On the Pi 5, `base.en` takes 5–8 s per inference; previously this froze the entire voice pipeline (state stuck in `thinking`) for the duration of every transcription. The tick loop now returns immediately and the transcript/intent are published asynchronously when Whisper finishes.
+- Added thread-safety lock (`threading.Lock`) to `FasterWhisperSTT` so the warm-up thread and the finalize thread can never call `model.transcribe()` concurrently.
+- Added pre-transcription energy gate in `FasterWhisperSTT.finalize()`: if the collected audio RMS is below −50 dBFS, the clip is discarded without calling Whisper. Eliminates the 5–8 s penalty for spurious wake events (noise/clicks/non-speech sounds).
+- Enabled ReSpeaker Flex hardware DSP processing (`input_processing_enabled: true`, `input_processed_channel: 0`) so the voice pipeline receives the noise-suppressed and echo-cancelled mono channel instead of the raw mic array, improving Whisper transcription accuracy.
+- Raised wake threshold from −38 dBFS to −35 dBFS to reduce spurious wake events on background noise.
+
 ## [1.42.6] - 2026-06-30
 ### Fixed
 - Removed `vad_filter=True` from `FasterWhisperSTT.finalize()`. Silero VAD (used internally by faster_whisper) was stripping the entire audio buffer before Whisper could decode it — the microphone signal level on the ReSpeaker is too low for Silero's default thresholds. The service's own energy-based VAD (`audio.vad` bus topic, −42 dBFS) handles silence detection correctly without a second VAD pass.

@@ -168,15 +168,21 @@ class FasterWhisperSTTConfig:
     device: str = "cpu"
     compute_type: str = "int8"
     beam_size: int = 3
+    cpu_threads: int = 2  # limit inference threads to avoid starving other services
 
 
 class FasterWhisperSTT(StreamingSTTBackend):
     """Persistent Faster-Whisper backend that keeps the model loaded in-process."""
 
+    _MIN_SPEECH_DBFS: float = -50.0  # skip transcription if RMS is below this
+
     def __init__(self, config: FasterWhisperSTTConfig | None = None) -> None:
+        import threading
         self._cfg = config or FasterWhisperSTTConfig()
         self._chunks: list[np.ndarray] = []
         self._model = None
+        self._model_lock = threading.Lock()   # guards one-time model loading
+        self._infer_lock = threading.Lock()   # prevents concurrent inference calls
 
     def start_stream(self) -> None:
         self._chunks.clear()
@@ -187,51 +193,53 @@ class FasterWhisperSTT(StreamingSTTBackend):
         return None
 
     def _ensure_model(self):
-        if self._model is not None:
+        """Load the model exactly once; safe to call from multiple threads."""
+        if self._model is not None:  # fast path — no lock needed
             return self._model
-        started = time.monotonic()
-        try:
-            from faster_whisper import WhisperModel
-        except ImportError:
-            log.warning("FasterWhisperSTT unavailable: faster_whisper is not installed")
-            return None
-        try:
-            self._model = WhisperModel(
+        with self._model_lock:
+            if self._model is not None:  # re-check under lock
+                return self._model
+            started = time.monotonic()
+            try:
+                from faster_whisper import WhisperModel
+            except ImportError:
+                log.warning("FasterWhisperSTT unavailable: faster_whisper is not installed")
+                return None
+            try:
+                self._model = WhisperModel(
+                    self._cfg.model,
+                    device=self._cfg.device,
+                    compute_type=self._cfg.compute_type,
+                    local_files_only=True,
+                    cpu_threads=int(self._cfg.cpu_threads),
+                )
+            except Exception:  # noqa: BLE001 — fall back to allowing download
+                try:
+                    self._model = WhisperModel(
+                        self._cfg.model,
+                        device=self._cfg.device,
+                        compute_type=self._cfg.compute_type,
+                        cpu_threads=int(self._cfg.cpu_threads),
+                    )
+                except (RuntimeError, ValueError, OSError) as exc:
+                    log.warning("FasterWhisperSTT failed to load model %r: %s", self._cfg.model, exc)
+                    return None
+            log.info(
+                "FasterWhisperSTT loaded model=%s device=%s compute=%s in %.2fs",
                 self._cfg.model,
-                device=self._cfg.device,
-                compute_type=self._cfg.compute_type,
+                self._cfg.device,
+                self._cfg.compute_type,
+                time.monotonic() - started,
             )
-        except (RuntimeError, ValueError, OSError) as exc:
-            log.warning("FasterWhisperSTT failed to load model %r: %s", self._cfg.model, exc)
-            return None
-        log.info(
-            "FasterWhisperSTT loaded model=%s device=%s compute=%s in %.2fs",
-            self._cfg.model,
-            self._cfg.device,
-            self._cfg.compute_type,
-            time.monotonic() - started,
-        )
-        return self._model
+            return self._model
 
     def warm_up(self) -> None:
-        """Pre-load the model in a background thread so the first real command is fast."""
+        """Pre-load the model on a background thread so the first command isn't penalized."""
         import threading
 
-        def _load():
-            model = self._ensure_model()
-            if model is not None:
-                # Run one silent inference to JIT-compile the decoder path.
-                try:
-                    list(model.transcribe(
-                        np.zeros(1600, dtype=np.float32),
-                        language=self._cfg.language,
-                        beam_size=1,
-                    )[0])
-                except Exception:  # noqa: BLE001
-                    pass
-
-        t = threading.Thread(target=_load, daemon=True, name="fw-stt-warmup")
-        t.start()
+        threading.Thread(
+            target=self._ensure_model, daemon=True, name="fw-stt-warmup"
+        ).start()
 
     def finalize(self) -> str:
         if not self._chunks:
@@ -243,14 +251,24 @@ class FasterWhisperSTT(StreamingSTTBackend):
 
         audio = np.concatenate(self._chunks, axis=0)
         self._chunks.clear()
+
+        rms = float(np.sqrt(np.mean(audio * audio)))
+        dbfs = 20.0 * math.log10(rms) if rms > 1e-9 else -120.0
+        if dbfs < self._MIN_SPEECH_DBFS:
+            log.debug("FasterWhisperSTT: audio too quiet (%.1f dBFS), skipping", dbfs)
+            return ""
+
         try:
-            segments, _info = model.transcribe(
-                audio,
-                language=self._cfg.language,
-                beam_size=int(self._cfg.beam_size),
-                condition_on_previous_text=False,
-            )
+            with self._infer_lock:
+                segments, _info = model.transcribe(
+                    audio,
+                    language=self._cfg.language,
+                    beam_size=int(self._cfg.beam_size),
+                    condition_on_previous_text=False,
+                )
+                result = " ".join(seg.text.strip() for seg in segments).strip()
         except (RuntimeError, ValueError, OSError) as exc:
             log.warning("FasterWhisperSTT transcription failed: %s", exc)
             return ""
-        return " ".join(seg.text.strip() for seg in segments).strip()
+        log.info("FasterWhisperSTT: %.1f dBFS -> %r", dbfs, result)
+        return result
