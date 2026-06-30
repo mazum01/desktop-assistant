@@ -364,6 +364,10 @@ def main() -> int:
             wake_cooldown_s=float(_voice_cfg_raw.get("wake_cooldown_s", 1.5)),
             wake_threshold_dbfs=float(_voice_cfg_raw.get("wake_threshold_dbfs", -38.0)),
             wake_consecutive_frames=int(_voice_cfg_raw.get("wake_consecutive_frames", 2)),
+            wake_backend=str(_voice_cfg_raw.get("wake_backend", "energy")),
+            oww_model=str(_voice_cfg_raw.get("oww_model", "hey_jarvis_v0.1")),
+            oww_threshold=float(_voice_cfg_raw.get("oww_threshold", 0.5)),
+            oww_refractory_s=float(_voice_cfg_raw.get("oww_refractory_s", 2.0)),
             command_min_s=float(_voice_cfg_raw.get("command_min_s", 0.35)),
             command_max_s=float(_voice_cfg_raw.get("command_max_s", 6.0)),
             silence_end_s=float(_voice_cfg_raw.get("silence_end_s", 0.8)),
@@ -374,6 +378,7 @@ def main() -> int:
             stt_model=str(_voice_cfg_raw.get("stt_model", "base.en")),
             stt_device=str(_voice_cfg_raw.get("stt_device", "cpu")),
             stt_compute_type=str(_voice_cfg_raw.get("stt_compute_type", "int8")),
+            stt_cpu_threads=int(_voice_cfg_raw.get("stt_cpu_threads", 2)),
             dialog_timeout_s=float(_voice_cfg_raw.get("dialog_timeout_s", 20.0)),
         ),
     )
