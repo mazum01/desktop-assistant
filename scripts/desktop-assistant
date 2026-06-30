@@ -1637,13 +1637,20 @@ def cmd_audio(args) -> int:
             print()
             print(f"  {BLD}Voice STT{RST}")
             print(f"    Enabled                : {GRN if d.get('enabled') else YLW}{d.get('enabled', False)}{RST}")
-            print(f"    STT backend            : {d.get('stt_backend', 'shell')}")
-            print(f"    STT language           : {d.get('stt_language', 'en')}")
-            print(f"    STT command            : {d.get('stt_command', '') or '(not set)'}")
-            print(f"    Sample rate            : {d.get('sample_rate', 16000)}")
-            print(f"    STT timeout (s)        : {d.get('stt_timeout_s', 20.0)}")
+            print(f"    Wake backend           : {d.get('wake_backend', 'energy')}")
+            print(f"    OWW model              : {d.get('oww_model', 'hey_jarvis_v0.1')}")
+            print(f"    OWW threshold          : {d.get('oww_threshold', 0.5)}")
+            print(f"    OWW refractory (s)     : {d.get('oww_refractory_s', 2.0)}")
             print(f"    Wake threshold (dBFS)  : {d.get('wake_threshold_dbfs', -38.0)}")
             print(f"    Wake cooldown (s)      : {d.get('wake_cooldown_s', 1.5)}")
+            print(f"    STT backend            : {d.get('stt_backend', 'faster_whisper')}")
+            print(f"    STT model              : {d.get('stt_model', 'base.en')}")
+            print(f"    STT language           : {d.get('stt_language', 'en')}")
+            print(f"    STT timeout (s)        : {d.get('stt_timeout_s', 60.0)}")
+            print(f"    STT command            : {d.get('stt_command', '') or '(not set)'}")
+            print(f"    Sample rate            : {d.get('sample_rate', 16000)}")
+            print(f"    Available wake backends: {', '.join(d.get('available_wake_backends', ['energy', 'openwakeword']))}")
+            print(f"    Available STT backends : {', '.join(d.get('available_stt_backends', ['faster_whisper', 'shell', 'null']))}")
             print()
             return 0
         except Exception as exc:
@@ -1665,10 +1672,12 @@ def cmd_audio(args) -> int:
         if not pairs:
             print(
                 "Usage: vera audio stt-set key=value ... "
-                "(keys: enabled,poll_seconds,sample_rate,wake_cooldown_s,"
-                "wake_threshold_dbfs,wake_consecutive_frames,command_min_s,"
-                "command_max_s,silence_end_s,stt_backend,stt_command,"
-                "stt_language,stt_timeout_s,dialog_timeout_s)",
+                "(keys: enabled,poll_seconds,sample_rate,"
+                "wake_backend,oww_model,oww_threshold,oww_refractory_s,"
+                "wake_cooldown_s,wake_threshold_dbfs,wake_consecutive_frames,"
+                "command_min_s,command_max_s,silence_end_s,"
+                "stt_backend,stt_command,stt_language,stt_timeout_s,"
+                "stt_cpu_threads,dialog_timeout_s)",
                 file=sys.stderr,
             )
             return 1
@@ -1869,8 +1878,8 @@ def cmd_help(args) -> int:
                             "                  audio stt-status              Show current voice STT configuration.\n"
                             "                  audio stt-enable              Enable voice STT pipeline.\n"
                             "                  audio stt-disable             Disable voice STT pipeline.\n"
-                            "                  audio stt-set k=v ...         Update voice STT settings (backend, command, language, wake tuning).\n"
-                            "                  Note: backend changes require a service restart to take effect.",
+                            "                  audio stt-set k=v ...         Update voice STT/wake settings (backend, wake_backend, oww_model, oww_threshold, language, etc.).\n"
+                            "                  Note: stt_backend and wake_backend changes require a service restart to take effect.",
         "privacy":          "Nudity detection look-away service. Sub-commands:\n"
                             "                  privacy status                Show enabled state, hardware readiness, and settings.\n"
                             "                  privacy enable                Enable nudity detection + look-away.\n"

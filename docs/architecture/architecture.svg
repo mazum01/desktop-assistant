@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-992 4602.27,-992 4602.27,4 -4,4"/>
 <text text-anchor="start" x="2011.64" y="-972.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="2111.14" y="-961" font-family="Helvetica,sans-Serif" font-size="10.00">v1.42.0 — Voice command pipeline + STT controls across CLI/Web/OpenClaw</text>
+<text text-anchor="start" x="2037.14" y="-961" font-family="Helvetica,sans-Serif" font-size="10.00">v1.44.0 — openWakeWord neural wake detection + voice pipeline + STT controls across CLI/Web/OpenClaw</text>
 <g id="clust1" class="cluster">
 <title>cluster_hw</title>
 <path fill="#f5e9d8" stroke="black" d="M1986,-835C1986,-835 3067,-835 3067,-835 3073,-835 3079,-841 3079,-847 3079,-847 3079,-934 3079,-934 3079,-940 3073,-946 3067,-946 3067,-946 1986,-946 1986,-946 1980,-946 1974,-940 1974,-934 1974,-934 1974,-847 1974,-847 1974,-841 1980,-835 1986,-835"/>
