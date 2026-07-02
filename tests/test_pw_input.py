@@ -43,6 +43,23 @@ def test_resolve_source_name_parses_pw_dump(monkeypatch):
     assert pw_input._resolve_source_name("nonexistent") is None
 
 
+def test_resolve_source_name_prefers_alsa_input_over_monitor(monkeypatch):
+    """When both monitor and mic source match, choose the physical mic source."""
+    fake_dump = (
+        '[{"type":"PipeWire:Interface:Node","info":{"props":'
+        '{"media.class":"Audio/Source","node.name":"alsa_output.reSpeaker.monitor"}}},'
+        '{"type":"PipeWire:Interface:Node","info":{"props":'
+        '{"media.class":"Audio/Source","node.name":"alsa_input.reSpeaker_xyz"}}}]'
+    )
+
+    class _R:
+        returncode = 0
+        stdout = fake_dump
+
+    monkeypatch.setattr(pw_input.subprocess, "run", lambda *a, **k: _R())
+    assert pw_input._resolve_source_name("reSpeaker") == "alsa_input.reSpeaker_xyz"
+
+
 def test_resolve_source_name_empty_match():
     assert pw_input._resolve_source_name("") is None
 

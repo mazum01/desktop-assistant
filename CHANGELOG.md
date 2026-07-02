@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [1.44.1] - 2026-07-02
+## [1.44.3] - 2026-07-02
+### Fixed
+- PipeWire source auto-selection for ReSpeaker capture now prefers physical
+  microphone inputs (`alsa_input.*`) over monitor sources. This prevents
+  accidental binding to an output monitor source (playback/silence), which can
+  make wake-word detection and STT appear non-responsive even when voice
+  services are enabled.
+
+### Tests
+- Added regression coverage for source resolution preference when both monitor
+  and mic sources match the same substring.
+
 ## [1.44.2] - 2026-07-02
 ### Added
 - Web GUI card: **STT Transcript History** (Overview tab), showing the last 20

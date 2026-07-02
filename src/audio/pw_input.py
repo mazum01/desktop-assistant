@@ -50,13 +50,20 @@ class PipeWireMicConfig:
 
 
 def _resolve_source_name(match: str) -> Optional[str]:
-    """Return the node.name of the first Audio/Source matching *match*, or None."""
+    """Return the best Audio/Source node.name matching *match*.
+
+    Prefer physical mic inputs (``alsa_input.*``) over monitor sources.  On
+    PipeWire systems a sink monitor is also an ``Audio/Source`` and can match
+    ``reSpeaker``; selecting that would feed playback/silence instead of mic
+    capture.
+    """
     if not match:
         return None
     try:
         r = subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=5)
         if r.returncode != 0:
             return None
+        candidates: list[str] = []
         for obj in json.loads(r.stdout):
             if obj.get("type") != "PipeWire:Interface:Node":
                 continue
@@ -65,7 +72,17 @@ def _resolve_source_name(match: str) -> Optional[str]:
                 continue
             name = props.get("node.name", "")
             if match.lower() in name.lower():
-                return name
+                candidates.append(name)
+        if not candidates:
+            return None
+        candidates.sort(
+            key=lambda n: (
+                not n.startswith("alsa_input."),
+                ".monitor" in n,
+                n,
+            )
+        )
+        return candidates[0]
     except Exception as exc:
         log.debug("pw_input: source resolve failed: %s", exc)
     return None
