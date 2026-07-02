@@ -287,6 +287,7 @@ function updateDashboard(data) {
   // Event log
   const events = data.events || [];
   renderEventLog(events);
+  renderSttTranscriptLog(events);
 
   // FPS overlays — driven by server-side frame counters (Chrome-compatible)
   updateFpsOverlays(data);
@@ -979,6 +980,45 @@ function renderEventLog(events) {
     row.innerHTML = `
       <span class="event-ts">${ts}</span>
       <span class="event-topic">${esc(ev.topic)}</span>
+      <span class="event-body">${esc(snip)}</span>
+    `;
+    container.appendChild(row);
+  }
+}
+
+function renderSttTranscriptLog(events) {
+  const container = el("stt-transcript-log");
+  if (!container) return;
+  container.innerHTML = "";
+
+  const transcriptEvents = (events || [])
+    .filter((ev) => ev && ev.topic === "voice.transcript")
+    .slice(-20);
+
+  if (transcriptEvents.length === 0) {
+    const row = document.createElement("div");
+    row.className = "event-row";
+    row.innerHTML = `
+      <span class="event-ts">—</span>
+      <span class="event-topic">voice.transcript</span>
+      <span class="event-body" style="color:var(--text-dim)">No transcripts yet.</span>
+    `;
+    container.appendChild(row);
+    return;
+  }
+
+  for (const ev of [...transcriptEvents].reverse()) {
+    const ts = new Date(ev.ts * 1000).toLocaleTimeString();
+    const payload = ev.payload || {};
+    const text = typeof payload.text === "string" ? payload.text.trim() : "";
+    const elapsed = Number(payload.elapsed_s);
+    const tail = Number.isFinite(elapsed) ? ` (${elapsed.toFixed(2)}s)` : "";
+    const snip = text.length > 160 ? text.slice(0, 160) + "…" : text || "(empty)";
+    const row = document.createElement("div");
+    row.className = "event-row";
+    row.innerHTML = `
+      <span class="event-ts">${ts}</span>
+      <span class="event-topic">voice.transcript${tail}</span>
       <span class="event-body">${esc(snip)}</span>
     `;
     container.appendChild(row);

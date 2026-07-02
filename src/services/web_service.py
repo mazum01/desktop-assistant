@@ -859,7 +859,7 @@ class WebService:
         for topic in (
             "perception.faces", "face.identified", "av.spoke",
             "motion.position", "thermal.temp", "thermal.fan",
-            "voice.state", "voice.wake", "voice.intent",
+            "voice.state", "voice.wake", "voice.intent", "voice.transcript",
         ):
             self._unsubs.append(
                 self.bus.subscribe(topic, lambda t, p, _t=topic: self._on_event(_t, p))

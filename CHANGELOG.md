@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [1.44.1] - 2026-07-02
+## [1.44.2] - 2026-07-02
+### Added
+- Web GUI card: **STT Transcript History** (Overview tab), showing the last 20
+  `voice.transcript` events with timestamp, elapsed transcription window, and
+  transcript text preview.
+- Browser rendering function `renderSttTranscriptLog(events)` in
+  `src/web/static/app.js`.
+
+### Changed
+- `WebService` now includes `voice.transcript` in the event-log subscription
+  list so transcript history reaches the dashboard websocket payload.
+
+## [1.44.1] - 2026-07-02
 ### Fixed
 - Gate `VoiceCommandService.run_tick()` STT chunk acceptance on VAD activity
   (plus a 350ms trailing window). Previously every audio chunk in the command
