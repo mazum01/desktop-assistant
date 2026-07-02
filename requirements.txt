@@ -13,6 +13,8 @@ gpiozero>=2.0
 sounddevice>=0.4.6
 soundfile>=0.12.1
 numpy>=1.26
+pyaudio>=0.2.14
+pyusb>=1.2.1
 
 # Camera (Pi Camera Module 3 — libcamera backend)
 # NOTE: picamera2 must be installed via apt (`python3-picamera2`) on the Pi,

@@ -614,13 +614,13 @@
   <div class="control-group">
     <label>Input Pipeline</label>
     <select id="audio-rs-input-pipeline" style="width:220px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
-      <option value="respeaker_native">respeaker_native (sounddevice/ALSA)</option>
+      <option value="respeaker_native">respeaker_native (official ReSpeaker/PyAudio)</option>
       <option value="pipewire">pipewire (pw-record)</option>
     </select>
   </div>
   <div class="control-group">
-    <label>Input Device Name <small style="color:var(--text-muted)">(ALSA substring match)</small></label>
-    <input id="audio-rs-input-device" type="text" placeholder="ReSpeaker" style="width:100%;max-width:320px"/>
+    <label>Input Device Name <small style="color:var(--text-muted)">(PyAudio device name substring)</small></label>
+    <input id="audio-rs-input-device" type="text" placeholder="pulse" style="width:100%;max-width:320px"/>
   </div>
   <div class="control-group">
     <label>PipeWire Source Match <small style="color:var(--text-muted)">(used only when input pipeline is pipewire)</small></label>

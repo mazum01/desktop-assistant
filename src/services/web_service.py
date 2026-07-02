@@ -400,7 +400,7 @@ class _AudioDefaultSettings(BaseModel):
 
 class _AudioReSpeakerSettings(BaseModel):
     input_pipeline: str = "respeaker_native"
-    input_device_name: str = "ReSpeaker"
+    input_device_name: str = "pulse"
     input_sample_rate: int = 16000
     input_raw_channels: int = 6
     input_processing_enabled: bool = True
@@ -584,7 +584,7 @@ def _read_audio_config() -> dict:
     }
     respeaker_defaults = {
         "input_pipeline": "respeaker_native",
-        "input_device_name": "ReSpeaker",
+        "input_device_name": "pulse",
         "input_sample_rate": 16000,
         "input_raw_channels": 6,
         "input_processing_enabled": True,

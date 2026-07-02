@@ -1806,7 +1806,7 @@ async function loadAudioSettings() {
     // ReSpeaker Flex fields
     const rs = d.respeaker_flex ?? {};
     _setVal("audio-rs-input-pipeline", rs.input_pipeline ?? "respeaker_native");
-    _setVal("audio-rs-input-device", rs.input_device_name ?? "ReSpeaker");
+    _setVal("audio-rs-input-device", rs.input_device_name ?? "pulse");
     _setVal("audio-rs-source-match", rs.input_source_match ?? "reSpeaker");
     _setVal("audio-rs-input-rate",   rs.input_sample_rate ?? 16000);
     _setVal("audio-rs-raw-ch",       rs.input_raw_channels ?? 6);

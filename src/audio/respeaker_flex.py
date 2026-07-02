@@ -51,6 +51,8 @@ In ``config/assistant.yaml``::
 from __future__ import annotations
 
 import logging
+import queue
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -58,14 +60,23 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-# ── Optional sounddevice import (same pattern as AudioInput) ─────────────────
+# ── Optional official ReSpeaker mic-array stack (PyAudio) ─────────────────────
+try:
+    import pyaudio  # type: ignore
+    _PYAUDIO_AVAILABLE = True
+except (ImportError, OSError) as _exc:
+    pyaudio = None  # type: ignore
+    _PYAUDIO_AVAILABLE = False
+    log.warning("pyaudio not available — ReSpeaker official input disabled (%s)", _exc)
+
+# ── Optional sounddevice fallback (legacy path) ───────────────────────────────
 try:
     import sounddevice as sd
     _SD_AVAILABLE = True
 except (ImportError, OSError) as _exc:
     sd = None  # type: ignore
     _SD_AVAILABLE = False
-    log.warning("sounddevice not available — ReSpeaker input in sim mode (%s)", _exc)
+    log.warning("sounddevice not available — ReSpeaker legacy fallback disabled (%s)", _exc)
 
 # ── Optional LED library ──────────────────────────────────────────────────────
 try:
@@ -130,24 +141,141 @@ class ReSpeakerFlexInput:
 
     def __init__(self, config: Optional[ReSpeakerFlexInputConfig] = None) -> None:
         self._cfg = config or ReSpeakerFlexInputConfig()
-        self._sim = not _SD_AVAILABLE
+        self._sim = False
         self._device_index: Optional[int] = None
+        self._mode = "sim"
+        self._pa = None
+        self._stream = None
+        self._queue: "queue.Queue[bytes]" = queue.Queue(maxsize=200)
 
-        if self._sim:
+        # Prefer the official ReSpeaker mic_array capture model (PyAudio callback
+        # + queue), then fall back to our older sounddevice implementation if the
+        # official stack is unavailable.
+        if _PYAUDIO_AVAILABLE:
+            if self._init_pyaudio():
+                self._mode = "official"
+                self._sim = False
+                return
+        if _SD_AVAILABLE and self._init_sounddevice():
+            self._mode = "legacy"
+            self._sim = False
             return
 
+        self._sim = True
+        log.warning(
+            "[sim] ReSpeaker input unavailable — neither official (pyaudio) "
+            "nor legacy (sounddevice) backend could initialize"
+        )
+
+    def _find_pyaudio_device(self, pa) -> Optional[int]:
+        needle = self._cfg.device_name.lower()
+        exact_channel_match: Optional[int] = None
+        for idx in range(pa.get_device_count()):
+            try:
+                dev = pa.get_device_info_by_index(idx)
+            except Exception:
+                continue
+            name = str(dev.get("name", ""))
+            ch = int(dev.get("maxInputChannels", 0) or 0)
+            if ch <= 0:
+                continue
+            if needle in name.lower():
+                return idx
+            # Official ReSpeaker examples select by channel count when names are
+            # not predictable across hosts.
+            if exact_channel_match is None and ch == int(self._cfg.raw_channels):
+                exact_channel_match = idx
+        if exact_channel_match is not None:
+            return exact_channel_match
+        for idx in range(pa.get_device_count()):
+            try:
+                dev = pa.get_device_info_by_index(idx)
+            except Exception:
+                continue
+            if int(dev.get("maxInputChannels", 0) or 0) > 0:
+                return idx
+        return None
+
+    def _init_pyaudio(self) -> bool:
+        try:
+            pa = pyaudio.PyAudio()
+        except Exception as exc:
+            log.warning("ReSpeaker official input init failed (PyAudio create): %s", exc)
+            return False
+
+        if self._cfg.device_index is not None:
+            self._device_index = self._cfg.device_index
+        else:
+            self._device_index = self._find_pyaudio_device(pa)
+
+        if self._device_index is None:
+            try:
+                pa.terminate()
+            except Exception:
+                pass
+            log.warning(
+                "[sim] ReSpeaker official pipeline: no input device matched %r",
+                self._cfg.device_name,
+            )
+            return False
+
+        frames_per_buffer = max(1, int(self._cfg.sample_rate * 0.08))
+
+        def _callback(in_data, frame_count, time_info, status):  # noqa: ARG001
+            try:
+                self._queue.put_nowait(in_data)
+            except queue.Full:
+                try:
+                    self._queue.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    self._queue.put_nowait(in_data)
+                except queue.Full:
+                    pass
+            return (None, pyaudio.paContinue)
+
+        try:
+            self._stream = pa.open(
+                input=True,
+                start=False,
+                format=pyaudio.paInt16,
+                channels=int(self._cfg.raw_channels),
+                rate=int(self._cfg.sample_rate),
+                frames_per_buffer=int(frames_per_buffer),
+                stream_callback=_callback,
+                input_device_index=self._device_index,
+            )
+            self._stream.start_stream()
+            self._pa = pa
+            log.info(
+                "ReSpeakerFlexInput: official pipeline ready (PyAudio) dev=%s rate=%d ch=%d proc=%d",
+                self._device_index, self._cfg.sample_rate, self._cfg.raw_channels, self._cfg.processed_channel,
+            )
+            return True
+        except Exception as exc:
+            try:
+                pa.terminate()
+            except Exception:
+                pass
+            self._stream = None
+            self._pa = None
+            log.warning("ReSpeaker official pipeline open failed: %s", exc)
+            return False
+
+    def _init_sounddevice(self) -> bool:
         if self._cfg.device_index is not None:
             self._device_index = self._cfg.device_index
         elif self._cfg.device_name:
             self._device_index = self._find_device()
             if self._device_index is None:
                 log.warning(
-                    "[sim] ReSpeaker: no device matched %r — audio input disabled",
+                    "[sim] ReSpeaker legacy fallback: no device matched %r",
                     self._cfg.device_name,
                 )
-                self._sim = True
+                return False
 
-        if not self._sim and hasattr(sd, "check_input_settings"):
+        if hasattr(sd, "check_input_settings"):
             try:
                 sd.check_input_settings(
                     device=self._device_index,
@@ -156,17 +284,14 @@ class ReSpeakerFlexInput:
                     dtype="float32",
                 )
                 log.info(
-                    "ReSpeakerFlexInput: device index=%s rate=%d ch=%d proc=%d",
-                    self._device_index, self._cfg.sample_rate,
-                    self._cfg.raw_channels, self._cfg.processed_channel,
+                    "ReSpeakerFlexInput: legacy fallback ready (sounddevice) dev=%s rate=%d ch=%d proc=%d",
+                    self._device_index, self._cfg.sample_rate, self._cfg.raw_channels, self._cfg.processed_channel,
                 )
+                return True
             except Exception as exc:
-                log.warning(
-                    "[sim] ReSpeaker input probe failed (dev=%s rate=%d ch=%d): %s",
-                    self._device_index, self._cfg.sample_rate,
-                    self._cfg.raw_channels, exc,
-                )
-                self._sim = True
+                log.warning("ReSpeaker legacy fallback probe failed: %s", exc)
+                return False
+        return False
 
     def _find_device(self) -> Optional[int]:
         """Return index of the first input device whose name contains device_name."""
@@ -215,9 +340,47 @@ class ReSpeakerFlexInput:
         Returns silence (zeros, shape ``(n_samples,)``) in sim mode.
         """
         n_samples = int(seconds * self._cfg.sample_rate)
-        if self._sim or not _SD_AVAILABLE:
+        if self._sim:
             return np.zeros(n_samples, dtype=np.float32)
 
+        if self._mode == "official" and self._stream is not None:
+            need_frames = n_samples
+            chunks: list[np.ndarray] = []
+            got = 0
+            deadline = time.monotonic() + seconds + 1.0
+            while got < need_frames and time.monotonic() < deadline:
+                timeout = max(0.01, min(0.2, deadline - time.monotonic()))
+                try:
+                    b = self._queue.get(timeout=timeout)
+                except queue.Empty:
+                    continue
+                if not b:
+                    continue
+                arr = np.frombuffer(b, dtype=np.int16)
+                if arr.size == 0:
+                    continue
+                frames = arr.size // int(self._cfg.raw_channels)
+                if frames <= 0:
+                    continue
+                arr = arr[: frames * int(self._cfg.raw_channels)]
+                arr = arr.reshape(frames, int(self._cfg.raw_channels)).astype(np.float32) / 32768.0
+                ch = min(int(self._cfg.processed_channel), arr.shape[1] - 1)
+                mono = arr[:, ch]
+                chunks.append(mono)
+                got += mono.size
+
+            if got < need_frames:
+                if chunks:
+                    out = np.concatenate(chunks, axis=0)
+                else:
+                    out = np.zeros(0, dtype=np.float32)
+                if out.size < need_frames:
+                    out = np.pad(out, (0, need_frames - out.size))
+                return out[:need_frames]
+            out = np.concatenate(chunks, axis=0)
+            return out[:need_frames]
+
+        # Legacy sounddevice fallback
         try:
             recording = sd.rec(
                 n_samples,
@@ -227,13 +390,29 @@ class ReSpeakerFlexInput:
                 device=self._device_index,
                 blocking=True,
             )
+            ch = min(self._cfg.processed_channel, recording.shape[1] - 1)
+            return recording[:, ch].copy()
         except Exception as exc:
             log.warning("ReSpeaker record failed: %s", exc)
             return np.zeros(n_samples, dtype=np.float32)
 
-        # recording shape: (n_samples, raw_channels) — extract processed channel
-        ch = min(self._cfg.processed_channel, recording.shape[1] - 1)
-        return recording[:, ch].copy()
+    def close(self) -> None:
+        if self._stream is not None:
+            try:
+                self._stream.stop_stream()
+            except Exception:
+                pass
+            try:
+                self._stream.close()
+            except Exception:
+                pass
+            self._stream = None
+        if self._pa is not None:
+            try:
+                self._pa.terminate()
+            except Exception:
+                pass
+            self._pa = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

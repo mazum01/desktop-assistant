@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [1.44.1] - 2026-07-02
+## [1.44.4] - 2026-07-02
+### Changed
+- ReSpeaker microphone input path now uses the official ReSpeaker-style Python
+  pipeline first (`PyAudio` callback stream/ring buffer), with channel
+  extraction for processed/raw selection matching existing config semantics.
+- ReSpeaker audio settings defaults now target the PyAudio `pulse` device name
+  so the official pipeline can attach reliably on PipeWire-managed systems.
+- Web GUI labels now describe ReSpeaker native mode as the official
+  ReSpeaker/PyAudio pipeline.
+
+### Notes
+- Added `pyaudio` and `pyusb` to Python requirements to support official
+  ReSpeaker audio/USB stacks.
+
 ## [1.44.3] - 2026-07-02
 ### Fixed
 - PipeWire source auto-selection for ReSpeaker capture now prefers physical
