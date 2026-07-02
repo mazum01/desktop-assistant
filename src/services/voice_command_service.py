@@ -332,6 +332,10 @@ class VoiceCommandService(Service):
         self._pre_roll_chunks.clear()
         self._set_state(STATE_COMMAND_LISTEN, reason="wake_detected")
         self.bus.publish(
+            "av.beep",
+            {"freq": 880.0, "duration": 0.08, "amplitude": 0.18},
+        )
+        self.bus.publish(
             "voice.wake",
             {"ts": time.time(), "backend": str(self._cfg.wake_backend)},
         )

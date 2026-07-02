@@ -4,7 +4,18 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
-## [1.44.1] - 2026-07-02
+## [1.44.5] - 2026-07-02
+## [1.44.6] - 2026-07-02
+### Added
+- Wake acknowledgement beep in `VoiceCommandService`: when wake-word detection
+  opens a command window, it now publishes `av.beep` (880Hz, 80ms, low
+  amplitude) so users get immediate audible feedback that the voice command was
+  heard.
+
+### Tests
+- Added `test_voice_command_service_emits_beep_on_wake` to verify wake
+  transitions emit the beep event.
+
 ## [1.44.5] - 2026-07-02
 ### Fixed
 - Voice wake-tail suppression for openWakeWord flow: `VoiceCommandService`

@@ -86,6 +86,36 @@ def test_voice_command_service_dispatches_av_utterance_from_transcript():
     assert stt.chunks == 2
 
 
+def test_voice_command_service_emits_beep_on_wake():
+    bus = MessageBus()
+    cap = _FakeCapture()
+    svc = VoiceCommandService(
+        bus=bus,
+        capture_service=cap,
+        config=VoiceCommandConfig(
+            enabled=True,
+            command_min_s=0.0,
+            silence_end_s=0.0,
+            command_max_s=1.0,
+        ),
+        wake_detector=_OneShotWake(),
+        stt_backend=_StaticSTT(""),
+    )
+    beeps = []
+    bus.subscribe("av.beep", lambda _t, p: beeps.append(p))
+    svc.on_start()
+    try:
+        cap.push(np.ones(800, dtype=np.float32) * 0.05)
+        svc.run_tick()
+    finally:
+        svc.on_stop()
+
+    assert beeps
+    assert beeps[-1]["freq"] == 880.0
+    assert beeps[-1]["duration"] == 0.08
+    assert beeps[-1]["amplitude"] == 0.18
+
+
 def test_voice_command_service_handles_empty_transcript_without_dispatch():
     bus = MessageBus()
     cap = _FakeCapture()
