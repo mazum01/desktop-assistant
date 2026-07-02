@@ -36,7 +36,7 @@ def test_create_input_default_returns_audio_input():
 
 def test_create_input_respeaker_returns_respeaker_input():
     obj = create_audio_input(BACKEND_RESPEAKER_FLEX, {})
-    assert isinstance(obj, PipeWireMicInput)
+    assert isinstance(obj, (ReSpeakerFlexInput, PipeWireMicInput))
 
 
 def test_create_input_unknown_falls_back_to_default():
@@ -159,6 +159,7 @@ def test_led_disabled_does_not_publish():
 
 def test_factory_input_passes_pipewire_channel_selection():
     cfg = {
+        "input_pipeline": "pipewire",
         "input_sample_rate": 16000,
         "input_raw_channels": 6,
         "input_source_match": "reSpeaker",
@@ -171,6 +172,57 @@ def test_factory_input_passes_pipewire_channel_selection():
     assert obj._cfg.sample_rate == 16000
     assert obj._cfg.channels == 6
     assert obj._cfg.select_channel == 2
+
+
+def test_factory_input_uses_respeaker_native_pipeline_by_default(monkeypatch):
+    captured = {}
+
+    class _FakeNative:
+        def __init__(self, config):
+            captured["cfg"] = config
+            self._cfg = config
+
+        @property
+        def hardware_ready(self):
+            return True
+
+    monkeypatch.setattr("src.audio.respeaker_flex.ReSpeakerFlexInput", _FakeNative)
+
+    cfg = {
+        "input_device_name": "ReSpeaker",
+        "input_sample_rate": 16000,
+        "input_raw_channels": 6,
+        "input_processing_enabled": False,
+        "input_raw_mic_channel": 3,
+    }
+    obj = create_audio_input(BACKEND_RESPEAKER_FLEX, cfg)
+    assert isinstance(obj, _FakeNative)
+    assert captured["cfg"].sample_rate == 16000
+    assert captured["cfg"].raw_channels == 6
+    assert captured["cfg"].processed_channel == 3
+
+
+def test_factory_input_native_pipeline_falls_back_to_pipewire(monkeypatch):
+    class _FakeNative:
+        def __init__(self, config):
+            self._cfg = config
+
+        @property
+        def hardware_ready(self):
+            return False
+
+    monkeypatch.setattr("src.audio.respeaker_flex.ReSpeakerFlexInput", _FakeNative)
+
+    cfg = {
+        "input_pipeline": "respeaker_native",
+        "input_sample_rate": 16000,
+        "input_raw_channels": 6,
+        "input_source_match": "reSpeaker",
+        "input_processing_enabled": True,
+        "input_processed_channel": 0,
+    }
+    obj = create_audio_input(BACKEND_RESPEAKER_FLEX, cfg)
+    assert isinstance(obj, PipeWireMicInput)
 
 
 def test_factory_output_passes_alsa_device():

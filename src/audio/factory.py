@@ -66,6 +66,8 @@ def create_audio_input(backend: str, cfg: dict | None = None) -> Any:
 
     if backend == BACKEND_RESPEAKER_FLEX:
         from src.audio.pw_input import PipeWireMicInput, PipeWireMicConfig
+        from src.audio.respeaker_flex import ReSpeakerFlexInput, ReSpeakerFlexInputConfig
+        input_pipeline = str(cfg.get("input_pipeline", "respeaker_native")).lower()
         processing_enabled = bool(cfg.get("input_processing_enabled", True))
         selected_channel = int(
             cfg.get(
@@ -73,18 +75,53 @@ def create_audio_input(backend: str, cfg: dict | None = None) -> Any:
                 0 if processing_enabled else 1,
             )
         )
-        input_cfg = PipeWireMicConfig(
+        if input_pipeline == "pipewire":
+            input_cfg = PipeWireMicConfig(
+                sample_rate=int(cfg.get("input_sample_rate", 16000)),
+                channels=int(cfg.get("input_raw_channels", 6)),
+                select_channel=selected_channel,
+                source_match=str(cfg.get("input_source_match", "reSpeaker")),
+            )
+            log.info(
+                "Audio backend: respeaker_flex — input via PipeWire rate=%d raw_ch=%d channel=%d processing=%s match=%r",
+                input_cfg.sample_rate, input_cfg.channels,
+                input_cfg.select_channel, processing_enabled, input_cfg.source_match,
+            )
+            return PipeWireMicInput(input_cfg)
+
+        if input_pipeline not in {"respeaker_native", "pipewire"}:
+            log.warning(
+                "Audio backend: respeaker_flex — unknown input_pipeline %r; using respeaker_native",
+                input_pipeline,
+            )
+        input_cfg = ReSpeakerFlexInputConfig(
+            device_name=str(cfg.get("input_device_name", "ReSpeaker")),
+            sample_rate=int(cfg.get("input_sample_rate", 16000)),
+            raw_channels=int(cfg.get("input_raw_channels", 6)),
+            processed_channel=selected_channel,
+        )
+        log.info(
+            "Audio backend: respeaker_flex — input via native ReSpeaker driver device=%r rate=%d raw_ch=%d channel=%d processing=%s",
+            input_cfg.device_name,
+            input_cfg.sample_rate,
+            input_cfg.raw_channels,
+            input_cfg.processed_channel,
+            processing_enabled,
+        )
+        native_input = ReSpeakerFlexInput(input_cfg)
+        if native_input.hardware_ready:
+            return native_input
+
+        log.warning(
+            "Audio backend: respeaker_flex — native pipeline unavailable; falling back to PipeWire"
+        )
+        fallback_cfg = PipeWireMicConfig(
             sample_rate=int(cfg.get("input_sample_rate", 16000)),
             channels=int(cfg.get("input_raw_channels", 6)),
             select_channel=selected_channel,
             source_match=str(cfg.get("input_source_match", "reSpeaker")),
         )
-        log.info(
-            "Audio backend: respeaker_flex — input via PipeWire rate=%d raw_ch=%d channel=%d processing=%s match=%r",
-            input_cfg.sample_rate, input_cfg.channels,
-            input_cfg.select_channel, processing_enabled, input_cfg.source_match,
-        )
-        return PipeWireMicInput(input_cfg)
+        return PipeWireMicInput(fallback_cfg)
 
     # default
     from src.audio.input import AudioInput, AudioInputConfig

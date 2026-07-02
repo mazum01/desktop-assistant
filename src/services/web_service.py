@@ -399,12 +399,14 @@ class _AudioDefaultSettings(BaseModel):
 
 
 class _AudioReSpeakerSettings(BaseModel):
+    input_pipeline: str = "respeaker_native"
     input_device_name: str = "ReSpeaker"
     input_sample_rate: int = 16000
     input_raw_channels: int = 6
     input_processing_enabled: bool = True
     input_processed_channel: int = 0
     input_raw_mic_channel: int = 1
+    input_source_match: str = "reSpeaker"
     output_alsa_device: str = "pulse"
     output_sample_rate: int = 44100
     loudness_boost: float = 2.0
@@ -581,12 +583,14 @@ def _read_audio_config() -> dict:
         "eq_preset": "flat",
     }
     respeaker_defaults = {
+        "input_pipeline": "respeaker_native",
         "input_device_name": "ReSpeaker",
         "input_sample_rate": 16000,
         "input_raw_channels": 6,
         "input_processing_enabled": True,
         "input_processed_channel": 0,
         "input_raw_mic_channel": 1,
+        "input_source_match": "reSpeaker",
         "output_alsa_device": "pulse",
         "output_sample_rate": 44100,
         "loudness_boost": 2.0,
@@ -594,11 +598,16 @@ def _read_audio_config() -> dict:
         "led_enabled": True,
     }
 
-    return {
+    out = {
         "backend": audio.get("backend", _AUDIO_BACKEND_DEFAULT),
         "default": {**default_defaults, **audio.get("default", {})},
         "respeaker_flex": {**respeaker_defaults, **audio.get("respeaker_flex", {})},
     }
+    pipeline = str(out["respeaker_flex"].get("input_pipeline", "respeaker_native")).lower()
+    if pipeline not in {"respeaker_native", "pipewire"}:
+        pipeline = "respeaker_native"
+    out["respeaker_flex"]["input_pipeline"] = pipeline
+    return out
 
 
 def _write_audio_config(body: dict) -> None:
