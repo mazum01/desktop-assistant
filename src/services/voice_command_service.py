@@ -258,6 +258,8 @@ class VoiceCommandService(Service):
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()
+        if self._finalize_thread is not None and self._finalize_thread.is_alive():
+            self._finalize_thread.join(timeout=float(self._cfg.stt_timeout_s) + 1.0)
         self._stt.close()
         self._set_led_state("idle")
 
@@ -430,7 +432,11 @@ class VoiceCommandService(Service):
         if self._state != STATE_COMMAND_LISTEN:
             return
 
-        self._stt.accept_chunk(chunk, int(self._cfg.sample_rate))
+        # Only feed VAD-active speech (plus a short trailing window) to the STT
+        # backend. Whisper hallucinates speech-like text when given silent or
+        # near-silent audio, so silence must not reach accept_chunk().
+        if self._vad_active or (now - self._last_voice_mono) <= 0.35:
+            self._stt.accept_chunk(chunk, int(self._cfg.sample_rate))
         if self._vad_active:
             self._last_voice_mono = now
 

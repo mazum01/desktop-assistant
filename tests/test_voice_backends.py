@@ -54,8 +54,9 @@ def test_faster_whisper_stt_uses_persistent_model(monkeypatch):
     calls = {}
 
     class _FakeModel:
-        def __init__(self, model, device, compute_type):
+        def __init__(self, model, device, compute_type, **kwargs):
             calls["init"] = (model, device, compute_type)
+            calls["init_kwargs"] = kwargs
 
         def transcribe(self, wav_path, **kwargs):
             calls["transcribe"] = (wav_path, kwargs)

@@ -4,6 +4,24 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.44.1] - 2026-07-02
+### Fixed
+- Gate `VoiceCommandService.run_tick()` STT chunk acceptance on VAD activity
+  (plus a 350ms trailing window). Previously every audio chunk in the command
+  window — including silence and ambient noise — was passed to the STT
+  backend, causing FasterWhisper/Whisper to hallucinate speech-like text
+  (e.g. long fabricated "lecture" transcripts) on non-speech audio.
+- `VoiceCommandService.on_stop()` now joins the in-flight STT finalize thread
+  (bounded by `stt_timeout_s + 1.0`) instead of tearing down immediately,
+  preventing a shutdown race where the finalize thread's dispatch/intent
+  events never fire before capture/bus teardown.
+### Tests
+- Fixed flaky `test_voice_command_service_dispatches_av_utterance_from_transcript`
+  and `test_voice_command_service_handles_empty_transcript_without_dispatch`,
+  which raced against the async STT finalize thread introduced in 1.42.2+.
+- Updated `test_faster_whisper_stt_uses_persistent_model`'s fake model to
+  accept `local_files_only`/`cpu_threads` kwargs used by the real backend.
+
 ## [1.44.0] - 2026-06-30
 ### Added
 - `OpenWakeWordDetector` class in `src/voice/backends.py` — ONNX-based neural
