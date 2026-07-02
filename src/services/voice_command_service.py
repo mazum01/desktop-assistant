@@ -101,6 +101,7 @@ class VoiceCommandService(Service):
         self._last_wake_mono = 0.0
         self._cmd_started_mono = 0.0
         self._last_voice_mono = 0.0
+        self._stt_accept_after_mono = 0.0
         self._last_chunk_index = 0
         self._unsubs = []
         self._finalize_thread: Optional[threading.Thread] = None
@@ -320,8 +321,14 @@ class VoiceCommandService(Service):
         self._last_wake_mono = now_mono
         self._cmd_started_mono = now_mono
         self._last_voice_mono = now_mono
-        for chunk in self._pre_roll_chunks:
-            self._stt.accept_chunk(chunk, int(self._cfg.sample_rate))
+        if str(self._cfg.wake_backend).lower() == "openwakeword":
+            # openWakeWord consumes the wake phrase itself. Feeding pre-roll into
+            # STT causes wake-tail leakage like "...jarvis" -> "service".
+            self._stt_accept_after_mono = now_mono + 0.35
+        else:
+            self._stt_accept_after_mono = now_mono
+            for chunk in self._pre_roll_chunks:
+                self._stt.accept_chunk(chunk, int(self._cfg.sample_rate))
         self._pre_roll_chunks.clear()
         self._set_state(STATE_COMMAND_LISTEN, reason="wake_detected")
         self.bus.publish(
@@ -435,7 +442,9 @@ class VoiceCommandService(Service):
         # Only feed VAD-active speech (plus a short trailing window) to the STT
         # backend. Whisper hallucinates speech-like text when given silent or
         # near-silent audio, so silence must not reach accept_chunk().
-        if self._vad_active or (now - self._last_voice_mono) <= 0.35:
+        if now >= self._stt_accept_after_mono and (
+            self._vad_active or (now - self._last_voice_mono) <= 0.35
+        ):
             self._stt.accept_chunk(chunk, int(self._cfg.sample_rate))
         if self._vad_active:
             self._last_voice_mono = now

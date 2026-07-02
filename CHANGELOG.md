@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [1.44.1] - 2026-07-02
+## [1.44.5] - 2026-07-02
+### Fixed
+- Voice wake-tail suppression for openWakeWord flow: `VoiceCommandService`
+  now skips STT acceptance for ~350ms after wake and does not inject pre-roll
+  chunks into STT for `wake_backend=openwakeword`. This prevents wake phrase
+  tail bleed-through (for example, trailing "Jarvis" being transcribed as
+  errant command text such as "service").
+
 ## [1.44.4] - 2026-07-02
 ### Changed
 - ReSpeaker microphone input path now uses the official ReSpeaker-style Python
