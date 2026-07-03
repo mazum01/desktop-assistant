@@ -353,7 +353,7 @@ class FasterWhisperSTTConfig:
     model: str = "base.en"
     device: str = "cpu"
     compute_type: str = "int8"
-    beam_size: int = 3
+    beam_size: int = 1
     cpu_threads: int = 2  # limit inference threads to avoid starving other services
 
 

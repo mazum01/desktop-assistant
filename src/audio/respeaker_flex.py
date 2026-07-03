@@ -146,7 +146,9 @@ class ReSpeakerFlexInput:
         self._mode = "sim"
         self._pa = None
         self._stream = None
-        self._queue: "queue.Queue[bytes]" = queue.Queue(maxsize=200)
+        # Keep callback queue intentionally small so wake/STT sees near-live audio
+        # rather than seconds-old buffered frames.
+        self._queue: "queue.Queue[bytes]" = queue.Queue(maxsize=12)
 
         # Prefer the official ReSpeaker mic_array capture model (PyAudio callback
         # + queue), then fall back to our older sounddevice implementation if the
@@ -347,9 +349,18 @@ class ReSpeakerFlexInput:
             need_frames = n_samples
             chunks: list[np.ndarray] = []
             got = 0
-            deadline = time.monotonic() + seconds + 1.0
+            # Low-latency path: when capture loop asks for tiny chunks (e.g. 80ms),
+            # discard deep backlog so we process the most recent microphone audio.
+            if seconds <= 0.2:
+                while self._queue.qsize() > 2:
+                    try:
+                        self._queue.get_nowait()
+                    except queue.Empty:
+                        break
+            slack_s = min(0.5, max(0.08, seconds * 0.5))
+            deadline = time.monotonic() + seconds + slack_s
             while got < need_frames and time.monotonic() < deadline:
-                timeout = max(0.01, min(0.2, deadline - time.monotonic()))
+                timeout = max(0.01, min(0.05, deadline - time.monotonic()))
                 try:
                     b = self._queue.get(timeout=timeout)
                 except queue.Empty:

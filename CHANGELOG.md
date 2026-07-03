@@ -4,7 +4,16 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
-## [1.44.5] - 2026-07-02
+## [1.44.7] - 2026-07-03
+### Changed
+- ReSpeaker official PyAudio input path now prioritizes low-latency capture for
+  voice control by keeping a smaller callback queue, dropping stale buffered
+  chunks during short command-listening reads, and reducing per-read wait
+  windows. This prevents wake/STT from lagging behind live speech when the
+  callback stream briefly outpaces the consumer.
+- FasterWhisper default beam search now uses `beam_size=1` (previously `3`) to
+  reduce CPU inference latency on Raspberry Pi class hardware.
+
 ## [1.44.6] - 2026-07-02
 ### Added
 - Wake acknowledgement beep in `VoiceCommandService`: when wake-word detection
