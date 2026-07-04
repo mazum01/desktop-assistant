@@ -37,6 +37,14 @@ class _OneShotWake:
         return
 
 
+class _AlwaysWake:
+    def process(self, samples: np.ndarray, sample_rate: int) -> bool:  # noqa: ARG002
+        return True
+
+    def reset(self) -> None:
+        return
+
+
 class _StaticSTT(StreamingSTTBackend):
     def __init__(self, transcript: str):
         self._transcript = transcript
@@ -233,6 +241,40 @@ def test_voice_command_service_clears_stuck_tts_gate():
         svc.on_stop()
 
     assert utterances
+
+
+def test_voice_command_service_rejects_oww_hits_without_min_voice_window():
+    import time
+
+    bus = MessageBus()
+    cap = _FakeCapture()
+    beeps = []
+    svc = VoiceCommandService(
+        bus=bus,
+        capture_service=cap,
+        config=VoiceCommandConfig(
+            enabled=True,
+            wake_backend="openwakeword",
+            wake_min_voice_s=0.2,
+        ),
+        wake_detector=_AlwaysWake(),
+        stt_backend=_StaticSTT(""),
+    )
+    bus.subscribe("av.beep", lambda _t, p: beeps.append(p))
+    svc.on_start()
+    try:
+        cap.push(np.ones(800, dtype=np.float32) * 0.05)
+        svc.run_tick()
+        assert beeps == []
+
+        bus.publish("audio.vad", {"active": True, "state_changed": True})
+        svc._vad_started_mono = time.monotonic() - 1.0
+        cap.push(np.ones(800, dtype=np.float32) * 0.05)
+        svc.run_tick()
+    finally:
+        svc.on_stop()
+
+    assert beeps
 
 
 def test_voice_command_service_applies_runtime_config_updates():

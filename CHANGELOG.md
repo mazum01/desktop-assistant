@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [1.44.8] - 2026-07-04
+## [1.44.9] - 2026-07-04
+### Fixed
+- Reduced openWakeWord false activations from non-speech noises by requiring
+  multiple consecutive wake-model hits (`oww_consecutive_hits`) before entering
+  command mode.
+- Added a minimum active-voice window gate (`wake_min_voice_s`) for
+  openWakeWord wake acceptance so short transients (typing/sniff bursts) are
+  less likely to trigger the command window.
+
+### Changed
+- Added runtime/config wiring for `voice_commands.oww_consecutive_hits` and
+  `voice_commands.wake_min_voice_s` in `core_main` and web voice settings
+  defaults/validation.
+
+### Tests
+- Added tests for openWakeWord consecutive-hit behavior and voice-service wake
+  rejection when the minimum VAD voice window is not met.
+
+## [1.44.8] - 2026-07-04
 ### Fixed
 - Voice wake-word re-arming reliability after the first command:
   `VoiceCommandService` now always returns to `idle` even when STT finalize or

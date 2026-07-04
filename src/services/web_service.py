@@ -430,7 +430,9 @@ class _VoiceSettingsBody(BaseModel):
     wake_backend: Optional[str] = None
     oww_model: Optional[str] = None
     oww_threshold: Optional[float] = None
+    oww_consecutive_hits: Optional[int] = None
     oww_refractory_s: Optional[float] = None
+    wake_min_voice_s: Optional[float] = None
     command_min_s: Optional[float] = None
     command_max_s: Optional[float] = None
     silence_end_s: Optional[float] = None
@@ -650,7 +652,9 @@ def _read_voice_config() -> dict:
         "wake_backend": "energy",
         "oww_model": "hey_jarvis_v0.1",
         "oww_threshold": 0.5,
+        "oww_consecutive_hits": 2,
         "oww_refractory_s": 2.0,
+        "wake_min_voice_s": 0.2,
         "command_min_s": 0.35,
         "command_max_s": 6.0,
         "silence_end_s": 0.8,
@@ -1686,6 +1690,10 @@ class WebService:
                 raise HTTPException(422, "command_max_s must be > 0")
             if "stt_timeout_s" in patch and float(patch["stt_timeout_s"]) <= 0:
                 raise HTTPException(422, "stt_timeout_s must be > 0")
+            if "oww_consecutive_hits" in patch and int(patch["oww_consecutive_hits"]) < 1:
+                raise HTTPException(422, "oww_consecutive_hits must be >= 1")
+            if "wake_min_voice_s" in patch and float(patch["wake_min_voice_s"]) < 0:
+                raise HTTPException(422, "wake_min_voice_s must be >= 0")
             if "tts_stuck_timeout_s" in patch and float(patch["tts_stuck_timeout_s"]) <= 0:
                 raise HTTPException(422, "tts_stuck_timeout_s must be > 0")
 

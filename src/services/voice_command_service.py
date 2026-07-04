@@ -47,7 +47,9 @@ class VoiceCommandConfig:
     wake_backend: str = "energy"
     oww_model: str = "hey_jarvis_v0.1"
     oww_threshold: float = 0.5
+    oww_consecutive_hits: int = 2
     oww_refractory_s: float = 2.0
+    wake_min_voice_s: float = 0.2
     command_min_s: float = 0.35
     command_max_s: float = 6.0
     silence_end_s: float = 0.8
@@ -100,6 +102,7 @@ class VoiceCommandService(Service):
         self._tts_speaking = False
         self._tts_started_mono = 0.0
         self._vad_active = False
+        self._vad_started_mono = 0.0
         self._last_wake_mono = 0.0
         self._cmd_started_mono = 0.0
         self._last_voice_mono = 0.0
@@ -123,6 +126,7 @@ class VoiceCommandService(Service):
                 OpenWakeWordDetectorConfig(
                     model_name=str(self._cfg.oww_model),
                     threshold=float(self._cfg.oww_threshold),
+                    consecutive_hits=int(self._cfg.oww_consecutive_hits),
                     refractory_s=float(self._cfg.oww_refractory_s),
                     fallback_to_energy=True,
                     energy_threshold_dbfs=float(self._cfg.wake_threshold_dbfs),
@@ -174,6 +178,7 @@ class VoiceCommandService(Service):
         prev_wake_backend = str(self._cfg.wake_backend).lower()
         prev_oww_model = str(self._cfg.oww_model)
         prev_oww_threshold = float(self._cfg.oww_threshold)
+        prev_oww_consecutive_hits = int(self._cfg.oww_consecutive_hits)
 
         for key, value in patch.items():
             if not hasattr(self._cfg, key):
@@ -224,6 +229,7 @@ class VoiceCommandService(Service):
             wake_backend != prev_wake_backend
             or str(self._cfg.oww_model) != prev_oww_model
             or float(self._cfg.oww_threshold) != prev_oww_threshold
+            or int(self._cfg.oww_consecutive_hits) != prev_oww_consecutive_hits
         )
         if wake_changed:
             self._wake = self._build_wake_detector()
@@ -267,8 +273,12 @@ class VoiceCommandService(Service):
         self._set_led_state("idle")
 
     def _on_vad(self, _topic: str, payload: dict) -> None:
-        active = bool((payload or {}).get("active", False))
+        data = payload or {}
+        active = bool(data.get("active", False))
+        changed = bool(data.get("state_changed", False))
         self._vad_active = active
+        if changed:
+            self._vad_started_mono = time.monotonic() if active else 0.0
         if active:
             self._last_voice_mono = time.monotonic()
 
@@ -464,6 +474,17 @@ class VoiceCommandService(Service):
             self._pre_roll_chunks.append(chunk.astype(np.float32, copy=True))
             cooldown_elapsed = (now - self._last_wake_mono) >= float(self._cfg.wake_cooldown_s)
             if cooldown_elapsed and self._wake.process(chunk, int(self._cfg.sample_rate)):
+                if str(self._cfg.wake_backend).lower() == "openwakeword":
+                    min_voice_s = max(0.0, float(self._cfg.wake_min_voice_s))
+                    vad_for_s = (now - self._vad_started_mono) if self._vad_started_mono > 0 else 0.0
+                    if (not self._vad_active) or (vad_for_s < min_voice_s):
+                        log.debug(
+                            "VoiceCommandService: rejecting wake hit (vad_active=%s vad_for=%.3fs min=%.3fs)",
+                            self._vad_active,
+                            vad_for_s,
+                            min_voice_s,
+                        )
+                        return
                 self._start_command_window(now)
             return
 

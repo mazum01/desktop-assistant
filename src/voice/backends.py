@@ -71,6 +71,7 @@ _OWW_SAMPLE_RATE = 16000   # only 16 kHz is supported
 class OpenWakeWordDetectorConfig:
     model_name: str = "hey_jarvis_v0.1"
     threshold: float = 0.5
+    consecutive_hits: int = 2
     refractory_s: float = 2.0  # suppress re-triggers for this many seconds after wake
     fallback_to_energy: bool = True
     energy_threshold_dbfs: float = -38.0
@@ -96,6 +97,7 @@ class OpenWakeWordDetector:
         self._model_lock = threading.Lock()
         self._model_failed = False
         self._last_trigger_mono: float = -999.0
+        self._hits = 0
         # Overflow buffer: carry forward leftover samples when input chunk < 1280
         self._overflow: np.ndarray = np.empty(0, dtype=np.int16)
         # Energy fallback (used when OWW unavailable)
@@ -113,6 +115,7 @@ class OpenWakeWordDetector:
     def reset(self) -> None:
         """Reset internal state (call after a wake is consumed)."""
         self._overflow = np.empty(0, dtype=np.int16)
+        self._hits = 0
         if self._energy:
             self._energy.reset()
         model = self._model
@@ -166,16 +169,22 @@ class OpenWakeWordDetector:
                 continue
             score = preds.get(self._cfg.model_name, 0.0)
             if score >= self._cfg.threshold:
-                log.info(
-                    "OpenWakeWordDetector: wake phrase detected (model=%s score=%.3f)",
-                    self._cfg.model_name,
-                    score,
-                )
-                self._last_trigger_mono = time.monotonic()
-                model.reset()
-                self._overflow = np.empty(0, dtype=np.int16)
-                triggered = True
-                break  # don't process further blocks — hand control to command window
+                self._hits += 1
+                if self._hits >= max(1, int(self._cfg.consecutive_hits)):
+                    log.info(
+                        "OpenWakeWordDetector: wake phrase detected (model=%s score=%.3f hits=%d)",
+                        self._cfg.model_name,
+                        score,
+                        self._hits,
+                    )
+                    self._last_trigger_mono = time.monotonic()
+                    self._hits = 0
+                    model.reset()
+                    self._overflow = np.empty(0, dtype=np.int16)
+                    triggered = True
+                    break  # don't process further blocks — hand control to command window
+            else:
+                self._hits = 0
 
         if i < int16.size:
             self._overflow = int16[i:]

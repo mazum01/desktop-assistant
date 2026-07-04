@@ -9,6 +9,8 @@ from src.voice.backends import (
     FasterWhisperSTT,
     FasterWhisperSTTConfig,
     NullStreamingSTT,
+    OpenWakeWordDetector,
+    OpenWakeWordDetectorConfig,
     ShellCommandSTT,
     ShellCommandSTTConfig,
 )
@@ -81,3 +83,30 @@ def test_faster_whisper_stt_uses_persistent_model(monkeypatch):
     assert stt.finalize() == "what time is it"
     assert calls["init"] == ("base.en", "cpu", "int8")
     assert calls["transcribe"][1]["language"] == "en"
+
+
+def test_openwakeword_requires_consecutive_hits(monkeypatch):
+    class _FakeModel:
+        def __init__(self):
+            self.reset_calls = 0
+
+        def predict(self, _block):
+            return {"hey_jarvis_v0.1": 0.8}
+
+        def reset(self):
+            self.reset_calls += 1
+
+    model = _FakeModel()
+    det = OpenWakeWordDetector(
+        OpenWakeWordDetectorConfig(
+            model_name="hey_jarvis_v0.1",
+            threshold=0.5,
+            consecutive_hits=2,
+            fallback_to_energy=False,
+        )
+    )
+    monkeypatch.setattr(det, "_ensure_model", lambda: model)
+    x = np.ones(1280, dtype=np.float32) * 0.02
+    assert det.process(x, 16000) is False
+    assert det.process(x, 16000) is True
+    assert model.reset_calls == 1
