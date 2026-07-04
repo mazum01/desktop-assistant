@@ -60,6 +60,7 @@ class VoiceCommandConfig:
     stt_compute_type: str = "int8"
     stt_cpu_threads: int = 2
     dialog_timeout_s: float = 20.0
+    tts_stuck_timeout_s: float = 20.0
 
 
 class VoiceCommandService(Service):
@@ -97,6 +98,7 @@ class VoiceCommandService(Service):
 
         self._state = STATE_IDLE
         self._tts_speaking = False
+        self._tts_started_mono = 0.0
         self._vad_active = False
         self._last_wake_mono = 0.0
         self._cmd_started_mono = 0.0
@@ -272,11 +274,13 @@ class VoiceCommandService(Service):
 
     def _on_speaking_started(self, _topic: str, _payload: dict) -> None:
         self._tts_speaking = True
+        self._tts_started_mono = time.monotonic()
         if self._state == STATE_COMMAND_LISTEN:
             self._set_state(STATE_IDLE, reason="tts_started")
 
     def _on_spoke(self, _topic: str, _payload: dict) -> None:
         self._tts_speaking = False
+        self._tts_started_mono = 0.0
 
     def _set_led_state(self, state: str) -> None:
         led = self._led
@@ -390,22 +394,37 @@ class VoiceCommandService(Service):
         timeout_s = float(self._cfg.stt_timeout_s)
 
         def _transcribe() -> None:
-            transcript = self._stt.finalize().strip()
-            if transcript:
-                self._dispatch_transcript(transcript, elapsed)
-            else:
+            try:
+                transcript = self._stt.finalize().strip()
+                if transcript:
+                    self._dispatch_transcript(transcript, elapsed)
+                else:
+                    self.bus.publish(
+                        "voice.intent",
+                        {
+                            "intent": "empty",
+                            "route": "none",
+                            "confidence": 1.0,
+                            "text": "",
+                            "dialog": self._dialog.snapshot(),
+                            "ts": time.time(),
+                        },
+                    )
+            except Exception:
+                log.exception("VoiceCommandService: STT finalize/dispatch failed")
                 self.bus.publish(
                     "voice.intent",
                     {
-                        "intent": "empty",
+                        "intent": "stt_error",
                         "route": "none",
-                        "confidence": 1.0,
+                        "confidence": 0.0,
                         "text": "",
                         "dialog": self._dialog.snapshot(),
                         "ts": time.time(),
                     },
                 )
-            self._set_state(STATE_IDLE, reason="command_complete")
+            finally:
+                self._set_state(STATE_IDLE, reason="command_complete")
 
         def _run_with_timeout() -> None:
             t = threading.Thread(target=_transcribe, daemon=True, name="vera-stt-finalize")
@@ -426,13 +445,21 @@ class VoiceCommandService(Service):
     def run_tick(self) -> None:
         if not self._cfg.enabled:
             return
+        now = time.monotonic()
         if self._tts_speaking:
-            return
+            if (now - self._tts_started_mono) >= float(self._cfg.tts_stuck_timeout_s):
+                log.warning(
+                    "VoiceCommandService: clearing stuck speaking gate after %.1fs without av.spoke",
+                    float(self._cfg.tts_stuck_timeout_s),
+                )
+                self._tts_speaking = False
+                self._tts_started_mono = 0.0
+            else:
+                return
         chunk = self._read_latest_chunk()
         if chunk is None:
             return
 
-        now = time.monotonic()
         if self._state == STATE_IDLE:
             self._pre_roll_chunks.append(chunk.astype(np.float32, copy=True))
             cooldown_elapsed = (now - self._last_wake_mono) >= float(self._cfg.wake_cooldown_s)

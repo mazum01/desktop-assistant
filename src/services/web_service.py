@@ -442,6 +442,7 @@ class _VoiceSettingsBody(BaseModel):
     stt_device: Optional[str] = None
     stt_compute_type: Optional[str] = None
     dialog_timeout_s: Optional[float] = None
+    tts_stuck_timeout_s: Optional[float] = None
 
 
 def _normalise_fan_control_points(points: list[dict]) -> list[dict[str, float]]:
@@ -661,6 +662,7 @@ def _read_voice_config() -> dict:
         "stt_device": "cpu",
         "stt_compute_type": "int8",
         "dialog_timeout_s": 20.0,
+        "tts_stuck_timeout_s": 20.0,
     }
     try:
         with open(_ASSISTANT_CONFIG_PATH) as f:
@@ -1684,6 +1686,8 @@ class WebService:
                 raise HTTPException(422, "command_max_s must be > 0")
             if "stt_timeout_s" in patch and float(patch["stt_timeout_s"]) <= 0:
                 raise HTTPException(422, "stt_timeout_s must be > 0")
+            if "tts_stuck_timeout_s" in patch and float(patch["tts_stuck_timeout_s"]) <= 0:
+                raise HTTPException(422, "tts_stuck_timeout_s must be > 0")
 
             try:
                 _write_voice_config(patch)

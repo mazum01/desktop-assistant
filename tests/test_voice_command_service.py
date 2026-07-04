@@ -53,6 +53,17 @@ class _StaticSTT(StreamingSTTBackend):
         return self._transcript
 
 
+class _RaisingSTT(StreamingSTTBackend):
+    def start_stream(self) -> None:
+        return
+
+    def accept_chunk(self, samples: np.ndarray, sample_rate: int) -> str | None:  # noqa: ARG002
+        return None
+
+    def finalize(self) -> str:
+        raise RuntimeError("stt failed")
+
+
 def test_voice_command_service_dispatches_av_utterance_from_transcript():
     bus = MessageBus()
     cap = _FakeCapture()
@@ -148,6 +159,80 @@ def test_voice_command_service_handles_empty_transcript_without_dispatch():
     assert utterances == []
     assert intents
     assert intents[-1]["intent"] == "empty"
+
+
+def test_voice_command_service_recovers_when_finalize_raises():
+    bus = MessageBus()
+    cap = _FakeCapture()
+    intents = []
+    states = []
+    svc = VoiceCommandService(
+        bus=bus,
+        capture_service=cap,
+        config=VoiceCommandConfig(
+            enabled=True,
+            command_min_s=0.0,
+            silence_end_s=0.0,
+            command_max_s=0.01,
+            stt_timeout_s=0.2,
+        ),
+        wake_detector=_OneShotWake(),
+        stt_backend=_RaisingSTT(),
+    )
+    bus.subscribe("voice.intent", lambda _t, p: intents.append(p))
+    bus.subscribe("voice.state", lambda _t, p: states.append(p))
+    svc.on_start()
+    try:
+        cap.push(np.ones(800, dtype=np.float32) * 0.05)  # wake
+        svc.run_tick()
+        cap.push(np.ones(800, dtype=np.float32) * 0.05)  # command
+        svc.run_tick()
+        for _ in range(20):
+            svc.run_tick()
+            if states and states[-1].get("state") == "idle":
+                break
+    finally:
+        svc.on_stop()
+
+    assert intents
+    assert intents[-1]["intent"] == "stt_error"
+    assert states
+    assert states[-1]["state"] == "idle"
+
+
+def test_voice_command_service_clears_stuck_tts_gate():
+    import time
+
+    bus = MessageBus()
+    cap = _FakeCapture()
+    utterances = []
+    stt = _StaticSTT("turn off the lights")
+    svc = VoiceCommandService(
+        bus=bus,
+        capture_service=cap,
+        config=VoiceCommandConfig(
+            enabled=True,
+            command_min_s=0.0,
+            silence_end_s=0.0,
+            command_max_s=1.0,
+            tts_stuck_timeout_s=0.05,
+        ),
+        wake_detector=_OneShotWake(),
+        stt_backend=stt,
+    )
+    bus.subscribe("av.utterance", lambda _t, p: utterances.append(p))
+    svc.on_start()
+    try:
+        bus.publish("av.speaking_started", {"text": "hello"})
+        svc._tts_started_mono = time.monotonic() - 1.0
+        cap.push(np.ones(800, dtype=np.float32) * 0.05)  # wake
+        svc.run_tick()
+        cap.push(np.ones(800, dtype=np.float32) * 0.05)  # command
+        svc.run_tick()
+    finally:
+        svc.on_stop()
+
+    assert utterances
 
 
 def test_voice_command_service_applies_runtime_config_updates():

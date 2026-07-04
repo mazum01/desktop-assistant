@@ -380,6 +380,7 @@ def main() -> int:
             stt_compute_type=str(_voice_cfg_raw.get("stt_compute_type", "int8")),
             stt_cpu_threads=int(_voice_cfg_raw.get("stt_cpu_threads", 2)),
             dialog_timeout_s=float(_voice_cfg_raw.get("dialog_timeout_s", 20.0)),
+            tts_stuck_timeout_s=float(_voice_cfg_raw.get("tts_stuck_timeout_s", 20.0)),
         ),
     )
     # Let AVService record clips from the already-running capture stream

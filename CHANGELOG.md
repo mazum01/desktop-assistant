@@ -4,6 +4,25 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.44.8] - 2026-07-04
+### Fixed
+- Voice wake-word re-arming reliability after the first command:
+  `VoiceCommandService` now always returns to `idle` even when STT finalize or
+  transcript dispatch raises an exception (publishes `voice.intent=stt_error`
+  instead of getting stuck in `thinking`).
+- Added a safety timeout for stale `av.speaking_started` without matching
+  `av.spoke`. If TTS completion events are missed, voice recognition now
+  automatically clears the speaking gate after `tts_stuck_timeout_s` so wake
+  detection can resume.
+
+### Changed
+- Added `voice_commands.tts_stuck_timeout_s` runtime/config plumbing
+  (`core_main` + web voice settings validation/defaults).
+
+### Tests
+- Added coverage for STT finalize exception recovery and stuck speaking-gate
+  recovery in `tests/test_voice_command_service.py`.
+
 ## [1.44.7] - 2026-07-03
 ### Changed
 - ReSpeaker official PyAudio input path now prioritizes low-latency capture for
