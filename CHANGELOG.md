@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.44.11] - 2026-07-07
+### Changed
+- Music tile playback marker is now a thin vertical line instead of a circular
+  thumb, making the current playback position read more like a timeline.
+
 ## [1.44.10] - 2026-07-06
 ### Fixed
 - Pandora/music tile progress bar now shows a visible current-playback marker
