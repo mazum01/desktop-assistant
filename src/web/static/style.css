@@ -759,10 +759,38 @@ main {
   height: 4px;
   cursor: default;
   accent-color: var(--green);
+  -webkit-appearance: none;
+  appearance: none;
 }
-/* Hide the range thumb so it looks like a static track */
-.music-progress-bar::-webkit-slider-thumb { display: none; }
-.music-progress-bar::-moz-range-thumb { width: 0; height: 0; border: none; }
+.music-progress-bar::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+.music-progress-bar::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid var(--green);
+  background: var(--bg-card);
+  margin-top: -4px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.music-progress-bar::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+.music-progress-bar::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid var(--green);
+  background: var(--bg-card);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
 .music-volume-row {
   display: flex;
   align-items: center;

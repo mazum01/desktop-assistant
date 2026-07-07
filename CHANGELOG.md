@@ -4,7 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
-## [1.44.8] - 2026-07-04
+## [1.44.10] - 2026-07-06
+### Fixed
+- Pandora/music tile progress bar now shows a visible current-playback marker
+  instead of appearing as a plain static track, making playback position easier
+  to read at a glance.
+
 ## [1.44.9] - 2026-07-04
 ### Fixed
 - Reduced openWakeWord false activations from non-speech noises by requiring
