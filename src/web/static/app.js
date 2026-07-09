@@ -1842,6 +1842,124 @@ async function saveVoiceSettings() {
   setTimeout(() => { if (st) st.textContent = ""; }, 5000);
 }
 
+function _formatXvfValues(values) {
+  if (!Array.isArray(values) || values.length === 0) return "";
+  return values.map(v => typeof v === "number" ? `${v}` : String(v)).join(", ");
+}
+
+function _setXvfStatus(message, isError = false) {
+  const st = el("xvf-status");
+  if (!st) return;
+  st.className = isError ? "qh-status error" : "qh-status";
+  st.textContent = message;
+}
+
+function _renderXvfSnapshot(snapshot) {
+  const meta = el("xvf-meta");
+  const roBody = el("xvf-readonly-rows");
+  const tunableBody = el("xvf-tunable-rows");
+  if (!meta || !roBody || !tunableBody) return;
+
+  if (!snapshot?.available) {
+    meta.textContent = "XVF3800 controller not detected on this system.";
+    roBody.innerHTML = '<tr><td colspan="3">Unavailable</td></tr>';
+    tunableBody.innerHTML = '<tr><td colspan="4">Unavailable</td></tr>';
+    return;
+  }
+
+  meta.textContent = `Connected: ${snapshot.connected ? "yes" : "no"}`
+    + (snapshot.usb?.vendor_id ? ` | USB ${snapshot.usb.vendor_id}:${snapshot.usb.product_id}` : "")
+    + (snapshot.usb?.bus !== null && snapshot.usb?.address !== null ? ` | bus ${snapshot.usb.bus} addr ${snapshot.usb.address}` : "");
+
+  const readonly = Array.isArray(snapshot.readonly) ? snapshot.readonly : [];
+  roBody.innerHTML = readonly.length
+    ? readonly.map(item => `<tr><td><code>${item.command}</code></td><td>${item.label}</td><td>${_formatXvfValues(item.values)}</td></tr>`).join("")
+    : '<tr><td colspan="3">No read-only values reported</td></tr>';
+
+  const tunables = Array.isArray(snapshot.tunables) ? snapshot.tunables : [];
+  tunableBody.innerHTML = tunables.length
+    ? tunables.map(item => {
+        const current = Array.isArray(item.values) && item.values.length ? item.values[0] : "";
+        let input = "";
+        if (item.dtype === "bool") {
+          input = `<input type="checkbox" data-xvf-command="${item.command}" data-xvf-index="0" ${current ? "checked" : ""}/>`;
+        } else if (item.dtype === "int" || item.dtype === "float") {
+          const step = item.dtype === "float" ? "0.1" : "1";
+          const min = item.min !== null && item.min !== undefined ? `min="${item.min}"` : "";
+          const max = item.max !== null && item.max !== undefined ? `max="${item.max}"` : "";
+          input = `<input type="number" step="${step}" ${min} ${max} value="${current}" data-xvf-command="${item.command}" data-xvf-index="0"/>`;
+        } else {
+          input = `<input type="text" value="${current}" data-xvf-command="${item.command}" data-xvf-index="0"/>`;
+        }
+        return `<tr>
+          <td><code>${item.command}</code></td>
+          <td>${item.label}</td>
+          <td>${_formatXvfValues(item.values)}</td>
+          <td>${input}</td>
+        </tr>`;
+      }).join("")
+    : '<tr><td colspan="4">No tunables reported</td></tr>';
+}
+
+async function loadXvfState() {
+  try {
+    const r = await fetch("/api/audio/xvf");
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || "Load failed");
+    _renderXvfSnapshot(d);
+    _setXvfStatus("");
+  } catch (e) {
+    _setXvfStatus(e.message || "Load failed", true);
+  }
+}
+
+function _collectXvfWrites() {
+  const rows = new Map();
+  document.querySelectorAll("[data-xvf-command]").forEach(input => {
+    const command = input.dataset.xvfCommand;
+    const index = parseInt(input.dataset.xvfIndex || "0", 10);
+    let value;
+    if (input.type === "checkbox") {
+      value = input.checked;
+    } else if (input.type === "number") {
+      value = input.step && input.step.includes(".") ? parseFloat(input.value) : parseInt(input.value, 10);
+      if (Number.isNaN(value)) value = 0;
+    } else {
+      value = input.value;
+    }
+    if (!rows.has(command)) rows.set(command, []);
+    rows.get(command)[index] = value;
+  });
+  return Array.from(rows.entries()).map(([command, values]) => ({ command, values }));
+}
+
+async function saveXvfTunables() {
+  try {
+    const r = await fetch("/api/audio/xvf", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ writes: _collectXvfWrites(), save: false }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || "Save failed");
+    _renderXvfSnapshot(d);
+    _setXvfStatus("Applied ✓");
+  } catch (e) {
+    _setXvfStatus(e.message || "Save failed", true);
+  }
+}
+
+async function saveXvfConfiguration() {
+  try {
+    const r = await fetch("/api/audio/xvf/save", { method: "POST" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || "Save failed");
+    _setXvfStatus(d.saved ? "Saved to flash ✓" : "Save requested");
+  } catch (e) {
+    _setXvfStatus(e.message || "Save failed", true);
+  }
+}
+
 async function loadAudioInputGain() {
   const slider = el("audio-input-gain-slider");
   const label = el("audio-input-gain-label");
@@ -2664,6 +2782,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadFanControlPoints();
   loadAudioSettings();
   loadVoiceSettings();
+  loadXvfState();
   loadAudioInputGain();
   loadAudioVoiceGain();
   loadServoEnabled();

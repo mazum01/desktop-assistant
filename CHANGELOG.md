@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.44.2] - 2026-07-09
+### Added
+- Added XVF3800 REST endpoints and dashboard controls so ReSpeaker Flex
+  diagnostics and selected DSP tunables can be viewed, adjusted live, and
+  explicitly saved to device flash.
+
+### Tests
+- Added web-service coverage for XVF availability, live writes, and
+  save-to-flash actions.
+
 ## [1.44.1] - 2026-07-02
 ### Fixed
 - Gate `VoiceCommandService.run_tick()` STT chunk acceptance on VAD activity

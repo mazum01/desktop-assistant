@@ -721,6 +721,33 @@
   <span class="qh-status" id="audio-status"></span>
 </div>
 </section>
+<section class="card" id="card-xvf">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>ReSpeaker Flex XVF3800</h2>
+<p style="font-size:0.85em;color:var(--text-muted);margin-bottom:12px">
+  Live diagnostics and safe DSP tuning from the XVF host-control interface.
+  Use <strong>Save to Device Flash</strong> only when you want the hardware to
+  keep the current values across reboots.
+</p>
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+  <button class="btn btn-secondary btn-sm" onclick="loadXvfState()">Refresh XVF</button>
+  <button class="btn btn-primary btn-sm" onclick="saveXvfTunables()">Apply Tunables</button>
+  <button class="btn btn-warning btn-sm" onclick="saveXvfConfiguration()">Save to Device Flash</button>
+  <span class="qh-status" id="xvf-status"></span>
+</div>
+<div class="xvf-meta" id="xvf-meta">Loading XVF3800 state…</div>
+<div class="control-group" style="margin-top:14px">
+  <label>Read-only diagnostics</label>
+  <table class="help-table xvf-table">
+    <tbody id="xvf-readonly-rows"><tr><td colspan="3">Loading…</td></tr></tbody>
+  </table>
+</div>
+<div class="control-group" style="margin-top:14px">
+  <label>Tunable parameters</label>
+  <table class="help-table xvf-table">
+    <tbody id="xvf-tunable-rows"><tr><td colspan="4">Loading…</td></tr></tbody>
+  </table>
+</div>
+</section>
 </div>
 <!-- ══ TAB: SYSTEM ══════════════════════════════════════════ -->
 <div class="tab-pane" id="tab-system">

@@ -77,6 +77,9 @@ GET  /api/settings/audio   Get audio backend + all per-backend settings + availa
 PUT  /api/settings/audio   Set audio backend and/or per-backend settings  body: {"backend": str, "default"?: {...}, "respeaker_flex"?: {...}}
 GET  /api/settings/voice   Get voice command (wake/STT/dialog) settings
 PUT  /api/settings/voice   Update voice command settings body: {"enabled"?: bool, ...}
+GET  /api/audio/xvf        Get ReSpeaker Flex XVF3800 live diagnostics + tunables
+PUT  /api/audio/xvf        Apply live XVF3800 tunables body: {"writes": [{"command": str, "values": [...] }], "save": bool?}
+POST /api/audio/xvf/save   Persist current XVF3800 config to flash
 """
 
 import asyncio
@@ -442,6 +445,16 @@ class _VoiceSettingsBody(BaseModel):
     dialog_timeout_s: Optional[float] = None
 
 
+class _XvfWriteItemBody(BaseModel):
+    command: str
+    values: list[float | int | bool | str]
+
+
+class _XvfWriteBody(BaseModel):
+    writes: list[_XvfWriteItemBody]
+    save: bool = False
+
+
 def _normalise_fan_control_points(points: list[dict]) -> list[dict[str, float]]:
     if len(points) < 2:
         raise ValueError("At least two control points are required")
@@ -681,6 +694,12 @@ def _write_voice_config(patch: dict) -> None:
 
     with open(_ASSISTANT_CONFIG_PATH, "w") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
+
+
+def _create_xvf_controller():
+    from src.audio.xvf_host import XvfHostController
+
+    return XvfHostController.find()
 
 
 
@@ -1693,6 +1712,54 @@ class WebService:
                 "runtime_applied": bool(self.bus),
                 "restart_required": False,
             }
+
+        @app.get("/api/audio/xvf")
+        async def api_get_xvf():
+            ctl = _create_xvf_controller()
+            if ctl is None:
+                return {
+                    "ok": True,
+                    "available": False,
+                    "connected": False,
+                    "readonly": [],
+                    "tunables": [],
+                }
+            try:
+                with ctl:
+                    snapshot = ctl.snapshot()
+            except (RuntimeError, ValueError, OSError) as exc:
+                raise HTTPException(500, f"Unable to query XVF3800: {exc}")
+            return {"ok": True, "available": True, **snapshot}
+
+        @app.put("/api/audio/xvf")
+        async def api_put_xvf(body: _XvfWriteBody):
+            if not body.writes:
+                raise HTTPException(422, "At least one XVF write is required")
+            ctl = _create_xvf_controller()
+            if ctl is None:
+                raise HTTPException(503, "ReSpeaker Flex XVF3800 not detected")
+            try:
+                with ctl:
+                    for item in body.writes:
+                        ctl.write(str(item.command).upper(), list(item.values))
+                    if body.save:
+                        ctl.save_configuration()
+                    snapshot = ctl.snapshot()
+            except (RuntimeError, ValueError, OSError) as exc:
+                raise HTTPException(500, f"Unable to apply XVF3800 setting: {exc}")
+            return {"ok": True, "available": True, **snapshot, "saved": bool(body.save)}
+
+        @app.post("/api/audio/xvf/save")
+        async def api_post_xvf_save():
+            ctl = _create_xvf_controller()
+            if ctl is None:
+                raise HTTPException(503, "ReSpeaker Flex XVF3800 not detected")
+            try:
+                with ctl:
+                    ctl.save_configuration()
+            except (RuntimeError, ValueError, OSError) as exc:
+                raise HTTPException(500, f"Unable to save XVF3800 config: {exc}")
+            return {"ok": True, "saved": True}
 
         # ── REST: greeting settings ───────────────────────────────────
 
