@@ -546,6 +546,35 @@ def test_xvf_get_returns_unavailable_when_controller_missing(app_client, monkeyp
     assert body["tunables"] == []
 
 
+class _PermissionDeniedXvfController:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def snapshot(self):
+        raise PermissionError("permission denied opening USB device")
+
+    def save_configuration(self):
+        raise PermissionError("permission denied opening USB device")
+
+    def write(self, command, values):
+        raise PermissionError("permission denied opening USB device")
+
+
+def test_xvf_get_returns_unavailable_when_permission_denied(app_client, monkeypatch):
+    client, _bus, _svc = app_client
+    monkeypatch.setattr(web_service, "_create_xvf_controller", lambda: _PermissionDeniedXvfController())
+
+    r = client.get("/api/audio/xvf")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is False
+    assert body["connected"] is False
+    assert body["error"] == "permission_denied"
+
+
 def test_xvf_put_applies_writes_and_can_save(app_client, monkeypatch):
     client, _bus, _svc = app_client
     fake = _FakeXvfController()
@@ -572,6 +601,18 @@ def test_xvf_put_applies_writes_and_can_save(app_client, monkeypatch):
     assert tunables["AUDIO_MGR_MIC_GAIN"] == [2.25]
 
 
+def test_xvf_put_returns_503_when_permission_denied(app_client, monkeypatch):
+    client, _bus, _svc = app_client
+    monkeypatch.setattr(web_service, "_create_xvf_controller", lambda: _PermissionDeniedXvfController())
+
+    r = client.put(
+        "/api/audio/xvf",
+        json={"writes": [{"command": "PP_AGCONOFF", "values": [False]}], "save": False},
+    )
+    assert r.status_code == 503
+    assert "access denied" in r.json()["detail"].lower()
+
+
 def test_xvf_save_endpoint_persists_current_configuration(app_client, monkeypatch):
     client, _bus, _svc = app_client
     fake = _FakeXvfController()
@@ -581,6 +622,15 @@ def test_xvf_save_endpoint_persists_current_configuration(app_client, monkeypatc
     assert r.status_code == 200
     assert r.json()["saved"] is True
     assert fake.saved is True
+
+
+def test_xvf_save_returns_503_when_permission_denied(app_client, monkeypatch):
+    client, _bus, _svc = app_client
+    monkeypatch.setattr(web_service, "_create_xvf_controller", lambda: _PermissionDeniedXvfController())
+
+    r = client.post("/api/audio/xvf/save")
+    assert r.status_code == 503
+    assert "access denied" in r.json()["detail"].lower()
 
 
 def test_audio_repeat_endpoint_calls_av_service(app_client):

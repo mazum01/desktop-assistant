@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.1] - 2026-07-09
+### Fixed
+- XVF settings API now degrades cleanly when the ReSpeaker USB control device is
+  present but inaccessible to the service user. The web GUI now sees XVF as
+  unavailable instead of surfacing a raw permission-denied fetch error.
+
+### Tests
+- Added XVF endpoint coverage for USB permission-denied reads, writes, and
+  save-to-flash requests.
+
 ## [1.45.0] - 2026-07-09
 ### Added
 - Added XVF3800 REST endpoints and dashboard controls so ReSpeaker Flex

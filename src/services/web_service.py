@@ -702,6 +702,12 @@ def _create_xvf_controller():
     return XvfHostController.find()
 
 
+def _is_xvf_access_denied(exc: BaseException) -> bool:
+    from src.audio.xvf_host import is_xvf_access_denied_error
+
+    return is_xvf_access_denied_error(exc)
+
+
 
 
 def _read_tts_output_gain() -> float:
@@ -1728,6 +1734,17 @@ class WebService:
                 with ctl:
                     snapshot = ctl.snapshot()
             except (RuntimeError, ValueError, OSError) as exc:
+                if _is_xvf_access_denied(exc):
+                    log.warning("XVF3800 access denied: %s", exc)
+                    return {
+                        "ok": True,
+                        "available": False,
+                        "connected": False,
+                        "readonly": [],
+                        "tunables": [],
+                        "error": "permission_denied",
+                        "detail": str(exc),
+                    }
                 raise HTTPException(500, f"Unable to query XVF3800: {exc}")
             return {"ok": True, "available": True, **snapshot}
 
@@ -1746,6 +1763,8 @@ class WebService:
                         ctl.save_configuration()
                     snapshot = ctl.snapshot()
             except (RuntimeError, ValueError, OSError) as exc:
+                if _is_xvf_access_denied(exc):
+                    raise HTTPException(503, f"XVF3800 access denied: {exc}")
                 raise HTTPException(500, f"Unable to apply XVF3800 setting: {exc}")
             return {"ok": True, "available": True, **snapshot, "saved": bool(body.save)}
 
@@ -1758,6 +1777,8 @@ class WebService:
                 with ctl:
                     ctl.save_configuration()
             except (RuntimeError, ValueError, OSError) as exc:
+                if _is_xvf_access_denied(exc):
+                    raise HTTPException(503, f"XVF3800 access denied: {exc}")
                 raise HTTPException(500, f"Unable to save XVF3800 config: {exc}")
             return {"ok": True, "saved": True}
 

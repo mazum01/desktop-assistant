@@ -7,6 +7,7 @@ smaller, UI-friendly subset of safe diagnostics and tunables.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import errno
 import struct
 import sys
 import threading
@@ -83,6 +84,15 @@ def _usb_find():
             raise RuntimeError("Windows requires libusb-package")
         return libusb_package.find
     return usb.core.find
+
+
+def is_xvf_access_denied_error(exc: BaseException) -> bool:
+    if isinstance(exc, PermissionError):
+        return True
+    if isinstance(exc, OSError) and getattr(exc, "errno", None) in {errno.EACCES, errno.EPERM}:
+        return True
+    text = str(exc).lower()
+    return "permission denied" in text or "access denied" in text or "not permitted" in text
 
 
 class XvfHostController:
