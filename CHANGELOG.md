@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.44.3] - 2026-07-09
+### Changed
+- Committed the current `config/assistant.yaml` runtime settings to source
+  control so tuned assistant defaults are preserved on this branch instead of
+  being left as uncommitted local state.
+
 ## [1.44.2] - 2026-07-09
 ### Added
 - Added XVF3800 REST endpoints and dashboard controls so ReSpeaker Flex
