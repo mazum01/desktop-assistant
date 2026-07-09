@@ -1901,9 +1901,15 @@ function _renderXvfSnapshot(snapshot) {
   if (!meta || !roBody || !tunableBody) return;
 
   if (!snapshot?.available) {
-    meta.textContent = "XVF3800 controller not detected on this system.";
-    roBody.innerHTML = '<tr><td colspan="3">Unavailable</td></tr>';
-    tunableBody.innerHTML = '<tr><td colspan="4">Unavailable</td></tr>';
+    if (snapshot?.error === "permission_denied") {
+      meta.textContent = "XVF3800 detected, but USB control access is denied to the desktop-assistant service user.";
+      roBody.innerHTML = '<tr><td colspan="3">USB access denied</td></tr>';
+      tunableBody.innerHTML = '<tr><td colspan="4">USB access denied</td></tr>';
+    } else {
+      meta.textContent = "XVF3800 controller not detected on this system.";
+      roBody.innerHTML = '<tr><td colspan="3">Unavailable</td></tr>';
+      tunableBody.innerHTML = '<tr><td colspan="4">Unavailable</td></tr>';
+    }
     return;
   }
 
@@ -1947,7 +1953,11 @@ async function loadXvfState() {
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.detail || "Load failed");
     _renderXvfSnapshot(d);
-    _setXvfStatus("");
+    if (d?.error === "permission_denied") {
+      _setXvfStatus("XVF USB access denied for the service user", true);
+    } else {
+      _setXvfStatus("");
+    }
   } catch (e) {
     _setXvfStatus(e.message || "Load failed", true);
   }

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.2] - 2026-07-09
+### Fixed
+- The XVF dashboard now distinguishes USB permission problems from missing
+  hardware, showing that the XVF3800 is detected but inaccessible instead of
+  incorrectly claiming it is not installed.
+
 ## [1.45.1] - 2026-07-09
 ### Fixed
 - XVF settings API now degrades cleanly when the ReSpeaker USB control device is
