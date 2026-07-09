@@ -121,12 +121,12 @@ privacy:
   announce: false
   announce_text: I'll give you some privacy.
   clear_frames: 4
-  cooldown_s: 5
-  enabled: false
+  cooldown_s: 5.0
+  enabled: true
   idle_rate_hz: 0.25
   look_away_angle_deg: 45
   person_hold_s: 8.0
-  rate_hz: 1
+  rate_hz: 1.0
   require_person: true
   resume_text: Are you decent?
   threshold: 0.7
@@ -156,9 +156,9 @@ servo:
 telegram:
   bot_token: ''
   chat_id: ''
-  emoji_named: "\U0001F3F7\uFE0F"
-  emoji_new_face: "\U0001F44B"
-  emoji_returning: "\U0001F464"
+  emoji_named: 🏷️
+  emoji_new_face: 👋
+  emoji_returning: 👤
   enabled: true
   forward_tts: true
   tts_skip_patterns:
@@ -175,23 +175,23 @@ voice_commands:
   command_min_s: 0.35
   dialog_timeout_s: 20.0
   enabled: true
+  oww_model: hey_jarvis_v0.1
+  oww_refractory_s: 2.0
+  oww_threshold: 0.5
   poll_seconds: 0.08
   sample_rate: 16000
   silence_end_s: 0.5
   stt_backend: faster_whisper
-  stt_model: base.en
-  stt_device: cpu
   stt_compute_type: int8
   stt_cpu_threads: 2
+  stt_device: cpu
   stt_language: en
+  stt_model: base.en
   stt_timeout_s: 60.0
   wake_backend: openwakeword
   wake_consecutive_frames: 2
   wake_cooldown_s: 1.5
   wake_threshold_dbfs: -35.0
-  oww_model: hey_jarvis_v0.1
-  oww_threshold: 0.5
-  oww_refractory_s: 2.0
 watchdog:
   check_interval_s: 30
   enabled: true

@@ -4,7 +4,21 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
-## [1.44.1] - 2026-07-02
+## [1.45.0] - 2026-07-09
+### Added
+- Added XVF3800 REST endpoints and dashboard controls so ReSpeaker Flex
+  diagnostics and selected DSP tunables can be viewed, adjusted live, and
+  explicitly saved to device flash.
+
+### Changed
+- Committed the current `config/assistant.yaml` runtime settings to source
+  control so tuned assistant defaults are preserved on this branch instead of
+  being left as uncommitted local state.
+
+### Tests
+- Added web-service coverage for XVF availability, live writes, and
+  save-to-flash actions.
+
 ## [1.44.3] - 2026-07-02
 ### Fixed
 - PipeWire source auto-selection for ReSpeaker capture now prefers physical

@@ -484,6 +484,105 @@ def test_voice_settings_reject_invalid_backend(app_client):
     assert r.status_code == 422
 
 
+class _FakeXvfController:
+    def __init__(self):
+        self.saved = False
+        self.tunables = {
+            "PP_AGCONOFF": [True],
+            "AUDIO_MGR_MIC_GAIN": [1.5],
+        }
+        self.writes = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def write(self, command, values):
+        self.writes.append((command, values))
+        self.tunables[command] = values
+
+    def save_configuration(self):
+        self.saved = True
+
+    def snapshot(self):
+        return {
+            "connected": True,
+            "usb": {"vendor_id": "0x2886", "product_id": "0x0018", "bus": 1, "address": 2},
+            "readonly": [
+                {"command": "VERSION", "label": "Firmware Version", "values": ["1.0.0"]},
+            ],
+            "tunables": [
+                {
+                    "command": "PP_AGCONOFF",
+                    "label": "AGC Enabled",
+                    "dtype": "bool",
+                    "values": self.tunables["PP_AGCONOFF"],
+                    "min": None,
+                    "max": None,
+                },
+                {
+                    "command": "AUDIO_MGR_MIC_GAIN",
+                    "label": "Mic Gain",
+                    "dtype": "float",
+                    "values": self.tunables["AUDIO_MGR_MIC_GAIN"],
+                    "min": 0.0,
+                    "max": 10.0,
+                },
+            ],
+        }
+
+
+def test_xvf_get_returns_unavailable_when_controller_missing(app_client, monkeypatch):
+    client, _bus, _svc = app_client
+    monkeypatch.setattr(web_service, "_create_xvf_controller", lambda: None)
+
+    r = client.get("/api/audio/xvf")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is False
+    assert body["readonly"] == []
+    assert body["tunables"] == []
+
+
+def test_xvf_put_applies_writes_and_can_save(app_client, monkeypatch):
+    client, _bus, _svc = app_client
+    fake = _FakeXvfController()
+    monkeypatch.setattr(web_service, "_create_xvf_controller", lambda: fake)
+
+    r = client.put(
+        "/api/audio/xvf",
+        json={
+            "writes": [
+                {"command": "PP_AGCONOFF", "values": [False]},
+                {"command": "AUDIO_MGR_MIC_GAIN", "values": [2.25]},
+            ],
+            "save": True,
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["saved"] is True
+    assert fake.saved is True
+    assert ("PP_AGCONOFF", [False]) in fake.writes
+    assert ("AUDIO_MGR_MIC_GAIN", [2.25]) in fake.writes
+    tunables = {item["command"]: item["values"] for item in body["tunables"]}
+    assert tunables["PP_AGCONOFF"] == [False]
+    assert tunables["AUDIO_MGR_MIC_GAIN"] == [2.25]
+
+
+def test_xvf_save_endpoint_persists_current_configuration(app_client, monkeypatch):
+    client, _bus, _svc = app_client
+    fake = _FakeXvfController()
+    monkeypatch.setattr(web_service, "_create_xvf_controller", lambda: fake)
+
+    r = client.post("/api/audio/xvf/save")
+    assert r.status_code == 200
+    assert r.json()["saved"] is True
+    assert fake.saved is True
+
+
 def test_audio_repeat_endpoint_calls_av_service(app_client):
     client, bus, svc = app_client
 
