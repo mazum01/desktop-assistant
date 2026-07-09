@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.4] - 2026-07-09
+### Fixed
+- XVF API snapshots now sanitize non-finite float values (`NaN`, `+/-Inf`) so
+  live DSP telemetry can be JSON-encoded instead of failing the web request
+  with a generic load error once USB permissions are correct.
+
+### Tests
+- Added XVF host unit coverage for non-finite float sanitization.
+
 ## [1.45.3] - 2026-07-09
 ### Fixed
 - Added a ReSpeaker Flex XVF3800 udev rule and explicit `plugdev` service-group

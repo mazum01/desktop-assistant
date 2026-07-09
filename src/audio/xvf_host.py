@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import errno
+import math
 import struct
 import sys
 import threading
@@ -93,6 +94,20 @@ def is_xvf_access_denied_error(exc: BaseException) -> bool:
         return True
     text = str(exc).lower()
     return "permission denied" in text or "access denied" in text or "not permitted" in text
+
+
+def _json_safe_number(value: float) -> float | None:
+    return value if math.isfinite(value) else None
+
+
+def _json_safe_values(values: list[Any]) -> list[Any]:
+    cleaned: list[Any] = []
+    for value in values:
+        if isinstance(value, float):
+            cleaned.append(_json_safe_number(value))
+        else:
+            cleaned.append(value)
+    return cleaned
 
 
 class XvfHostController:
@@ -238,9 +253,10 @@ class XvfHostController:
         if isinstance(raw, str):
             return {"value": raw, "display": raw}
         values = list(raw)
+        json_values = _json_safe_values(values)
         if spec.name == "VERSION":
             version = ".".join(str(int(v)) for v in values)
-            return {"value": version, "display": version, "values": values}
+            return {"value": version, "display": version, "values": json_values}
         if spec.name == "DOA_VALUE":
             angle = int(values[0]) if values else 0
             speech_detected = bool(values[1]) if len(values) > 1 else False
@@ -248,18 +264,22 @@ class XvfHostController:
             return {
                 "value": {"angle_deg": angle, "speech_detected": speech_detected},
                 "display": display,
-                "values": values,
+                "values": json_values,
             }
         if spec.widget == "bool":
             state = bool(values[0])
-            return {"value": state, "display": "on" if state else "off", "values": values}
+            return {"value": state, "display": "on" if state else "off", "values": json_values}
         if spec.length == 1:
             scalar = values[0]
             if isinstance(scalar, float):
-                return {"value": float(scalar), "display": f"{float(scalar):.3f}", "values": values}
-            return {"value": int(scalar), "display": str(int(scalar)), "values": values}
+                return {
+                    "value": _json_safe_number(float(scalar)),
+                    "display": f"{float(scalar):.3f}",
+                    "values": json_values,
+                }
+            return {"value": int(scalar), "display": str(int(scalar)), "values": json_values}
         display_values = [f"{float(v):.3f}" if isinstance(v, float) else str(v) for v in values]
-        return {"value": values, "display": ", ".join(display_values), "values": values}
+        return {"value": json_values, "display": ", ".join(display_values), "values": json_values}
 
     def snapshot(self) -> dict[str, Any]:
         readonly: list[dict[str, Any]] = []
