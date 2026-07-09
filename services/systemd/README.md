@@ -17,6 +17,9 @@ events yet — when that's needed (Phase 3), we'll add an IPC transport
 ```bash
 sudo cp services/systemd/desktop-assistant-thermal.service /etc/systemd/system/
 sudo cp services/systemd/desktop-assistant-core.service    /etc/systemd/system/
+sudo install -D -m 0644 services/udev/70-respeaker-flex-xvf.rules /etc/udev/rules.d/70-respeaker-flex-xvf.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --attr-match=idVendor=2886 --attr-match=idProduct=0022
 sudo systemctl daemon-reload
 sudo systemctl enable --now desktop-assistant-thermal.service
 sudo systemctl enable --now desktop-assistant-core.service
@@ -46,7 +49,9 @@ sudo systemctl disable desktop-assistant-core desktop-assistant-thermal
 
 - Both units run as user `starter`, group `starter`, with supplementary
   groups for the hardware they touch (`i2c`, `gpio`, plus `audio`,
-  `video` for the core unit). Make sure your user is a member.
+  `video`, and `plugdev` for the core unit). Make sure your user is a member.
+- ReSpeaker Flex XVF host-control requires the accompanying udev rule so the
+  raw USB device node is group-accessible to `plugdev`.
 - Path is hard-coded to `/home/starter/Code/VERA` — edit
   the unit files if your layout differs.
 - `ProtectSystem=strict` + `ReadWritePaths=/tmp` keeps the rest of the

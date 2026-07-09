@@ -1,0 +1,6 @@
+# ReSpeaker Flex XVF3800 USB vendor-control access for desktop-assistant.
+#
+# The audio path itself uses standard USB audio interfaces, but XVF host control
+# (DSP telemetry/tuning) talks to the raw USB device node. Grant the device to
+# plugdev so the desktop-assistant service can query and tune the XVF3800.
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="2886", ATTR{idProduct}=="0022", MODE="0660", GROUP="plugdev"

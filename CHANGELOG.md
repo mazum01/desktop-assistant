@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.3] - 2026-07-09
+### Fixed
+- Added a ReSpeaker Flex XVF3800 udev rule and explicit `plugdev` service-group
+  wiring so the desktop-assistant daemon can access the raw USB control device
+  for XVF telemetry and tuning instead of failing with permission denied.
+
 ## [1.45.2] - 2026-07-09
 ### Fixed
 - The XVF dashboard now distinguishes USB permission problems from missing

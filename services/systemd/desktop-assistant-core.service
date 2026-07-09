@@ -12,7 +12,7 @@ StartLimitBurst=5
 Type=simple
 User=starter
 Group=starter
-SupplementaryGroups=i2c gpio audio video
+SupplementaryGroups=i2c gpio audio video plugdev
 WorkingDirectory=/home/starter/Code/Desktop Assistant
 Environment=PYTHONUNBUFFERED=1
 Environment="PYTHONPATH=/home/starter/Code/Desktop Assistant"
