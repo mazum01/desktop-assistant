@@ -621,7 +621,9 @@ class FaceService(Service):
     def _resolve_openclaw_cli_path(self) -> str | None:
         """Resolve the OpenClaw CLI path for daemon-safe execution."""
         if self._openclaw_cli_path_cfg:
-            return self._openclaw_cli_path_cfg if shutil.which(self._openclaw_cli_path_cfg) else None
+            expanded = os.path.expanduser(self._openclaw_cli_path_cfg)
+            found = shutil.which(expanded)
+            return found or expanded
         found = shutil.which("openclaw")
         if found:
             return found

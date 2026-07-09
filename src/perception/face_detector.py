@@ -131,7 +131,7 @@ class FaceDetector:
                 cascade_path = _cvdata.haarcascades + "haarcascade_frontalface_default.xml"
             except (ImportError, AttributeError):
                 cascade_path = None
-        if cascade_path:
+        if cascade_path and hasattr(cv2, "CascadeClassifier"):
             cascade = cv2.CascadeClassifier(cascade_path)
             if not cascade.empty():
                 self._haar = cascade

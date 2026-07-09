@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.5] - 2026-07-09
+### Fixed
+- CI now degrades cleanly on lean runner environments: `FaceDetector` no longer
+  assumes `cv2.CascadeClassifier` exists, and `FaceService` honors an explicit
+  OpenClaw CLI path without requiring it to resolve during test setup.
+
 ## [1.45.4] - 2026-07-09
 ### Fixed
 - XVF API snapshots now sanitize non-finite float values (`NaN`, `+/-Inf`) so
