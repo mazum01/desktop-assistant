@@ -115,7 +115,7 @@ def _openclaw_send(
             ],
             capture_output=True,
             text=True,
-            timeout=15,
+            timeout=45,
         )
     except (subprocess.SubprocessError, OSError) as exc:
         log.warning("OpenClaw notify failed to execute: %s", exc)

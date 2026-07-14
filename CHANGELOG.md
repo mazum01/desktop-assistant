@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.11] - 2026-07-14
+### Fixed
+- Increased watchdog OpenClaw notification command timeout to 45s so Telegram
+  sends through `openclaw message send` don't fail during slower channel/API
+  response windows.
+
 ## [1.45.10] - 2026-07-14
 ### Changed
 - Watchdog notifications now deliver via OpenClaw (`openclaw message send`)
