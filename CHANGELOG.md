@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.9] - 2026-07-14
+### Fixed
+- OpenClaw watchdog multiplicity now defaults to `openclaw_max_processes: 2`
+  to account for the gateway parent + worker process model while still
+  flagging true runaway duplication (3+ processes).
+
 ## [1.45.8] - 2026-07-14
 ### Fixed
 - Default watchdog config now keeps OpenClaw `require_systemd_active` disabled

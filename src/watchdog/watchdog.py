@@ -66,6 +66,7 @@ _DEFAULT_INTERVAL_S       = 30.0
 _DEFAULT_COOLDOWN_MIN     = 5.0
 _DEFAULT_STUCK_THRESHOLD  = 10   # "Bot not initialized" occurrences / 60 s
 _DEFAULT_MAX_UPTIME_MIN   = 90   # openclaw-gateway forced restart interval (polling-stall guard)
+_DEFAULT_OPENCLAW_MAX_PROCESSES = 2
 _DEFAULT_STATUS_NOTIFY_MIN = 15.0
 _DEFAULT_ALERT_COOLDOWN_MIN = 10.0
 _DEFAULT_CORE_RSS_WARN_MB = 2200.0
@@ -561,6 +562,7 @@ def main() -> int:
     tg_notify         = bool(wd_cfg.get("telegram_notify", True))
     stuck_threshold   = int(wd_cfg.get("openclaw_stuck_threshold", _DEFAULT_STUCK_THRESHOLD))
     max_uptime_min    = int(wd_cfg.get("openclaw_max_uptime_min", _DEFAULT_MAX_UPTIME_MIN))
+    openclaw_max_processes = int(wd_cfg.get("openclaw_max_processes", _DEFAULT_OPENCLAW_MAX_PROCESSES))
     status_notify_min = float(wd_cfg.get("status_notify_interval_min", _DEFAULT_STATUS_NOTIFY_MIN))
     alert_cooldown_min = float(wd_cfg.get("alert_cooldown_min", _DEFAULT_ALERT_COOLDOWN_MIN))
     core_rss_warn_mb = float(wd_cfg.get("core_rss_warn_mb", _DEFAULT_CORE_RSS_WARN_MB))
@@ -583,7 +585,7 @@ def main() -> int:
             unit="openclaw-gateway.service",
             http_check="http://localhost:18789/health",
             process_match="openclaw/dist/index.js gateway",
-            max_processes=1,
+            max_processes=max(1, openclaw_max_processes),
             journal_stuck_pattern="Bot not initialized",
             stuck_threshold=stuck_threshold,
             require_systemd_active=bool(wd_cfg.get("openclaw_require_systemd_active", True)),

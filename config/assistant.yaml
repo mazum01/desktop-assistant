@@ -199,6 +199,7 @@ watchdog:
   core_rss_warn_mb: 2200
   core_threads_warn: 180
   enabled: true
+  openclaw_max_processes: 2
   openclaw_max_uptime_min: 90
   openclaw_require_systemd_active: false
   openclaw_stuck_threshold: 10
