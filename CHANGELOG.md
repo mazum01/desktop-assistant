@@ -4,11 +4,20 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.7] - 2026-07-14
+### Fixed
+- Watchdog now explicitly detects OpenClaw process multiplicity and marks the
+  service unhealthy when more than one gateway process is present.
+- Before restarting OpenClaw, watchdog now terminates extra non-systemd gateway
+  processes so recovery converges to a single systemd-owned instance.
+
 ## [1.45.6] - 2026-07-14
 ### Changed
 - Watchdog now treats OpenClaw as unhealthy when systemd is inactive, so it
   converges back to a service-owned gateway process instead of tolerating a
   healthy orphan/manual instance.
+- Watchdog now detects duplicate OpenClaw gateway processes and treats
+  multiplicity as unhealthy, terminating extra non-systemd PIDs before restart.
 - Added watchdog periodic status heartbeats and core-resource threshold alerts
   (RSS/FDs/threads) with configurable intervals/cooldowns to surface freezes
   and degradation earlier through Telegram notifications.

@@ -104,6 +104,8 @@ class ManagedService:
     unit: str
     http_check: Optional[str] = None          # URL to GET; expects {"ok": true}
     http_timeout_s: float = 5.0
+    process_match: Optional[str] = None       # Optional process multiplicity guard
+    max_processes: int = 1
     journal_stuck_pattern: Optional[str] = None  # grep in last-60s journal
     stuck_threshold: int = _DEFAULT_STUCK_THRESHOLD
     # Set False for services that self-manage single-instance (e.g. openclaw exits
@@ -139,6 +141,38 @@ class ManagedService:
                 return bool(data.get("ok") or data.get("status") == "live")
         except Exception:
             return False
+
+    def _matching_process_ids(self) -> list[int]:
+        pattern = (self.process_match or "").strip()
+        if not pattern:
+            return []
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", pattern],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (subprocess.SubprocessError, OSError):
+            return []
+        if result.returncode not in (0, 1):
+            return []
+        pids: list[int] = []
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                pids.append(int(line))
+            except ValueError:
+                continue
+        return pids
+
+    def is_process_count_healthy(self) -> bool:
+        pids = self._matching_process_ids()
+        if not pids:
+            return True
+        return len(pids) <= max(1, int(self.max_processes))
 
     def is_journal_stuck(self) -> bool:
         """Return True if the stuck pattern appears ≥ stuck_threshold times in the last 60 s."""
@@ -231,6 +265,9 @@ class ManagedService:
         """Return (healthy, reason). reason is '' when healthy."""
         if self.require_systemd_active and not self.is_systemd_active():
             return False, "systemd unit inactive/failed"
+        if not self.is_process_count_healthy():
+            count = len(self._matching_process_ids())
+            return False, f"process multiplicity detected ({count} matches for '{self.process_match}')"
         if not self.is_http_healthy():
             return False, f"HTTP health check failed ({self.http_check})"
         if self.is_journal_stuck():
@@ -294,9 +331,24 @@ class ManagedService:
             log.exception("%s: failed to SIGKILL orphan pid=%d",
                           self.unit, port_pid)
 
+    def _kill_extra_processes(self) -> None:
+        pids = self._matching_process_ids()
+        allowed = max(1, int(self.max_processes))
+        if len(pids) <= allowed:
+            return
+        keep_pid = self._systemd_main_pid()
+        for pid in pids:
+            if keep_pid and pid == keep_pid:
+                continue
+            try:
+                os.kill(pid, 15)
+            except OSError:
+                continue
+
     def restart(self) -> bool:
         """Restart the systemd unit. Returns True on success."""
         log.info("Restarting %s …", self.unit)
+        self._kill_extra_processes()
         self._kill_orphan_port_holder()
         try:
             result = subprocess.run(
@@ -530,6 +582,8 @@ def main() -> int:
         ManagedService(
             unit="openclaw-gateway.service",
             http_check="http://localhost:18789/health",
+            process_match="openclaw/dist/index.js gateway",
+            max_processes=1,
             journal_stuck_pattern="Bot not initialized",
             stuck_threshold=stuck_threshold,
             require_systemd_active=bool(wd_cfg.get("openclaw_require_systemd_active", True)),

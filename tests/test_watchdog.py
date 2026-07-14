@@ -55,6 +55,18 @@ class TestManagedServiceHttp:
             assert svc.is_http_healthy() is False
 
 
+class TestManagedServiceProcessMultiplicity:
+    def test_disabled_process_guard_is_healthy(self):
+        svc = ManagedService(unit="fake.service")
+        assert svc.is_process_count_healthy() is True
+
+    def test_process_multiplicity_detected(self):
+        svc = ManagedService(unit="fake.service", process_match="openclaw", max_processes=1)
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="101\n202\n")
+            assert svc.is_process_count_healthy() is False
+
+
 class TestManagedServiceJournalStuck:
     def test_no_pattern_never_stuck(self):
         svc = ManagedService(unit="fake.service")
