@@ -4,12 +4,18 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.8] - 2026-07-14
+### Fixed
+- Default watchdog config now keeps OpenClaw `require_systemd_active` disabled
+  while still enforcing single-process + HTTP health, avoiding churn when the
+  gateway intentionally exits with code 78 after confirming a healthy instance.
+
 ## [1.45.7] - 2026-07-14
 ### Fixed
 - Watchdog now explicitly detects OpenClaw process multiplicity and marks the
   service unhealthy when more than one gateway process is present.
-- Before restarting OpenClaw, watchdog now terminates extra non-systemd gateway
-  processes so recovery converges to a single systemd-owned instance.
+- Before restarting OpenClaw, watchdog now terminates extra gateway processes so
+  recovery converges to a single healthy instance.
 
 ## [1.45.6] - 2026-07-14
 ### Changed
