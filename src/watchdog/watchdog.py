@@ -19,8 +19,8 @@ crashing service doesn't trigger an infinite restart storm.
 
 Telegram notifications
 ----------------------
-Sent directly via Bot API (no dependency on the running assistant).
-Uses the same bot_token / chat_id from config/assistant.yaml.
+Sent via OpenClaw first (so messages appear in OpenClaw history), then
+fallback to direct Bot API if OpenClaw delivery is unavailable.
 
 Run as
 ------
@@ -94,6 +94,40 @@ def _tg_send(token: str, chat_id: str, text: str) -> None:
                 log.warning("Telegram API returned not-ok: %s", result)
     except Exception as exc:
         log.warning("Telegram notify failed: %s", exc)
+
+
+def _openclaw_send(
+    text: str,
+    *,
+    channel: str,
+    target: str,
+    cli_path: str = "openclaw",
+) -> bool:
+    if not channel or not target:
+        return False
+    try:
+        result = subprocess.run(
+            [
+                cli_path, "message", "send",
+                "--channel", channel,
+                "--target", target,
+                "--message", text,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        log.warning("OpenClaw notify failed to execute: %s", exc)
+        return False
+    if result.returncode != 0:
+        log.warning(
+            "OpenClaw notify failed (rc=%d): %s",
+            result.returncode,
+            (result.stderr or result.stdout).strip(),
+        )
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -381,6 +415,10 @@ class Watchdog:
         tg_token: str = "",
         tg_chat_id: str = "",
         telegram_notify: bool = True,
+        notify_via_openclaw: bool = True,
+        openclaw_notify_channel: str = "telegram",
+        openclaw_notify_target: str = "",
+        openclaw_cli_path: str = "openclaw",
         status_notify_interval_s: float = _DEFAULT_STATUS_NOTIFY_MIN * 60.0,
         alert_cooldown_s: float = _DEFAULT_ALERT_COOLDOWN_MIN * 60.0,
         core_rss_warn_mb: float = _DEFAULT_CORE_RSS_WARN_MB,
@@ -393,6 +431,10 @@ class Watchdog:
         self._tg_token = tg_token
         self._tg_chat_id = tg_chat_id
         self._telegram_notify = telegram_notify
+        self._notify_via_openclaw = notify_via_openclaw
+        self._openclaw_notify_channel = (openclaw_notify_channel or "").strip()
+        self._openclaw_notify_target = (openclaw_notify_target or "").strip()
+        self._openclaw_cli_path = (openclaw_cli_path or "openclaw").strip()
         self._status_notify_interval_s = max(0.0, status_notify_interval_s)
         self._alert_cooldown_s = max(10.0, alert_cooldown_s)
         self._core_rss_warn_mb = core_rss_warn_mb
@@ -423,9 +465,19 @@ class Watchdog:
         self._maybe_send_resource_alerts()
 
     def _notify(self, msg: str) -> None:
-        if not (self._telegram_notify and self._tg_token and self._tg_chat_id):
+        if not self._telegram_notify:
             return
-        _tg_send(self._tg_token, self._tg_chat_id, msg)
+        if self._notify_via_openclaw:
+            delivered = _openclaw_send(
+                msg,
+                channel=self._openclaw_notify_channel,
+                target=self._openclaw_notify_target,
+                cli_path=self._openclaw_cli_path,
+            )
+            if delivered:
+                return
+        if self._tg_token and self._tg_chat_id:
+            _tg_send(self._tg_token, self._tg_chat_id, msg)
 
     def _check_one(self, svc: ManagedService) -> None:
         healthy, reason = svc.is_healthy()
@@ -568,10 +620,16 @@ def main() -> int:
     core_rss_warn_mb = float(wd_cfg.get("core_rss_warn_mb", _DEFAULT_CORE_RSS_WARN_MB))
     core_fd_warn = int(wd_cfg.get("core_fd_warn", _DEFAULT_CORE_FD_WARN))
     core_threads_warn = int(wd_cfg.get("core_threads_warn", _DEFAULT_CORE_THREADS_WARN))
+    notify_via_openclaw = bool(wd_cfg.get("notify_via_openclaw", True))
+    openclaw_notify_channel = str(wd_cfg.get("openclaw_notify_channel", "telegram"))
+    openclaw_notify_target = str(wd_cfg.get("openclaw_notify_target", ""))
+    openclaw_cli_path = str(wd_cfg.get("openclaw_cli_path", "openclaw"))
 
     tg_cfg     = cfg.get("telegram", {})
     tg_token   = str(tg_cfg.get("bot_token", ""))
     tg_chat_id = str(tg_cfg.get("chat_id", ""))
+    if not openclaw_notify_target:
+        openclaw_notify_target = tg_chat_id
 
     services = [
         ManagedService(
@@ -600,6 +658,10 @@ def main() -> int:
         tg_token=tg_token,
         tg_chat_id=tg_chat_id,
         telegram_notify=tg_notify,
+        notify_via_openclaw=notify_via_openclaw,
+        openclaw_notify_channel=openclaw_notify_channel,
+        openclaw_notify_target=openclaw_notify_target,
+        openclaw_cli_path=openclaw_cli_path,
         status_notify_interval_s=status_notify_min * 60,
         alert_cooldown_s=alert_cooldown_min * 60,
         core_rss_warn_mb=core_rss_warn_mb,

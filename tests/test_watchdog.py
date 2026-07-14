@@ -170,7 +170,8 @@ class TestWatchdogTelegramNotify:
         svc.is_healthy = MagicMock(return_value=(False, "dead"))
         svc.restart = MagicMock(return_value=True)
         wd = Watchdog([svc], restart_cooldown_s=0,
-                      tg_token="TOKEN", tg_chat_id="CHAT", telegram_notify=True)
+                      tg_token="TOKEN", tg_chat_id="CHAT", telegram_notify=True,
+                      notify_via_openclaw=False)
         with patch("src.watchdog.watchdog._tg_send") as mock_tg:
             wd._check_one(svc)
             assert mock_tg.call_count >= 1
@@ -188,3 +189,43 @@ class TestWatchdogTelegramNotify:
         with patch("src.watchdog.watchdog._tg_send") as mock_tg:
             wd._check_one(svc)
             mock_tg.assert_not_called()
+
+    def test_notify_prefers_openclaw_delivery(self):
+        svc = ManagedService(unit="fake.service")
+        svc.is_healthy = MagicMock(return_value=(False, "dead"))
+        svc.restart = MagicMock(return_value=True)
+        wd = Watchdog(
+            [svc],
+            restart_cooldown_s=0,
+            tg_token="TOKEN",
+            tg_chat_id="CHAT",
+            telegram_notify=True,
+            notify_via_openclaw=True,
+            openclaw_notify_channel="telegram",
+            openclaw_notify_target="1234",
+        )
+        with patch("src.watchdog.watchdog._openclaw_send", return_value=True) as mock_oc, \
+             patch("src.watchdog.watchdog._tg_send") as mock_tg:
+            wd._check_one(svc)
+            assert mock_oc.call_count >= 1
+            mock_tg.assert_not_called()
+
+    def test_notify_falls_back_to_direct_telegram(self):
+        svc = ManagedService(unit="fake.service")
+        svc.is_healthy = MagicMock(return_value=(False, "dead"))
+        svc.restart = MagicMock(return_value=True)
+        wd = Watchdog(
+            [svc],
+            restart_cooldown_s=0,
+            tg_token="TOKEN",
+            tg_chat_id="CHAT",
+            telegram_notify=True,
+            notify_via_openclaw=True,
+            openclaw_notify_channel="telegram",
+            openclaw_notify_target="1234",
+        )
+        with patch("src.watchdog.watchdog._openclaw_send", return_value=False) as mock_oc, \
+             patch("src.watchdog.watchdog._tg_send") as mock_tg:
+            wd._check_one(svc)
+            assert mock_oc.call_count >= 1
+            assert mock_tg.call_count >= 1

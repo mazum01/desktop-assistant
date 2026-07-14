@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.10] - 2026-07-14
+### Changed
+- Watchdog notifications now deliver via OpenClaw (`openclaw message send`)
+  first so alert history is preserved in OpenClaw channels, then fallback to
+  direct Telegram Bot API delivery if OpenClaw send fails.
+- Added watchdog config options for OpenClaw-backed delivery:
+  `notify_via_openclaw`, `openclaw_cli_path`, `openclaw_notify_channel`, and
+  `openclaw_notify_target` (default target falls back to `telegram.chat_id`).
+
 ## [1.45.9] - 2026-07-14
 ### Fixed
 - OpenClaw watchdog multiplicity now defaults to `openclaw_max_processes: 2`
