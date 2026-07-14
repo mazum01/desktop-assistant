@@ -53,6 +53,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+import psutil
 import yaml
 
 log = logging.getLogger("watchdog")
@@ -65,6 +66,11 @@ _DEFAULT_INTERVAL_S       = 30.0
 _DEFAULT_COOLDOWN_MIN     = 5.0
 _DEFAULT_STUCK_THRESHOLD  = 10   # "Bot not initialized" occurrences / 60 s
 _DEFAULT_MAX_UPTIME_MIN   = 90   # openclaw-gateway forced restart interval (polling-stall guard)
+_DEFAULT_STATUS_NOTIFY_MIN = 15.0
+_DEFAULT_ALERT_COOLDOWN_MIN = 10.0
+_DEFAULT_CORE_RSS_WARN_MB = 2200.0
+_DEFAULT_CORE_FD_WARN = 900
+_DEFAULT_CORE_THREADS_WARN = 180
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CONFIG_PATH = _REPO_ROOT / "config" / "assistant.yaml"
@@ -110,8 +116,9 @@ class ManagedService:
     max_uptime_min: Optional[int] = None
 
     # Runtime state — not part of config
-    last_restart_ts: float = field(default=0.0, init=False, repr=False)
+    last_restart_ts: float = field(default=-1.0, init=False, repr=False)
     consecutive_failures: int = field(default=0, init=False, repr=False)
+    last_failure_reason: str = field(default="", init=False, repr=False)
 
     def is_systemd_active(self) -> bool:
         try:
@@ -321,6 +328,11 @@ class Watchdog:
         tg_token: str = "",
         tg_chat_id: str = "",
         telegram_notify: bool = True,
+        status_notify_interval_s: float = _DEFAULT_STATUS_NOTIFY_MIN * 60.0,
+        alert_cooldown_s: float = _DEFAULT_ALERT_COOLDOWN_MIN * 60.0,
+        core_rss_warn_mb: float = _DEFAULT_CORE_RSS_WARN_MB,
+        core_fd_warn: int = _DEFAULT_CORE_FD_WARN,
+        core_threads_warn: int = _DEFAULT_CORE_THREADS_WARN,
     ) -> None:
         self._services = services
         self._interval = check_interval_s
@@ -328,6 +340,13 @@ class Watchdog:
         self._tg_token = tg_token
         self._tg_chat_id = tg_chat_id
         self._telegram_notify = telegram_notify
+        self._status_notify_interval_s = max(0.0, status_notify_interval_s)
+        self._alert_cooldown_s = max(10.0, alert_cooldown_s)
+        self._core_rss_warn_mb = core_rss_warn_mb
+        self._core_fd_warn = max(1, core_fd_warn)
+        self._core_threads_warn = max(1, core_threads_warn)
+        self._last_status_notify_ts = 0.0
+        self._last_alert_ts = 0.0
 
     def run(self) -> None:
         log.info(
@@ -347,21 +366,37 @@ class Watchdog:
                 self._check_one(svc)
             except Exception:
                 log.exception("Error checking %s", svc.unit)
+        self._maybe_send_status_heartbeat()
+        self._maybe_send_resource_alerts()
+
+    def _notify(self, msg: str) -> None:
+        if not (self._telegram_notify and self._tg_token and self._tg_chat_id):
+            return
+        _tg_send(self._tg_token, self._tg_chat_id, msg)
 
     def _check_one(self, svc: ManagedService) -> None:
         healthy, reason = svc.is_healthy()
         if healthy:
             if svc.consecutive_failures > 0:
                 log.info("%s is healthy again", svc.unit)
+                self._notify(f"✅ Watchdog recovery: {svc.unit} is healthy again.")
                 svc.consecutive_failures = 0
+                svc.last_failure_reason = ""
             return
 
         svc.consecutive_failures += 1
-        log.warning("%s is UNHEALTHY (failure #%d): %s",
-                    svc.unit, svc.consecutive_failures, reason)
+        if svc.consecutive_failures == 1 or reason != svc.last_failure_reason:
+            log.warning("%s is UNHEALTHY (failure #%d): %s",
+                        svc.unit, svc.consecutive_failures, reason)
+            self._notify(
+                f"⚠️ Watchdog alert: {svc.unit}\n"
+                f"Issue: {reason}\n"
+                f"Failure #{svc.consecutive_failures}"
+            )
+        svc.last_failure_reason = reason
 
         # Enforce cooldown between restarts
-        elapsed = time.monotonic() - svc.last_restart_ts
+        elapsed = time.monotonic() - svc.last_restart_ts if svc.last_restart_ts > 0 else self._cooldown + 1
         if elapsed < self._cooldown:
             remaining = int(self._cooldown - elapsed)
             log.info("%s: cooldown active — %ds remaining before next restart",
@@ -377,8 +412,71 @@ class Watchdog:
             f"Failure #{svc.consecutive_failures} — {status}"
         )
         log.info("Watchdog action: %s", msg.replace("\n", " | "))
-        if self._telegram_notify and self._tg_token and self._tg_chat_id:
-            _tg_send(self._tg_token, self._tg_chat_id, msg)
+        self._notify(msg)
+
+    def _core_pid(self) -> Optional[int]:
+        try:
+            result = subprocess.run(
+                ["systemctl", "show", "desktop-assistant-core.service", "-p", "MainPID", "--value"],
+                capture_output=True, text=True, timeout=5,
+            )
+            pid = int(result.stdout.strip() or 0)
+            return pid or None
+        except (subprocess.SubprocessError, ValueError, OSError):
+            return None
+
+    def _maybe_send_status_heartbeat(self) -> None:
+        if self._status_notify_interval_s <= 0:
+            return
+        now = time.monotonic()
+        if self._last_status_notify_ts and (now - self._last_status_notify_ts) < self._status_notify_interval_s:
+            return
+        statuses = []
+        for svc in self._services:
+            healthy, reason = svc.is_healthy()
+            statuses.append(f"{svc.unit}: {'ok' if healthy else 'bad'}{'' if healthy else f' ({reason})'}")
+        pid = self._core_pid()
+        metrics = ""
+        if pid:
+            try:
+                p = psutil.Process(pid)
+                rss_mb = p.memory_info().rss / 1024 / 1024
+                fds = p.num_fds()
+                threads = p.num_threads()
+                metrics = f"\ncore pid={pid} rss={rss_mb:.0f}MB fds={fds} threads={threads}"
+            except (psutil.Error, OSError, ValueError):
+                pass
+        self._notify("📊 Watchdog status heartbeat\n" + "\n".join(statuses) + metrics)
+        self._last_status_notify_ts = now
+
+    def _maybe_send_resource_alerts(self) -> None:
+        now = time.monotonic()
+        if self._last_alert_ts and (now - self._last_alert_ts) < self._alert_cooldown_s:
+            return
+        pid = self._core_pid()
+        if not pid:
+            return
+        try:
+            p = psutil.Process(pid)
+            rss_mb = p.memory_info().rss / 1024 / 1024
+            fds = p.num_fds()
+            threads = p.num_threads()
+        except (psutil.Error, OSError, ValueError):
+            return
+        breaches = []
+        if rss_mb >= self._core_rss_warn_mb:
+            breaches.append(f"rss {rss_mb:.0f}MB ≥ {self._core_rss_warn_mb:.0f}MB")
+        if fds >= self._core_fd_warn:
+            breaches.append(f"fds {fds} ≥ {self._core_fd_warn}")
+        if threads >= self._core_threads_warn:
+            breaches.append(f"threads {threads} ≥ {self._core_threads_warn}")
+        if not breaches:
+            return
+        self._notify(
+            "🚨 Watchdog resource alert: desktop-assistant-core\n"
+            f"pid={pid}\n" + "\n".join(breaches)
+        )
+        self._last_alert_ts = now
 
 
 # ---------------------------------------------------------------------------
@@ -411,6 +509,11 @@ def main() -> int:
     tg_notify         = bool(wd_cfg.get("telegram_notify", True))
     stuck_threshold   = int(wd_cfg.get("openclaw_stuck_threshold", _DEFAULT_STUCK_THRESHOLD))
     max_uptime_min    = int(wd_cfg.get("openclaw_max_uptime_min", _DEFAULT_MAX_UPTIME_MIN))
+    status_notify_min = float(wd_cfg.get("status_notify_interval_min", _DEFAULT_STATUS_NOTIFY_MIN))
+    alert_cooldown_min = float(wd_cfg.get("alert_cooldown_min", _DEFAULT_ALERT_COOLDOWN_MIN))
+    core_rss_warn_mb = float(wd_cfg.get("core_rss_warn_mb", _DEFAULT_CORE_RSS_WARN_MB))
+    core_fd_warn = int(wd_cfg.get("core_fd_warn", _DEFAULT_CORE_FD_WARN))
+    core_threads_warn = int(wd_cfg.get("core_threads_warn", _DEFAULT_CORE_THREADS_WARN))
 
     tg_cfg     = cfg.get("telegram", {})
     tg_token   = str(tg_cfg.get("bot_token", ""))
@@ -429,7 +532,7 @@ def main() -> int:
             http_check="http://localhost:18789/health",
             journal_stuck_pattern="Bot not initialized",
             stuck_threshold=stuck_threshold,
-            require_systemd_active=False,  # exits 78 when healthy instance already runs
+            require_systemd_active=bool(wd_cfg.get("openclaw_require_systemd_active", True)),
             max_uptime_min=max_uptime_min,
         ),
     ]
@@ -441,6 +544,11 @@ def main() -> int:
         tg_token=tg_token,
         tg_chat_id=tg_chat_id,
         telegram_notify=tg_notify,
+        status_notify_interval_s=status_notify_min * 60,
+        alert_cooldown_s=alert_cooldown_min * 60,
+        core_rss_warn_mb=core_rss_warn_mb,
+        core_fd_warn=core_fd_warn,
+        core_threads_warn=core_threads_warn,
     )
     watchdog.run()
     return 0

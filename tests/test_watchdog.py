@@ -139,6 +139,14 @@ class TestWatchdogCooldown:
         wd._check_one(svc)
         svc.restart.assert_called_once()
 
+    def test_initial_state_does_not_apply_startup_cooldown(self):
+        svc = self._make_unhealthy_svc()
+        svc.last_restart_ts = -1
+        wd = Watchdog([svc], check_interval_s=1, restart_cooldown_s=300,
+                      telegram_notify=False)
+        wd._check_one(svc)
+        svc.restart.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # Watchdog Telegram notification
@@ -153,8 +161,8 @@ class TestWatchdogTelegramNotify:
                       tg_token="TOKEN", tg_chat_id="CHAT", telegram_notify=True)
         with patch("src.watchdog.watchdog._tg_send") as mock_tg:
             wd._check_one(svc)
-            mock_tg.assert_called_once()
-            args = mock_tg.call_args[0]
+            assert mock_tg.call_count >= 1
+            args = mock_tg.call_args_list[-1][0]
             assert args[0] == "TOKEN"
             assert args[1] == "CHAT"
             assert "fake.service" in args[2]

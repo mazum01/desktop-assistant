@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.6] - 2026-07-14
+### Changed
+- Watchdog now treats OpenClaw as unhealthy when systemd is inactive, so it
+  converges back to a service-owned gateway process instead of tolerating a
+  healthy orphan/manual instance.
+- Added watchdog periodic status heartbeats and core-resource threshold alerts
+  (RSS/FDs/threads) with configurable intervals/cooldowns to surface freezes
+  and degradation earlier through Telegram notifications.
+- Reduced watchdog log churn by deduplicating repeated unhealthy reasons and
+  fixed startup cooldown behavior so initial restart attempts are not delayed by
+  host uptime.
+
+### Fixed
+- Enabled watchdog notification and threshold settings in
+  `config/assistant.yaml` for regular health updates and anomaly alerts.
+
 ## [1.45.5] - 2026-07-09
 ### Fixed
 - CI now degrades cleanly on lean runner environments: `FaceDetector` no longer

@@ -193,12 +193,18 @@ voice_commands:
   wake_cooldown_s: 1.5
   wake_threshold_dbfs: -35.0
 watchdog:
+  alert_cooldown_min: 10
   check_interval_s: 30
+  core_fd_warn: 900
+  core_rss_warn_mb: 2200
+  core_threads_warn: 180
   enabled: true
   openclaw_max_uptime_min: 90
+  openclaw_require_systemd_active: true
   openclaw_stuck_threshold: 10
   restart_cooldown_min: 5
-  telegram_notify: false
+  status_notify_interval_min: 15
+  telegram_notify: true
 web_dashboard:
   enabled: true
   host: 0.0.0.0
