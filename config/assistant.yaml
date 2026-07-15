@@ -28,7 +28,7 @@ audio_capture:
   vad_threshold_dbfs: -42.0
 camera:
   af_mode: continuous
-  framerate: 30
+  framerate: 20
   height: 480
   rotation_deg: 0
   stream_height: 360
@@ -37,7 +37,7 @@ camera:
 camera2:
   af_mode: continuous
   enabled: true
-  framerate: 30
+  framerate: 20
   height: 1080
   index: 1
   rotation_deg: 0
@@ -74,7 +74,7 @@ face_recognition:
   greeting_cooldown_min: 30
   guest_intro_delay_min: 2.0
   match_threshold: 0.6
-  max_fps: 5.0
+  max_fps: 3.0
   min_absence_s: 30
   min_face_px: 80
 head_tracking:
@@ -115,7 +115,7 @@ notifications:
 object_detection:
   conf_threshold: 0.4
   enabled: true
-  max_fps: 2.0
+  max_fps: 1.5
   max_objects: 8
 privacy:
   announce: false

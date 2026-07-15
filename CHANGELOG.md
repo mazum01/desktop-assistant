@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.13] - 2026-07-15
+### Changed
+- PerceptionService config now honors `face_recognition.max_fps` from
+  `assistant.yaml` (it was previously hardcoded to the class default), so face
+  pipeline rate tuning is now applied at runtime.
+- Tuned default runtime settings to lower sustained vision CPU load:
+  - `camera.framerate`: 30 → 20
+  - `camera2.framerate`: 30 → 20
+  - `face_recognition.max_fps`: 5.0 → 3.0
+  - `object_detection.max_fps`: 2.0 → 1.5
+
 ## [1.45.12] - 2026-07-15
 ### Fixed
 - PerceptionService now pre-checks its detection interval before queuing
