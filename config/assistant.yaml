@@ -28,7 +28,7 @@ audio_capture:
   vad_threshold_dbfs: -42.0
 camera:
   af_mode: continuous
-  framerate: 20
+  framerate: 15
   height: 480
   rotation_deg: 0
   stream_height: 360
@@ -37,7 +37,7 @@ camera:
 camera2:
   af_mode: continuous
   enabled: true
-  framerate: 20
+  framerate: 12
   height: 1080
   index: 1
   rotation_deg: 0

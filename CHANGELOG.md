@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.14] - 2026-07-15
+### Changed
+- Further reduced default camera frame rates to lower sustained CPU load:
+  - `camera.framerate`: 20 → 15
+  - `camera2.framerate`: 20 → 12
+
 ## [1.45.13] - 2026-07-15
 ### Changed
 - PerceptionService config now honors `face_recognition.max_fps` from
