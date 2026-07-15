@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.12] - 2026-07-15
+### Fixed
+- PerceptionService now pre-checks its detection interval before queuing
+  `vision.frame_ready` work, reducing queue churn and avoidable wakeups at high
+  camera FPS when face detection is rate-limited.
+
 ## [1.45.11] - 2026-07-14
 ### Fixed
 - Increased watchdog OpenClaw notification command timeout to 45s so Telegram

@@ -222,6 +222,10 @@ class PerceptionService(Service):
         # Skip detection on sim frames to avoid false positives from placeholder graphics.
         if self._vision_svc is not None and not self._vision_svc.hardware_ready:
             return
+        # Avoid waking the worker when we're still inside the configured
+        # detection interval; this trims queue churn at high camera FPS.
+        if time.monotonic() - self._last_detect_ts < self._min_interval * 0.9:
+            return
         # Non-blocking put; drop the signal if the worker is still busy with the previous frame.
         try:
             self._frame_queue.put_nowait(True)
