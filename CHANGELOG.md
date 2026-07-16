@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.15] - 2026-07-16
+### Fixed
+- OpenClaw systemd unit now starts the gateway with the explicit foreground
+  command (`gateway run --port 18789`) instead of the ambiguous top-level
+  `gateway` invocation that could self-detect as already running and exit 78.
+- Removed `SuccessExitStatus=78` from the gateway unit so startup collisions are
+  treated as failures and recovered by normal restart/watchdog logic.
+- Watchdog defaults now require the gateway to stay systemd-owned
+  (`openclaw_require_systemd_active: true`) while keeping the existing
+  two-process OpenClaw allowance (`openclaw_max_processes: 2`) for the
+  parent+worker model.
+
 ## [1.45.14] - 2026-07-15
 ### Changed
 - Further reduced default camera frame rates to lower sustained CPU load:

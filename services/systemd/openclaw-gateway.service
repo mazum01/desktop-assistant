@@ -19,13 +19,10 @@ EnvironmentFile=/home/starter/.openclaw/api-keys.env
 # Use the nvm-managed node that OpenClaw was installed into
 ExecStart=/home/starter/.nvm/versions/node/v24.15.0/bin/node \
     /home/starter/.nvm/versions/node/v24.15.0/lib/node_modules/openclaw/dist/index.js \
-    gateway --port 18789
+    gateway run --port 18789
 
 Restart=on-failure
 RestartSec=5
-# Exit 78 means another gateway instance is already running and healthy —
-# OpenClaw deliberately exits this way to prevent restart loops.
-SuccessExitStatus=78
 
 StandardOutput=journal
 StandardError=journal

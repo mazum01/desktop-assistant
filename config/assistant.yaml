@@ -205,7 +205,7 @@ watchdog:
   openclaw_max_uptime_min: 90
   openclaw_notify_channel: telegram
   openclaw_notify_target: ''
-  openclaw_require_systemd_active: false
+  openclaw_require_systemd_active: true
   openclaw_stuck_threshold: 10
   restart_cooldown_min: 5
   status_notify_interval_min: 15
