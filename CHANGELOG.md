@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.16] - 2026-07-16
+### Fixed
+- `tests/test_yale_service.py` had its entire back half (get_reading through
+  start/stop lifecycle tests) accidentally duplicated verbatim, causing 8
+  duplicate `def` redefinitions that silently shadowed the earlier test
+  functions at collection time. Removed the duplicate block; all 17 unique
+  tests now run (previously the module only exercised the second, redundant
+  copy of each test).
+### Changed
+- `README.md` no longer hardcodes a stale version string ("v1.43.x"); points
+  readers to `/VERSION` and `CHANGELOG.md` instead so it can't drift again.
+- `docs/REQUIREMENTS.md` updated to state IPC is ZeroMQ (previously listed as
+  "DBus or ZeroMQ (TBD)"), matching the `IPCBridge` implementation that has
+  been in production for several releases.
+
 ## [1.45.15] - 2026-07-16
 ### Fixed
 - OpenClaw systemd unit now starts the gateway with the explicit foreground

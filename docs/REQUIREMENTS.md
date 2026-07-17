@@ -75,7 +75,7 @@
 - Language: Python 3.11+ (with C extensions where needed)
 - AI runtime: HailoRT
 - Audio: ALSA / PipeWire
-- IPC: DBus or ZeroMQ (TBD)
+- IPC: ZeroMQ (`IPCBridge`, `ipc:///tmp/desktop-assistant.{pub,rep}`) between the `thermal` and `core` systemd units
 - Process mgmt: systemd
 
 ## 5. Out of Scope (initial release)

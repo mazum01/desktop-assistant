@@ -74,7 +74,7 @@ Available skills (25):
 See [`docs/FEATURES.md`](docs/FEATURES.md) for the full CLI / Web / OpenClaw feature matrix.
 
 ## Status
-Active development — v1.43.x. See [CHANGELOG.md](CHANGELOG.md) for history.
+Active development — see `/VERSION` for the current release and [CHANGELOG.md](CHANGELOG.md) for history.
 
 ## License
 Apache 2.0 — see [LICENSE](LICENSE)
