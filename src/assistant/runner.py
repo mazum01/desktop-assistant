@@ -5,9 +5,12 @@ Each systemd unit (thermal, core, …) calls `run_services(...)` with the
 list of `Service` instances it owns. Handles SIGINT/SIGTERM, ordered
 startup, reverse-order shutdown, structured logging, and exit codes.
 
-Each entry point is its own OS process and so has its own
-`MessageBus` — there is no cross-process bus yet. When (if) we need
-inter-process events, we'll add a transport layer here.
+Each entry point is its own OS process and so has its own `MessageBus`.
+Cross-process events flow through `src/services/ipc_bridge.py`'s ZeroMQ
+PUB/SUB + REQ/REP bridge (already used between `thermal` and `core`).
+`src/core/process_node.py`'s `ProcessNode` wraps this runner + the bridge
+together for any future service group that needs to run as its own
+process — see docs/architecture/PROCESS_ISOLATION_PROPOSAL.md.
 """
 
 from __future__ import annotations

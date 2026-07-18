@@ -4,6 +4,35 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.18] - 2026-07-18
+### Added
+- `docs/architecture/PROCESS_ISOLATION_PROPOSAL.md` — ADR-style design
+  document answering "should VERA adopt ROS2?" (no — recommends
+  generalizing the existing proven ZeroMQ `IPCBridge` pattern instead),
+  documenting the Hailo single-VDevice-per-process hard constraint, the
+  `WebService` 14-service/68-call-site coupling that blocks a naive `web`
+  process split, a proposed 7-group target topology, and a phased rollout
+  plan (starting with the low-risk `media` group).
+- `src/core/process_node.py` — `ProcessNode`, a reusable wrapper combining
+  a `MessageBus` + `IPCBridge` + `run_services()` so future service-group
+  processes don't need to hand-rederive the `thermal_main.py` wiring.
+- `src/core/ipc_client.py` — `IPCClient`, a reusable REQ-socket client
+  (`call()`/`ping()`) that dedupes the boilerplate currently duplicated
+  between the CLI's `_request()`/`_thermal_request()` helpers (not yet
+  wired into the CLI — left as a documented follow-up).
+- `tests/test_process_node.py` — 4 integration tests binding two real,
+  independently-addressed `ProcessNode` instances over `ipc://` sockets,
+  proving cross-process event forwarding, RPC dispatch, `ping()`, and
+  clean timeout behavior against a non-listening endpoint.
+### Changed
+- `src/assistant/runner.py` docstring corrected — it previously claimed
+  "there is no cross-process bus yet," which has been inaccurate since
+  `IPCBridge` shipped and went into production for the thermal↔core split;
+  now references `IPCBridge` and `ProcessNode` directly.
+### Notes
+- This is design + tested scaffolding only. No production service has been
+  extracted into a new process, and the CLI was not modified.
+
 ## [1.45.17] - 2026-07-18
 ### Added
 - `docs/ARCHITECTURE_REVIEW.md` — full architecture review (source of truth),
