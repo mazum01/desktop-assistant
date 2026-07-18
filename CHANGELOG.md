@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.45.17] - 2026-07-18
+### Added
+- `docs/ARCHITECTURE_REVIEW.md` — full architecture review (source of truth),
+  covering the current runtime footprint, comparison against VERA's own
+  requirements/phases docs, comparison against comparable open-source
+  projects (Home Assistant, Mycroft/OVOS, Rhasspy/Wyoming, Frigate), ranked
+  strengths/weaknesses, and prioritized software + hardware recommendations.
+- `docs/ARCHITECTURE_REVIEW.pdf` — Letter-sized (8.5"x11"), printable render
+  of the above for offline/print reference.
+
 ## [1.45.16] - 2026-07-16
 ### Fixed
 - `tests/test_yale_service.py` had its entire back half (get_reading through
