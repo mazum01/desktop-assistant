@@ -7,10 +7,13 @@ Services monitored
 ------------------
 * desktop-assistant-core    — systemctl + HTTP ping (localhost:8080/health)
 * desktop-assistant-thermal — systemctl only (no HTTP interface)
-* desktop-assistant-media   — systemctl only (no HTTP interface; music +
+* desktop-assistant-media   — systemctl --user only (no HTTP interface; music +
                               podcast playback, split out of core per
                               docs/architecture/PROCESS_ISOLATION_PROPOSAL.md
-                              Phase 1)
+                              Phase 1). Installed as a --user unit rather than
+                              system-wide because this box's passwordless sudo
+                              is scoped to a fixed command list that doesn't
+                              cover daemon-reload/enable for new units.
 * openclaw-gateway          — systemctl + HTTP ping (localhost:18789)
                               + journal scan for stuck "Bot not initialized" loop
                               + max-uptime restart (Telegram polling-stall guard)
@@ -155,16 +158,26 @@ class ManagedService:
     # running longer than this many minutes.  Guards against silent polling stalls
     # (e.g. openclaw Telegram ingress dying after a long agentic session).
     max_uptime_min: Optional[int] = None
+    # True for units installed in the user's own systemd instance
+    # (~/.config/systemd/user/) rather than system-wide (/etc/systemd/system/).
+    # Uses `systemctl --user` (no sudo needed/possible) for both status checks
+    # and restarts. desktop-assistant-media.service runs this way on boxes
+    # where passwordless sudo is scoped to a fixed command list that doesn't
+    # include daemon-reload/enable for new units.
+    user_unit: bool = False
 
     # Runtime state — not part of config
     last_restart_ts: float = field(default=-1.0, init=False, repr=False)
     consecutive_failures: int = field(default=0, init=False, repr=False)
     last_failure_reason: str = field(default="", init=False, repr=False)
 
+    def _systemctl_base(self) -> list[str]:
+        return ["systemctl", "--user"] if self.user_unit else ["systemctl"]
+
     def is_systemd_active(self) -> bool:
         try:
             result = subprocess.run(
-                ["systemctl", "is-active", self.unit],
+                [*self._systemctl_base(), "is-active", self.unit],
                 capture_output=True, text=True, timeout=5,
             )
             return result.returncode == 0
@@ -319,7 +332,7 @@ class ManagedService:
         """Return the MainPID systemd has recorded for this unit, or None."""
         try:
             result = subprocess.run(
-                ["systemctl", "show", self.unit, "-p", "MainPID", "--value"],
+                [*self._systemctl_base(), "show", self.unit, "-p", "MainPID", "--value"],
                 capture_output=True, text=True, timeout=5,
             )
             pid = int(result.stdout.strip() or 0)
@@ -389,9 +402,14 @@ class ManagedService:
         log.info("Restarting %s …", self.unit)
         self._kill_extra_processes()
         self._kill_orphan_port_holder()
+        # User-manager units restart via the user's own systemd instance —
+        # no sudo needed (and none of our fixed passwordless sudo entries
+        # cover arbitrary units anyway).
+        cmd = [*self._systemctl_base(), "restart", self.unit] if self.user_unit \
+            else ["sudo", "systemctl", "restart", self.unit]
         try:
             result = subprocess.run(
-                ["sudo", "systemctl", "restart", self.unit],
+                cmd,
                 capture_output=True, text=True, timeout=30,
             )
             if result.returncode == 0:
@@ -645,6 +663,10 @@ def main() -> int:
         ),
         ManagedService(
             unit="desktop-assistant-media.service",
+            # This box's passwordless sudo doesn't cover daemon-reload/enable
+            # for new units, so media runs as a --user unit; see the
+            # user_unit field docstring above.
+            user_unit=True,
         ),
         ManagedService(
             unit="openclaw-gateway.service",

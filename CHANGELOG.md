@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.46.1] - 2026-07-18
+### Fixed
+- **Watchdog couldn't correctly monitor/restart a `--user`-manager systemd
+  unit.** `ManagedService` always shelled out to plain `systemctl`
+  (system manager) and `sudo systemctl restart` for restarts. Added a
+  `user_unit: bool` field; when set, health checks use `systemctl --user`
+  and restarts skip `sudo` entirely (a user's own systemd instance doesn't
+  need or accept it). Needed because `desktop-assistant-media.service`
+  (new in 1.46.0) is installed as a `--user` unit on boxes where
+  passwordless sudo is scoped to a fixed command list that doesn't cover
+  `daemon-reload`/`enable` for newly-added units — installing it as a
+  system unit wasn't possible without an interactive sudo password.
+  `src/watchdog/watchdog.py`'s media `ManagedService` entry now sets
+  `user_unit=True`. Added 4 regression tests in `tests/test_watchdog.py`.
+
 ## [1.46.0] - 2026-07-18
 ### Added
 - **Process Isolation Phase 1 — `media` process**: `MusicService` and

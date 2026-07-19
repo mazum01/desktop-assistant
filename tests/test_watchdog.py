@@ -32,6 +32,22 @@ class TestManagedServiceSystemd:
         with patch("subprocess.run", side_effect=OSError("no systemctl")):
             assert svc.is_systemd_active() is False
 
+    def test_user_unit_checks_via_systemctl_user(self):
+        svc = ManagedService(unit="fake.service", user_unit=True)
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            assert svc.is_systemd_active() is True
+        args = mock_run.call_args[0][0]
+        assert args[:3] == ["systemctl", "--user", "is-active"]
+
+    def test_system_unit_checks_via_plain_systemctl(self):
+        svc = ManagedService(unit="fake.service", user_unit=False)
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            svc.is_systemd_active()
+        args = mock_run.call_args[0][0]
+        assert args[:2] == ["systemctl", "is-active"]
+
 
 class TestManagedServiceHttp:
     def test_no_http_check_always_healthy(self):
@@ -113,6 +129,23 @@ class TestManagedServiceRestart:
             mock_run.return_value = MagicMock(returncode=1, stderr="error")
             ok = svc.restart()
         assert ok is False
+
+    def test_user_unit_restart_skips_sudo(self):
+        svc = ManagedService(unit="fake.service", user_unit=True)
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            ok = svc.restart()
+        assert ok is True
+        args = mock_run.call_args[0][0]
+        assert args == ["systemctl", "--user", "restart", "fake.service"]
+
+    def test_system_unit_restart_uses_sudo(self):
+        svc = ManagedService(unit="fake.service", user_unit=False)
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            svc.restart()
+        args = mock_run.call_args[0][0]
+        assert args == ["sudo", "systemctl", "restart", "fake.service"]
 
 
 # ---------------------------------------------------------------------------

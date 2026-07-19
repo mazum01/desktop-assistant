@@ -1,6 +1,14 @@
 [Unit]
 Description=VERA — media services (Pandora + podcasts)
 Documentation=https://github.com/mazum01/desktop-assistant
+# NOTE: this is the canonical system-level unit (requires root to install:
+# cp into /etc/systemd/system/, daemon-reload, enable --now). On boxes where
+# passwordless sudo is scoped to a fixed command list that doesn't cover
+# those operations, install this as a --user unit instead
+# (~/.config/systemd/user/desktop-assistant-media.service, dropping
+# User=/Group=/SupplementaryGroups= and using `systemctl --user`/
+# `WantedBy=default.target`) — see watchdog.py's ManagedService(user_unit=True)
+# for the corresponding monitoring-side support.
 After=network.target sound.target desktop-assistant-core.service
 # Wants= (not Requires=): media can run standalone in dev, but in
 # production core will already be up (its IPCBridge is the upstream
