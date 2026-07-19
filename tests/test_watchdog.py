@@ -48,6 +48,26 @@ class TestManagedServiceSystemd:
         args = mock_run.call_args[0][0]
         assert args[:2] == ["systemctl", "is-active"]
 
+    def test_user_unit_injects_runtime_dir_env(self):
+        # Watchdog runs as a system unit (no login-session bus), so
+        # `systemctl --user` needs XDG_RUNTIME_DIR/DBUS_SESSION_BUS_ADDRESS
+        # injected explicitly rather than relying on ambient environment.
+        svc = ManagedService(unit="fake.service", user_unit=True)
+        with patch("subprocess.run") as mock_run, \
+             patch("os.getuid", return_value=1000):
+            mock_run.return_value = MagicMock(returncode=0)
+            svc.is_systemd_active()
+        env = mock_run.call_args.kwargs["env"]
+        assert env["XDG_RUNTIME_DIR"] == "/run/user/1000"
+        assert "DBUS_SESSION_BUS_ADDRESS" in env
+
+    def test_system_unit_passes_no_explicit_env(self):
+        svc = ManagedService(unit="fake.service", user_unit=False)
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            svc.is_systemd_active()
+        assert mock_run.call_args.kwargs["env"] is None
+
 
 class TestManagedServiceHttp:
     def test_no_http_check_always_healthy(self):

@@ -174,11 +174,32 @@ class ManagedService:
     def _systemctl_base(self) -> list[str]:
         return ["systemctl", "--user"] if self.user_unit else ["systemctl"]
 
+    def _systemctl_env(self) -> Optional[dict]:
+        """Environment for `systemctl --user` subprocess calls.
+
+        The watchdog itself typically runs as a *system* unit (spawned by
+        PID 1, even with User=starter) rather than inside the user's login
+        session, so it has no XDG_RUNTIME_DIR / DBUS_SESSION_BUS_ADDRESS —
+        `systemctl --user` fails without them ("$DBUS_SESSION_BUS_ADDRESS
+        and $XDG_RUNTIME_DIR not defined"). Inject them explicitly rather
+        than depend on the watchdog's own service file/ambient environment.
+        """
+        if not self.user_unit:
+            return None
+        env = dict(os.environ)
+        env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+        env.setdefault(
+            "DBUS_SESSION_BUS_ADDRESS",
+            f"unix:path={env['XDG_RUNTIME_DIR']}/bus",
+        )
+        return env
+
     def is_systemd_active(self) -> bool:
         try:
             result = subprocess.run(
                 [*self._systemctl_base(), "is-active", self.unit],
                 capture_output=True, text=True, timeout=5,
+                env=self._systemctl_env(),
             )
             return result.returncode == 0
         except Exception:
@@ -334,6 +355,7 @@ class ManagedService:
             result = subprocess.run(
                 [*self._systemctl_base(), "show", self.unit, "-p", "MainPID", "--value"],
                 capture_output=True, text=True, timeout=5,
+                env=self._systemctl_env(),
             )
             pid = int(result.stdout.strip() or 0)
             return pid or None
@@ -411,6 +433,7 @@ class ManagedService:
             result = subprocess.run(
                 cmd,
                 capture_output=True, text=True, timeout=30,
+                env=self._systemctl_env(),
             )
             if result.returncode == 0:
                 self.last_restart_ts = time.monotonic()

@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.46.2] - 2026-07-18
+### Fixed
+- **`systemctl --user` calls from the watchdog failed** with
+  `$DBUS_SESSION_BUS_ADDRESS and $XDG_RUNTIME_DIR not defined`. The
+  watchdog runs as a *system* unit (spawned by PID 1, not inside a login
+  session) even though `User=starter`, so it has no user D-Bus session
+  environment. `ManagedService` now injects `XDG_RUNTIME_DIR`/
+  `DBUS_SESSION_BUS_ADDRESS` explicitly for `user_unit=True` services
+  instead of relying on ambient environment. 2 more regression tests in
+  `tests/test_watchdog.py`.
+
 ## [1.46.1] - 2026-07-18
 ### Fixed
 - **Watchdog couldn't correctly monitor/restart a `--user`-manager systemd
@@ -11,11 +22,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
   (system manager) and `sudo systemctl restart` for restarts. Added a
   `user_unit: bool` field; when set, health checks use `systemctl --user`
   and restarts skip `sudo` entirely (a user's own systemd instance doesn't
-  need or accept it). Needed because `desktop-assistant-media.service`
-  (new in 1.46.0) is installed as a `--user` unit on boxes where
-  passwordless sudo is scoped to a fixed command list that doesn't cover
-  `daemon-reload`/`enable` for newly-added units — installing it as a
-  system unit wasn't possible without an interactive sudo password.
+  need or accept it).
+  Needed in practice: `desktop-assistant-media.service` (new in 1.46.0) is
+  installed as a `--user` unit on boxes where passwordless sudo is scoped
+  to a fixed command list that doesn't cover `daemon-reload`/`enable` for
+  newly-added units — installing it as a system unit wasn't possible
+  without an interactive sudo password.
   `src/watchdog/watchdog.py`'s media `ManagedService` entry now sets
   `user_unit=True`. Added 4 regression tests in `tests/test_watchdog.py`.
 
