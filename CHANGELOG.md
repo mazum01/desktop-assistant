@@ -4,6 +4,24 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.46.3] - 2026-07-19
+### Fixed
+- **3 Pylance/Pyright errors in `src/services/voice_command_service.py`**
+  (`Cannot access attribute "warm_up"` on `EnergyWakeWordDetector` and
+  `StreamingSTTBackend`). The code already guarded these calls at runtime
+  with `hasattr(...)`, but Pyright doesn't narrow member-access
+  expressions (e.g. `self._wake`) through `hasattr()` the way it does for
+  local variables, so the static checker still flagged them. Rather than
+  work around the checker, `warm_up()` is now a real no-op default method
+  on the `StreamingSTTBackend` ABC and on `EnergyWakeWordDetector` (mirroring
+  the existing `close()` no-op pattern), making it a genuine part of the
+  shared duck-typed backend interface. The 3 call sites in
+  `voice_command_service.py` now call `.warm_up()` directly without
+  defensive `hasattr()` checks. Also annotated `_unsubs` and added a
+  return type to `_build_wake_detector()` to clear an adjacent mypy error.
+  Updated the `_OneShotWake` test fake in
+  `tests/test_voice_command_service.py` to implement the same interface.
+
 ## [1.46.2] - 2026-07-18
 ### Fixed
 - **`systemctl --user` calls from the watchdog failed** with

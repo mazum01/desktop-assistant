@@ -36,6 +36,9 @@ class _OneShotWake:
     def reset(self) -> None:
         return
 
+    def warm_up(self) -> None:
+        return
+
 
 class _StaticSTT(StreamingSTTBackend):
     def __init__(self, transcript: str):

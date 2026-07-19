@@ -42,6 +42,9 @@ class EnergyWakeWordDetector:
     def reset(self) -> None:
         self._hits = 0
 
+    def warm_up(self) -> None:
+        """No model to pre-load for the energy-based detector. No-op."""
+
     def process(self, samples: np.ndarray, sample_rate: int) -> bool:  # noqa: ARG002
         if samples.size == 0:
             self._hits = 0
@@ -258,6 +261,9 @@ class StreamingSTTBackend(ABC):
 
     def close(self) -> None:
         """Release resources if needed."""
+
+    def warm_up(self) -> None:
+        """Optionally pre-load models/resources ahead of first use. No-op by default."""
 
 
 class NullStreamingSTT(StreamingSTTBackend):

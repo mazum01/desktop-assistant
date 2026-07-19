@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 
@@ -102,7 +102,7 @@ class VoiceCommandService(Service):
         self._cmd_started_mono = 0.0
         self._last_voice_mono = 0.0
         self._last_chunk_index = 0
-        self._unsubs = []
+        self._unsubs: list[Callable[[], None]] = []
         self._finalize_thread: Optional[threading.Thread] = None
         self._pre_roll_chunks: deque[np.ndarray] = deque()
         self._refresh_pre_roll_buffer()
@@ -112,7 +112,7 @@ class VoiceCommandService(Service):
         retained = list(self._pre_roll_chunks)[-max_chunks:]
         self._pre_roll_chunks = deque(retained, maxlen=max_chunks)
 
-    def _build_wake_detector(self):
+    def _build_wake_detector(self) -> EnergyWakeWordDetector | OpenWakeWordDetector:
         """Construct a wake detector from current config."""
         backend = str(self._cfg.wake_backend).lower()
         if backend == "openwakeword":
@@ -224,8 +224,7 @@ class VoiceCommandService(Service):
         )
         if wake_changed:
             self._wake = self._build_wake_detector()
-            if hasattr(self._wake, "warm_up"):
-                self._wake.warm_up()
+            self._wake.warm_up()
 
     def _on_set_config(self, _topic: str, payload: dict) -> None:
         if not isinstance(payload, dict):
@@ -249,10 +248,8 @@ class VoiceCommandService(Service):
                 self._cfg.stt_backend,
                 self._cfg.wake_backend,
             )
-            if hasattr(self._wake, "warm_up"):
-                self._wake.warm_up()
-            if hasattr(self._stt, "warm_up"):
-                self._stt.warm_up()
+            self._wake.warm_up()
+            self._stt.warm_up()
 
     def on_stop(self) -> None:
         for unsub in self._unsubs:
