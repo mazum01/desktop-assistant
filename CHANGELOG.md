@@ -4,6 +4,56 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.46.0] - 2026-07-18
+### Added
+- **Process Isolation Phase 1 — `media` process**: `MusicService` and
+  `PodcastService` now run in their own OS process
+  (`src/assistant/media_main.py`, `desktop-assistant-media.service`),
+  implementing Phase 1 of `docs/architecture/PROCESS_ISOLATION_PROPOSAL.md`.
+  Wired via the existing `ProcessNode`/`IPCBridge` pattern proven by
+  `thermal_main.py` — no new IPC framework introduced.
+- `src/core/media_client.py` — `MusicServiceProxy`/`PodcastServiceProxy`,
+  drop-in objects that replicate the real services' public API and forward
+  calls to the media process via `IPCClient` RPCs. `core_main.py` wires
+  these into `WebService` in place of real service instances, so all 27
+  existing `_music_svc`/`_podcast_svc` call sites in `web_service.py`
+  continue to work unmodified.
+- `MusicService.mark_eq_custom()` — new public method replacing a private-
+  attribute reach-in (`_eq_preset = "custom"`) that `web_service.py`
+  previously did directly; now needed since that attribute lives in a
+  different process.
+- `config/assistant.yaml` — new `podcast:` section (`enabled`,
+  `auto_refresh_on_start`).
+- `src/watchdog/watchdog.py` now also monitors
+  `desktop-assistant-media.service` (systemctl-only check, same pattern as
+  thermal).
+- `docs/architecture/architecture.dot` (+ regenerated `.pdf`/`.svg`/`.png`)
+  updated with a new `media` process cluster, bidirectional cross-process
+  IPC edges between core and media, and a `WebService → media IPC` RPC
+  edge.
+- `tests/test_media_process_split.py` — 8 new integration tests covering
+  music/podcast RPC round-trips, bidirectional command forwarding, and
+  proxy graceful-fallback when the media process is unreachable.
+- `tests/test_podcast_service.py` — regression tests for the `stop()`
+  shadowing bug fix below.
+
+### Fixed
+- **`PodcastService.stop()` silently shadowed `Service.stop()`.** The
+  business method for "stop playback" had the same name as the inherited
+  lifecycle method the service runner calls on shutdown, so `on_stop()`,
+  the worker thread join, and the `service.stopped` bus event never fired
+  for `PodcastService`. This was dormant and unnoticed because
+  `PodcastService` had never actually been instantiated in
+  `core_main.py` before this release (see below). Renamed the business
+  method to `stop_playback()`; the external RPC/API name (`podcast.stop`,
+  `PodcastServiceProxy.stop()`) is unchanged.
+- **`PodcastService` was defined but never wired into production.**
+  `web_service.py` accepted a `podcast_service` constructor argument that
+  `core_main.py` never actually passed, so every `/api/podcasts/*` route
+  silently hit the "not configured" fallback in the live assistant. This
+  release wires a real (proxied) `PodcastService` into `core_main.py` for
+  the first time, making podcast search/subscribe/playback functional.
+
 ## [1.45.18] - 2026-07-18
 ### Added
 - `docs/architecture/PROCESS_ISOLATION_PROPOSAL.md` — ADR-style design

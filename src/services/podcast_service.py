@@ -111,7 +111,7 @@ class PodcastService(Service):
         self.bus.publish("podcast.playback", self.status())
 
     def on_stop(self) -> None:
-        self.stop()
+        self.stop_playback()
         log.info("PodcastService stopped")
 
     # ── Public API ────────────────────────────────────────────────────
@@ -296,7 +296,7 @@ class PodcastService(Service):
         if not audio_url:
             raise ValueError("Episode has no audio URL")
 
-        self.stop()
+        self.stop_playback()
         duration_sec = self._duration_to_seconds(ep.get("duration"))
         player_name, proc = self._spawn_player(audio_url=audio_url, start_offset_sec=0.0)
 
@@ -323,7 +323,15 @@ class PodcastService(Service):
         self.bus.publish("podcast.playback", status)
         return status
 
-    def stop(self) -> dict:
+    def stop_playback(self) -> dict:
+        """Stop podcast playback (does not affect subscriptions).
+
+        Named distinctly from the inherited `Service.stop()` lifecycle
+        method (which the runner calls on shutdown) — reusing that name
+        here previously shadowed it, silently skipping `on_stop()`, the
+        thread join, and the `service.stopped` bus event on every service
+        shutdown/restart.
+        """
         with self._lock:
             proc = self._player_proc
             self._player_proc = None

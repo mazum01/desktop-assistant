@@ -1,0 +1,43 @@
+[Unit]
+Description=VERA — media services (Pandora + podcasts)
+Documentation=https://github.com/mazum01/desktop-assistant
+After=network.target sound.target desktop-assistant-core.service
+# Wants= (not Requires=): media can run standalone in dev, but in
+# production core will already be up (its IPCBridge is the upstream
+# media subscribes to for music.*/podcast.* commands from skills/CLI).
+Wants=desktop-assistant-core.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=starter
+Group=starter
+SupplementaryGroups=audio video plugdev
+WorkingDirectory=/home/starter/Code/Desktop Assistant
+Environment=PYTHONUNBUFFERED=1
+Environment="PYTHONPATH=/home/starter/Code/Desktop Assistant"
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=PULSE_SERVER=unix:/run/user/1000/pulse/native
+ExecStart=/usr/bin/python3 -m src.assistant.media_main
+
+Restart=on-failure
+RestartSec=3
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+# NOTE: PrivateTmp must be FALSE — the ZMQ ipc:///tmp/desktop-assistant-media.{pub,rep}
+# sockets are how core's IPCBridge and this process talk to each other,
+# same reasoning as desktop-assistant-core.service.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+PrivateTmp=false
+ReadWritePaths=/tmp /home/starter/.config/pianobar /home/starter/.config/desktop-assistant
+
+[Install]
+WantedBy=multi-user.target

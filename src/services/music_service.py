@@ -199,6 +199,24 @@ class MusicService(Service):
             log.warning("MusicService: failed to persist EQ preset: %s", exc)
         log.info("EQ preset changed to %r", preset)
 
+    def mark_eq_custom(self) -> None:
+        """Record that the active EQ is a user-defined custom curve.
+
+        Unlike `set_eq_preset()`, this does NOT re-publish `av.set_eq_preset`
+        (the caller — the `/api/music/eq/custom` route — already published
+        `av.set_custom_eq` with the actual band values; re-publishing here
+        would tell AVService to switch to a *named* "custom" preset with no
+        bands, clobbering what was just set). Only updates the tracked
+        preset name (for `eq_preset`/`/api/music/status`) and persists it so
+        the "custom" selection survives daemon restarts.
+        """
+        self._eq_preset = "custom"
+        try:
+            _DA_STATE_DIR.mkdir(parents=True, exist_ok=True)
+            _MUSIC_EQ_STATE_FILE.write_text("custom")
+        except Exception as exc:
+            log.warning("MusicService: failed to persist EQ preset: %s", exc)
+
     # ── Lifecycle ─────────────────────────────────────────────────────
 
     def on_start(self) -> None:

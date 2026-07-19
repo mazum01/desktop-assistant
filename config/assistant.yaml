@@ -117,6 +117,9 @@ object_detection:
   enabled: true
   max_fps: 1.5
   max_objects: 8
+podcast:
+  auto_refresh_on_start: false
+  enabled: true
 privacy:
   announce: false
   announce_text: I'll give you some privacy.

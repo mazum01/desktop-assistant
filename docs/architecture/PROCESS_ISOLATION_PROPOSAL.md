@@ -1,8 +1,8 @@
 ---
 title: Process Isolation Proposal — Fixing VERA's Monolithic Core
 date: 2026-07-18
-version: 1.45.18
-status: Proposed — scaffolding implemented and tested; no production cutover yet
+version: 1.46.0
+status: Phase 1 (media) implemented and live — see §6 update below
 ---
 
 # Process Isolation Proposal
@@ -10,8 +10,12 @@ status: Proposed — scaffolding implemented and tested; no production cutover y
 **Companion to:** `docs/ARCHITECTURE_REVIEW.md` §5.1 ("Monolithic single-process
 core with 116 threads")
 **Status:** Design + reusable scaffolding + integration tests are complete
-and merged. **No live service has been moved out of `desktop-assistant-core`
-yet** — this document proposes *how* and *in what order* to do that safely.
+and merged. **Phase 1 (`media`) has been implemented** — `MusicService` and
+`PodcastService` now run in their own `desktop-assistant-media.service`
+process, wired via the same `ProcessNode`/`IPCBridge` pattern this document
+proposed. See the "Phase 1 — implementation notes" callout in §6 for what
+actually shipped, including one real bug this split surfaced and fixed.
+`web`/`integrations`/`audio-voice` (Phases 2-4) remain unstarted.
 
 ---
 
@@ -215,7 +219,7 @@ biggest win on paper.**
 
 1. **Phase 0 (done):** `ProcessNode` + `IPCClient` scaffolding, integration
    tests. No behavior change to the running system.
-2. **Phase 1 — `media`:** Extract `MusicService` + `PodcastService` into
+2. **Phase 1 — `media` (done):** Extract `MusicService` + `PodcastService` into
    `src/assistant/media_main.py` + `desktop-assistant-media.service`. These
    have no cross-service object coupling today, so this is close to a pure
    "wrap in ProcessNode" change. Update `WebService`'s 27 `_music_svc`/
@@ -223,6 +227,38 @@ biggest win on paper.**
    the new media node. This phase **validates the full pattern end-to-end
    on live hardware** (systemd unit, `Restart=always`, CLI/dashboard talking
    across the new boundary) before touching anything higher-stakes.
+
+   > **Implementation notes (v1.46.0):** Shipped essentially as designed,
+   > with three refinements discovered while building it:
+   > 1. `WebService`'s 27 call sites did **not** need to be rewritten by
+   >    hand. `src/core/media_client.py`'s `MusicServiceProxy`/
+   >    `PodcastServiceProxy` duck-type the exact same public API
+   >    (`state`, `current_song`, `set_volume()`, `search()`, …) and forward
+   >    each call over `IPCClient` to the media node's RPC handlers.
+   >    `WebService` holds these proxies exactly where it used to hold the
+   >    real service objects — zero route-handler changes needed. Only one
+   >    line changed in `web_service.py` (a private-attribute reach-in,
+   >    `_eq_preset = "custom"`, became a new public `MusicService.
+   >    mark_eq_custom()` method, since a private attribute can't be set
+   >    across a process boundary).
+   > 2. Commands stay one-way as designed (skills/CLI publish `music.*`/
+   >    `podcast.*` onto core's bus → forwarded upstream into media, same
+   >    mechanism thermal already used for telemetry — just running in the
+   >    opposite direction). No CLI changes were needed at all: it already
+   >    talked to `music.*`/`podcast.*` through the generic IPCBridge
+   >    `publish`/`last` commands or the HTTP API, both of which keep
+   >    working unmodified.
+   > 3. **`PodcastService` had never actually been wired into
+   >    `desktop-assistant-core.service`** (`web_service.py` accepted a
+   >    `podcast_service` constructor arg that `core_main.py` never passed —
+   >    so every `/api/podcasts/*` route silently 503'd in production). This
+   >    split is the first time podcast search/subscribe/playback
+   >    genuinely works end-to-end. It also surfaced a real bug: `PodcastService`
+   >    defined a business method named `stop()` (stop playback) that had
+   >    the exact same name as the inherited `Service.stop()` lifecycle
+   >    method the runner calls on shutdown — silently shadowing it, so
+   >    `on_stop()`, the thread join, and the `service.stopped` event never
+   >    ran. Renamed to `stop_playback()`; added a regression test.
 3. **Phase 2 — `integrations`:** Extract the cloud/IoT services. Lower risk
    than `web` (fewer inbound dashboard dependencies), and immediately
    isolates flaky third-party API calls (Yale, Nest, DROP, radon) from the

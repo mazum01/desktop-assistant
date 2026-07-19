@@ -7,6 +7,10 @@ Services monitored
 ------------------
 * desktop-assistant-core    — systemctl + HTTP ping (localhost:8080/health)
 * desktop-assistant-thermal — systemctl only (no HTTP interface)
+* desktop-assistant-media   — systemctl only (no HTTP interface; music +
+                              podcast playback, split out of core per
+                              docs/architecture/PROCESS_ISOLATION_PROPOSAL.md
+                              Phase 1)
 * openclaw-gateway          — systemctl + HTTP ping (localhost:18789)
                               + journal scan for stuck "Bot not initialized" loop
                               + max-uptime restart (Telegram polling-stall guard)
@@ -638,6 +642,9 @@ def main() -> int:
         ManagedService(
             unit="desktop-assistant-core.service",
             http_check="http://localhost:8080/health",
+        ),
+        ManagedService(
+            unit="desktop-assistant-media.service",
         ),
         ManagedService(
             unit="openclaw-gateway.service",

@@ -2704,14 +2704,7 @@ class WebService:
                 self.bus.publish("av.set_custom_eq", {"bands": bands})
                 # Also update music_svc eq_preset tracker so UI stays consistent
                 if self._music_svc:
-                    self._music_svc._eq_preset = "custom"
-                    # Persist so the "custom" selection survives daemon restarts.
-                    try:
-                        _p = Path.home() / ".config" / "desktop-assistant" / "music_eq_preset.txt"
-                        _p.parent.mkdir(parents=True, exist_ok=True)
-                        _p.write_text("custom")
-                    except Exception:
-                        pass
+                    self._music_svc.mark_eq_custom()
             return {"ok": True, "bands": bands}
 
         class _MusicPlayBody(BaseModel):

@@ -20,6 +20,32 @@ def test_podcast_service_instantiation():
     assert svc.status()["state"] == "stopped"
 
 
+def test_lifecycle_stop_is_not_shadowed_by_stop_playback(tmp_path, monkeypatch):
+    """Regression test: PodcastService previously defined a business method
+    named `stop()` (stop playback) that had the exact same name as the
+    inherited `Service.stop()` lifecycle method the runner calls on
+    shutdown. That silently shadowed it — `on_stop()`/thread-join/the
+    `service.stopped` bus event never ran, and calling `svc.stop()` from
+    the runner just stopped podcast playback instead of the service.
+
+    The business method is now `stop_playback()`; `stop()` must remain the
+    unmodified `Service` lifecycle method."""
+    monkeypatch.setattr(podcast_module, "_STATE_DIR", tmp_path)
+    monkeypatch.setattr(podcast_module, "_PODCASTS_STATE_FILE", tmp_path / "podcasts.json")
+
+    svc = PodcastService(bus=MessageBus())
+    events = []
+    svc.bus.subscribe("service.stopped", lambda _t, payload: events.append(payload))
+
+    svc.start()
+    assert svc.is_running() is True
+
+    svc.stop()
+
+    assert svc.is_running() is False
+    assert events == [{"name": "podcast"}]
+
+
 def test_subscribe_unsubscribe_roundtrip(tmp_path, monkeypatch):
     """Subscribe/unsubscribe updates in-memory subscription list."""
     monkeypatch.setattr(podcast_module, "_STATE_DIR", tmp_path)
@@ -97,3 +123,34 @@ def test_seek_and_skip_update_position(monkeypatch):
     monkeypatch.setattr(podcast_module.time, "monotonic", lambda: 111.0)
     out2 = svc.skip(30.0)
     assert out2["position_sec"] == pytest.approx(71.0, abs=0.75)
+
+
+def test_stop_playback_terminates_process_and_resets_state():
+    """`stop_playback()` (the business "stop podcast playback" action,
+    distinct from the `Service.stop()` lifecycle method) terminates the
+    active player process and resets playback state to stopped."""
+    svc = PodcastService(bus=MessageBus())
+
+    class _Proc:
+        def __init__(self):
+            self.terminated = False
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            return None
+
+        def kill(self):
+            pass
+
+    proc = _Proc()
+    svc._player_proc = proc
+    svc._player_name = "mpv"
+    svc._playback.update({"state": "playing", "paused": False})
+
+    out = svc.stop_playback()
+
+    assert proc.terminated is True
+    assert out["state"] == "stopped"
+    assert svc._player_proc is None

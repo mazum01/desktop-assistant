@@ -16,6 +16,8 @@ import sys
 
 from src.assistant.runner import run_services
 from src.core.bus import MessageBus
+from src.core.ipc_client import IPCClient
+from src.core.media_client import MusicServiceProxy, PodcastServiceProxy
 from src.services.audio_capture_service import AudioCaptureService, AudioCaptureConfig
 from src.services.av_service import AVService
 from src.services.clock_service import ClockService
@@ -23,7 +25,6 @@ from src.services.face_service import FaceService
 from src.services.ipc_bridge import IPCBridge
 from src.services.iot_service import IoTService
 from src.services.motion_service import MotionService
-from src.services.music_service import MusicService
 from src.services.object_service import ObjectService, ObjectConfig
 from src.services.perception_service import PerceptionService, PerceptionConfig
 from src.services.raw_camera_service import RawCameraService, RawCameraConfig
@@ -47,6 +48,14 @@ from src.services.privacy_service import PrivacyService, PrivacyConfig
 # this endpoint; we SUBscribe to it from the core IPCBridge and re-emit
 # events on our local bus so the CLI sees thermal.* topics in `status`.
 _THERMAL_PUB = "ipc:///tmp/desktop-assistant-thermal.pub"
+
+# The media service (music + podcasts) also runs in a separate process
+# (Phase 1 of docs/architecture/PROCESS_ISOLATION_PROPOSAL.md). Same
+# upstream-forwarding pattern as thermal, plus a REP endpoint core calls
+# into (via MusicServiceProxy/PodcastServiceProxy) for synchronous reads
+# and actions that WebService needs a return value from.
+_MEDIA_PUB = "ipc:///tmp/desktop-assistant-media.pub"
+_MEDIA_REP = "ipc:///tmp/desktop-assistant-media.rep"
 
 
 def main() -> int:
@@ -299,7 +308,7 @@ def main() -> int:
                         servo_min_deg=_soft_min_deg, servo_max_deg=_soft_max_deg)
     ipc = IPCBridge(
         bus=bus,
-        upstream_endpoints=[_THERMAL_PUB],
+        upstream_endpoints=[_THERMAL_PUB, _MEDIA_PUB],
     )
     ipc.register_rpc("tts_duration", lambda msg: {
         "ok": True,
@@ -315,12 +324,9 @@ def main() -> int:
         pulse_max_us=int(_servo_cfg.get("pulse_max_us", 2500)),
     )
 
-    _music_cfg = _cfg.get("music", {})
-    music_svc = MusicService(
-        bus=bus,
-        enabled=bool(_music_cfg.get("enabled", True)),
-        announce_song_changes=bool(_music_cfg.get("announce_song_changes", False)),
-    )
+    _media_client = IPCClient(_MEDIA_REP)
+    music_proxy = MusicServiceProxy(_media_client)
+    podcast_proxy = PodcastServiceProxy(_media_client)
 
     # Second camera (optional — gracefully absent if not configured or detected)
     _cam2_cfg_raw = _cfg.get("camera2", {})
@@ -407,7 +413,6 @@ def main() -> int:
             quiet_hours=_qh,
             guest_intro_delay_min=0.0,  # gate is now in PerceptionService
         ),
-        music_svc,
     ]
     skills_svc = SkillsService(bus=bus, quiet_hours=_qh)
     services.append(skills_svc)
@@ -525,7 +530,8 @@ def main() -> int:
         room_svc = next((s for s in services if getattr(s, "name", "") == "room"), None)
         web_svc = WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
                              quiet_hours=_qh, motion_service=motion_svc,
-                             tracking_service=tracking_svc, music_service=music_svc,
+                             tracking_service=tracking_svc, music_service=music_proxy,
+                             podcast_service=podcast_proxy,
                              camera2_service=cam2_svc, object_service=obj_svc,
                              skills_service=skills_svc, perception_service=perc_svc,
                              dense_stereo_service=dense_stereo_svc,
