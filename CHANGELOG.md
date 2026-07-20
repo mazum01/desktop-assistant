@@ -4,6 +4,34 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.46.5] - 2026-07-20
+### Fixed
+- **Removed the redundant legacy system-wide `openclaw-gateway.service` unit**
+  (`services/systemd/openclaw-gateway.service`) from the repo, and documented
+  that the gateway is exclusively owned by the `openclaw` CLI's own per-user
+  systemd unit (`openclaw daemon install`, `~/.config/systemd/user/`). Having
+  both a hand-rolled system unit (deployed early in this project, before
+  OpenClaw shipped its own systemd integration) and the CLI's user unit
+  enabled and racing for port 18789 was the underlying condition that made
+  the 1.46.4 watchdog bug possible in the first place. Updated
+  `services/systemd/README.md` with an explicit warning against
+  reintroducing a system-level unit of the same name.
+### Ops
+- Diagnosed two Raspberry Pi OS vendor systemd drop-ins that were silently
+  overriding the intended fixes from the 1.46.4 investigation:
+  `/usr/lib/systemd/journald.conf.d/40-rpi-volatile-storage.conf` forces
+  `Storage=volatile` (protects SD cards from wear — moot on this box, which
+  boots from NVMe), so a plain edit to `/etc/systemd/journald.conf` was
+  silently losing to it. Fix requires a same-or-higher-precedence drop-in
+  under `/etc/systemd/journald.conf.d/` (e.g. `50-persistent-storage.conf`)
+  rather than editing the base file. Separately, confirmed the hardware
+  watchdog is already active via the RPi vendor drop-in
+  `/usr/lib/systemd/system.conf.d/40-rpi-enable-watchdog.conf`
+  (`RuntimeWatchdogSec=1m`, `RebootWatchdogSec=2m`,
+  `/sys/class/watchdog/watchdog0/state=active`) — no further action needed
+  there; a plain edit to `/etc/systemd/system.conf` requesting a tighter 20s
+  interval was similarly overridden and is inert.
+
 ## [1.46.4] - 2026-07-20
 ### Fixed
 - **Watchdog was force-killing a perfectly healthy `openclaw-gateway` process

@@ -45,6 +45,20 @@ sudo systemctl stop  desktop-assistant-core desktop-assistant-thermal
 sudo systemctl disable desktop-assistant-core desktop-assistant-thermal
 ```
 
+## OpenClaw gateway
+
+`openclaw-gateway.service` is **not** managed from this directory. It is
+installed and owned by the `openclaw` CLI itself as a per-user systemd unit
+(`~/.config/systemd/user/openclaw-gateway.service`), via `openclaw daemon
+install`. Use `systemctl --user restart openclaw-gateway.service` to manage
+it — never install a system-wide unit of the same name here, since a
+duplicate system-level unit fighting the CLI's user unit for port 18789
+caused a real production incident (watchdog SIGKILLed the healthy
+CLI-managed gateway because it queried the wrong systemd manager — see
+CHANGELOG 1.46.4). A legacy hand-rolled system unit used to live at
+`services/systemd/openclaw-gateway.service`; it has been removed from this
+repo for that reason.
+
 ## Notes
 
 - Both units run as user `starter`, group `starter`, with supplementary
