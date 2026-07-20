@@ -282,3 +282,38 @@ class TestWatchdogTelegramNotify:
             wd._check_one(svc)
             assert mock_oc.call_count >= 1
             assert mock_tg.call_count >= 1
+
+
+# ---------------------------------------------------------------------------
+# main() service wiring — regression test for the openclaw user_unit bug
+# ---------------------------------------------------------------------------
+
+class TestMainServiceWiring:
+    def test_openclaw_gateway_is_wired_as_user_unit(self):
+        """The real openclaw-gateway process runs under the *user* systemd
+        instance (auto-installed by the `openclaw` CLI), not the legacy
+        system-wide unit of the same name. If this ManagedService entry isn't
+        marked user_unit=True, is_systemd_active()/_systemd_main_pid() query
+        the wrong (system) manager, which has no knowledge of the real
+        process — making _kill_orphan_port_holder() treat the healthy
+        gateway as an orphan and SIGKILL it (observed in production: forced
+        kills + restart races every ~90 min, tied to max_uptime_min).
+        """
+        import src.watchdog.watchdog as wd_module
+
+        captured = {}
+
+        class _CapturingWatchdog:
+            def __init__(self, services, **kwargs):
+                captured["services"] = services
+
+            def run(self):
+                return None
+
+        with patch.object(wd_module, "_load_config", return_value={}), \
+             patch.object(wd_module, "Watchdog", _CapturingWatchdog):
+            wd_module.main()
+
+        services_by_unit = {s.unit: s for s in captured["services"]}
+        openclaw_svc = services_by_unit["openclaw-gateway.service"]
+        assert openclaw_svc.user_unit is True

@@ -700,6 +700,18 @@ def main() -> int:
             stuck_threshold=stuck_threshold,
             require_systemd_active=bool(wd_cfg.get("openclaw_require_systemd_active", True)),
             max_uptime_min=max_uptime_min,
+            # The gateway actually runs as a --user unit (auto-installed by the
+            # `openclaw` CLI itself, ~/.config/systemd/user/). A legacy *system*
+            # unit of the same name also exists and is enabled, but it always
+            # loses the port race and exits 78. Before this fix, user_unit
+            # defaulted to False here, so _systemd_main_pid()/is_systemd_active()
+            # queried the SYSTEM manager, which has no knowledge of the real
+            # (user-managed) process. That made _kill_orphan_port_holder()
+            # always see main_pid=None != port_pid, treat the perfectly healthy
+            # gateway as an "orphan", and SIGKILL it — every time max_uptime_min
+            # tripped (~90 min), causing a forced kill + restart race between
+            # the two duplicate units fighting over port 18789.
+            user_unit=True,
         ),
     ]
 

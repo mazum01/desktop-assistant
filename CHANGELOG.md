@@ -4,6 +4,31 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.46.4] - 2026-07-20
+### Fixed
+- **Watchdog was force-killing a perfectly healthy `openclaw-gateway` process
+  every ~90 minutes, causing a restart race and (suspected) contributing to
+  the reported intermittent system lockups (web GUI/VNC/SSH all timing out).**
+  Two systemd units named `openclaw-gateway.service` exist on this box: a
+  legacy *system* unit installed by this repo, and the *user* unit
+  auto-installed by the `openclaw` CLI itself — only the user unit actually
+  wins the port race and runs the real gateway. The watchdog's
+  `ManagedService` entry for it was never marked `user_unit=True`, so
+  `_systemd_main_pid()` queried the wrong (system) systemd manager, which has
+  no knowledge of the real process. Every time `openclaw_max_uptime_min`
+  (90 min) tripped, `_kill_orphan_port_holder()` saw `main_pid=None !=
+  port_pid`, concluded the healthy gateway was an unmanaged "orphan", and
+  sent it `sudo kill` → `sudo kill -9` mid-shutdown — followed by a restart
+  race between the two duplicate units both trying to rebind port 18789.
+  Fixed by wiring `user_unit=True` for the `openclaw-gateway.service`
+  `ManagedService` entry, so all systemd queries and restarts now correctly
+  target the user manager that actually owns the process. Also reverted a
+  local config override (`openclaw_require_systemd_active: false`) that had
+  been applied as a band-aid for this same bug — no longer needed now that
+  the systemd-active check targets the right manager. Added a regression
+  test (`TestMainServiceWiring`) asserting `main()` wires the openclaw
+  gateway service with `user_unit=True`.
+
 ## [1.46.3] - 2026-07-19
 ### Fixed
 - **3 Pylance/Pyright errors in `src/services/voice_command_service.py`**
