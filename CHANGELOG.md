@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.46.6] - 2026-07-20
+### Docs
+- Brought the top-level `README.md` back in sync with the actual repo: fixed
+  the hardware list (dual mics → Seeed Studio ReSpeaker Flex XVF3800 6-mic
+  array), added the six `src/` subdirectories missing from Repo Layout
+  (`iot`, `services`, `skills`, `voice`, `watchdog`, `web`), noted the
+  multi-process systemd topology (`core`/`thermal`/`media`/`watchdog`), linked
+  `docs/ARCHITECTURE_REVIEW.md` and `docs/architecture/PROCESS_ISOLATION_PROPOSAL.md`
+  from the Documents section, and corrected the OpenClaw skills table
+  (25 → 26; removed three skills that don't exist in `.github/skills/`
+  — `person-seek`, `email-monitor`, `faces` — and added four real ones that
+  were missing — `audio`, `podcast`, `restart-daemon`, `security-scan`).
+
 ## [1.46.5] - 2026-07-20
 ### Fixed
 - **Removed the redundant legacy system-wide `openclaw-gateway.service` unit**
