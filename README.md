@@ -51,9 +51,10 @@ tests/           unit and integration tests
 
 VERA is split across several independent OS processes (ZeroMQ IPC), not one
 monolith: `desktop-assistant-core`, `desktop-assistant-thermal`,
-`desktop-assistant-media`, and `desktop-assistant-watchdog` are separate
-systemd units today, with more services planned to move out of `core` per
-the [Process Isolation Proposal](docs/architecture/PROCESS_ISOLATION_PROPOSAL.md).
+`desktop-assistant-media`, `desktop-assistant-integrations`, and
+`desktop-assistant-watchdog` are separate systemd units today, with more
+services (IoT, Skills) planned to move out of `core` per the
+[Process Isolation Proposal](docs/architecture/PROCESS_ISOLATION_PROPOSAL.md).
 
 ## OpenClaw Integration
 Natural-language control via Telegram using the [OpenClaw](https://openclaw.dev)

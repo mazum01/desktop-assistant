@@ -14,6 +14,10 @@ Services monitored
                               system-wide because this box's passwordless sudo
                               is scoped to a fixed command list that doesn't
                               cover daemon-reload/enable for new units.
+* desktop-assistant-integrations — systemctl --user only (no HTTP interface;
+                              Telegram + Notification + Clock, split out of
+                              core per docs/architecture/PROCESS_ISOLATION_PROPOSAL.md
+                              Phase 2a). Same --user-unit constraint as media.
 * openclaw-gateway          — systemctl + HTTP ping (localhost:18789)
                               + journal scan for stuck "Bot not initialized" loop
                               + max-uptime restart (Telegram polling-stall guard)
@@ -689,6 +693,13 @@ def main() -> int:
             # This box's passwordless sudo doesn't cover daemon-reload/enable
             # for new units, so media runs as a --user unit; see the
             # user_unit field docstring above.
+            user_unit=True,
+        ),
+        ManagedService(
+            unit="desktop-assistant-integrations.service",
+            # Telegram + Notification + Clock, split out of core per
+            # docs/architecture/PROCESS_ISOLATION_PROPOSAL.md Phase 2a.
+            # Same --user-unit constraint as media (see above).
             user_unit=True,
         ),
         ManagedService(

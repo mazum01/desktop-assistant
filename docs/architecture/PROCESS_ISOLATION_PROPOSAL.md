@@ -1,8 +1,8 @@
 ---
 title: Process Isolation Proposal — Fixing VERA's Monolithic Core
 date: 2026-07-18
-version: 1.46.0
-status: Phase 1 (media) implemented and live — see §6 update below
+version: 1.47.0
+status: Phase 1 (media) and Phase 2a (integrations) implemented and live — see §6 update below
 ---
 
 # Process Isolation Proposal
@@ -13,9 +13,13 @@ core with 116 threads")
 and merged. **Phase 1 (`media`) has been implemented** — `MusicService` and
 `PodcastService` now run in their own `desktop-assistant-media.service`
 process, wired via the same `ProcessNode`/`IPCBridge` pattern this document
-proposed. See the "Phase 1 — implementation notes" callout in §6 for what
-actually shipped, including one real bug this split surfaced and fixed.
-`web`/`integrations`/`audio-voice` (Phases 2-4) remain unstarted.
+proposed. **Phase 2a (`integrations`) has also been implemented** —
+`TelegramService`, `NotificationService`, and `ClockService` now run in their
+own `desktop-assistant-integrations.service` process. See the "Phase 1" and
+"Phase 2a" implementation-notes callouts in §6 for what actually shipped,
+including two real bugs these splits surfaced and fixed.
+`IoTService`/`SkillsService` (Phase 2b), `web` (Phase 3), and `audio-voice`
+(Phase 4) remain unstarted.
 
 ---
 
@@ -158,8 +162,8 @@ grouping below is built around.
 | `watchdog` *(exists today, unchanged)* | External supervisor (`src/watchdog/watchdog.py`) | Already isolated; monitors the others via `systemctl` + HTTP, not the bus |
 | `vision-hailo` | `VisionService`, `FaceService`, `ObjectService`, `PerceptionService`, `TrackingService`, `MonoDepthService`, `StereoService`, `DenseStereoService`, `PrivacyService`, `RoomService`, `MotionService` (servo) | **Must** share the Hailo `VDevice` singleton (§3); servo/tracking are latency-coupled to vision output, and `ipc://` (Unix domain socket) round trips are sub-millisecond, so keeping `MotionService` here vs. splitting it further costs nothing in practice |
 | `audio-voice` | `AudioCaptureService`, `VoiceCommandService`, `AVService` (TTS/output) | Wake-word → STT → intent → TTS is the most latency-sensitive path in the system (NFR: ≤1.5s wake-to-response); keep it in one process to avoid adding any IPC hop to the critical path |
-| `media` | `MusicService`, `PodcastService` | Loosely coupled, no cross-service object references, no hardware contention — **lowest-risk first extraction candidate** |
-| `integrations` | `TelegramService`, `NotificationService`, `IoTService`, `NestService`, `YaleService`, `DropService`, `RadonService`, `SkillsService`, `ClockService` | Network/cloud-bound, low frequency, no hardware ownership; a crash or slow HTTP call here should never affect vision/audio |
+| `media` *(Phase 1 — done)* | `MusicService`, `PodcastService` | Loosely coupled, no cross-service object references, no hardware contention — **lowest-risk first extraction candidate** |
+| `integrations` *(Phase 2a — done: Telegram/Notification/Clock; Phase 2b — pending: IoT/Skills)* | `TelegramService`, `NotificationService`, `ClockService` *(done)*, `IoTService`, `NestService`, `YaleService`, `DropService`, `RadonService`, `SkillsService` *(pending — need `WebService` proxies first)* | Network/cloud-bound, low frequency, no hardware ownership; a crash or slow HTTP call here should never affect vision/audio |
 | `web` | `WebService` (dashboard/API/websocket) | Isolates the single largest, most complex file (2,880 lines) so a slow request handler no longer shares a GIL with motion/vision/audio |
 
 Every process links to a common backbone the same way `core` already links
@@ -259,21 +263,73 @@ biggest win on paper.**
    >    method the runner calls on shutdown — silently shadowing it, so
    >    `on_stop()`, the thread join, and the `service.stopped` event never
    >    ran. Renamed to `stop_playback()`; added a regression test.
-3. **Phase 2 — `integrations`:** Extract the cloud/IoT services. Lower risk
-   than `web` (fewer inbound dashboard dependencies), and immediately
-   isolates flaky third-party API calls (Yale, Nest, DROP, radon) from the
-   vision/audio critical path.
-4. **Phase 3 — `web`:** Finish decoupling the remaining ~40 call sites
+3. **Phase 2a — `integrations` — Telegram/Notification/Clock (done):** Extract
+   the three zero-object-coupling services (`TelegramService`,
+   `NotificationService`, `ClockService`) into `src/assistant/
+   integrations_main.py` + `desktop-assistant-integrations.service`. `IoTService`
+   and `SkillsService` were deliberately deferred to Phase 2b (see below) once
+   auditing `WebService` showed they have real object coupling requiring
+   proxies, unlike the other three.
+
+   > **Implementation notes (v1.47.0):**
+   > 1. **Scoping decision:** an audit of `WebService`'s direct object
+   >    references to each of the 9 originally-proposed `integrations`
+   >    services found `TelegramService`/`NotificationService`/`ClockService`
+   >    have **zero** direct coupling (bus-only, exactly like `media`'s
+   >    starting shape), while `IoTService` (`iot_registry`, 10 call sites)
+   >    and `SkillsService` (`skills_svc`, 4 call sites) need
+   >    `media_client.py`-style proxies first. Splitting the low-risk three
+   >    now mirrors the Phase 1 playbook (validate the pattern before the
+   >    harder cases) rather than blocking on proxy work.
+   >    `NestService`/`YaleService`/`DropService`/`RadonService` were never
+   >    directly instantiated in `core_main.py` — they're constructed lazily
+   >    inside `IoTService`'s device-plugin wrappers, so they'll move
+   >    automatically whenever `IoTService` does in Phase 2b.
+   > 2. **IPCBridge forwarding is not transitive:** if process A subscribes
+   >    upstream to B, and B relays an event from ITS OWN upstream C, B does
+   >    not re-forward that C-originated event onward to A — each process
+   >    that needs another's telemetry must subscribe **directly** to that
+   >    process's PUB. `NotificationService` needs `thermal.temp`, so
+   >    `integrations_main.py` subscribes to both core's AND thermal's PUB
+   >    directly, exactly mirroring how `core_main.py` subscribes directly to
+   >    thermal/media/integrations rather than relying on any one process as
+   >    a relay.
+   > 3. **`QuietHours` can't cross a process boundary by reference.** The new
+   >    process keeps its own independent `QuietHours` instance, kept in sync
+   >    via the existing `settings.quiet_hours_updated` bus event (already
+   >    published by `WebService`/`QuietHoursSkill`, both still in core) —
+   >    no new plumbing needed.
+   > 4. **Found and fixed a real latent bug in `IPCBridge`'s anti-echo-loop
+   >    guard**, exposed by this phase because `ClockService`/
+   >    `NotificationService` are the first services to synchronously publish
+   >    a *new* topic while handling an upstream-injected one (e.g. reacting
+   >    to an injected `av.tell_joke` by publishing `av.say`). The guard used
+   >    a boolean thread-local flag that stayed `True` for the entire nested
+   >    call stack of the injected `bus.publish()`, so it incorrectly
+   >    suppressed that *different* new topic from ever reaching the
+   >    process's own PUB — meaning jokes/thermal alerts were spoken inside
+   >    `integrations` but never actually reached `AVService` in core. Fixed
+   >    by storing the specific injected *topic string* instead of a bare
+   >    boolean, so only an exact echo of the same topic is suppressed. This
+   >    fix benefits every process using `IPCBridge`, not just `integrations`.
+   >    Verified live: `da status` now shows the correct "last spoken" text
+   >    after a `tell me a joke` round-trip through `integrations` and back.
+4. **Phase 2b — `integrations` — IoT/Skills (not started):** Extract
+   `IoTService` and `SkillsService`. Requires `media_client.py`-style
+   `IPCClient` proxies for `WebService`'s `iot_registry` (10 call sites) and
+   `skills_svc` (4 call sites) before the services themselves can move,
+   mirroring how Phase 1 proxied `_music_svc`/`_podcast_svc`.
+5. **Phase 3 — `web`:** Finish decoupling the remaining ~40 call sites
    (vision/tracking/skills/perception/depth), then extract. This is the
    highest-value split (isolates the 2,880-line file and its FastAPI/GIL
    load) and the highest-effort one — deliberately last.
-5. **Phase 4 (optional, higher risk) — `audio-voice` split from
+6. **Phase 4 (optional, higher risk) — `audio-voice` split from
    `vision-hailo`:** Only worth doing if profiling after phases 1–3 shows
    audio/voice latency is still affected by vision/Hailo load. Requires
    re-validating the ≤1.5s wake-to-response NFR after the split, since this
    is the one boundary where an added IPC hop touches the most
    latency-sensitive path in the system.
-6. **`vision-hailo` stays a single process indefinitely**, per the Hailo
+7. **`vision-hailo` stays a single process indefinitely**, per the Hailo
    VDevice constraint in §3, unless Hailo's own multi-process device sharing
    story changes upstream.
 
@@ -302,8 +358,10 @@ To keep the growing number of cross-process links maintainable:
 
 ## 8. What This Proposal Does NOT Do
 
-- It does **not** move any service out of `desktop-assistant-core` today.
-  The running production system is unchanged.
+- It moved three services out of `desktop-assistant-core` (Phase 1: media;
+  Phase 2a: Telegram/Notification/Clock). `IoTService`/`SkillsService`
+  (Phase 2b), `WebService` (Phase 3), and the vision/audio core group remain
+  in `desktop-assistant-core` for now.
 - It does **not** touch `scripts/desktop-assistant`'s existing
   `_request()`/`_thermal_request()` functions — refactoring the CLI to use
   `IPCClient` is a good follow-up but is out of scope here to keep this
@@ -314,7 +372,11 @@ To keep the growing number of cross-process links maintainable:
 
 VERA doesn't need a new framework — it needs to finish what the thermal
 process already proved works. The scaffolding for that (`ProcessNode`,
-`IPCClient`, and passing integration tests) is done. The next concrete step
-is Phase 1 (`media`), which is low-risk, fully decoupled today, and would be
-the first real-world validation of splitting the monolith beyond the
-thermal/core precedent.
+`IPCClient`, and passing integration tests) is done, and two phases have now
+shipped and are running live: Phase 1 (`media`) and Phase 2a
+(`integrations` — Telegram/Notification/Clock). Both splits validated the
+pattern end-to-end on real hardware and each surfaced (and fixed) a genuine
+latent bug the monolith had been hiding. The next concrete step is Phase 2b
+(`IoTService`/`SkillsService`), which needs `media_client.py`-style
+`WebService` proxies before the services themselves can move — followed by
+the higher-effort, higher-value Phase 3 (`web`).

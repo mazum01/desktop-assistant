@@ -4,6 +4,45 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.47.0] - 2026-07-21
+### Added
+- **Process Isolation Phase 2a: extracted `TelegramService`, `NotificationService`,
+  and `ClockService` into a new `desktop-assistant-integrations.service` process**
+  (`src/assistant/integrations_main.py`), following the same `ProcessNode`/
+  `IPCBridge` pattern Phase 1 (`media`) established. These three services have
+  zero direct object coupling to `WebService` (unlike `IoTService`/`SkillsService`,
+  deferred to Phase 2b — see `docs/architecture/PROCESS_ISOLATION_PROPOSAL.md`
+  §6), so no client-side proxies were needed. The new process subscribes
+  directly to both `core`'s and `thermal`'s PUB endpoints (needed for
+  `NotificationService`'s thermal-alert logic, since IPCBridge forwarding is
+  not transitive), and keeps its own independent `QuietHours` instance in
+  sync via the existing `settings.quiet_hours_updated` bus event. Deployed as
+  a `systemctl --user` unit (`services/systemd/desktop-assistant-integrations.service`
+  is the canonical source-controlled unit), and added to the watchdog's
+  monitored service list (`user_unit=True`, mirroring `media`).
+### Fixed
+- **`IPCBridge` anti-echo-loop guard incorrectly suppressed unrelated events
+  published in reaction to an injected upstream event.** The guard used a
+  boolean thread-local flag that stayed `True` for the entire nested call
+  stack of an injected `bus.publish()`, so when a handler reacting to an
+  injected event (e.g. `ClockService` reacting to an injected `av.tell_joke`)
+  synchronously published a *different* topic (`av.say`), that new topic was
+  wrongly suppressed from reaching the process's own PUB — meaning jokes and
+  thermal alerts were spoken inside `integrations` but silently never reached
+  `AVService` in core. Fixed by tracking the specific injected *topic string*
+  instead of a bare boolean, so only an exact echo of the same topic is
+  suppressed. This bug pre-dated Phase 2a and affects every process using
+  `IPCBridge`; Phase 2a's services were simply the first to expose it. Added
+  a regression test (`tests/test_integrations_process_split.py`) reproducing
+  the full thermal→integrations→core chain with real `ProcessNode`s; verified
+  it fails against the old code and passes with the fix.
+- **`IPCBridge._build_status()`'s dashboard snapshot never included `av.spoke`,
+  `face.identified`, `perception.faces`, or `perception.error`**, even though
+  `scripts/desktop-assistant status` has always rendered "last spoken" and
+  "last identity" from those topics — so both fields always showed as empty
+  regardless of actual bus activity. Added the missing topics to
+  `snapshot_topics`.
+
 ## [1.46.6] - 2026-07-20
 ### Docs
 - Brought the top-level `README.md` back in sync with the actual repo: fixed

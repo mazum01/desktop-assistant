@@ -277,9 +277,17 @@ class IPCBridge(Service):
     def _forward_to_pub(self, topic: str, payload) -> None:
         if self._pub is None:
             return
-        # Skip events we just injected from an upstream SUB — avoids
-        # forming a loop if upstream/downstream are ever cross-linked.
-        if getattr(self._injecting, "active", False):
+        # Skip only the exact topic we're in the middle of injecting from an
+        # upstream SUB — this prevents echoing the same event straight back
+        # out (which would loop if upstream/downstream are ever cross-linked).
+        # It must NOT suppress *other* topics a handler publishes in reaction
+        # to the injected event (e.g. ClockService reacting to an injected
+        # `av.tell_joke` by publishing `av.say`) — those are new, locally
+        # originated events from this process's perspective and need to reach
+        # this process's own PUB like any other bus.publish() call, or they'd
+        # silently never leave the process (see PROCESS_ISOLATION_PROPOSAL.md
+        # §6, Phase 2a).
+        if getattr(self._injecting, "topic", None) == topic:
             return
         try:
             with self._pub_lock:
@@ -314,11 +322,12 @@ class IPCBridge(Service):
                 payload = json.loads(frames[1].decode("utf-8"))
             except Exception:
                 continue
-            self._injecting.active = True
+            self._injecting.topic = topic
             try:
                 self.bus.publish(topic, payload)
             finally:
-                self._injecting.active = False
+                self._injecting.topic = None
+
 
     def _rep_loop(self) -> None:
         poller = zmq.Poller()
@@ -386,6 +395,8 @@ class IPCBridge(Service):
             "audio.level", "audio.error",
             "voice.state", "voice.wake", "voice.intent", "voice.transcript",
             "telemetry.flush",
+            "face.identified", "perception.faces", "perception.error",
+            "av.spoke",
         )
         last = {t: self.bus.last(t) for t in snapshot_topics}
 

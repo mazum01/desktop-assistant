@@ -1,0 +1,52 @@
+[Unit]
+Description=VERA — integrations services (Telegram, notifications, clock)
+Documentation=https://github.com/mazum01/desktop-assistant
+# NOTE: this is the canonical system-level unit (requires root to install:
+# cp into /etc/systemd/system/, daemon-reload, enable --now). On boxes where
+# passwordless sudo is scoped to a fixed command list that doesn't cover
+# those operations, install this as a --user unit instead
+# (~/.config/systemd/user/desktop-assistant-integrations.service, dropping
+# User=/Group=/SupplementaryGroups= and using `systemctl --user`/
+# `WantedBy=default.target`) — see watchdog.py's ManagedService(user_unit=True)
+# for the corresponding monitoring-side support. This mirrors
+# desktop-assistant-media.service, which is deployed this way today.
+After=network.target desktop-assistant-core.service desktop-assistant-thermal.service
+# Wants= (not Requires=): integrations can run standalone in dev, but in
+# production core/thermal will already be up (their IPCBridges are the
+# upstreams this process subscribes to for face.greeted/av.spoke/
+# thermal.temp/settings.quiet_hours_updated/etc).
+Wants=desktop-assistant-core.service desktop-assistant-thermal.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=starter
+Group=starter
+SupplementaryGroups=audio video plugdev
+WorkingDirectory=/home/starter/Code/Desktop Assistant
+Environment=PYTHONUNBUFFERED=1
+Environment="PYTHONPATH=/home/starter/Code/Desktop Assistant"
+EnvironmentFile=/etc/desktop-assistant/secrets.env
+ExecStart=/usr/bin/python3 -m src.assistant.integrations_main
+
+Restart=on-failure
+RestartSec=3
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+# NOTE: PrivateTmp must be FALSE — the ZMQ ipc:///tmp/desktop-assistant-integrations.{pub,rep}
+# sockets are how core's IPCBridge and this process talk to each other,
+# same reasoning as desktop-assistant-core.service / -media.service.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+PrivateTmp=false
+ReadWritePaths=/tmp /home/starter/.config/desktop-assistant
+
+[Install]
+WantedBy=multi-user.target

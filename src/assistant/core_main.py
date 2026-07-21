@@ -20,7 +20,6 @@ from src.core.ipc_client import IPCClient
 from src.core.media_client import MusicServiceProxy, PodcastServiceProxy
 from src.services.audio_capture_service import AudioCaptureService, AudioCaptureConfig
 from src.services.av_service import AVService
-from src.services.clock_service import ClockService
 from src.services.face_service import FaceService
 from src.services.ipc_bridge import IPCBridge
 from src.services.iot_service import IoTService
@@ -39,9 +38,7 @@ from src.services.voice_command_service import VoiceCommandService, VoiceCommand
 from src.core.quiet_hours import QuietHours
 from src.services.web_service import WebService
 from src.core.runtime_state import load as _load_runtime, save as _save_runtime
-from src.services.notification_service import NotificationService
 from src.services.room_service import RoomService
-from src.services.telegram_service import TelegramService
 from src.services.privacy_service import PrivacyService, PrivacyConfig
 
 # The thermal service runs in a separate process. Its IPCBridge PUBs on
@@ -57,6 +54,12 @@ _THERMAL_PUB = "ipc:///tmp/desktop-assistant-thermal.pub"
 _MEDIA_PUB = "ipc:///tmp/desktop-assistant-media.pub"
 _MEDIA_REP = "ipc:///tmp/desktop-assistant-media.rep"
 
+# Telegram/notification/clock (the "integrations" group, Phase 2a of
+# docs/architecture/PROCESS_ISOLATION_PROPOSAL.md) also run in a separate
+# process. No proxy needed — WebService never held direct references to
+# these three, only bus events (forwarded automatically via upstream).
+_INTEGRATIONS_PUB = "ipc:///tmp/desktop-assistant-integrations.pub"
+
 
 def main() -> int:
     import yaml
@@ -67,7 +70,6 @@ def main() -> int:
     # Runtime state overlays the base config for toggle settings.
     _rt = _load_runtime()
 
-    _clock_enabled = _cfg.get("clock_announcements", {}).get("enabled", True)
     _tracking_enabled = _cfg.get("head_tracking", {}).get("enabled", True)
     _face_tracking_enabled = _rt.get("head_tracking", {}).get(
         "face_tracking_enabled",
@@ -172,11 +174,7 @@ def main() -> int:
         max_objects=int(_obj_cfg_raw.get("max_objects", 8)),
     )
 
-    _notif_cfg = _cfg.get("notifications", {})
-    _notif_thermal_cfg = _notif_cfg.get("thermal_alerts", {})
-    _notif_absence_cfg = _notif_cfg.get("absence_alerts", {})
     _room_cfg = _cfg.get("room_detection", {})
-    _tg_cfg = _cfg.get("telegram", {})
 
     _web_cfg = _cfg.get("web_dashboard", {})
     _web_enabled = _web_cfg.get("enabled", True)
@@ -308,7 +306,7 @@ def main() -> int:
                         servo_min_deg=_soft_min_deg, servo_max_deg=_soft_max_deg)
     ipc = IPCBridge(
         bus=bus,
-        upstream_endpoints=[_THERMAL_PUB, _MEDIA_PUB],
+        upstream_endpoints=[_THERMAL_PUB, _MEDIA_PUB, _INTEGRATIONS_PUB],
     )
     ipc.register_rpc("tts_duration", lambda msg: {
         "ok": True,
@@ -401,7 +399,6 @@ def main() -> int:
         perc_svc,
         obj_svc,
         TelemetryService(bus=bus),
-        ClockService(bus=bus, enabled=_clock_enabled, quiet_hours=_qh),
         IoTService(bus=bus, cfg=_cfg),
         RoomService(bus=bus, vision_service=vis, cfg=_room_cfg),
         FaceService(
@@ -498,31 +495,10 @@ def main() -> int:
     )
     services.append(privacy_svc)
 
-    notif_svc = NotificationService(
-        bus=bus,
-        quiet_hours=_qh,
-        thermal_alerts_enabled=bool(_notif_thermal_cfg.get("enabled", True)),
-        warn_celsius=float(_notif_thermal_cfg.get("warn_celsius", 75.0)),
-        critical_celsius=float(_notif_thermal_cfg.get("critical_celsius", 85.0)),
-        thermal_rate_limit_min=float(_notif_thermal_cfg.get("min_interval_min", 10.0)),
-        absence_alerts_enabled=bool(_notif_absence_cfg.get("enabled", True)),
-        absence_min=float(_notif_absence_cfg.get("absence_min", 30.0)),
-        absence_rate_limit_min=float(_notif_absence_cfg.get("min_interval_min", 60.0)),
-    )
-    services.append(notif_svc)
-
-    tg_svc = TelegramService(
-        bus=bus,
-        enabled=bool(_tg_cfg.get("enabled", False)),
-        bot_token=str(_tg_cfg.get("bot_token", "")),
-        chat_id=str(_tg_cfg.get("chat_id", "")),
-        emoji_map={
-            "new_face":  _tg_cfg.get("emoji_new_face", "👋"),
-            "returning": _tg_cfg.get("emoji_returning", "👤"),
-            "named":     _tg_cfg.get("emoji_named", "🏷️"),
-        },
-    )
-    services.append(tg_svc)
+    # NotificationService and TelegramService moved to the "integrations"
+    # process (Phase 2a of docs/architecture/PROCESS_ISOLATION_PROPOSAL.md;
+    # see src/assistant/integrations_main.py). No proxy needed here since
+    # WebService never held direct references to either.
     services.append(ipc)
     ipc._all_services = services  # seed service registry at startup
     if _web_enabled:
