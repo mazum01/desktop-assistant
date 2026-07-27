@@ -23,6 +23,32 @@ Services monitored
                               + max-uptime restart (Telegram polling-stall guard)
                               + max-uptime restart (Telegram polling-stall guard)
 
+Network reachability (outbound Wi-Fi / DNS)
+--------------------------------------------
+Added after a 2026-07-21 incident where wlan0 lost its Wi-Fi association
+mid-handshake, NetworkManager entered "need-auth" waiting for a secrets
+agent that doesn't exist on this headless box (nm-applet only registers
+once, tied to the desktop/wayvnc session, and can silently go stale), and
+the box was left with ZERO outbound connectivity for ~27 hours until a
+manual power-cycle — even though desktop-assistant-core and all local
+services stayed perfectly healthy throughout (confirmed via this same
+watchdog's own localhost health checks never failing during that window).
+This class independently probes outbound reachability (raw TCP connect to
+well-known IPs, so it doesn't depend on DNS working) and, on sustained
+failure, attempts escalating self-recovery via `nmcli` (device reconnect →
+connection re-activation → networking bounce) — the same recovery a human
+would perform manually, without needing a GUI secrets agent.
+
+NOTE: `nmcli` connection activation requires org.freedesktop.NetworkManager
+polkit authorization. The box's existing polkit rule
+(/usr/share/polkit-1/rules.d/org.freedesktop.NetworkManager.rules) only
+grants this to *active local sessions* — the watchdog runs as a background
+systemd service with no active session, so recovery calls will fail with
+"Not authorized to control networking" until a polkit rule is added
+granting network-control to the starter user unconditionally. See
+docs/architecture/ (or ask the assistant) for the one-line polkit rule
+file needed; this requires a one-time interactive `sudo` step.
+
 Restart guard
 -------------
 Each service has an independent cooldown (default 5 min) so a repeatedly
@@ -48,6 +74,14 @@ watchdog:
   # Per-service overrides (optional):
   openclaw_stuck_threshold: 10   # "Bot not initialized" lines in 60s → restart
   openclaw_max_uptime_min: 90    # max gateway uptime before forced restart (polling-stall guard)
+  # Outbound network reachability (see "Network reachability" section above):
+  network_check_enabled: true
+  network_probe_hosts: "1.1.1.1:53,8.8.8.8:53,9.9.9.9:53"
+  network_failure_threshold: 3     # consecutive failed checks before alert/recovery
+  network_recovery_enabled: true
+  network_recovery_cooldown_min: 3
+  wifi_device: wlan0
+  wifi_connection_id: saturn
 """
 
 from __future__ import annotations
@@ -55,6 +89,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -83,6 +118,17 @@ _DEFAULT_ALERT_COOLDOWN_MIN = 10.0
 _DEFAULT_CORE_RSS_WARN_MB = 2200.0
 _DEFAULT_CORE_FD_WARN = 900
 _DEFAULT_CORE_THREADS_WARN = 180
+
+# Outbound network reachability monitor (see NetworkMonitor docstring / module
+# docstring "Network reachability" section for the incident that motivated this).
+_DEFAULT_NETWORK_CHECK_ENABLED = True
+_DEFAULT_NETWORK_PROBE_HOSTS = "1.1.1.1:53,8.8.8.8:53,9.9.9.9:53"
+_DEFAULT_NETWORK_PROBE_TIMEOUT_S = 5.0
+_DEFAULT_NETWORK_FAILURE_THRESHOLD = 3    # consecutive failed checks before declaring unhealthy
+_DEFAULT_NETWORK_RECOVERY_ENABLED = True
+_DEFAULT_NETWORK_RECOVERY_COOLDOWN_MIN = 3.0
+_DEFAULT_WIFI_DEVICE = "wlan0"
+_DEFAULT_WIFI_CONNECTION_ID = "saturn"
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CONFIG_PATH = _REPO_ROOT / "config" / "assistant.yaml"
@@ -450,6 +496,117 @@ class ManagedService:
         return False
 
 
+# ---------------------------------------------------------------------------
+# Outbound network reachability monitor
+# ---------------------------------------------------------------------------
+
+@dataclass
+class NetworkMonitor:
+    """Detects total loss of outbound network connectivity and attempts
+    self-recovery via nmcli. See the module docstring's "Network
+    reachability" section for the incident this is defending against.
+    """
+
+    probe_hosts: list[tuple[str, int]] = field(
+        default_factory=lambda: _parse_probe_hosts(_DEFAULT_NETWORK_PROBE_HOSTS)
+    )
+    probe_timeout_s: float = _DEFAULT_NETWORK_PROBE_TIMEOUT_S
+    failure_threshold: int = _DEFAULT_NETWORK_FAILURE_THRESHOLD
+    recovery_enabled: bool = _DEFAULT_NETWORK_RECOVERY_ENABLED
+    recovery_cooldown_s: float = _DEFAULT_NETWORK_RECOVERY_COOLDOWN_MIN * 60
+    wifi_device: str = _DEFAULT_WIFI_DEVICE
+    wifi_connection_id: str = _DEFAULT_WIFI_CONNECTION_ID
+
+    # Runtime state — not part of config
+    consecutive_failures: int = field(default=0, init=False, repr=False)
+    last_failure_reason: str = field(default="", init=False, repr=False)
+    last_recovery_ts: float = field(default=-1.0, init=False, repr=False)
+    recovery_attempts: int = field(default=0, init=False, repr=False)
+
+    def is_reachable(self) -> tuple[bool, str]:
+        """Raw TCP connect to well-known IPs (no DNS dependency) to detect
+        total outbound-connectivity loss, distinct from a single flaky host.
+        """
+        for host, port in self.probe_hosts:
+            try:
+                with socket.create_connection((host, port), timeout=self.probe_timeout_s):
+                    return True, ""
+            except OSError:
+                continue
+        # All probes failed — also check whether DNS itself resolves, purely
+        # for a more actionable diagnostic message (both were down together
+        # in the 2026-07-21 incident, but this distinguishes future cases).
+        dns_ok = False
+        try:
+            socket.getaddrinfo("api.telegram.org", 443, type=socket.SOCK_STREAM)
+            dns_ok = True
+        except OSError:
+            dns_ok = False
+        hosts_desc = ", ".join(f"{h}:{p}" for h, p in self.probe_hosts)
+        reason = (
+            f"no outbound connectivity — unreachable: {hosts_desc}"
+            f" (DNS resolution {'OK' if dns_ok else 'ALSO failing'})"
+        )
+        return False, reason
+
+    def attempt_recovery(self) -> tuple[bool, str]:
+        """Escalating self-recovery, cycling through 3 levels of increasing
+        aggressiveness each time the cooldown elapses while still unhealthy.
+        """
+        self.recovery_attempts += 1
+        level = (self.recovery_attempts - 1) % 3 + 1
+        if level == 1:
+            desc = f"nmcli device connect {self.wifi_device}"
+            cmd = ["nmcli", "device", "connect", self.wifi_device]
+            ok = self._run(cmd)
+        elif level == 2:
+            desc = f"nmcli connection up {self.wifi_connection_id}"
+            cmd = ["nmcli", "connection", "up", self.wifi_connection_id]
+            ok = self._run(cmd)
+        else:
+            desc = "nmcli networking off/on (full bounce)"
+            ok = self._run(["nmcli", "networking", "off"])
+            time.sleep(2)
+            ok = self._run(["nmcli", "networking", "on"]) and ok
+        return ok, f"recovery level {level}: {desc}"
+
+    def _run(self, cmd: list[str]) -> bool:
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        except Exception:
+            log.exception("Network recovery command raised an exception: %s", " ".join(cmd))
+            return False
+        if result.returncode == 0:
+            return True
+        stderr = (result.stderr or result.stdout).strip()
+        if "not authorized" in stderr.lower():
+            log.error(
+                "Network recovery command denied by polkit (rc=%d): %s — "
+                "the watchdog's background service context has no active "
+                "session, so the box's existing NetworkManager polkit rule "
+                "doesn't grant it control. A polkit rule permitting the "
+                "'starter' user unconditionally is needed (one-time, "
+                "interactive sudo) — see module docstring.",
+                result.returncode, stderr,
+            )
+        else:
+            log.error("Network recovery command failed (rc=%d): %s", result.returncode, stderr)
+        return False
+
+
+def _parse_probe_hosts(spec: str) -> list[tuple[str, int]]:
+    hosts: list[tuple[str, int]] = []
+    for entry in spec.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        host, _, port_s = entry.partition(":")
+        try:
+            hosts.append((host, int(port_s) if port_s else 53))
+        except ValueError:
+            continue
+    return hosts
+
 
 # ---------------------------------------------------------------------------
 # Watchdog
@@ -473,6 +630,7 @@ class Watchdog:
         core_rss_warn_mb: float = _DEFAULT_CORE_RSS_WARN_MB,
         core_fd_warn: int = _DEFAULT_CORE_FD_WARN,
         core_threads_warn: int = _DEFAULT_CORE_THREADS_WARN,
+        network: Optional[NetworkMonitor] = None,
     ) -> None:
         self._services = services
         self._interval = check_interval_s
@@ -491,11 +649,13 @@ class Watchdog:
         self._core_threads_warn = max(1, core_threads_warn)
         self._last_status_notify_ts = 0.0
         self._last_alert_ts = 0.0
+        self._network = network
 
     def run(self) -> None:
         log.info(
-            "Watchdog started — monitoring %d service(s), interval=%.0fs, cooldown=%.0fm",
+            "Watchdog started — monitoring %d service(s), interval=%.0fs, cooldown=%.0fm%s",
             len(self._services), self._interval, self._cooldown / 60,
+            ", network reachability monitor enabled" if self._network else "",
         )
         while True:
             try:
@@ -510,8 +670,58 @@ class Watchdog:
                 self._check_one(svc)
             except Exception:
                 log.exception("Error checking %s", svc.unit)
+        if self._network is not None:
+            try:
+                self._check_network(self._network)
+            except Exception:
+                log.exception("Error checking network reachability")
         self._maybe_send_status_heartbeat()
         self._maybe_send_resource_alerts()
+
+    def _check_network(self, net: NetworkMonitor) -> None:
+        healthy, reason = net.is_reachable()
+        if healthy:
+            if net.consecutive_failures > 0:
+                log.info("network reachability is healthy again")
+                self._notify("✅ Watchdog recovery: outbound network reachability restored.")
+                net.consecutive_failures = 0
+                net.last_failure_reason = ""
+                net.recovery_attempts = 0
+            return
+
+        net.consecutive_failures += 1
+        if net.consecutive_failures == net.failure_threshold or reason != net.last_failure_reason:
+            log.warning("network is UNHEALTHY (failure #%d): %s",
+                        net.consecutive_failures, reason)
+        net.last_failure_reason = reason
+
+        if net.consecutive_failures < net.failure_threshold:
+            return  # require sustained failure before alerting/acting — avoid noise on brief blips
+
+        if net.consecutive_failures == net.failure_threshold:
+            self._notify(
+                f"⚠️ Watchdog alert: outbound network reachability\n"
+                f"Issue: {reason}\n"
+                f"(sustained for {net.failure_threshold} consecutive checks)"
+            )
+
+        if not net.recovery_enabled:
+            return
+
+        elapsed = time.monotonic() - net.last_recovery_ts if net.last_recovery_ts > 0 else net.recovery_cooldown_s + 1
+        if elapsed < net.recovery_cooldown_s:
+            return
+
+        ok, desc = net.attempt_recovery()
+        status = "✅ attempted" if ok else "❌ FAILED"
+        msg = (
+            f"🩺 Watchdog: outbound network reachability\n"
+            f"Issue: {reason}\n"
+            f"{desc} — {status}"
+        )
+        log.info("Watchdog network recovery action: %s", msg.replace("\n", " | "))
+        self._notify(msg)
+        net.last_recovery_ts = time.monotonic()
 
     def _notify(self, msg: str) -> None:
         if not self._telegram_notify:
@@ -674,6 +884,15 @@ def main() -> int:
     openclaw_notify_target = str(wd_cfg.get("openclaw_notify_target", ""))
     openclaw_cli_path = str(wd_cfg.get("openclaw_cli_path", "openclaw"))
 
+    network_check_enabled = bool(wd_cfg.get("network_check_enabled", _DEFAULT_NETWORK_CHECK_ENABLED))
+    network_probe_hosts = str(wd_cfg.get("network_probe_hosts", _DEFAULT_NETWORK_PROBE_HOSTS))
+    network_probe_timeout_s = float(wd_cfg.get("network_probe_timeout_s", _DEFAULT_NETWORK_PROBE_TIMEOUT_S))
+    network_failure_threshold = int(wd_cfg.get("network_failure_threshold", _DEFAULT_NETWORK_FAILURE_THRESHOLD))
+    network_recovery_enabled = bool(wd_cfg.get("network_recovery_enabled", _DEFAULT_NETWORK_RECOVERY_ENABLED))
+    network_recovery_cooldown_min = float(wd_cfg.get("network_recovery_cooldown_min", _DEFAULT_NETWORK_RECOVERY_COOLDOWN_MIN))
+    wifi_device = str(wd_cfg.get("wifi_device", _DEFAULT_WIFI_DEVICE))
+    wifi_connection_id = str(wd_cfg.get("wifi_connection_id", _DEFAULT_WIFI_CONNECTION_ID))
+
     tg_cfg     = cfg.get("telegram", {})
     tg_token   = str(tg_cfg.get("bot_token", ""))
     tg_chat_id = str(tg_cfg.get("chat_id", ""))
@@ -742,6 +961,15 @@ def main() -> int:
         core_rss_warn_mb=core_rss_warn_mb,
         core_fd_warn=core_fd_warn,
         core_threads_warn=core_threads_warn,
+        network=NetworkMonitor(
+            probe_hosts=_parse_probe_hosts(network_probe_hosts),
+            probe_timeout_s=network_probe_timeout_s,
+            failure_threshold=max(1, network_failure_threshold),
+            recovery_enabled=network_recovery_enabled,
+            recovery_cooldown_s=network_recovery_cooldown_min * 60,
+            wifi_device=wifi_device,
+            wifi_connection_id=wifi_connection_id,
+        ) if network_check_enabled else None,
     )
     watchdog.run()
     return 0

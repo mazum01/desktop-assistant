@@ -124,12 +124,12 @@ privacy:
   announce: false
   announce_text: I'll give you some privacy.
   clear_frames: 4
-  cooldown_s: 5.0
-  enabled: true
+  cooldown_s: 5
+  enabled: false
   idle_rate_hz: 0.25
   look_away_angle_deg: 45
   person_hold_s: 8.0
-  rate_hz: 1.0
+  rate_hz: 1
   require_person: true
   resume_text: Are you decent?
   threshold: 0.7
@@ -202,6 +202,12 @@ watchdog:
   core_rss_warn_mb: 2200
   core_threads_warn: 180
   enabled: true
+  network_check_enabled: true
+  network_failure_threshold: 3
+  network_probe_hosts: 1.1.1.1:53,8.8.8.8:53,9.9.9.9:53
+  network_probe_timeout_s: 5
+  network_recovery_cooldown_min: 3
+  network_recovery_enabled: true
   notify_via_openclaw: true
   openclaw_cli_path: openclaw
   openclaw_max_processes: 2
@@ -213,6 +219,8 @@ watchdog:
   restart_cooldown_min: 5
   status_notify_interval_min: 15
   telegram_notify: true
+  wifi_connection_id: saturn
+  wifi_device: wlan0
 web_dashboard:
   enabled: true
   host: 0.0.0.0
