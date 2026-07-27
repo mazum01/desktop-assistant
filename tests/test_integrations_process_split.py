@@ -48,6 +48,14 @@ def integrations_node(tmp_path, monkeypatch):
     import src.assistant.integrations_main as _integ_module
     monkeypatch.setattr(_integ_module, "_CONFIG_DIR", tmp_path)
 
+    # Isolate IoT persistence from the real config/iot_devices.json and
+    # ~/.local/share/desktop-assistant/iot_history.json — build_node() now
+    # also wires up IoTService/SkillsService (Phase 2b).
+    import src.iot.loader as _iot_loader
+    import src.iot.history_store as _iot_history_store
+    monkeypatch.setattr(_iot_loader, "_PERSIST_PATH", tmp_path / "iot_devices.json")
+    monkeypatch.setattr(_iot_history_store, "_DEFAULT_PATH", tmp_path / "iot_history.json")
+
     core_pub, core_rep = _unique_endpoints("core")
     thermal_pub, thermal_rep = _unique_endpoints("thermal")
     integ_pub, integ_rep = _unique_endpoints("integrations")
@@ -105,7 +113,7 @@ def test_thermal_temp_direct_subscription_triggers_alert(integrations_node):
     assert "degrees" in said[0]["text"]
 
 
-def test_alert_triggered_by_upstream_event_still_escapes_to_own_pub():
+def test_alert_triggered_by_upstream_event_still_escapes_to_own_pub(tmp_path, monkeypatch):
     """Regression test: a handler reacting to an event *forwarded in from
     upstream* (thermal.temp) synchronously publishes a brand-new topic
     (av.say) on the same thread as the SUB-loop's injection. That new topic
@@ -116,6 +124,17 @@ def test_alert_triggered_by_upstream_event_still_escapes_to_own_pub():
     broke in production for Phase 2a: NotificationService/ClockService
     reacting to an upstream-forwarded event and calling bus.publish("av.say",
     ...), which never reached core's AVService before the fix."""
+    # Isolate QuietHours/IoT persistence from the real on-disk config on
+    # this box — this test doesn't use the `integrations_node` fixture, so
+    # it needs its own isolation (build_node() now also wires up IoTService
+    # as of Phase 2b).
+    import src.assistant.integrations_main as _integ_module
+    import src.iot.loader as _iot_loader
+    import src.iot.history_store as _iot_history_store
+    monkeypatch.setattr(_integ_module, "_CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(_iot_loader, "_PERSIST_PATH", tmp_path / "iot_devices.json")
+    monkeypatch.setattr(_iot_history_store, "_DEFAULT_PATH", tmp_path / "iot_history.json")
+
     thermal_pub, thermal_rep = _unique_endpoints("thermal")
     integ_pub, integ_rep = _unique_endpoints("integrations")
     core_pub, core_rep = _unique_endpoints("core")
@@ -185,11 +204,20 @@ def test_core_originated_event_reaches_telegram_service(integrations_node):
     assert received[0]["name"] == "Ada"
 
 
-def test_av_say_from_integrations_reaches_core():
+def test_av_say_from_integrations_reaches_core(tmp_path, monkeypatch):
     """Proves the reverse direction: av.say published inside the
     integrations process (e.g. a thermal alert) is forwarded to core, where
     AVService (which stays in core) would speak it — symmetric to how
     media.state_changed already reaches core today."""
+    # Isolate QuietHours/IoT persistence from the real on-disk config —
+    # build_node() now also wires up IoTService/SkillsService (Phase 2b).
+    import src.assistant.integrations_main as _integ_module
+    import src.iot.loader as _iot_loader
+    import src.iot.history_store as _iot_history_store
+    monkeypatch.setattr(_integ_module, "_CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(_iot_loader, "_PERSIST_PATH", tmp_path / "iot_devices.json")
+    monkeypatch.setattr(_iot_history_store, "_DEFAULT_PATH", tmp_path / "iot_history.json")
+
     core_pub, core_rep = _unique_endpoints("core")
     integ_pub, integ_rep = _unique_endpoints("integrations")
 

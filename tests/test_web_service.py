@@ -783,20 +783,20 @@ def test_status_includes_iot_snapshots(app_client):
 def test_iot_action_route_dispatches_to_device(app_client):
     client, bus, svc = app_client
 
-    class _FakeDevice:
-        device_id = "nest_thermostat"
-        device_name = "Nest Thermostat"
-        device_icon = "🌡️"
-
-        def execute_action(self, action, params=None):
+    class _FakeIoTRegistryProxy:
+        def execute_action(self, device_id, action, params=None):
+            assert device_id == "nest_thermostat"
             assert action == "auth"
-            return {"ok": True, "message": "https://example.invalid/auth", "auth_url": "https://example.invalid/auth"}
+            return {
+                "ok": True,
+                "payload": {
+                    "ok": True,
+                    "message": "https://example.invalid/auth",
+                    "auth_url": "https://example.invalid/auth",
+                },
+            }
 
-    class _FakeIoTRegistry:
-        def get(self, device_id):
-            return _FakeDevice() if device_id == "nest_thermostat" else None
-
-    svc._iot_registry = _FakeIoTRegistry()
+    svc._iot_registry = _FakeIoTRegistryProxy()
     r = client.post("/api/iot/nest_thermostat/action", json={"action": "auth", "params": {}})
     assert r.status_code == 200
     data = r.json()
@@ -806,13 +806,9 @@ def test_iot_action_route_dispatches_to_device(app_client):
 
 def test_iot_config_route_merges_and_restarts_device(app_client, monkeypatch):
     client, bus, svc = app_client
-    calls = {"stop": 0, "start": 0}
+    calls = {"stop": 0, "start": 0, "saved": 0}
 
-    class _FakeDevice:
-        device_id = "nest_thermostat"
-        device_name = "Nest Thermostat"
-        device_icon = "🌡️"
-
+    class _FakeIoTRegistryProxy:
         def __init__(self):
             self._cfg = {
                 "project_id": "proj",
@@ -820,24 +816,15 @@ def test_iot_config_route_merges_and_restarts_device(app_client, monkeypatch):
                 "client_secret": "secret",
             }
 
-        def stop(self):
+        def update_config(self, device_id, config_patch):
+            assert device_id == "nest_thermostat"
             calls["stop"] += 1
-
-        def start(self):
+            self._cfg.update(config_patch)
             calls["start"] += 1
+            calls["saved"] += 1
+            return {"ok": True, "device_id": device_id, "config": dict(self._cfg)}
 
-    dev = _FakeDevice()
-
-    class _FakeIoTRegistry:
-        def get(self, device_id):
-            return dev if device_id == "nest_thermostat" else None
-
-    saved = {"count": 0}
-    import src.iot.loader as iot_loader
-
-    monkeypatch.setattr(iot_loader, "save_persisted", lambda registry: saved.__setitem__("count", saved["count"] + 1))
-
-    svc._iot_registry = _FakeIoTRegistry()
+    svc._iot_registry = _FakeIoTRegistryProxy()
     r = client.put("/api/iot/nest_thermostat", json={"config": {"refresh_token": "newtoken"}})
     assert r.status_code == 200
     data = r.json()
@@ -846,7 +833,7 @@ def test_iot_config_route_merges_and_restarts_device(app_client, monkeypatch):
     assert data["config"]["refresh_token"] == "newtoken"
     assert calls["stop"] == 1
     assert calls["start"] == 1
-    assert saved["count"] == 1
+    assert calls["saved"] == 1
 
 
 # ── Dashboard HTML ────────────────────────────────────────────────────────────

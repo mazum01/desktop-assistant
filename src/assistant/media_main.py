@@ -12,10 +12,19 @@ Wiring
 ------
 - Owns its own `MessageBus` + `IPCBridge`, exactly like `thermal_main.py`.
 - Subscribes *upstream* to core's PUB endpoint so bus-published commands
-  from skills/CLI/WebService (`music.play`, `music.set_volume`,
-  `podcast.*`, …) — which are published onto *core's* bus — are forwarded
-  onto this process's local bus, where `MusicService`/`PodcastService`'s
-  normal `bus.subscribe(...)` handlers pick them up unchanged.
+  from CLI/WebService (`music.play`, `music.set_volume`, `podcast.*`, …) —
+  which are published onto *core's* bus — are forwarded onto this
+  process's local bus, where `MusicService`/`PodcastService`'s normal
+  `bus.subscribe(...)` handlers pick them up unchanged.
+- Also subscribes *upstream* to the `integrations` process's PUB endpoint.
+  `MusicControlSkill`/`VolumeSkill` publish `music.*` commands, and
+  `SkillsService` now runs in the `integrations` process (Phase 2b of
+  docs/architecture/PROCESS_ISOLATION_PROPOSAL.md), so those commands
+  originate on *integrations'* bus, not core's. IPCBridge forwarding is not
+  transitive (core does not re-broadcast events it merely received from an
+  upstream), so this subscription can't be skipped in favor of relying on
+  core as a relay — same reasoning as `integrations_main.py`'s direct
+  thermal subscription.
 - `core_main.py`'s own `IPCBridge` adds this process's PUB endpoint as one
   more upstream (alongside thermal's), so state-change events published
   here (`music.state_changed`, `music.song_changed`, `av.say`, …) still
@@ -47,6 +56,11 @@ from src.services.podcast_service import PodcastService
 # bus.subscribe() handlers running in this process.
 _CORE_PUB = "ipc:///tmp/desktop-assistant.pub"
 
+# The integrations process's IPCBridge PUBs here; SkillsService (which
+# publishes music.* commands via MusicControlSkill/VolumeSkill) runs there
+# as of Phase 2b — see module docstring.
+_INTEGRATIONS_PUB = "ipc:///tmp/desktop-assistant-integrations.pub"
+
 # This process's own endpoints — core's IPCBridge adds MEDIA_PUB as one of
 # its upstream_endpoints, symmetric to how it already does for thermal.
 MEDIA_PUB = "ipc:///tmp/desktop-assistant-media.pub"
@@ -76,7 +90,9 @@ def build_node(
         name="media",
         pub_endpoint=pub_endpoint,
         rep_endpoint=rep_endpoint,
-        upstream_endpoints=[_CORE_PUB] if upstream_endpoints is None else upstream_endpoints,
+        upstream_endpoints=(
+            [_CORE_PUB, _INTEGRATIONS_PUB] if upstream_endpoints is None else upstream_endpoints
+        ),
     )
 
     music_cfg = cfg.get("music", {})

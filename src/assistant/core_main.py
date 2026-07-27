@@ -18,11 +18,11 @@ from src.assistant.runner import run_services
 from src.core.bus import MessageBus
 from src.core.ipc_client import IPCClient
 from src.core.media_client import MusicServiceProxy, PodcastServiceProxy
+from src.core.integrations_client import IoTRegistryProxy, SkillsServiceProxy
 from src.services.audio_capture_service import AudioCaptureService, AudioCaptureConfig
 from src.services.av_service import AVService
 from src.services.face_service import FaceService
 from src.services.ipc_bridge import IPCBridge
-from src.services.iot_service import IoTService
 from src.services.motion_service import MotionService
 from src.services.object_service import ObjectService, ObjectConfig
 from src.services.perception_service import PerceptionService, PerceptionConfig
@@ -31,7 +31,6 @@ from src.services.stereo_service import StereoService, StereoConfig
 from src.services.dense_stereo_service import DenseStereoService, DenseStereoConfig
 from src.services.mono_depth_service import MonoDepthService
 from src.services.telemetry_service import TelemetryService
-from src.services.skills_service import SkillsService
 from src.services.tracking_service import TrackingService
 from src.services.vision_service import VisionService
 from src.services.voice_command_service import VoiceCommandService, VoiceCommandConfig
@@ -54,11 +53,14 @@ _THERMAL_PUB = "ipc:///tmp/desktop-assistant-thermal.pub"
 _MEDIA_PUB = "ipc:///tmp/desktop-assistant-media.pub"
 _MEDIA_REP = "ipc:///tmp/desktop-assistant-media.rep"
 
-# Telegram/notification/clock (the "integrations" group, Phase 2a of
-# docs/architecture/PROCESS_ISOLATION_PROPOSAL.md) also run in a separate
-# process. No proxy needed — WebService never held direct references to
-# these three, only bus events (forwarded automatically via upstream).
+# Telegram/notification/clock/IoT/skills (the "integrations" group of
+# docs/architecture/PROCESS_ISOLATION_PROPOSAL.md, Phases 2a+2b) also run
+# in a separate process. Telegram/notification/clock need no proxy (pure
+# bus events); IoT/skills need a REP endpoint core calls into (via
+# IoTRegistryProxy/SkillsServiceProxy) since WebService held direct object
+# references to them.
 _INTEGRATIONS_PUB = "ipc:///tmp/desktop-assistant-integrations.pub"
+_INTEGRATIONS_REP = "ipc:///tmp/desktop-assistant-integrations.rep"
 
 
 def main() -> int:
@@ -326,6 +328,10 @@ def main() -> int:
     music_proxy = MusicServiceProxy(_media_client)
     podcast_proxy = PodcastServiceProxy(_media_client)
 
+    _integrations_client = IPCClient(_INTEGRATIONS_REP)
+    iot_registry_proxy = IoTRegistryProxy(_integrations_client)
+    skills_proxy = SkillsServiceProxy(_integrations_client)
+
     # Second camera (optional — gracefully absent if not configured or detected)
     _cam2_cfg_raw = _cfg.get("camera2", {})
     cam2_svc = None
@@ -399,7 +405,6 @@ def main() -> int:
         perc_svc,
         obj_svc,
         TelemetryService(bus=bus),
-        IoTService(bus=bus, cfg=_cfg),
         RoomService(bus=bus, vision_service=vis, cfg=_room_cfg),
         FaceService(
             bus=bus,
@@ -411,8 +416,6 @@ def main() -> int:
             guest_intro_delay_min=0.0,  # gate is now in PerceptionService
         ),
     ]
-    skills_svc = SkillsService(bus=bus, quiet_hours=_qh)
-    services.append(skills_svc)
     if cam2_svc is not None:
         services.append(cam2_svc)
     # Stereo depth service — runs only when cam2 is present and depth is enabled
@@ -495,6 +498,10 @@ def main() -> int:
     )
     services.append(privacy_svc)
 
+    # IoTService and SkillsService moved to the "integrations" process
+    # (Phase 2b of docs/architecture/PROCESS_ISOLATION_PROPOSAL.md; see
+    # src/assistant/integrations_main.py). WebService gets proxies instead
+    # of direct object references.
     # NotificationService and TelegramService moved to the "integrations"
     # process (Phase 2a of docs/architecture/PROCESS_ISOLATION_PROPOSAL.md;
     # see src/assistant/integrations_main.py). No proxy needed here since
@@ -502,19 +509,18 @@ def main() -> int:
     services.append(ipc)
     ipc._all_services = services  # seed service registry at startup
     if _web_enabled:
-        iot_svc = next((s for s in services if getattr(s, "name", "") == "iot"), None)
         room_svc = next((s for s in services if getattr(s, "name", "") == "room"), None)
         web_svc = WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
                              quiet_hours=_qh, motion_service=motion_svc,
                              tracking_service=tracking_svc, music_service=music_proxy,
                              podcast_service=podcast_proxy,
                              camera2_service=cam2_svc, object_service=obj_svc,
-                             skills_service=skills_svc, perception_service=perc_svc,
+                             skills_service=skills_proxy, perception_service=perc_svc,
                              dense_stereo_service=dense_stereo_svc,
                              mono_depth_service=mono_depth_svc,
                              room_service=room_svc,
                              privacy_service=privacy_svc,
-                             iot_registry=(iot_svc.registry if iot_svc else None))
+                             iot_registry=iot_registry_proxy)
         services.append(web_svc)
         web_svc._all_services = services  # seed service registry at startup
 

@@ -1922,64 +1922,50 @@ class WebService:
         async def api_skills():
             if self._skills_svc is None:
                 return JSONResponse({"skills": []})
-            skills_info = []
-            for skill in self._skills_svc.registry.skills:
-                patterns = skill.patterns
-                example = ""
-                if patterns:
-                    raw = patterns[0].pattern
-                    example = (raw
-                               .replace(r"\b", "").replace(r"(", "").replace(r")", "")
-                               .replace(r"[", "").replace(r"]", "")
-                               .replace("?", "").replace("+", "").replace("*", "")
-                               .replace("\\", "").strip())
-                schema = skill.config_schema
-                config_values = skill.get_config() if schema else {}
-                skills_info.append({
-                    "name":          skill.name,
-                    "enabled":       skill.enabled,
-                    "example":       example,
-                    "pattern_count": len(patterns),
-                    "has_config":    bool(schema),
-                    "config_schema": [f.as_dict() for f in schema],
-                    "config_values": config_values,
-                })
-            return JSONResponse({"skills": skills_info})
+            reply = await asyncio.to_thread(self._skills_svc.list_skills)
+            return JSONResponse({"skills": reply.get("skills", [])})
 
         @app.post("/api/skills/{skill_name}/enabled")
         async def api_skill_enabled(skill_name: str, body: _SkillEnabledBody):
             if self._skills_svc is None:
                 raise HTTPException(503, "skills unavailable")
-            skill = self._skills_svc.find_skill(skill_name)
-            if skill is None:
+            reply = await asyncio.to_thread(
+                self._skills_svc.set_enabled, skill_name, body.enabled
+            )
+            if reply.get("reason") == "not_found":
                 raise HTTPException(404, f"Skill {skill_name!r} not found")
-            skill.enabled = body.enabled
-            return {"ok": True, "name": skill_name, "enabled": skill.enabled}
+            if not reply.get("ok"):
+                raise HTTPException(503, reply.get("error", "skills service unavailable"))
+            return {"ok": True, "name": skill_name, "enabled": reply.get("enabled")}
 
         @app.get("/api/skills/{skill_name}/config")
         async def api_skill_config_get(skill_name: str):
             if self._skills_svc is None:
                 raise HTTPException(503, "skills unavailable")
-            skill = self._skills_svc.find_skill(skill_name)
-            if skill is None:
+            reply = await asyncio.to_thread(self._skills_svc.get_config, skill_name)
+            if reply.get("reason") == "not_found":
                 raise HTTPException(404, f"Skill {skill_name!r} not found")
+            if not reply.get("ok"):
+                raise HTTPException(503, reply.get("error", "skills service unavailable"))
             return JSONResponse({
                 "name":   skill_name,
-                "schema": [f.as_dict() for f in skill.config_schema],
-                "values": skill.get_config(),
+                "schema": reply.get("schema", []),
+                "values": reply.get("values", {}),
             })
 
         @app.post("/api/skills/{skill_name}/config")
         async def api_skill_config_set(skill_name: str, body: _SkillConfigBody):
             if self._skills_svc is None:
                 raise HTTPException(503, "skills unavailable")
-            skill = self._skills_svc.find_skill(skill_name)
-            if skill is None:
+            reply = await asyncio.to_thread(
+                self._skills_svc.set_config, skill_name, body.key, body.value
+            )
+            if reply.get("reason") == "not_found":
                 raise HTTPException(404, f"Skill {skill_name!r} not found")
-            try:
-                skill.set_config(body.key, body.value)
-            except ValueError as exc:
-                raise HTTPException(400, str(exc))
+            if reply.get("reason") == "bad_request":
+                raise HTTPException(400, reply.get("error", "bad request"))
+            if not reply.get("ok"):
+                raise HTTPException(503, reply.get("error", "skills service unavailable"))
             return {"ok": True, "name": skill_name, "key": body.key, "value": body.value}
 
         @app.post("/api/utterance")
@@ -2328,10 +2314,13 @@ class WebService:
         async def api_iot_list():
             if not self._iot_registry:
                 return {"ok": True, "devices": [], "snapshots": {}}
+            reply = await asyncio.to_thread(self._iot_registry.list_all)
+            if not reply.get("ok"):
+                raise HTTPException(503, reply.get("error", "iot service unavailable"))
             return {
                 "ok": True,
-                "devices": self._iot_registry.get_device_list(),
-                "snapshots": self._iot_registry.get_all_snapshots(),
+                "devices": reply.get("devices", []),
+                "snapshots": reply.get("snapshots", {}),
             }
 
         @app.get("/api/iot/types")
@@ -2343,7 +2332,6 @@ class WebService:
         async def api_iot_add(body: dict):
             if not self._iot_registry:
                 raise HTTPException(503, "iot registry unavailable")
-            from src.iot import loader as iot_loader
 
             type_id = str((body or {}).get("type_id") or "").strip()
             cfg = (body or {}).get("config") or {}
@@ -2352,88 +2340,81 @@ class WebService:
             if not isinstance(cfg, dict):
                 raise HTTPException(400, "config must be an object")
 
-            try:
-                dev = iot_loader.create_device(type_id, cfg, bus=self.bus)
-                self._iot_registry.register(dev)
-                dev.start()
-                iot_loader.save_persisted(self._iot_registry)
-            except ValueError as exc:
-                raise HTTPException(400, str(exc))
-            except Exception as exc:
-                raise HTTPException(400, str(exc))
+            reply = await asyncio.to_thread(self._iot_registry.add, type_id, cfg)
+            if reply.get("reason") == "bad_request":
+                raise HTTPException(400, reply.get("error", "bad request"))
+            if not reply.get("ok"):
+                raise HTTPException(503, reply.get("error", "iot service unavailable"))
 
             return {
                 "ok": True,
-                "device_id": dev.device_id,
-                "device_name": dev.device_name,
-                "device_icon": dev.device_icon,
+                "device_id": reply.get("device_id"),
+                "device_name": reply.get("device_name"),
+                "device_icon": reply.get("device_icon"),
             }
 
         @app.get("/api/iot/{device_id}")
         async def api_iot_get(device_id: str):
             if not self._iot_registry:
                 raise HTTPException(503, "iot registry unavailable")
-            dev = self._iot_registry.get(device_id)
-            if not dev:
+            reply = await asyncio.to_thread(self._iot_registry.get_detail, device_id)
+            if reply.get("reason") == "not_found":
                 raise HTTPException(404, "device not found")
-            try:
-                snap = dev.get_snapshot()
-            except Exception as exc:
-                raise HTTPException(400, str(exc))
+            if reply.get("reason") == "bad_request":
+                raise HTTPException(400, reply.get("error", "bad request"))
+            if not reply.get("ok"):
+                raise HTTPException(503, reply.get("error", "iot service unavailable"))
             return {
                 "ok": True,
-                "device_id": dev.device_id,
-                "device_name": dev.device_name,
-                "device_icon": dev.device_icon,
-                "config": dict(getattr(dev, "_cfg", {}) or {}),
-                "actions": dev.get_actions(),
-                "snapshot": snap,
+                "device_id": reply.get("device_id"),
+                "device_name": reply.get("device_name"),
+                "device_icon": reply.get("device_icon"),
+                "config": reply.get("config", {}),
+                "actions": reply.get("actions", []),
+                "snapshot": reply.get("snapshot", {}),
             }
 
         @app.put("/api/iot/{device_id}")
         async def api_iot_update(device_id: str, body: dict):
             if not self._iot_registry:
                 raise HTTPException(503, "iot registry unavailable")
-            from src.iot import loader as iot_loader
-
-            dev = self._iot_registry.get(device_id)
-            if not dev:
-                raise HTTPException(404, "device not found")
 
             cfg_patch = (body or {}).get("config")
             if not isinstance(cfg_patch, dict):
                 raise HTTPException(400, "config object is required")
 
-            merged = dict(getattr(dev, "_cfg", {}) or {})
-            merged.update(cfg_patch)
-
-            dev.stop()
-            dev._cfg = merged
-            dev.start()
-            iot_loader.save_persisted(self._iot_registry)
-            return {"ok": True, "device_id": device_id, "config": merged}
+            reply = await asyncio.to_thread(
+                self._iot_registry.update_config, device_id, cfg_patch
+            )
+            if reply.get("reason") == "not_found":
+                raise HTTPException(404, "device not found")
+            if reply.get("reason") == "bad_request":
+                raise HTTPException(400, reply.get("error", "bad request"))
+            if not reply.get("ok"):
+                raise HTTPException(503, reply.get("error", "iot service unavailable"))
+            return {"ok": True, "device_id": device_id, "config": reply.get("config", {})}
 
         @app.delete("/api/iot/{device_id}")
         async def api_iot_delete(device_id: str):
             if not self._iot_registry:
                 raise HTTPException(503, "iot registry unavailable")
-            from src.iot import loader as iot_loader
-
-            dev = self._iot_registry.get(device_id)
-            if not dev:
+            reply = await asyncio.to_thread(self._iot_registry.delete, device_id)
+            if reply.get("reason") == "not_found":
                 raise HTTPException(404, "device not found")
-            self._iot_registry.unregister(device_id)
-            iot_loader.save_persisted(self._iot_registry)
+            if not reply.get("ok"):
+                raise HTTPException(503, reply.get("error", "iot service unavailable"))
             return {"ok": True}
 
         @app.post("/api/iot/{device_id}/announce")
         async def api_iot_announce(device_id: str):
             if not self._iot_registry:
                 raise HTTPException(503, "iot registry unavailable")
-            dev = self._iot_registry.get(device_id)
-            if not dev:
+            reply = await asyncio.to_thread(self._iot_registry.announce, device_id)
+            if reply.get("reason") == "not_found":
                 raise HTTPException(404, "device not found")
-            text = dev.announce()
+            if not reply.get("ok"):
+                raise HTTPException(503, reply.get("error", "iot service unavailable"))
+            text = reply.get("text")
             if self.bus and text:
                 self.bus.publish("av.say", {"text": text})
             return {"ok": True, "text": text}
@@ -2442,9 +2423,6 @@ class WebService:
         async def api_iot_action(device_id: str, body: dict):
             if not self._iot_registry:
                 raise HTTPException(503, "iot registry unavailable")
-            dev = self._iot_registry.get(device_id)
-            if not dev:
-                raise HTTPException(404, "device not found")
 
             action = str((body or {}).get("action") or "").strip()
             params = (body or {}).get("params") or {}
@@ -2453,14 +2431,16 @@ class WebService:
             if not isinstance(params, dict):
                 raise HTTPException(400, "params must be an object")
 
-            try:
-                result = dev.execute_action(action, params=params)
-            except Exception as exc:
-                raise HTTPException(400, str(exc))
-
-            if isinstance(result, dict):
-                return result
-            return {"ok": True, "result": result}
+            reply = await asyncio.to_thread(
+                self._iot_registry.execute_action, device_id, action, params
+            )
+            if reply.get("reason") == "not_found":
+                raise HTTPException(404, "device not found")
+            if reply.get("reason") == "bad_request":
+                raise HTTPException(400, reply.get("error", "bad request"))
+            if not reply.get("ok"):
+                raise HTTPException(503, reply.get("error", "iot service unavailable"))
+            return reply.get("payload", {"ok": True})
 
         # ── Depth query ─────────────────────────────────────────────────
 
