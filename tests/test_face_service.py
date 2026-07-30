@@ -499,3 +499,123 @@ def test_guest_timer_cleared_when_face_recognized(bus):
 
     assert "g4" not in service._guest_first_seen, "Timer should be cleared when face recognized"
     service.stop()
+
+
+# ── Anthropic API toggle ──────────────────────────────────────────────────────
+
+
+def test_uses_anthropic_model_true_by_default(bus):
+    """Default openclaw_greeting_model is Anthropic/Claude-branded."""
+    service = FaceService(bus=bus, registry=_mock_registry())
+    assert service._uses_anthropic_model() is True
+
+
+def test_uses_anthropic_model_false_for_other_model(bus):
+    service = FaceService(
+        bus=bus, registry=_mock_registry(),
+        openclaw_greeting_model="openai/gpt-5",
+    )
+    assert service._uses_anthropic_model() is False
+
+
+def test_anthropic_enabled_defaults_true(bus):
+    service = FaceService(bus=bus, registry=_mock_registry())
+    assert service._anthropic_enabled is True
+
+
+def test_anthropic_enabled_constructor_override(bus):
+    service = FaceService(bus=bus, registry=_mock_registry(), anthropic_enabled=False)
+    assert service._anthropic_enabled is False
+
+
+def test_anthropic_bus_event_toggles_at_runtime(bus):
+    reg = _mock_registry()
+    service = FaceService(bus=bus, registry=reg)
+    service.start()
+    try:
+        bus.publish("anthropic.set_enabled", {"enabled": False})
+        assert service._anthropic_enabled is False
+        bus.publish("anthropic.set_enabled", {"enabled": True})
+        assert service._anthropic_enabled is True
+    finally:
+        service.stop()
+
+
+def test_anthropic_bus_event_ignores_non_dict_payload(bus):
+    service = FaceService(bus=bus, registry=_mock_registry())
+    service.start()
+    try:
+        bus.publish("anthropic.set_enabled", "not-a-dict")
+        assert service._anthropic_enabled is True
+    finally:
+        service.stop()
+
+
+def test_openclaw_greeting_skipped_when_anthropic_disabled_and_model_is_anthropic(bus):
+    """Default model is Anthropic-branded, so disabling the switch should skip OpenClaw."""
+    spoken = []
+    bus.subscribe("av.say", lambda t, p: spoken.append(p.get("text", "")))
+
+    reg = _mock_registry()
+    reg.needs_greeting.return_value = True
+    service = FaceService(
+        bus=bus,
+        registry=reg,
+        guest_intro_delay_min=0.0,
+        openclaw_greetings_enabled=True,
+        openclaw_greeting_timeout_s=1.0,
+        openclaw_cli_path="openclaw",
+        anthropic_enabled=False,
+    )
+    service.start()
+
+    from unittest.mock import patch
+    with patch("subprocess.run") as mock_run:
+        face = _make_face(face_id="fa1", name="Alice", is_new=False, score=0.7)
+        bus.publish("perception.faces", _faces_payload(face))
+        _wait()
+
+    service.stop()
+    # subprocess.run must never be invoked — the Anthropic-branded model is blocked.
+    mock_run.assert_not_called()
+    # Falls back to a static greeting phrase containing the name.
+    assert any("Alice" in s for s in spoken), spoken
+
+
+def test_openclaw_greeting_still_used_when_anthropic_disabled_but_model_is_not(bus):
+    """A non-Anthropic OpenClaw model should be unaffected by the switch."""
+    spoken = []
+    bus.subscribe("av.say", lambda t, p: spoken.append(p.get("text", "")))
+
+    reg = _mock_registry()
+    reg.needs_greeting.return_value = True
+    service = FaceService(
+        bus=bus,
+        registry=reg,
+        guest_intro_delay_min=0.0,
+        openclaw_greetings_enabled=True,
+        openclaw_greeting_timeout_s=1.0,
+        openclaw_cli_path="openclaw",
+        openclaw_greeting_model="openai/gpt-5",
+        anthropic_enabled=False,
+    )
+    service.start()
+
+    def _fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout=json.dumps(
+                {"outputs": [{"text": "Welcome back, Alice, hope you're well today."}]}
+            ),
+            stderr="",
+        )
+
+    from unittest.mock import patch
+    with patch("subprocess.run", side_effect=_fake_run):
+        face = _make_face(face_id="fa2", name="Alice", is_new=False, score=0.7)
+        bus.publish("perception.faces", _faces_payload(face))
+        _wait()
+
+    service.stop()
+    assert any("Welcome back, Alice" in s for s in spoken), spoken

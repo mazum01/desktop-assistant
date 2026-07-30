@@ -178,6 +178,9 @@ def main() -> int:
 
     _room_cfg = _cfg.get("room_detection", {})
 
+    _anthropic_cfg = _cfg.get("anthropic_api", {})
+    _anthropic_enabled = bool(_anthropic_cfg.get("enabled", True))
+
     _web_cfg = _cfg.get("web_dashboard", {})
     _web_enabled = _web_cfg.get("enabled", True)
     _web_port = int(_web_cfg.get("port", 8080))
@@ -405,7 +408,7 @@ def main() -> int:
         perc_svc,
         obj_svc,
         TelemetryService(bus=bus),
-        RoomService(bus=bus, vision_service=vis, cfg=_room_cfg),
+        RoomService(bus=bus, vision_service=vis, cfg=_room_cfg, anthropic_enabled=_anthropic_enabled),
         FaceService(
             bus=bus,
             greeting_cooldown_min=_greeting_cooldown_min,
@@ -414,6 +417,7 @@ def main() -> int:
             confidence_threshold=_confidence_threshold,
             quiet_hours=_qh,
             guest_intro_delay_min=0.0,  # gate is now in PerceptionService
+            anthropic_enabled=_anthropic_enabled,
         ),
     ]
     if cam2_svc is not None:
@@ -510,6 +514,7 @@ def main() -> int:
     ipc._all_services = services  # seed service registry at startup
     if _web_enabled:
         room_svc = next((s for s in services if getattr(s, "name", "") == "room"), None)
+        face_svc = next((s for s in services if getattr(s, "name", "") == "face"), None)
         web_svc = WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
                              quiet_hours=_qh, motion_service=motion_svc,
                              tracking_service=tracking_svc, music_service=music_proxy,
@@ -519,6 +524,7 @@ def main() -> int:
                              dense_stereo_service=dense_stereo_svc,
                              mono_depth_service=mono_depth_svc,
                              room_service=room_svc,
+                             face_service=face_svc,
                              privacy_service=privacy_svc,
                              iot_registry=iot_registry_proxy)
         services.append(web_svc)

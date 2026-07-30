@@ -976,3 +976,79 @@ thresholds:
     points = r2.json()["control_points"]
     assert points[0]["temp_c"] == 24.0
     assert points[-1]["duty"] == 100.0
+
+
+# ── Anthropic API settings ────────────────────────────────────────────────────
+
+
+def test_get_anthropic_settings_defaults_true_with_no_services(app_client):
+    client, bus, svc = app_client
+    r = client.get("/api/settings/anthropic")
+    assert r.status_code == 200
+    assert r.json()["enabled"] is True
+
+
+def test_get_anthropic_settings_reflects_room_service_state(app_client):
+    client, bus, svc = app_client
+
+    class _FakeRoom:
+        name = "room"
+        _anthropic_enabled = False
+
+    svc._room_svc = _FakeRoom()
+    r = client.get("/api/settings/anthropic")
+    assert r.status_code == 200
+    assert r.json()["enabled"] is False
+
+
+def test_get_anthropic_settings_falls_back_to_face_service(app_client):
+    client, bus, svc = app_client
+
+    class _FakeFace:
+        name = "face"
+        _anthropic_enabled = False
+
+    svc._room_svc = None
+    svc._face_svc = _FakeFace()
+    r = client.get("/api/settings/anthropic")
+    assert r.status_code == 200
+    assert r.json()["enabled"] is False
+
+
+def test_put_anthropic_settings_publishes_bus_event(app_client, tmp_path, monkeypatch):
+    client, bus, svc = app_client
+    cfg_path = tmp_path / "assistant.yaml"
+    cfg_path.write_text("audio:\n  backend: respeaker_flex\n")
+    monkeypatch.setattr(web_service, "_ASSISTANT_CONFIG_PATH", cfg_path)
+
+    events = []
+    bus.subscribe("anthropic.set_enabled", lambda t, p: events.append(p))
+
+    r = client.put("/api/settings/anthropic", json={"enabled": False})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert events
+    assert events[-1]["enabled"] is False
+
+
+def test_put_anthropic_settings_persists_to_yaml(app_client, tmp_path, monkeypatch):
+    client, bus, svc = app_client
+
+    cfg_path = tmp_path / "assistant.yaml"
+    cfg_path.write_text("audio:\n  backend: respeaker_flex\n")
+    monkeypatch.setattr(web_service, "_ASSISTANT_CONFIG_PATH", cfg_path)
+
+    r = client.put("/api/settings/anthropic", json={"enabled": False})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+
+    txt = cfg_path.read_text()
+    assert "anthropic_api" in txt
+    assert "enabled: false" in txt
+
+
+def test_put_anthropic_settings_missing_enabled_returns_error(app_client):
+    client, bus, svc = app_client
+    r = client.put("/api/settings/anthropic", json={})
+    assert r.status_code == 200
+    assert r.json()["ok"] is False

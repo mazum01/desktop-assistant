@@ -1,3 +1,9 @@
+anthropic_api:
+  # Master switch for all direct/indirect calls to the Anthropic Claude API.
+  # When false: RoomService skips cloud-assisted room identification, and
+  # FaceService skips OpenClaw greeting generation for any Anthropic/Claude
+  # model (other OpenClaw models, if configured, are unaffected).
+  enabled: true
 audio:
   backend: respeaker_flex
   default:

@@ -974,6 +974,34 @@ def cmd_object_detection(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_anthropic(args) -> int:
+    if args.action == "status":
+        try:
+            d = _http_get("/api/settings/anthropic")
+            enabled = d.get("enabled", True)
+            print(f"Anthropic API: {'enabled' if enabled else 'disabled'}")
+        except Exception:
+            r = _request({"cmd": "last", "topic": "anthropic.set_enabled"})
+            payload = r.get("payload")
+            if isinstance(payload, dict):
+                enabled = payload.get("enabled", True)
+                print(f"Anthropic API: {'enabled' if enabled else 'disabled'}")
+            else:
+                print("Anthropic API: status unknown")
+        return 0
+    enabled = args.action == "enable"
+    try:
+        d = _http_put("/api/settings/anthropic", {"enabled": enabled})
+        ok = d.get("ok", True)
+    except Exception:
+        r = _request({"cmd": "publish", "topic": "anthropic.set_enabled",
+                      "payload": {"enabled": enabled}})
+        ok = r.get("ok", False)
+    label = "enabled" if enabled else "disabled"
+    print(f"Anthropic API {label}." if ok else "Error toggling Anthropic API.")
+    return 0 if ok else 1
+
+
 # ── Fan subcommands (override + tach) ────────────────────────────────────────
 
 def _parse_fan_curve_specs(specs: list[str]) -> list[dict[str, float]]:
@@ -1789,6 +1817,11 @@ def cmd_help(args) -> int:
                             "                  object-detection enable     Turn on object detection.\n"
                             "                  object-detection disable    Turn off object detection.\n"
                             "                  object-detection status     Show current state.",
+        "anthropic":        "Enable or disable use of the Anthropic Claude API (room ID + OpenClaw\n"
+                            "                  greetings). Sub-commands:\n"
+                            "                  anthropic enable            Turn on Anthropic API use.\n"
+                            "                  anthropic disable           Turn off Anthropic API use.\n"
+                            "                  anthropic status            Show current state.",
         "music":            "Pandora music playback. Sub-commands:\n"
                             "                  music play [STATION]        Start or resume playback (optional station name).\n"
                             "                  music stop                  Stop playback.\n"
@@ -3029,6 +3062,14 @@ def main() -> int:
     od_sub.add_parser("enable",  help="Turn on object detection").set_defaults(func=cmd_object_detection)
     od_sub.add_parser("disable", help="Turn off object detection").set_defaults(func=cmd_object_detection)
     od_sub.add_parser("status",  help="Show current state").set_defaults(func=cmd_object_detection)
+
+    # ── anthropic API subcommand group ────────────────────────────────
+    an_sp = sub.add_parser("anthropic", help="Enable/disable use of the Anthropic Claude API")
+    an_sub = an_sp.add_subparsers(dest="action", metavar="<subcommand>")
+    an_sub.required = True
+    an_sub.add_parser("enable",  help="Turn on Anthropic API use").set_defaults(func=cmd_anthropic)
+    an_sub.add_parser("disable", help="Turn off Anthropic API use").set_defaults(func=cmd_anthropic)
+    an_sub.add_parser("status",  help="Show current state").set_defaults(func=cmd_anthropic)
 
     # ── music subcommand group ───────────────────────────────────────
     mus_sp = sub.add_parser("music", help="Pandora music playback via pianobar")

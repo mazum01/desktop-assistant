@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.skills.describe_scene import DescribeSceneSkill
+from src.skills.anthropic_toggle import AnthropicToggleSkill
 from src.skills.face_tracking_toggle import FaceTrackingToggleSkill
 from src.skills.greeting import GreetingSkill
 from src.skills.meet_face import MeetFaceSkill
@@ -219,6 +220,27 @@ def test_object_detect_toggle(text, expected_enabled):
     assert m is not None
     skill.handle(text, m, bus)
     bus.publish.assert_called_once_with("object.set_enabled", {"enabled": expected_enabled})
+
+
+# ---------------------------------------------------------------------------
+# AnthropicToggleSkill
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("text,expected_enabled", [
+    ("enable anthropic",           True),
+    ("enable the anthropic api",   True),
+    ("turn on claude",             True),
+    ("disable anthropic",          False),
+    ("turn off the claude api",    False),
+    ("stop anthropic",             False),
+])
+def test_anthropic_toggle(text, expected_enabled):
+    bus = make_bus()
+    skill = AnthropicToggleSkill()
+    m = skill.match(text)
+    assert m is not None, f"no match for {text!r}"
+    skill.handle(text, m, bus)
+    bus.publish.assert_called_once_with("anthropic.set_enabled", {"enabled": expected_enabled})
 
 
 # ---------------------------------------------------------------------------

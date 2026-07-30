@@ -67,6 +67,8 @@ PUT  /api/settings/depth     Toggle depth at runtime  body: {"dense_enabled": bo
 GET  /api/depth/map          Colorized depth map JPEG (TURBO colormap) — requires dense_enabled
 GET  /api/depth/mono         Colorized mono depth map JPEG (TURBO colormap) — requires mono_enabled
 GET  /api/depth/query        Depth statistics: nearest/farthest/mean + per-face depths
+GET  /api/settings/anthropic Get Anthropic API enabled state (used by RoomService & FaceService)
+PUT  /api/settings/anthropic Toggle Anthropic API at runtime  body: {"enabled": bool}
 GET  /api/music/eq/custom  Get current custom EQ bands
 PUT  /api/music/eq/custom  Set custom EQ bands  body: {"bands": [...]}
 GET  /api/audio/input-gain Get current reSpeaker mic input gain percentage
@@ -772,6 +774,7 @@ class WebService:
         dense_stereo_service=None,
         mono_depth_service=None,
         room_service=None,
+        face_service=None,
         iot_registry=None,
         privacy_service=None,
         api_key: str = "",
@@ -794,6 +797,7 @@ class WebService:
         self._dense_stereo_svc = dense_stereo_service
         self._mono_depth_svc = mono_depth_service
         self._room_svc = room_service
+        self._face_svc = face_service
         self._iot_registry = iot_registry
         self._privacy_svc = privacy_service
         self._all_services: list = []  # seeded by core_main after list is built
@@ -2251,6 +2255,36 @@ class WebService:
                     _yaml.dump(_cfg, _f, default_flow_style=False, allow_unicode=True)
             except Exception as _exc:
                 log.warning("depth settings: could not persist to YAML: %s", _exc)
+            return {"ok": True}
+
+        # ── Anthropic API toggle ─────────────────────────────────────────
+
+        @app.get("/api/settings/anthropic")
+        async def api_get_anthropic_settings():
+            enabled = getattr(self._room_svc, "_anthropic_enabled", None)
+            if enabled is None:
+                enabled = getattr(self._face_svc, "_anthropic_enabled", True)
+            return {"ok": True, "enabled": bool(enabled)}
+
+        @app.put("/api/settings/anthropic")
+        async def api_put_anthropic_settings(body: dict):
+            if "enabled" not in body:
+                return {"ok": False, "error": "missing 'enabled'"}
+            enabled = bool(body["enabled"])
+            if self.bus:
+                self.bus.publish("anthropic.set_enabled", {"enabled": enabled})
+            try:
+                import yaml as _yaml
+                _cfg_path = _ASSISTANT_CONFIG_PATH
+                with open(_cfg_path) as _f:
+                    _cfg = _yaml.safe_load(_f) or {}
+                if "anthropic_api" not in _cfg:
+                    _cfg["anthropic_api"] = {}
+                _cfg["anthropic_api"]["enabled"] = enabled
+                with open(_cfg_path, "w") as _f:
+                    _yaml.dump(_cfg, _f, default_flow_style=False, allow_unicode=True)
+            except Exception as _exc:
+                log.warning("anthropic settings: could not persist to YAML: %s", _exc)
             return {"ok": True}
 
         # ── Privacy settings ─────────────────────────────────────────────

@@ -133,15 +133,19 @@ _CLAUDE_MAX_TOKENS = 100
 _CLAUDE_TIMEOUT_S = 10.0
 
 
-def _identify_room_via_claude(frame: np.ndarray) -> Optional[str]:
+def _identify_room_via_claude(frame: np.ndarray, enabled: bool = True) -> Optional[str]:
     """Send a camera frame to Claude Sonnet and ask it to identify the room type.
 
     Returns a short room-name string (e.g. "office", "living room") or None
-    if the call fails or the API key is not configured.
+    if the call fails, *enabled* is False, or the API key is not configured.
 
     The frame is JPEG-compressed at 75% quality before encoding to keep the
     payload small (~20–40 KB typical).
     """
+    if not enabled:
+        log.debug("_identify_room_via_claude: Anthropic API disabled via config — skipping")
+        return None
+
     api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         log.debug("_identify_room_via_claude: ANTHROPIC_API_KEY not set — skipping")
@@ -227,10 +231,12 @@ class RoomService(Service):
         vision_service=None,
         state_path: Path = _STATE_PATH,
         cfg: Optional[dict] = None,
+        anthropic_enabled: bool = True,
     ) -> None:
         super().__init__(bus=bus)
         self._vision_svc = vision_service
         self._state_path = state_path
+        self._anthropic_enabled: bool = bool(anthropic_enabled)
 
         # Runtime tunables (from config, with defaults)
         _cfg = cfg or {}
@@ -334,6 +340,7 @@ class RoomService(Service):
             "faces_present": face_count > 0,
             "skip_when_faces": self._skip_when_faces,
             "sample_interval_s": self._sample_interval_s,
+            "anthropic_enabled": self._anthropic_enabled,
         }
 
 
@@ -344,6 +351,7 @@ class RoomService(Service):
         self.bus.subscribe("vision.depth_map",       self._on_depth_map)
         self.bus.subscribe("vision.mono_depth_map",  self._on_mono_depth_map)
         self.bus.subscribe("perception.faces",       self._on_faces)
+        self.bus.subscribe("anthropic.set_enabled",  self._on_set_anthropic_enabled)
         self._stop_evt.clear()
         self._timer_thread = threading.Thread(
             target=self._sample_loop, name="room-sampler", daemon=True
@@ -398,6 +406,14 @@ class RoomService(Service):
     def _on_motion_position(self, _topic, payload) -> None:
         if isinstance(payload, dict) and "angle" in payload:
             self._current_angle = float(payload["angle"])
+
+    def _on_set_anthropic_enabled(self, _topic, payload) -> None:
+        if isinstance(payload, dict) and "enabled" in payload:
+            self._anthropic_enabled = bool(payload["enabled"])
+            log.info(
+                "RoomService: Anthropic API %s",
+                "enabled" if self._anthropic_enabled else "disabled",
+            )
 
     def _on_faces(self, _topic, payload) -> None:
         """Cache the number of faces currently visible."""
@@ -528,7 +544,7 @@ class RoomService(Service):
                     pass
 
             if frame is not None:
-                claude_room = _identify_room_via_claude(frame)
+                claude_room = _identify_room_via_claude(frame, enabled=self._anthropic_enabled)
                 if claude_room:
                     log.info("RoomService: Claude identified room as %r", claude_room)
                     self.bus.publish(
@@ -774,7 +790,7 @@ class RoomService(Service):
         claude_room: Optional[str] = None
         if frame is not None:
             try:
-                claude_room = _identify_room_via_claude(frame)
+                claude_room = _identify_room_via_claude(frame, enabled=self._anthropic_enabled)
             except Exception as exc:
                 log.warning("RoomService: Claude identification failed: %s", exc)
 

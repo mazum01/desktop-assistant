@@ -899,6 +899,12 @@
 <span>Object classification (detects COCO objects via Hailo-8)</span>
 </label>
 </div>
+<div class="row-input" style="margin-top:6px">
+<label class="qh-toggle" style="margin:0">
+<input id="anthropic-enabled" onchange="saveAnthropicEnabled(this.checked)" type="checkbox"/>
+<span>Anthropic Claude API (room ID + OpenClaw greetings)</span>
+</label>
+</div>
 </div>
 </div>
 </section>
@@ -1017,6 +1023,8 @@
 <tr><td><code>da random-motion enable</code></td><td>Idle gaze drifts</td></tr>
 <tr><td><code>da object-detection enable</code></td><td>Enable COCO object classification</td></tr>
 <tr><td><code>da object-detection disable</code></td><td>Disable object classification</td></tr>
+<tr><td><code>da anthropic enable</code></td><td>Enable Anthropic Claude API use</td></tr>
+<tr><td><code>da anthropic disable</code></td><td>Disable Anthropic Claude API use</td></tr>
 <tr><td><code>da system ping</code></td><td>Confirm daemon is running</td></tr>
 <tr><td><code>da system restart</code></td><td>Restart the daemon</td></tr>
 <tr><td><code>da system version</code></td><td>Speak version number</td></tr>

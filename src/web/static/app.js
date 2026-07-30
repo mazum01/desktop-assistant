@@ -1685,6 +1685,25 @@ async function saveObjectDetectionEnabled(enabled) {
   } catch (e) { /* ignore */ }
 }
 
+async function loadAnthropicEnabled() {
+  try {
+    const r = await fetch("/api/settings/anthropic");
+    if (!r.ok) return;
+    const d = await r.json();
+    el("anthropic-enabled").checked = !!d.enabled;
+  } catch (e) { /* ignore */ }
+}
+
+async function saveAnthropicEnabled(enabled) {
+  try {
+    await fetch("/api/settings/anthropic", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+  } catch (e) { /* ignore */ }
+}
+
 async function loadPrivacySettings() {
   const st = el("privacy-status");
   try {
@@ -2845,6 +2864,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadStreamResolution();
   loadCam2Resolutions();
   loadObjectDetectionEnabled();
+  loadAnthropicEnabled();
   loadPrivacySettings();
   loadMusicStatus();
   loadPodcasts();

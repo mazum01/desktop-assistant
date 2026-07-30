@@ -26,6 +26,7 @@ from src.services.room_service import (
     _compute_gradient_embedding,
     _compute_signature,  # backwards-compat alias
     _cosine_similarity,
+    _identify_room_via_claude,
 )
 
 
@@ -37,12 +38,16 @@ def _make_service(
     vision_svc=None,
     room_name: Optional[str] = None,
     cfg: Optional[dict] = None,
+    anthropic_enabled: bool = True,
 ) -> RoomService:
     bus = MessageBus()
     state_path = tmp_path / "room_state.json"
     if room_name is not None:
         state_path.write_text(json.dumps({"name": room_name, "brightness_sig": None}))
-    svc = RoomService(bus=bus, vision_service=vision_svc, state_path=state_path, cfg=cfg)
+    svc = RoomService(
+        bus=bus, vision_service=vision_svc, state_path=state_path, cfg=cfg,
+        anthropic_enabled=anthropic_enabled,
+    )
     return svc
 
 
@@ -839,3 +844,96 @@ class TestFaceSkip:
             assert svc._consec_diverged > 0
         finally:
             svc.stop()
+
+
+# ── Anthropic API toggle ──────────────────────────────────────────────────────
+
+
+class TestIdentifyRoomViaClaude:
+    """_identify_room_via_claude() respects the enabled flag and API key gating."""
+
+    def test_disabled_returns_none_without_reaching_api_key_check(self, monkeypatch):
+        """enabled=False short-circuits before even checking ANTHROPIC_API_KEY."""
+        frame = np.zeros((64, 64, 3), dtype=np.uint8)
+        # Set a bogus key to prove the short-circuit happens before key inspection
+        # would otherwise proceed further into the function.
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-should-not-be-used")
+        result = _identify_room_via_claude(frame, enabled=False)
+        assert result is None
+
+    def test_enabled_but_no_api_key_returns_none(self, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        frame = np.zeros((64, 64, 3), dtype=np.uint8)
+        result = _identify_room_via_claude(frame, enabled=True)
+        assert result is None
+
+    def test_default_enabled_true_when_omitted(self, monkeypatch):
+        """Calling without the enabled kwarg preserves the pre-toggle default behavior."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        frame = np.zeros((64, 64, 3), dtype=np.uint8)
+        # No enabled kwarg passed — should behave as enabled=True (short-circuits on
+        # missing API key, but does NOT short-circuit on the disabled-flag branch).
+        result = _identify_room_via_claude(frame)
+        assert result is None
+
+
+class TestRoomServiceAnthropicToggle:
+    """RoomService wires anthropic_enabled through to _identify_room_via_claude."""
+
+    def test_defaults_to_enabled(self, tmp_path):
+        svc = _make_service(tmp_path)
+        assert svc._anthropic_enabled is True
+
+    def test_constructor_can_disable(self, tmp_path):
+        svc = _make_service(tmp_path, anthropic_enabled=False)
+        assert svc._anthropic_enabled is False
+
+    def test_bus_event_disables_at_runtime(self, tmp_path):
+        svc = _make_service(tmp_path)
+        svc.start()
+        try:
+            svc.bus.publish("anthropic.set_enabled", {"enabled": False})
+            assert svc._anthropic_enabled is False
+        finally:
+            svc.stop()
+
+    def test_bus_event_re_enables_at_runtime(self, tmp_path):
+        svc = _make_service(tmp_path, anthropic_enabled=False)
+        svc.start()
+        try:
+            svc.bus.publish("anthropic.set_enabled", {"enabled": True})
+            assert svc._anthropic_enabled is True
+        finally:
+            svc.stop()
+
+    def test_bus_event_ignores_non_dict_payload(self, tmp_path):
+        svc = _make_service(tmp_path)
+        svc.start()
+        try:
+            svc.bus.publish("anthropic.set_enabled", "not-a-dict")
+            assert svc._anthropic_enabled is True
+        finally:
+            svc.stop()
+
+    def test_status_dict_reports_anthropic_enabled(self, tmp_path):
+        svc = _make_service(tmp_path, anthropic_enabled=False)
+        status = svc.get_status_dict()
+        assert status["anthropic_enabled"] is False
+
+    def test_check_scene_does_not_call_claude_when_disabled(self, tmp_path):
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        svc = _make_service(
+            tmp_path, vision_svc=_make_vision(frame), anthropic_enabled=False,
+        )
+        with patch(
+            "src.services.room_service._identify_room_via_claude"
+        ) as mock_claude:
+            svc.start()
+            try:
+                svc._check_scene()
+            finally:
+                svc.stop()
+            # Whenever it is invoked, it must be told the feature is disabled.
+            for call in mock_claude.call_args_list:
+                _, kwargs = call
+                assert kwargs.get("enabled") is False

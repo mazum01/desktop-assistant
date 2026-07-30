@@ -172,6 +172,7 @@ class FaceService(Service):
         openclaw_greeting_model: str = _DEFAULT_OPENCLAW_GREETING_MODEL,
         openclaw_greeting_timeout_s: float = _DEFAULT_OPENCLAW_GREETING_TIMEOUT_S,
         openclaw_cli_path: str = _DEFAULT_OPENCLAW_CLI_PATH,
+        anthropic_enabled: bool = True,
     ) -> None:
         super().__init__(bus=bus)
         self._registry = registry
@@ -193,6 +194,7 @@ class FaceService(Service):
         self._openclaw_greeting_timeout_s = max(0.5, float(openclaw_greeting_timeout_s))
         self._openclaw_cli_path_cfg = str(openclaw_cli_path or "").strip()
         self._openclaw_cli_path: str | None = None
+        self._anthropic_enabled: bool = bool(anthropic_enabled)
 
     def on_start(self) -> None:
         if self._registry is None:
@@ -212,6 +214,9 @@ class FaceService(Service):
         self._unsubs.append(self.bus.subscribe("face.guests_cleared", self._on_faces_cleared))
         self._unsubs.append(self.bus.subscribe("face.registry_cleared", self._on_faces_cleared))
         self._unsubs.append(self.bus.subscribe("face.refresh", self._on_face_refresh))
+        self._unsubs.append(
+            self.bus.subscribe("anthropic.set_enabled", self._on_set_anthropic_enabled)
+        )
         self._openclaw_cli_path = self._resolve_openclaw_cli_path()
         if self._openclaw_greetings_enabled and not self._openclaw_cli_path:
             log.warning(
@@ -241,6 +246,19 @@ class FaceService(Service):
         log.info("FaceService stopped")
 
     # ── Bus handlers ─────────────────────────────────────────────────────
+
+    def _on_set_anthropic_enabled(self, _topic, payload) -> None:
+        if isinstance(payload, dict) and "enabled" in payload:
+            self._anthropic_enabled = bool(payload["enabled"])
+            log.info(
+                "FaceService: Anthropic API %s",
+                "enabled" if self._anthropic_enabled else "disabled",
+            )
+
+    def _uses_anthropic_model(self) -> bool:
+        """True if the configured OpenClaw greeting model routes to Anthropic/Claude."""
+        model = self._openclaw_greeting_model.lower()
+        return "anthropic" in model or "claude" in model
 
     def _on_set_cooldown(self, _topic, payload) -> None:
         if not isinstance(payload, dict):
@@ -526,6 +544,12 @@ class FaceService(Service):
         if not self._openclaw_greetings_enabled:
             return None
         if not self._openclaw_cli_path:
+            return None
+        if not self._anthropic_enabled and self._uses_anthropic_model():
+            log.debug(
+                "FaceService: Anthropic API disabled via config — skipping OpenClaw "
+                "greeting (model=%r)", self._openclaw_greeting_model,
+            )
             return None
 
         if event_type == "new":

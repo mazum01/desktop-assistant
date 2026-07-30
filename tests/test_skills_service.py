@@ -126,3 +126,21 @@ def test_skills_service_ignores_empty_utterance():
     svc._on_utterance("av.utterance", {"text": ""})
     svc._on_utterance("av.utterance", {})
     bus.publish.assert_not_called()
+
+
+def test_skills_service_registers_anthropic_toggle_skill():
+    from src.services.skills_service import SkillsService
+
+    bus = MagicMock()
+    svc = SkillsService(bus)
+    assert "anthropic_toggle" in svc._registry.skill_names
+
+
+def test_skills_service_dispatches_anthropic_toggle():
+    from src.services.skills_service import SkillsService
+
+    bus = MagicMock()
+    svc = SkillsService(bus)
+    svc._on_utterance("av.utterance", {"text": "disable anthropic"})
+    published_topics = [c[0][0] for c in bus.publish.call_args_list]
+    assert "anthropic.set_enabled" in published_topics

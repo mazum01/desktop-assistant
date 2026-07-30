@@ -23,6 +23,7 @@ import psutil
 
 from src.core.service import Service
 from src.skills.base import SkillRegistry
+from src.skills.anthropic_toggle import AnthropicToggleSkill
 from src.skills.describe_scene import DescribeSceneSkill
 from src.skills.face_tracking_toggle import FaceTrackingToggleSkill
 from src.skills.greeting import GreetingSkill
@@ -83,6 +84,7 @@ class SkillsService(Service):
             MotionControlSkill(),
             MusicControlSkill(),
             ObjectDetectToggleSkill(),
+            AnthropicToggleSkill(),
             FaceTrackingToggleSkill(),
             VolumeSkill(),
             WeatherSkill(),
