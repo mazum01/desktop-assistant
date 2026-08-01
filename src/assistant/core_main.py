@@ -90,13 +90,25 @@ def main() -> int:
         "random_motion_enabled",
         _cfg.get("head_tracking", {}).get("random_motion_enabled", True),
     )
-    _person_seek_enabled = _cfg.get("head_tracking", {}).get("person_seek_enabled", True)
+    _person_seek_enabled = _rt.get("head_tracking", {}).get(
+        "person_seek_enabled",
+        _cfg.get("head_tracking", {}).get("person_seek_enabled", True),
+    )
     _recognition_enabled = _cfg.get("face_recognition", {}).get("enabled", True)
     _fr_cfg = _cfg.get("face_recognition", {})
-    _greeting_cooldown_min = float(_fr_cfg.get("greeting_cooldown_min", 30.0))
-    _greeting_jitter_pct   = float(_fr_cfg.get("greeting_cooldown_jitter_pct", 25.0))
-    _min_absence_s         = float(_fr_cfg.get("min_absence_s", 30.0))
-    _confidence_threshold  = float(_fr_cfg.get("confidence_threshold", 0.5))
+    _rt_fr = _rt.get("face_recognition", {})
+    _greeting_cooldown_min = float(_rt_fr.get(
+        "greeting_cooldown_min", _fr_cfg.get("greeting_cooldown_min", 30.0)
+    ))
+    _greeting_jitter_pct   = float(_rt_fr.get(
+        "greeting_cooldown_jitter_pct", _fr_cfg.get("greeting_cooldown_jitter_pct", 25.0)
+    ))
+    _min_absence_s         = float(_rt_fr.get(
+        "min_absence_s", _fr_cfg.get("min_absence_s", 30.0)
+    ))
+    _confidence_threshold  = float(_rt_fr.get(
+        "confidence_threshold", _fr_cfg.get("confidence_threshold", 0.5)
+    ))
     _guest_intro_delay_min = float(_fr_cfg.get("guest_intro_delay_min", 2.0))
     _servo_enabled = _rt.get("servo", {}).get(
         "enabled",
@@ -217,6 +229,7 @@ def main() -> int:
         "head_tracking": {
             "face_tracking_enabled": _face_tracking_enabled,
             "random_motion_enabled": _random_motion_enabled,
+            "person_seek_enabled": _person_seek_enabled,
         },
         "camera": {
             "rotation_deg": _camera_rotation_deg,
@@ -227,6 +240,12 @@ def main() -> int:
         },
         "camera2": {
             "rotation_deg": _camera2_rotation_deg,
+        },
+        "face_recognition": {
+            "greeting_cooldown_min": _greeting_cooldown_min,
+            "greeting_cooldown_jitter_pct": _greeting_jitter_pct,
+            "min_absence_s": _min_absence_s,
+            "confidence_threshold": _confidence_threshold,
         },
     }
 
@@ -252,6 +271,25 @@ def main() -> int:
         if isinstance(payload, dict) and "enabled" in payload:
             _rt_state["head_tracking"]["random_motion_enabled"] = bool(payload["enabled"])
             _save_runtime(_rt_state)
+
+    def _on_person_seek_changed(_t, payload):
+        if isinstance(payload, dict) and "enabled" in payload:
+            _rt_state["head_tracking"]["person_seek_enabled"] = bool(payload["enabled"])
+            _save_runtime(_rt_state)
+
+    def _on_greeting_cooldown_changed(_t, payload):
+        if not isinstance(payload, dict):
+            return
+        fr = _rt_state["face_recognition"]
+        if "cooldown_min" in payload:
+            fr["greeting_cooldown_min"] = float(payload["cooldown_min"])
+        if "jitter_pct" in payload:
+            fr["greeting_cooldown_jitter_pct"] = float(payload["jitter_pct"])
+        if "min_absence_s" in payload:
+            fr["min_absence_s"] = float(payload["min_absence_s"])
+        if "confidence_threshold" in payload:
+            fr["confidence_threshold"] = float(payload["confidence_threshold"])
+        _save_runtime(_rt_state)
 
     def _on_camera_rotation_changed(_t, payload):
         if isinstance(payload, dict) and "rotation_deg" in payload:
@@ -291,6 +329,8 @@ def main() -> int:
     bus.subscribe("motion.limits_changed",          _on_limits_changed)
     bus.subscribe("tracking.face_tracking_changed", _on_face_tracking_changed)
     bus.subscribe("tracking.random_motion_changed", _on_random_motion_changed)
+    bus.subscribe("tracking.person_seek_changed",   _on_person_seek_changed)
+    bus.subscribe("tracking.greeting_cooldown_changed", _on_greeting_cooldown_changed)
     bus.subscribe("camera.rotation_changed",        _on_camera_rotation_changed)
     bus.subscribe("camera2.rotation_changed",       _on_camera2_rotation_changed)
     bus.subscribe("camera.resolution_changed",      _on_camera_resolution_changed)
@@ -542,6 +582,15 @@ def main() -> int:
     def _rpc_face_get_anthropic_enabled(_msg):
         return {"ok": True, "enabled": bool(face_svc._anthropic_enabled)}
 
+    def _rpc_face_get_greeting_settings(_msg):
+        return {
+            "ok": True,
+            "cooldown_min":         getattr(face_svc, "_cooldown_min", 30.0),
+            "jitter_pct":           getattr(face_svc, "_jitter_pct", 25.0),
+            "min_absence_s":        getattr(face_svc, "_min_absence_s", 30.0),
+            "confidence_threshold": getattr(face_svc, "_confidence_threshold", 0.5),
+        }
+
     def _rpc_privacy_get_status(_msg):
         svc = privacy_svc
         return {
@@ -675,6 +724,7 @@ def main() -> int:
 
     ipc.register_rpc("room.get_status", _rpc_room_get_status)
     ipc.register_rpc("face.get_anthropic_enabled", _rpc_face_get_anthropic_enabled)
+    ipc.register_rpc("face.get_greeting_settings", _rpc_face_get_greeting_settings)
     ipc.register_rpc("privacy.get_status", _rpc_privacy_get_status)
     ipc.register_rpc("object.get_enabled", _rpc_object_get_enabled)
     ipc.register_rpc("perception.capture_training_image", _rpc_perception_capture_training_image)

@@ -64,7 +64,7 @@ class RoomServiceProxy:
 
 class FaceServiceProxy:
     """Proxies `WebService`'s Anthropic-toggle fallback (used only when
-    `RoomServiceProxy` is unavailable)."""
+    `RoomServiceProxy` is unavailable) and greeting-settings reads."""
 
     name = "face"
 
@@ -76,6 +76,18 @@ class FaceServiceProxy:
         if not reply.get("ok"):
             return default
         return bool(reply.get("enabled", default))
+
+    def get_greeting_settings(self) -> dict:
+        reply = self._client.call({"cmd": "face.get_greeting_settings"})
+        if not reply.get("ok"):
+            log.warning("core RPC failed (face.get_greeting_settings): %s", reply.get("error"))
+            return {}
+        return {
+            "cooldown_min":         reply.get("cooldown_min", 30.0),
+            "jitter_pct":           reply.get("jitter_pct", 25.0),
+            "min_absence_s":        reply.get("min_absence_s", 30.0),
+            "confidence_threshold": reply.get("confidence_threshold", 0.5),
+        }
 
 
 class PrivacyServiceProxy:

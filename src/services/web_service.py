@@ -1845,11 +1845,12 @@ class WebService:
             except Exception:
                 pass
             fr = cfg.get("face_recognition", {})
+            live = await asyncio.to_thread(self._face_svc.get_greeting_settings) if self._face_svc else {}
             return {
-                "cooldown_min":         fr.get("greeting_cooldown_min", 30.0),
-                "jitter_pct":           fr.get("greeting_cooldown_jitter_pct", 25.0),
-                "min_absence_s":        fr.get("min_absence_s", 30.0),
-                "confidence_threshold": fr.get("confidence_threshold", 0.5),
+                "cooldown_min":         live.get("cooldown_min", fr.get("greeting_cooldown_min", 30.0)),
+                "jitter_pct":           live.get("jitter_pct", fr.get("greeting_cooldown_jitter_pct", 25.0)),
+                "min_absence_s":        live.get("min_absence_s", fr.get("min_absence_s", 30.0)),
+                "confidence_threshold": live.get("confidence_threshold", fr.get("confidence_threshold", 0.5)),
                 "enabled":              fr.get("enabled", True),
             }
 

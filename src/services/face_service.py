@@ -34,6 +34,10 @@ av.say              greeting text
 face.identified     ``{face_id, name, is_new, score}``  — telemetry / debug
 face.greeted        ``{face_id, name, text, event_type}``  — Telegram / audit
                     event_type: "new" | "returning" | "returning_corrected"
+tracking.greeting_cooldown_changed
+                    ``{cooldown_min, jitter_pct, min_absence_s, confidence_threshold}``
+                    — emitted after tracking.set_greeting_cooldown so
+                    core_main.py can persist the change to runtime_state.yaml.
 """
 
 from __future__ import annotations
@@ -277,6 +281,13 @@ class FaceService(Service):
             self._cooldown_min, self._jitter_pct, self._min_absence_s,
             self._confidence_threshold,
         )
+        if self.bus is not None:
+            self.bus.publish("tracking.greeting_cooldown_changed", {
+                "cooldown_min": self._cooldown_min,
+                "jitter_pct": self._jitter_pct,
+                "min_absence_s": self._min_absence_s,
+                "confidence_threshold": self._confidence_threshold,
+            })
 
     def _on_face_deleted(self, _topic, payload) -> None:
         """Purge a single deleted face from in-memory state."""

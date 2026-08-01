@@ -393,6 +393,23 @@ def test_set_greeting_cooldown_via_bus(bus, svc):
     assert svc._cooldown_min == pytest.approx(60.0)
 
 
+def test_set_greeting_cooldown_publishes_changed_event(bus, svc):
+    """tracking.set_greeting_cooldown should publish tracking.greeting_cooldown_changed
+    with the full resolved settings so core_main.py can persist them across
+    daemon restarts (see runtime_state.py overlay pattern)."""
+    changed = []
+    bus.subscribe("tracking.greeting_cooldown_changed", lambda t, p: changed.append(p))
+    bus.publish("tracking.set_greeting_cooldown", {
+        "cooldown_min": 45.0, "jitter_pct": 10.0,
+        "min_absence_s": 20.0, "confidence_threshold": 0.6,
+    })
+    _wait()
+    assert changed == [{
+        "cooldown_min": 45.0, "jitter_pct": 10.0,
+        "min_absence_s": 20.0, "confidence_threshold": 0.6,
+    }]
+
+
 # ── No crash on missing face_id ──────────────────────────────────────────────
 
 def test_faces_without_face_id_do_not_crash(bus, svc):

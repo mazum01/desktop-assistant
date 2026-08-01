@@ -771,13 +771,13 @@ def cmd_greeting_settings(_args) -> int:
         print(f"Warning: could not read runtime_state.yaml: {exc}")
 
     fr = cfg.get("face_recognition", {})
-    # Runtime state can override cooldown
-    rt_cooldown = rt.get("face_recognition", {}).get("greeting_cooldown_min")
-
-    cooldown_min = rt_cooldown if rt_cooldown is not None else fr.get("greeting_cooldown_min", 30.0)
-    jitter_pct   = fr.get("greeting_cooldown_jitter_pct", 25.0)
-    min_abs_s    = fr.get("min_absence_s", 30.0)
-    confidence   = fr.get("confidence_threshold", 0.5)
+    rt_fr = rt.get("face_recognition", {})
+    # Runtime state overrides these 4 tunables when present (persisted via
+    # tracking.set_greeting_cooldown → tracking.greeting_cooldown_changed).
+    cooldown_min = rt_fr.get("greeting_cooldown_min", fr.get("greeting_cooldown_min", 30.0))
+    jitter_pct   = rt_fr.get("greeting_cooldown_jitter_pct", fr.get("greeting_cooldown_jitter_pct", 25.0))
+    min_abs_s    = rt_fr.get("min_absence_s", fr.get("min_absence_s", 30.0))
+    confidence   = rt_fr.get("confidence_threshold", fr.get("confidence_threshold", 0.5))
     enabled      = fr.get("enabled", True)
 
     W = 34
