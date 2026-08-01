@@ -126,6 +126,12 @@ def main() -> int:
     )) % 360
     _cam_width  = int(_rt.get("camera", {}).get("width",  _cam_cfg_raw.get("width", 640)))
     _cam_height = int(_rt.get("camera", {}).get("height", _cam_cfg_raw.get("height", 480)))
+    _cam_stream_width  = int(_rt.get("camera", {}).get(
+        "stream_width",  _cam_cfg_raw.get("stream_width", 640)
+    ))
+    _cam_stream_height = int(_rt.get("camera", {}).get(
+        "stream_height", _cam_cfg_raw.get("stream_height", 360)
+    ))
     _camera_cfg = _CameraConfig(
         width=_cam_width,
         height=_cam_height,
@@ -133,8 +139,8 @@ def main() -> int:
         rotation_deg=_camera_rotation_deg,
         af_mode=str(_cam_cfg_raw.get("af_mode", "continuous")),
         lens_position=float(_cam_cfg_raw.get("lens_position", 0.0)),
-        stream_width=int(_cam_cfg_raw.get("stream_width", 640)),
-        stream_height=int(_cam_cfg_raw.get("stream_height", 360)),
+        stream_width=_cam_stream_width,
+        stream_height=_cam_stream_height,
     )
 
     def _tracking_frame_width(cam_w: int, cam_h: int, rot_deg: int) -> int:
@@ -216,6 +222,8 @@ def main() -> int:
             "rotation_deg": _camera_rotation_deg,
             "width": _cam_width,
             "height": _cam_height,
+            "stream_width": _cam_stream_width,
+            "stream_height": _cam_stream_height,
         },
         "camera2": {
             "rotation_deg": _camera2_rotation_deg,
@@ -273,6 +281,12 @@ def main() -> int:
             if tracking_svc is not None:
                 tracking_svc.update_frame_width(new_fw)
 
+    def _on_camera_stream_resolution_changed(_t, payload):
+        if isinstance(payload, dict) and "width" in payload and "height" in payload:
+            _rt_state["camera"]["stream_width"] = int(payload["width"])
+            _rt_state["camera"]["stream_height"] = int(payload["height"])
+            _save_runtime(_rt_state)
+
     bus.subscribe("motion.enabled_changed",         _on_servo_changed)
     bus.subscribe("motion.limits_changed",          _on_limits_changed)
     bus.subscribe("tracking.face_tracking_changed", _on_face_tracking_changed)
@@ -280,6 +294,7 @@ def main() -> int:
     bus.subscribe("camera.rotation_changed",        _on_camera_rotation_changed)
     bus.subscribe("camera2.rotation_changed",       _on_camera2_rotation_changed)
     bus.subscribe("camera.resolution_changed",      _on_camera_resolution_changed)
+    bus.subscribe("camera.stream_resolution_changed", _on_camera_stream_resolution_changed)
 
     tracking_svc: "TrackingService | None" = None  # forward-ref for rotation callback
 

@@ -904,6 +904,46 @@ def cmd_camera(args) -> int:
         )
         print(f"  Camera 1 rotation : {deg}°")
         return 0
+    if sub == "stream-resolution":
+        parts = args.resolution.split("x")
+        if len(parts) != 2:
+            print(f"Invalid format: {args.resolution!r}. Use WxH e.g. 640x360", file=sys.stderr)
+            return 1
+        try:
+            w, h = int(parts[0]), int(parts[1])
+        except ValueError:
+            print(f"Invalid resolution: {args.resolution!r}", file=sys.stderr)
+            return 1
+        r = _request({
+            "cmd": "publish",
+            "topic": "camera.set_stream_resolution",
+            "payload": {"width": w, "height": h},
+        })
+        if r.get("ok"):
+            print(f"Camera 1 stream resolution set to {w}×{h}")
+        else:
+            print(json.dumps(r, indent=2))
+        return 0 if r.get("ok") else 1
+    if sub == "stream-resolution-status":
+        import yaml as _yaml
+        _base = Path(__file__).resolve().parents[1]
+        _cfg, _rt = {}, {}
+        try:
+            _cfg = _yaml.safe_load((_base / "config" / "assistant.yaml").read_text()) or {}
+        except Exception:
+            pass
+        try:
+            _rt = _yaml.safe_load((_base / "config" / "runtime_state.yaml").read_text()) or {}
+        except Exception:
+            pass
+        w = _rt.get("camera", {}).get(
+            "stream_width", _cfg.get("camera", {}).get("stream_width", 640)
+        )
+        h = _rt.get("camera", {}).get(
+            "stream_height", _cfg.get("camera", {}).get("stream_height", 360)
+        )
+        print(f"  Camera 1 stream resolution : {w}×{h}")
+        return 0
     return 1
 
 
@@ -1803,7 +1843,9 @@ def cmd_help(args) -> int:
         "camera":           "Camera 1 settings. Sub-commands:\n"
                             "                  camera resolution <WxH>     Set capture resolution (e.g. 640x480).\n"
                             "                  camera rotation <deg>       Set camera 1 rotation (0–359°).\n"
-                            "                  camera rotation-status      Show current camera 1 rotation angle.",
+                            "                  camera rotation-status      Show current camera 1 rotation angle.\n"
+                            "                  camera stream-resolution <WxH>        Set MJPEG stream downscale size (e.g. 640x360).\n"
+                            "                  camera stream-resolution-status       Show current camera 1 stream resolution.",
         "camera2":          "Camera 2 (raw feed) settings. Sub-commands:\n"
                             "                  camera2 rotation <deg>      Set camera 2 rotation (0–359°).\n"
                             "                  camera2 rotation-status     Show current camera 2 rotation angle.",
@@ -3043,6 +3085,12 @@ def main() -> int:
     ssp.set_defaults(func=cmd_camera)
 
     cam_sub.add_parser("rotation-status", help="Show current camera 1 rotation angle").set_defaults(func=cmd_camera)
+
+    ssp = cam_sub.add_parser("stream-resolution", help="Set MJPEG stream downscale resolution for camera 1 (e.g. 640x360)")
+    ssp.add_argument("resolution", help="WxH (e.g. 640x360)")
+    ssp.set_defaults(func=cmd_camera)
+
+    cam_sub.add_parser("stream-resolution-status", help="Show current camera 1 stream resolution").set_defaults(func=cmd_camera)
 
     # ── camera 2 subcommand group ────────────────────────────────────
     cam2_sp = sub.add_parser("camera2", help="Camera 2 (raw feed) settings (rotation)")

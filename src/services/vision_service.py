@@ -1172,6 +1172,7 @@ class VisionService(Service):
         self._stream_width = w
         self._stream_height = h
         log.info("Stream resolution changed to %dx%d", w, h)
+        self.bus.publish("camera.stream_resolution_changed", {"width": w, "height": h})
 
     def _on_servo_angle(self, _topic, payload) -> None:
         if isinstance(payload, dict) and "angle" in payload:

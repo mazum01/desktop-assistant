@@ -79,6 +79,25 @@ def test_vision_service_capture_still_topic():
         svc.stop()
 
 
+def test_vision_service_set_stream_resolution_persists_change():
+    """camera.set_stream_resolution should update state and publish a
+    camera.stream_resolution_changed event so core_main.py can persist it
+    across daemon restarts (see runtime_state.py overlay pattern)."""
+    bus = MessageBus()
+    fake = _FakeCamera()
+    svc = VisionService(bus=bus, camera=fake)
+    svc.tick_seconds = 1.0  # avoid running ticks during this test
+    svc.start()
+    try:
+        changed = []
+        bus.subscribe("camera.stream_resolution_changed", lambda t, p: changed.append(p))
+        bus.publish("camera.set_stream_resolution", {"width": 1280, "height": 720})
+        assert svc.stream_resolution == (1280, 720)
+        assert changed == [{"width": 1280, "height": 720}]
+    finally:
+        svc.stop()
+
+
 def test_vision_service_handles_capture_error():
     bus = MessageBus()
     fake = _FakeCamera()
