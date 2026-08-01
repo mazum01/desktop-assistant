@@ -2,7 +2,7 @@
 title: Process Isolation Proposal — Fixing VERA's Monolithic Core
 date: 2026-07-18
 version: 1.47.0
-status: Phase 1 (media), Phase 2a (integrations: Telegram/Notification/Clock), and Phase 2b (integrations: IoT/Skills) implemented and live — see §6 update below
+status: Phase 1 (media), Phase 2a (integrations: Telegram/Notification/Clock), Phase 2b (integrations: IoT/Skills), and Phase 3 (web) implemented — see §6 update below. Phase 3 is code-complete and test-verified but NOT YET deployed live (elevated risk — see §6 note).
 ---
 
 # Process Isolation Proposal
@@ -19,10 +19,19 @@ own `desktop-assistant-integrations.service` process. **Phase 2b
 (`integrations`) has also been implemented** — `IoTService` and
 `SkillsService` now run in the same `desktop-assistant-integrations.service`
 process alongside the Phase 2a trio, via new `IoTRegistryProxy`/
-`SkillsServiceProxy` proxies. See the "Phase 1", "Phase 2a", and "Phase 2b"
-implementation-notes callouts in §6 for what actually shipped, including
-real bugs/gaps these splits surfaced and fixed. `web` (Phase 3) and
-`audio-voice` (Phase 4) remain unstarted.
+`SkillsServiceProxy` proxies. **Phase 3 (`web`) has also been implemented** —
+`WebService` (the FastAPI dashboard/API) now has its own
+`desktop-assistant-web.service` process entry point (`src/assistant/
+web_main.py`), with all ~55 remaining direct-object call sites converted to
+proxy calls (`src/core/web_client.py`) or `bus.last(...)` fallbacks. See the
+"Phase 1", "Phase 2a", "Phase 2b", and "Phase 3" implementation-notes
+callouts in §6 for what actually shipped, including real bugs/gaps these
+splits surfaced and fixed. **Phase 3 is code-complete, unit- and
+integration-tested (`tests/test_web_process_split.py`), and the full suite
+passes (984+ tests) — but has NOT yet been deployed live**, since it's the
+highest-risk cutover (it directly affects the dashboard/API/camera streams
+the user relies on day-to-day, unlike the lower-visibility Phase 1/2a/2b
+satellite processes). `audio-voice` (Phase 4) remains unstarted.
 
 ---
 
@@ -224,10 +233,21 @@ biggest win on paper.**
 > `_skills_svc` (Phase 2b) are now proxy objects (`MusicServiceProxy`/
 > `PodcastServiceProxy`/`IoTRegistryProxy`/`SkillsServiceProxy`) — those four
 > rows are resolved; the underlying services run in other processes.
-> `_tracking_svc`, `_camera2_svc`, `_vision_svc`, `_room_svc`, `_motion_svc`,
-> `_dense_stereo_svc`, `_mono_depth_svc`, `_object_svc`, `_perception_svc`,
-> and `_privacy_svc` still hold direct in-process object references — these
-> remain the Phase 3 (`web`) blocker.
+> **Phase 3 update:** `_tracking_svc`, `_camera2_svc`, `_vision_svc`,
+> `_room_svc`, `_motion_svc`, `_object_svc`, `_perception_svc`, and
+> `_privacy_svc` are now also proxy objects (`src/core/web_client.py`),
+> plus a new `_face_svc` proxy the cataloging pass found (the Anthropic
+> toggle's fallback path, missed in the original count above).
+> `_dense_stereo_svc`/`_mono_depth_svc` needed **no proxy at all**: every
+> call site already had a `bus.last(...)` fallback for when the direct
+> reference was `None`, and since both services publish their full payload
+> on the bus on every update, that fallback is always in sync — the
+> direct-object short-circuit was simply deleted. `_registry`
+> (`FaceRegistry`) also needed no proxy: `PerceptionService`/`FaceService`
+> already each open an independent `FaceRegistry` SQLite connection in the
+> same process today, so `WebService` opening a third connection from a
+> different OS process is the same pattern it already relied on, not a new
+> risk. **All 14 original blockers are now resolved.**
 
 ---
 
@@ -381,10 +401,82 @@ biggest win on paper.**
    >    `integrations_main.py`'s existing `_CORE_PUB` upstream subscription.
    >    Neither direction needed new wiring — only the two proxies above and
    >    the `media_main.py` fix in note 3.
-5. **Phase 3 — `web`:** Finish decoupling the remaining ~40 call sites
-   (vision/tracking/skills/perception/depth), then extract. This is the
-   highest-value split (isolates the 2,880-line file and its FastAPI/GIL
-   load) and the highest-effort one — deliberately last.
+5. **Phase 3 — `web` (done, not yet deployed live):** Decoupled the
+   remaining ~55 direct-object call sites (vision/tracking/motion/room/face/
+   privacy/object/perception/camera2/depth) and extracted `WebService` into
+   its own `src/assistant/web_main.py` process
+   (`desktop-assistant-web.service`). This is the highest-value split
+   (isolates the 2,900-line file and its FastAPI/GIL load) and was the
+   highest-effort one — deliberately last.
+
+   > **Implementation notes:**
+   > 1. **Direction reverses vs. Phase 1/2b.** In Phase 1/2b, a satellite
+   >    service moved *out* of core and core grew a client proxy pointed
+   >    *at* it. Here, `WebService` itself is the thing that moves out, so
+   >    `web_main.py` builds proxies (`src/core/web_client.py`) pointed
+   >    *at* core's own default IPCBridge REP endpoint
+   >    (`ipc:///tmp/desktop-assistant.rep`, already existed, reused as-is),
+   >    and `core_main.py` registers ~15 new `register_rpc(...)` handlers
+   >    against the real service objects, which stay in `core`.
+   > 2. **Most of the remaining coupling turned out to be read-mostly.**
+   >    Every write/toggle route (`/api/settings/servo`, `/api/pan`,
+   >    `/api/settings/anthropic` PUT, etc.) already only called
+   >    `self.bus.publish(...)`, which crosses the process boundary for
+   >    free via the existing IPCBridge upstream mechanism — no proxy
+   >    needed for those. Only the paired GET/read routes and two POST
+   >    actions (`/api/faces/{id}/train`, snapshot JPEG encode) needed a
+   >    proxy method.
+   > 3. **Two services needed zero proxy work.** `DenseStereoService`/
+   >    `MonoDepthService` publish their full payload on the bus on every
+   >    update, and every `web_service.py` call site reading
+   >    `.latest_payload()` already had a `bus.last(...)` fallback for when
+   >    the direct reference was `None` — so the direct-object
+   >    short-circuit was simply deleted, relying purely on the
+   >    always-in-sync bus cache. `FaceRegistry` (`self._registry`) also
+   >    needed no proxy: `PerceptionService`/`FaceService` already each open
+   >    an independent SQLite connection to the same shared
+   >    `~/.local/share/desktop-assistant/faces.db` in the same process
+   >    today — `WebService` opening a third connection from a different OS
+   >    process extends an already-proven pattern, not a new risk.
+   > 4. **Camera2 "configured" gating changed shape.** The original code
+   >    checked `self._camera2_svc is not None` as a plain truthy check
+   >    (startup subscribe gate, several GET routes). Since a proxy object
+   >    is never `None`, this became `Camera2ServiceProxy.is_configured()`,
+   >    which caches its answer after the first successful RPC round trip
+   >    (cam2's presence never changes at runtime) to avoid re-hitting the
+   >    wire on every truthiness check — but deliberately does **not** cache
+   >    a transport *failure*, so a later successful call (once `core` comes
+   >    back up) is retried instead of permanently reporting cam2 as absent.
+   > 5. **MJPEG streaming and snapshot JPEGs reuse the existing RPC
+   >    mechanism**, not a new binary channel — bandwidth-calculated as
+   >    trivial (~15–30KB base64 JPEG at cam1's ~11fps over local IPC).
+   >    Snapshot routes now JPEG-encode server-side in `core`
+   >    (`vision.snapshot_jpeg`/`camera2.snapshot_jpeg`) and return
+   >    base64-encoded bytes, so raw ndarrays are never sent across the
+   >    process boundary.
+   > 6. **Reverse cross-wiring requirement, unique to this phase.** Unlike
+   >    Phase 1/2b (satellite → core only), `web` both calls *into* core
+   >    (RPCs above) and is itself an upstream *other* processes must
+   >    subscribe to: `WebService`'s own `bus.publish()` calls (`music.*`,
+   >    `av.utterance`, `settings.quiet_hours_updated`, `motion.pan_to`,
+   >    etc.) now originate on `web`'s bus, not core's. Per the "IPCBridge
+   >    forwarding is not transitive" rule (§ Phase 2a notes), `core_main.py`
+   >    (its own `IPCBridge`), `media_main.py`, and `integrations_main.py`
+   >    each needed a new `_WEB_PUB` added to their `upstream_endpoints` —
+   >    symmetric to how `_INTEGRATIONS_PUB` was added to `media_main.py` in
+   >    Phase 2b. `web_main.py` itself subscribes to **all four** other
+   >    processes' PUBs (core, thermal, media, integrations) — the same
+   >    breadth core itself has — not just core's, since `WebService` used
+   >    to share core's in-process bus and therefore saw everything core
+   >    itself received from anywhere.
+   > 7. **Found one previously-uncataloged direct reference:** `_face_svc`
+   >    (the Anthropic-toggle GET route's fallback when `_room_svc` is
+   >    unavailable) — missed in the original §5 count, added as
+   >    `FaceServiceProxy` alongside the rest.
+   > 8. **Deliberately not yet deployed live.** Unlike Phase 1/2a/2b (lower-
+   >    visibility satellite processes), this cutover directly replaces the
+   >    dashboard/API/camera-stream process the user actively relies on —
+   >    flagged as elevated risk pending an explicit go-ahead on timing.
 6. **Phase 4 (optional, higher risk) — `audio-voice` split from
    `vision-hailo`:** Only worth doing if profiling after phases 1–3 shows
    audio/voice latency is still affected by vision/Hailo load. Requires
@@ -420,9 +512,9 @@ To keep the growing number of cross-process links maintainable:
 
 ## 8. What This Proposal Does NOT Do
 
-- It moved five services out of `desktop-assistant-core` (Phase 1: media;
-  Phase 2a: Telegram/Notification/Clock; Phase 2b: IoT/Skills). `WebService`
-  (Phase 3) and the vision/audio core group remain in
+- It moved six services/service-groups out of `desktop-assistant-core`
+  (Phase 1: media; Phase 2a: Telegram/Notification/Clock; Phase 2b:
+  IoT/Skills; Phase 3: `WebService`). The vision/audio core group remains in
   `desktop-assistant-core` for now.
 - It does **not** touch `scripts/desktop-assistant`'s existing
   `_request()`/`_thermal_request()` functions — refactoring the CLI to use
@@ -434,12 +526,17 @@ To keep the growing number of cross-process links maintainable:
 
 VERA doesn't need a new framework — it needs to finish what the thermal
 process already proved works. The scaffolding for that (`ProcessNode`,
-`IPCClient`, and passing integration tests) is done, and three phases have
-now shipped and are running live: Phase 1 (`media`), Phase 2a
-(`integrations` — Telegram/Notification/Clock), and Phase 2b (`integrations`
-— IoT/Skills). All three splits validated the pattern end-to-end on real
-hardware and each surfaced (and fixed) at least one genuine latent bug or
-gap the monolith had been hiding. The next concrete step is the
-higher-effort, higher-value Phase 3 (`web`) — finishing the ~40 remaining
-`WebService` call sites so the FastAPI/GIL-bound dashboard process can be
-isolated too.
+`IPCClient`, and passing integration tests) is done, and four phases have
+now shipped: Phase 1 (`media`), Phase 2a (`integrations` —
+Telegram/Notification/Clock), Phase 2b (`integrations` — IoT/Skills), and
+Phase 3 (`web` — the FastAPI dashboard/API). All four splits validated the
+pattern end-to-end (Phase 1/2a/2b on real hardware, Phase 3 via the full
+test suite plus a dedicated `tests/test_web_process_split.py` integration
+suite) and each surfaced (and fixed) at least one genuine latent bug or gap
+the monolith had been hiding. Phase 3 is code-complete but intentionally
+**not yet deployed live** — it's the highest-risk cutover of the four,
+directly replacing the dashboard/API/camera-stream process, so the actual
+service restart is being held for an explicit go/no-go from the user on
+timing. The only phase left after that is the optional, higher-risk Phase 4
+(`audio-voice` split from `vision-hailo`), worth doing only if profiling
+shows it's still needed once Phase 3 is live.

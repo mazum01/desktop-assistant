@@ -771,8 +771,7 @@ class WebService:
         object_service=None,
         skills_service=None,
         perception_service=None,
-        dense_stereo_service=None,
-        mono_depth_service=None,
+        depth_service=None,
         room_service=None,
         face_service=None,
         iot_registry=None,
@@ -794,8 +793,15 @@ class WebService:
         self._object_svc = object_service
         self._skills_svc = skills_service
         self._perception_svc = perception_service
-        self._dense_stereo_svc = dense_stereo_service
-        self._mono_depth_svc = mono_depth_service
+        # `DenseStereoService`/`MonoDepthService` themselves need no proxy —
+        # every route reading their `latest_payload()` already falls back to
+        # `self.bus.last(...)`, which is always in sync (both services
+        # publish their full payload on every update). `depth_service` only
+        # covers the two `_enabled` flags that route needed directly: pass
+        # anything exposing `.get_enabled_flags() -> {"dense_enabled":,
+        # "mono_enabled":}` — `DepthServicesProxy` (src/core/web_client.py)
+        # cross-process, or an equivalent test double in-process.
+        self._depth_svc = depth_service
         self._room_svc = room_service
         self._face_svc = face_service
         self._iot_registry = iot_registry
@@ -841,7 +847,7 @@ class WebService:
         self._unsubs.append(
             self.bus.subscribe("vision.jpeg_ready", self._on_frame)
         )
-        if self._camera2_svc is not None:
+        if self._camera2_configured():
             self._unsubs.append(
                 self.bus.subscribe("vision.frame2_ready", self._on_frame2)
             )
@@ -921,8 +927,32 @@ class WebService:
         log.info("WebService stopped")
 
     # ── Internal bus handlers ─────────────────────────────────────────
+    def _camera2_configured(self) -> bool:
+        """True if a second camera is present.
+
+        `self._camera2_svc` is either `None` (no cam2 at all — same as
+        before Phase 3) or a `Camera2ServiceProxy`/test double; the proxy
+        can't just be `None` when cam2 is unconfigured (it always exists,
+        pointed at `core`'s REP endpoint), so it exposes `is_configured()`
+        instead, caching the (never-changes-at-runtime) answer after the
+        first RPC round trip.
+        """
+        if self._camera2_svc is None:
+            return False
+        is_configured = getattr(self._camera2_svc, "is_configured", None)
+        if is_configured is None:
+            return True  # plain test double with no gating concept
+        return bool(is_configured())
+
     def _on_frame(self, _topic, payload) -> None:
-        """Read the pre-encoded JPEG from VisionService and wake the MJPEG generator."""
+        """Read the pre-encoded JPEG from VisionService and wake the MJPEG generator.
+
+        `latest_jpeg()` is a blocking RPC round trip to `core` when
+        `self._vision_svc` is a `VisionServiceProxy` (Phase 3) — bounded to
+        ~500ms by the proxy's own timeout so a slow/unreachable `core`
+        can't wedge this bus-subscriber thread indefinitely, at the cost of
+        occasionally dropping a preview frame under that failure mode.
+        """
         if self._vision_svc is None:
             return
         jpeg = self._vision_svc.latest_jpeg()
@@ -933,8 +963,11 @@ class WebService:
                 self._loop.call_soon_threadsafe(self._frame_event.set)
 
     def _on_frame2(self, _topic, payload) -> None:
-        """Read JPEG from RawCameraService (second camera) and wake /stream2 generator."""
-        if self._camera2_svc is None:
+        """Read JPEG from RawCameraService (second camera) and wake /stream2 generator.
+
+        Same bounded-blocking-RPC caveat as `_on_frame` applies here.
+        """
+        if not self._camera2_configured():
             return
         jpeg = self._camera2_svc.latest_jpeg()
         if jpeg is not None:
@@ -1066,6 +1099,8 @@ class WebService:
         self._cpu_history.append(round(cpu, 1))
         self._mem_history.append(round(mem, 1))
 
+        _room_detail = self._room_svc.get_status() if self._room_svc else None
+
         return {
             "version": get_version(),
             "ts": time.time(),
@@ -1078,8 +1113,8 @@ class WebService:
             "mem_percent": mem,
             "cpu_history": list(self._cpu_history),
             "mem_history": list(self._mem_history),
-            "room": self._room_svc.room_name if self._room_svc else None,
-            "room_detail": self._room_svc.get_status_dict() if self._room_svc else None,
+            "room": _room_detail.get("name") if _room_detail else None,
+            "room_detail": _room_detail or None,
             "iot": self._iot_registry.get_all_snapshots() if self._iot_registry else {},
             "processes": _get_vera_processes(),
         }
@@ -1321,14 +1356,16 @@ class WebService:
 
         @app.get("/api/room")
         async def api_get_room():
-            name = self._room_svc.room_name if self._room_svc else None
-            return {"name": name}
+            if not self._room_svc:
+                return {"name": None}
+            status = await asyncio.to_thread(self._room_svc.get_status)
+            return {"name": status.get("name")}
 
         @app.get("/api/room/status")
         async def api_room_status():
             if not self._room_svc:
                 raise HTTPException(503, "room service unavailable")
-            return self._room_svc.get_status_dict()
+            return await asyncio.to_thread(self._room_svc.get_status)
 
         @app.put("/api/room")
         async def api_set_room(body: _RoomBody):
@@ -1354,11 +1391,7 @@ class WebService:
                 raise HTTPException(503, "registry unavailable")
             if not self._perception_svc:
                 raise HTTPException(503, "perception service unavailable")
-            import asyncio
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None, self._perception_svc.capture_training_image, face_id
-            )
+            result = await asyncio.to_thread(self._perception_svc.capture_training_image, face_id)
             if not result.get("ok"):
                 reason = result.get("reason", "unknown")
                 code = 404 if reason == "face_not_found" else 503
@@ -1382,8 +1415,10 @@ class WebService:
 
         @app.get("/api/settings/servo")
         async def api_get_servo():
-            enabled = self._motion_svc.servo_enabled if self._motion_svc else True
-            return {"enabled": enabled}
+            if not self._motion_svc:
+                return {"enabled": True}
+            status = await asyncio.to_thread(self._motion_svc.get_status)
+            return {"enabled": status.get("servo_enabled", True)}
 
         @app.put("/api/settings/servo")
         async def api_put_servo(body: _ServoBody):
@@ -1394,8 +1429,9 @@ class WebService:
         @app.get("/api/settings/servo/limits")
         async def api_get_servo_limits():
             if self._motion_svc:
-                mn = self._motion_svc.soft_min_deg
-                mx = self._motion_svc.soft_max_deg
+                status = await asyncio.to_thread(self._motion_svc.get_status)
+                mn = status.get("soft_min_deg", 135.0)
+                mx = status.get("soft_max_deg", 215.0)
             else:
                 mn, mx = 135.0, 215.0
             return {"min_deg": mn, "max_deg": mx}
@@ -1413,8 +1449,10 @@ class WebService:
 
         @app.get("/api/settings/face-tracking")
         async def api_get_face_tracking():
-            enabled = self._tracking_svc.face_tracking_enabled if self._tracking_svc else True
-            return {"enabled": enabled}
+            if not self._tracking_svc:
+                return {"enabled": True}
+            status = await asyncio.to_thread(self._tracking_svc.get_status)
+            return {"enabled": status.get("face_tracking_enabled", True)}
 
         @app.put("/api/settings/face-tracking")
         async def api_put_face_tracking(body: _ServoBody):
@@ -1424,8 +1462,10 @@ class WebService:
 
         @app.get("/api/settings/random-motion")
         async def api_get_random_motion():
-            enabled = self._tracking_svc.random_motion_enabled if self._tracking_svc else True
-            return {"enabled": enabled}
+            if not self._tracking_svc:
+                return {"enabled": True}
+            status = await asyncio.to_thread(self._tracking_svc.get_status)
+            return {"enabled": status.get("random_motion_enabled", True)}
 
         @app.put("/api/settings/random-motion")
         async def api_put_random_motion(body: _ServoBody):
@@ -1435,8 +1475,10 @@ class WebService:
 
         @app.get("/api/settings/person-seek")
         async def api_get_person_seek():
-            enabled = self._tracking_svc.person_seek_enabled if self._tracking_svc else True
-            return {"enabled": enabled}
+            if not self._tracking_svc:
+                return {"enabled": True}
+            status = await asyncio.to_thread(self._tracking_svc.get_status)
+            return {"enabled": status.get("person_seek_enabled", True)}
 
         @app.put("/api/settings/person-seek")
         async def api_put_person_seek(body: _ServoBody):
@@ -1450,12 +1492,14 @@ class WebService:
         async def api_get_tracking_params():
             if not self._tracking_svc:
                 return JSONResponse({"params": {}, "ranges": {}, "presets": []})
-            return JSONResponse(self._tracking_svc.get_tunable_params())
+            return JSONResponse(await asyncio.to_thread(self._tracking_svc.get_tunable_params))
 
         @app.post("/api/tracking/params")
         async def api_post_tracking_param(body: _TrackingParamBody):
-            ok = bool(self._tracking_svc and self._tracking_svc.set_tunable_param(body.name, body.value))
-            return {"ok": ok, "name": body.name, "value": body.value}
+            ok = False
+            if self._tracking_svc:
+                ok = await asyncio.to_thread(self._tracking_svc.set_tunable_param, body.name, body.value)
+            return {"ok": bool(ok), "name": body.name, "value": body.value}
 
         @app.post("/api/tracking/save")
         async def api_post_tracking_save():
@@ -1524,7 +1568,9 @@ class WebService:
 
         @app.get("/api/settings/object-detection")
         async def api_get_object_detection():
-            enabled = self._object_svc.detection_enabled if self._object_svc else True
+            if not self._object_svc:
+                return {"enabled": True}
+            enabled = await asyncio.to_thread(self._object_svc.get_enabled)
             return {"enabled": enabled}
 
         @app.put("/api/settings/object-detection")
@@ -1991,34 +2037,24 @@ class WebService:
         @app.get("/api/snapshot")
         async def api_snapshot():
             """Return the current camera 1 frame as a full-resolution JPEG."""
-            import cv2
-            svc = self._vision_svc
-            if svc is None:
+            if self._vision_svc is None:
                 raise HTTPException(503, "vision service unavailable")
-            frame = svc.latest_frame()
-            if frame is None:
+            jpeg = await asyncio.to_thread(self._vision_svc.snapshot_jpeg, 95)
+            if jpeg is None:
                 raise HTTPException(503, "no frame available")
-            ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            if not ok:
-                raise HTTPException(500, "JPEG encode failed")
             from fastapi.responses import Response
-            return Response(content=bytes(buf), media_type="image/jpeg")
+            return Response(content=jpeg, media_type="image/jpeg")
 
         @app.get("/api/snapshot2")
         async def api_snapshot2():
             """Return the current camera 2 frame as a full-resolution JPEG."""
-            import cv2
-            svc = self._camera2_svc
-            if svc is None:
+            if not self._camera2_configured():
                 raise HTTPException(503, "camera 2 not enabled")
-            frame = svc.latest_frame()
-            if frame is None:
+            jpeg = await asyncio.to_thread(self._camera2_svc.snapshot_jpeg, 95)
+            if jpeg is None:
                 raise HTTPException(503, "no frame available")
-            ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            if not ok:
-                raise HTTPException(500, "JPEG encode failed")
             from fastapi.responses import Response
-            return Response(content=bytes(buf), media_type="image/jpeg")
+            return Response(content=jpeg, media_type="image/jpeg")
 
         @app.post("/api/version")
         async def api_version():
@@ -2124,8 +2160,10 @@ class WebService:
 
         @app.get("/api/settings/camera/rotation")
         async def api_get_camera_rotation():
-            deg = self._vision_svc.rotation_deg if self._vision_svc else 0
-            return {"rotation_deg": deg}
+            if not self._vision_svc:
+                return {"rotation_deg": 0}
+            status = await asyncio.to_thread(self._vision_svc.get_status)
+            return {"rotation_deg": status.get("rotation_deg", 0)}
 
         @app.put("/api/settings/camera/rotation")
         async def api_put_camera_rotation(body: _CameraRotationBody):
@@ -2138,8 +2176,10 @@ class WebService:
 
         @app.get("/api/settings/camera2/rotation")
         async def api_get_camera2_rotation():
-            deg = self._camera2_svc.rotation_deg if self._camera2_svc else 0
-            return {"rotation_deg": deg}
+            if not self._camera2_configured():
+                return {"rotation_deg": 0}
+            status = await asyncio.to_thread(self._camera2_svc.get_status)
+            return {"rotation_deg": status.get("rotation_deg", 0)}
 
         @app.put("/api/settings/camera2/rotation")
         async def api_put_camera2_rotation(body: _CameraRotationBody):
@@ -2153,7 +2193,8 @@ class WebService:
         @app.get("/api/settings/camera/resolution")
         async def api_get_camera_resolution():
             if self._vision_svc:
-                w, h = self._vision_svc.resolution
+                status = await asyncio.to_thread(self._vision_svc.get_status)
+                w, h = status.get("resolution", [640, 480])
             else:
                 w, h = 640, 480
             return {"width": w, "height": h}
@@ -2169,7 +2210,8 @@ class WebService:
         @app.get("/api/settings/camera/stream_resolution")
         async def api_get_stream_resolution():
             if self._vision_svc:
-                w, h = self._vision_svc.stream_resolution
+                status = await asyncio.to_thread(self._vision_svc.get_status)
+                w, h = status.get("stream_resolution", [640, 480])
             else:
                 w, h = 640, 480
             return {"width": w if w > 0 else 640, "height": h if h > 0 else 480}
@@ -2185,8 +2227,9 @@ class WebService:
 
         @app.get("/api/settings/camera2/resolution")
         async def api_get_camera2_resolution():
-            if self._camera2_svc:
-                w, h = self._camera2_svc.resolution
+            if self._camera2_configured():
+                status = await asyncio.to_thread(self._camera2_svc.get_status)
+                w, h = status.get("resolution", [640, 480])
             else:
                 w, h = 640, 480
             return {"width": w, "height": h}
@@ -2200,10 +2243,11 @@ class WebService:
 
         @app.get("/api/settings/camera2/stream_resolution")
         async def api_get_camera2_stream_resolution():
-            if self._camera2_svc:
-                w, h = self._camera2_svc.stream_resolution
+            if self._camera2_configured():
+                status = await asyncio.to_thread(self._camera2_svc.get_status)
+                w, h = status.get("stream_resolution", [640, 480])
                 if w == 0:
-                    w, h = self._camera2_svc.resolution  # 0 means use full capture res
+                    w, h = status.get("resolution", [640, 480])  # 0 means use full capture res
             else:
                 w, h = 640, 480
             return {"width": w, "height": h}
@@ -2221,15 +2265,15 @@ class WebService:
         async def api_get_depth_settings():
             last = self.bus.last("vision.depth_map") if self.bus else None
             mono_last = self.bus.last("vision.mono_depth_map") if self.bus else None
+            flags = await asyncio.to_thread(self._depth_svc.get_enabled_flags) if self._depth_svc else {
+                "dense_enabled": False, "mono_enabled": False,
+            }
             return JSONResponse({
                 "ok": True,
-                "dense_enabled": getattr(self._dense_stereo_svc, "_enabled", False),
-                "mono_enabled": getattr(self._mono_depth_svc, "_enabled", False),
+                "dense_enabled": flags.get("dense_enabled", False),
+                "mono_enabled": flags.get("mono_enabled", False),
                 "calibrated": last.get("calibrated", False) if last else False,
-                "mono_hardware_ready": mono_last.get("hardware_ready", False) if mono_last else (
-                    getattr(self._mono_depth_svc, "hardware_ready", False)
-                    if self._mono_depth_svc else False
-                ),
+                "mono_hardware_ready": mono_last.get("hardware_ready", False) if mono_last else False,
             })
 
         @app.put("/api/settings/depth")
@@ -2261,10 +2305,13 @@ class WebService:
 
         @app.get("/api/settings/anthropic")
         async def api_get_anthropic_settings():
-            enabled = getattr(self._room_svc, "_anthropic_enabled", None)
-            if enabled is None:
-                enabled = getattr(self._face_svc, "_anthropic_enabled", True)
-            return {"ok": True, "enabled": bool(enabled)}
+            enabled = None
+            if self._room_svc:
+                status = await asyncio.to_thread(self._room_svc.get_status)
+                enabled = status.get("anthropic_enabled")
+            if enabled is None and self._face_svc:
+                enabled = await asyncio.to_thread(self._face_svc.get_anthropic_enabled)
+            return {"ok": True, "enabled": bool(enabled if enabled is not None else True)}
 
         @app.put("/api/settings/anthropic")
         async def api_put_anthropic_settings(body: dict):
@@ -2291,22 +2338,15 @@ class WebService:
 
         @app.get("/api/settings/privacy")
         async def api_get_privacy_settings():
-            svc = self._privacy_svc
-            return {
-                "enabled":            getattr(svc, "_enabled", True) if svc else True,
-                "hardware_ready":     getattr(svc, "hardware_ready", False) if svc else False,
-                "rate_hz":            getattr(getattr(svc, "_cfg", None), "rate_hz", 1.0),
-                "idle_rate_hz":       getattr(getattr(svc, "_cfg", None), "idle_rate_hz", 0.25),
-                "threshold":          getattr(getattr(svc, "_cfg", None), "threshold", 0.6),
-                "look_away_angle_deg":getattr(getattr(svc, "_cfg", None), "look_away_angle_deg", 45.0),
-                "cooldown_s":         getattr(getattr(svc, "_cfg", None), "cooldown_s", 10.0),
-                "clear_frames":       getattr(getattr(svc, "_cfg", None), "clear_frames", 3),
-                "require_person":     getattr(getattr(svc, "_cfg", None), "require_person", True),
-                "person_hold_s":      getattr(getattr(svc, "_cfg", None), "person_hold_s", 8.0),
-                "announce":           getattr(getattr(svc, "_cfg", None), "announce", True),
-                "announce_text":      getattr(getattr(svc, "_cfg", None), "announce_text", "I'll give you some privacy."),
-                "resume_text":        getattr(getattr(svc, "_cfg", None), "resume_text", ""),
-            }
+            if not self._privacy_svc:
+                return {
+                    "enabled": True, "hardware_ready": False, "rate_hz": 1.0,
+                    "idle_rate_hz": 0.25, "threshold": 0.6, "look_away_angle_deg": 45.0,
+                    "cooldown_s": 10.0, "clear_frames": 3, "require_person": True,
+                    "person_hold_s": 8.0, "announce": True,
+                    "announce_text": "I'll give you some privacy.", "resume_text": "",
+                }
+            return await asyncio.to_thread(self._privacy_svc.get_status)
 
         @app.put("/api/settings/privacy")
         async def api_put_privacy_settings(body: dict):
@@ -2484,12 +2524,7 @@ class WebService:
             import numpy as _np
             import io
             from fastapi.responses import Response as _Response
-            payload = None
-            if self._dense_stereo_svc is not None:
-                payload = self._dense_stereo_svc.latest_payload()
-            if payload is None:
-                # Try bus last-value cache
-                payload = self.bus.last("vision.depth_map") if self.bus else None
+            payload = self.bus.last("vision.depth_map") if self.bus else None
             if payload is None:
                 raise HTTPException(503, "No depth map available — enable dense_depth in config")
             # Build colorized JPEG
@@ -2512,11 +2547,7 @@ class WebService:
 
         @app.get("/api/depth/query")
         async def api_depth_query():
-            payload = None
-            if self._dense_stereo_svc is not None:
-                payload = self._dense_stereo_svc.latest_payload()
-            if payload is None and self.bus:
-                payload = self.bus.last("vision.depth_map")
+            payload = self.bus.last("vision.depth_map") if self.bus else None
 
             # Per-face depths from stereo face service
             face_depths: list = []
@@ -2560,11 +2591,7 @@ class WebService:
         async def api_depth_mono_stats():
             """Debug endpoint — returns raw payload stats without rendering."""
             import numpy as _np
-            payload = None
-            if self._mono_depth_svc is not None:
-                payload = self._mono_depth_svc.latest_payload()
-            if payload is None and self.bus:
-                payload = self.bus.last("vision.mono_depth_map")
+            payload = self.bus.last("vision.mono_depth_map") if self.bus else None
             if payload is None:
                 return JSONResponse({"ok": False, "error": "no payload"})
             depth_list = payload.get("depth_rel", [])
@@ -2590,11 +2617,7 @@ class WebService:
             import cv2 as _cv2
             import numpy as _np
             from fastapi.responses import Response as _Response
-            payload = None
-            if self._mono_depth_svc is not None:
-                payload = self._mono_depth_svc.latest_payload()
-            if payload is None and self.bus:
-                payload = self.bus.last("vision.mono_depth_map")
+            payload = self.bus.last("vision.mono_depth_map") if self.bus else None
             if payload is None:
                 raise HTTPException(503, "No mono depth map available — enable mono_depth in config")
             depth_list = payload.get("depth_rel", [])

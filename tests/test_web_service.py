@@ -852,7 +852,7 @@ def test_index_returns_html(app_client):
 def app_client_with_motion():
     bus = MessageBus()
     motion = MagicMock()
-    motion.servo_enabled = True
+    motion.get_status.return_value = {"servo_enabled": True, "soft_min_deg": 135.0, "soft_max_deg": 215.0}
     svc = WebService(bus=bus, port=18080, registry=_mock_registry(), motion_service=motion)
     app = svc._build_app()
     return TestClient(app), bus, svc, motion
@@ -877,7 +877,7 @@ def test_put_servo_disabled_publishes_to_bus(app_client_with_motion):
 
 def test_put_servo_enabled_publishes_to_bus(app_client_with_motion):
     client, bus, svc, motion = app_client_with_motion
-    motion.servo_enabled = False
+    motion.get_status.return_value = {"servo_enabled": False, "soft_min_deg": 135.0, "soft_max_deg": 215.0}
     events = []
     bus.subscribe("motion.set_enabled", lambda t, p: events.append(p))
     r = client.put("/api/settings/servo", json={"enabled": True})
@@ -993,7 +993,9 @@ def test_get_anthropic_settings_reflects_room_service_state(app_client):
 
     class _FakeRoom:
         name = "room"
-        _anthropic_enabled = False
+
+        def get_status(self):
+            return {"anthropic_enabled": False}
 
     svc._room_svc = _FakeRoom()
     r = client.get("/api/settings/anthropic")
@@ -1006,7 +1008,9 @@ def test_get_anthropic_settings_falls_back_to_face_service(app_client):
 
     class _FakeFace:
         name = "face"
-        _anthropic_enabled = False
+
+        def get_anthropic_enabled(self, default: bool = True):
+            return False
 
     svc._room_svc = None
     svc._face_svc = _FakeFace()

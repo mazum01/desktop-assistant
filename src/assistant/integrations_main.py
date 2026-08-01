@@ -76,6 +76,12 @@ _CORE_PUB = "ipc:///tmp/desktop-assistant.pub"
 # be relied on to come transitively through core.
 _THERMAL_PUB = "ipc:///tmp/desktop-assistant-thermal.pub"
 
+# The web process's IPCBridge PUBs here as of Phase 3 — `WebService`'s own
+# routes (`/api/utterance`, quiet-hours PUT, etc.) publish `av.utterance`/
+# `settings.quiet_hours_updated`/etc. directly onto its own bus (not core's),
+# so SkillsService/QuietHours running here must subscribe to it directly too.
+_WEB_PUB = "ipc:///tmp/desktop-assistant-web.pub"
+
 # This process's own endpoints — core's IPCBridge adds INTEGRATIONS_PUB as
 # one of its upstream_endpoints, symmetric to how it already does for
 # thermal and media.
@@ -113,7 +119,7 @@ def build_node(
         pub_endpoint=pub_endpoint,
         rep_endpoint=rep_endpoint,
         upstream_endpoints=(
-            [_CORE_PUB, _THERMAL_PUB] if upstream_endpoints is None else upstream_endpoints
+            [_CORE_PUB, _THERMAL_PUB, _WEB_PUB] if upstream_endpoints is None else upstream_endpoints
         ),
     )
 

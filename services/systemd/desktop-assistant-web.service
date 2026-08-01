@@ -1,0 +1,59 @@
+[Unit]
+Description=VERA — web dashboard/API (FastAPI, cameras, settings)
+Documentation=https://github.com/mazum01/desktop-assistant
+# NOTE: this is the canonical system-level unit (requires root to install:
+# cp into /etc/systemd/system/, daemon-reload, enable --now). On boxes where
+# passwordless sudo is scoped to a fixed command list that doesn't cover
+# those operations, install this as a --user unit instead
+# (~/.config/systemd/user/desktop-assistant-web.service, dropping
+# User=/Group=/SupplementaryGroups= and using `systemctl --user`/
+# `WantedBy=default.target`) — see watchdog.py's ManagedService(user_unit=True)
+# for the corresponding monitoring-side support. This mirrors
+# desktop-assistant-media.service/-integrations.service, deployed this way today.
+After=network.target desktop-assistant-core.service desktop-assistant-thermal.service desktop-assistant-media.service desktop-assistant-integrations.service
+# Wants= (not Requires=): web can run standalone in dev (its proxies degrade
+# to safe defaults — 503s / "unavailable" — when a target process isn't
+# reachable, per src/core/web_client.py's reply contract), but in production
+# all four will already be up by the time we reach here: core/thermal/media/
+# integrations are each an upstream this process subscribes to, and
+# core/media/integrations are each an RPC target WebService calls into
+# (RoomService/MotionService/etc., MusicService/PodcastService,
+# IoTService/SkillsService respectively).
+Wants=desktop-assistant-core.service desktop-assistant-thermal.service desktop-assistant-media.service desktop-assistant-integrations.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=starter
+Group=starter
+SupplementaryGroups=audio video plugdev
+WorkingDirectory=/home/starter/Code/Desktop Assistant
+Environment=PYTHONUNBUFFERED=1
+Environment="PYTHONPATH=/home/starter/Code/Desktop Assistant"
+EnvironmentFile=/etc/desktop-assistant/secrets.env
+ExecStart=/usr/bin/python3 -m src.assistant.web_main
+
+Restart=on-failure
+RestartSec=3
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+# NOTE: PrivateTmp must be FALSE — the ZMQ ipc:///tmp/desktop-assistant-web.{pub,rep}
+# sockets are how core's/media's/integrations' IPCBridges and this process
+# talk to each other, same reasoning as desktop-assistant-core.service /
+# -media.service / -integrations.service. This unit also binds a TCP port
+# (web_dashboard.port in config/assistant.yaml, default 8080) for the
+# dashboard itself — no extra capability needed for an unprivileged port.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+PrivateTmp=false
+ReadWritePaths=/tmp /home/starter/.local/share/desktop-assistant /home/starter/.config/desktop-assistant
+
+[Install]
+WantedBy=multi-user.target

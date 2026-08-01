@@ -16,9 +16,6 @@ import sys
 
 from src.assistant.runner import run_services
 from src.core.bus import MessageBus
-from src.core.ipc_client import IPCClient
-from src.core.media_client import MusicServiceProxy, PodcastServiceProxy
-from src.core.integrations_client import IoTRegistryProxy, SkillsServiceProxy
 from src.services.audio_capture_service import AudioCaptureService, AudioCaptureConfig
 from src.services.av_service import AVService
 from src.services.face_service import FaceService
@@ -35,7 +32,6 @@ from src.services.tracking_service import TrackingService
 from src.services.vision_service import VisionService
 from src.services.voice_command_service import VoiceCommandService, VoiceCommandConfig
 from src.core.quiet_hours import QuietHours
-from src.services.web_service import WebService
 from src.core.runtime_state import load as _load_runtime, save as _save_runtime
 from src.services.room_service import RoomService
 from src.services.privacy_service import PrivacyService, PrivacyConfig
@@ -56,11 +52,24 @@ _MEDIA_REP = "ipc:///tmp/desktop-assistant-media.rep"
 # Telegram/notification/clock/IoT/skills (the "integrations" group of
 # docs/architecture/PROCESS_ISOLATION_PROPOSAL.md, Phases 2a+2b) also run
 # in a separate process. Telegram/notification/clock need no proxy (pure
-# bus events); IoT/skills need a REP endpoint core calls into (via
-# IoTRegistryProxy/SkillsServiceProxy) since WebService held direct object
-# references to them.
+# bus events); IoT/skills need a REP endpoint the "web" process calls into
+# (via IoTRegistryProxy/SkillsServiceProxy) since WebService holds direct
+# object references to them.
 _INTEGRATIONS_PUB = "ipc:///tmp/desktop-assistant-integrations.pub"
 _INTEGRATIONS_REP = "ipc:///tmp/desktop-assistant-integrations.rep"
+
+# WebService (the FastAPI dashboard) also runs in a separate process
+# (Phase 3 of docs/architecture/PROCESS_ISOLATION_PROPOSAL.md). Unlike the
+# other splits, the direction is reversed here: `web` is the one calling
+# *into* core (via the proxies in src/core/web_client.py) for the handful
+# of services it still needs live reads/actions from (room, face, privacy,
+# object detection, perception, motion, tracking, vision, camera2, depth
+# enabled-flags) — core's own default IPCBridge REP endpoint
+# (ipc:///tmp/desktop-assistant.rep, registered below) already serves this
+# without a dedicated `_CORE_REP` constant. `_WEB_PUB` is added to core's
+# upstream_endpoints so bus.publish() calls WebService makes (settings
+# toggles, av.say, motion.pan_to, ...) still reach core's services.
+_WEB_PUB = "ipc:///tmp/desktop-assistant-web.pub"
 
 
 def main() -> int:
@@ -181,10 +190,9 @@ def main() -> int:
     _anthropic_cfg = _cfg.get("anthropic_api", {})
     _anthropic_enabled = bool(_anthropic_cfg.get("enabled", True))
 
-    _web_cfg = _cfg.get("web_dashboard", {})
-    _web_enabled = _web_cfg.get("enabled", True)
-    _web_port = int(_web_cfg.get("port", 8080))
-    _web_host = _web_cfg.get("host", "0.0.0.0")
+    # web_dashboard config (host/port/enabled) is now read by
+    # src/assistant/web_main.py, which runs WebService in its own process
+    # (Phase 3 of docs/architecture/PROCESS_ISOLATION_PROPOSAL.md).
 
     _qh = QuietHours.from_config(
         cfg_dir=_cfg_path.parent,
@@ -311,7 +319,7 @@ def main() -> int:
                         servo_min_deg=_soft_min_deg, servo_max_deg=_soft_max_deg)
     ipc = IPCBridge(
         bus=bus,
-        upstream_endpoints=[_THERMAL_PUB, _MEDIA_PUB, _INTEGRATIONS_PUB],
+        upstream_endpoints=[_THERMAL_PUB, _MEDIA_PUB, _INTEGRATIONS_PUB, _WEB_PUB],
     )
     ipc.register_rpc("tts_duration", lambda msg: {
         "ok": True,
@@ -326,14 +334,6 @@ def main() -> int:
         pulse_min_us=int(_servo_cfg.get("pulse_min_us", 500)),
         pulse_max_us=int(_servo_cfg.get("pulse_max_us", 2500)),
     )
-
-    _media_client = IPCClient(_MEDIA_REP)
-    music_proxy = MusicServiceProxy(_media_client)
-    podcast_proxy = PodcastServiceProxy(_media_client)
-
-    _integrations_client = IPCClient(_INTEGRATIONS_REP)
-    iot_registry_proxy = IoTRegistryProxy(_integrations_client)
-    skills_proxy = SkillsServiceProxy(_integrations_client)
 
     # Second camera (optional — gracefully absent if not configured or detected)
     _cam2_cfg_raw = _cfg.get("camera2", {})
@@ -399,6 +399,17 @@ def main() -> int:
     # Let AVService record clips from the already-running capture stream
     # instead of opening a second (conflicting) input device.
     av.set_capture_service(capture_svc)
+    room_svc = RoomService(bus=bus, vision_service=vis, cfg=_room_cfg, anthropic_enabled=_anthropic_enabled)
+    face_svc = FaceService(
+        bus=bus,
+        greeting_cooldown_min=_greeting_cooldown_min,
+        greeting_cooldown_jitter_pct=_greeting_jitter_pct,
+        min_absence_s=_min_absence_s,
+        confidence_threshold=_confidence_threshold,
+        quiet_hours=_qh,
+        guest_intro_delay_min=0.0,  # gate is now in PerceptionService
+        anthropic_enabled=_anthropic_enabled,
+    )
     services = [
         motion_svc,
         vis,
@@ -408,17 +419,8 @@ def main() -> int:
         perc_svc,
         obj_svc,
         TelemetryService(bus=bus),
-        RoomService(bus=bus, vision_service=vis, cfg=_room_cfg, anthropic_enabled=_anthropic_enabled),
-        FaceService(
-            bus=bus,
-            greeting_cooldown_min=_greeting_cooldown_min,
-            greeting_cooldown_jitter_pct=_greeting_jitter_pct,
-            min_absence_s=_min_absence_s,
-            confidence_threshold=_confidence_threshold,
-            quiet_hours=_qh,
-            guest_intro_delay_min=0.0,  # gate is now in PerceptionService
-            anthropic_enabled=_anthropic_enabled,
-        ),
+        room_svc,
+        face_svc,
     ]
     if cam2_svc is not None:
         services.append(cam2_svc)
@@ -504,31 +506,174 @@ def main() -> int:
 
     # IoTService and SkillsService moved to the "integrations" process
     # (Phase 2b of docs/architecture/PROCESS_ISOLATION_PROPOSAL.md; see
-    # src/assistant/integrations_main.py). WebService gets proxies instead
-    # of direct object references.
+    # src/assistant/integrations_main.py).
     # NotificationService and TelegramService moved to the "integrations"
     # process (Phase 2a of docs/architecture/PROCESS_ISOLATION_PROPOSAL.md;
-    # see src/assistant/integrations_main.py). No proxy needed here since
-    # WebService never held direct references to either.
+    # see src/assistant/integrations_main.py).
     services.append(ipc)
     ipc._all_services = services  # seed service registry at startup
-    if _web_enabled:
-        room_svc = next((s for s in services if getattr(s, "name", "") == "room"), None)
-        face_svc = next((s for s in services if getattr(s, "name", "") == "face"), None)
-        web_svc = WebService(bus=bus, host=_web_host, port=_web_port, vision_service=vis,
-                             quiet_hours=_qh, motion_service=motion_svc,
-                             tracking_service=tracking_svc, music_service=music_proxy,
-                             podcast_service=podcast_proxy,
-                             camera2_service=cam2_svc, object_service=obj_svc,
-                             skills_service=skills_proxy, perception_service=perc_svc,
-                             dense_stereo_service=dense_stereo_svc,
-                             mono_depth_service=mono_depth_svc,
-                             room_service=room_svc,
-                             face_service=face_svc,
-                             privacy_service=privacy_svc,
-                             iot_registry=iot_registry_proxy)
-        services.append(web_svc)
-        web_svc._all_services = services  # seed service registry at startup
+
+    # ── WebService RPCs (Phase 3) ─────────────────────────────────────
+    # WebService itself now runs in the "web" process (src/assistant/
+    # web_main.py) and reaches these still-in-core services through the
+    # proxies in src/core/web_client.py. See that module's docstring for
+    # the full rationale (most of these are read-mostly; the paired
+    # PUT/action routes already went through self.bus.publish() and cross
+    # the process boundary for free via IPCBridge).
+
+    def _rpc_room_get_status(_msg):
+        return {"ok": True, "status": room_svc.get_status_dict()}
+
+    def _rpc_face_get_anthropic_enabled(_msg):
+        return {"ok": True, "enabled": bool(face_svc._anthropic_enabled)}
+
+    def _rpc_privacy_get_status(_msg):
+        svc = privacy_svc
+        return {
+            "ok": True,
+            "status": {
+                "enabled":             getattr(svc, "_enabled", True),
+                "hardware_ready":      getattr(svc, "hardware_ready", False),
+                "rate_hz":             getattr(getattr(svc, "_cfg", None), "rate_hz", 1.0),
+                "idle_rate_hz":        getattr(getattr(svc, "_cfg", None), "idle_rate_hz", 0.25),
+                "threshold":           getattr(getattr(svc, "_cfg", None), "threshold", 0.6),
+                "look_away_angle_deg": getattr(getattr(svc, "_cfg", None), "look_away_angle_deg", 45.0),
+                "cooldown_s":          getattr(getattr(svc, "_cfg", None), "cooldown_s", 10.0),
+                "clear_frames":        getattr(getattr(svc, "_cfg", None), "clear_frames", 3),
+                "require_person":      getattr(getattr(svc, "_cfg", None), "require_person", True),
+                "person_hold_s":       getattr(getattr(svc, "_cfg", None), "person_hold_s", 8.0),
+                "announce":            getattr(getattr(svc, "_cfg", None), "announce", True),
+                "announce_text":       getattr(getattr(svc, "_cfg", None), "announce_text",
+                                                "I'll give you some privacy."),
+                "resume_text":         getattr(getattr(svc, "_cfg", None), "resume_text", ""),
+            },
+        }
+
+    def _rpc_object_get_enabled(_msg):
+        return {"ok": True, "enabled": bool(obj_svc.detection_enabled)}
+
+    def _rpc_perception_capture_training_image(msg):
+        face_id = msg.get("face_id", "")
+        result = perc_svc.capture_training_image(face_id)
+        return {"ok": True, "result": result}
+
+    def _rpc_motion_get_status(_msg):
+        return {
+            "ok": True,
+            "status": {
+                "servo_enabled": motion_svc.servo_enabled,
+                "soft_min_deg":  motion_svc.soft_min_deg,
+                "soft_max_deg":  motion_svc.soft_max_deg,
+            },
+        }
+
+    def _rpc_tracking_get_status(_msg):
+        return {
+            "ok": True,
+            "status": {
+                "face_tracking_enabled": tracking_svc.face_tracking_enabled,
+                "random_motion_enabled": tracking_svc.random_motion_enabled,
+                "person_seek_enabled":   tracking_svc.person_seek_enabled,
+            },
+        }
+
+    def _rpc_tracking_get_tunable_params(_msg):
+        return {"ok": True, "data": tracking_svc.get_tunable_params()}
+
+    def _rpc_tracking_set_tunable_param(msg):
+        applied = bool(tracking_svc.set_tunable_param(msg.get("name"), msg.get("value")))
+        return {"ok": True, "applied": applied}
+
+    def _rpc_vision_get_status(_msg):
+        w, h = vis.resolution
+        sw, sh = vis.stream_resolution
+        return {
+            "ok": True,
+            "status": {
+                "rotation_deg": vis.rotation_deg,
+                "resolution": [w, h],
+                "stream_resolution": [sw, sh],
+            },
+        }
+
+    def _rpc_vision_latest_jpeg(_msg):
+        import base64
+        jpeg = vis.latest_jpeg()
+        return {"ok": True, "jpeg_b64": base64.b64encode(jpeg).decode("ascii") if jpeg else None}
+
+    def _rpc_vision_snapshot_jpeg(msg):
+        import base64
+        import cv2
+        frame = vis.latest_frame()
+        if frame is None:
+            return {"ok": False, "error": "no frame available"}
+        quality = int(msg.get("quality", 95))
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        if not ok:
+            return {"ok": False, "error": "JPEG encode failed"}
+        return {"ok": True, "jpeg_b64": base64.b64encode(bytes(buf)).decode("ascii")}
+
+    def _rpc_camera2_get_status(_msg):
+        if cam2_svc is None:
+            return {"ok": True, "configured": False, "status": {}}
+        w, h = cam2_svc.resolution
+        sw, sh = cam2_svc.stream_resolution
+        return {
+            "ok": True,
+            "configured": True,
+            "status": {
+                "rotation_deg": cam2_svc.rotation_deg,
+                "resolution": [w, h],
+                "stream_resolution": [sw, sh],
+            },
+        }
+
+    def _rpc_camera2_latest_jpeg(_msg):
+        import base64
+        if cam2_svc is None:
+            return {"ok": False, "error": "camera 2 not enabled"}
+        jpeg = cam2_svc.latest_jpeg()
+        return {"ok": True, "jpeg_b64": base64.b64encode(jpeg).decode("ascii") if jpeg else None}
+
+    def _rpc_camera2_snapshot_jpeg(msg):
+        import base64
+        import cv2
+        if cam2_svc is None:
+            return {"ok": False, "error": "camera 2 not enabled"}
+        frame = cam2_svc.latest_frame()
+        if frame is None:
+            return {"ok": False, "error": "no frame available"}
+        quality = int(msg.get("quality", 95))
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        if not ok:
+            return {"ok": False, "error": "JPEG encode failed"}
+        return {"ok": True, "jpeg_b64": base64.b64encode(bytes(buf)).decode("ascii")}
+
+    def _rpc_depth_get_enabled_flags(_msg):
+        return {
+            "ok": True,
+            "flags": {
+                "dense_enabled": getattr(dense_stereo_svc, "_enabled", False),
+                "mono_enabled":  getattr(mono_depth_svc, "_enabled", False),
+            },
+        }
+
+    ipc.register_rpc("room.get_status", _rpc_room_get_status)
+    ipc.register_rpc("face.get_anthropic_enabled", _rpc_face_get_anthropic_enabled)
+    ipc.register_rpc("privacy.get_status", _rpc_privacy_get_status)
+    ipc.register_rpc("object.get_enabled", _rpc_object_get_enabled)
+    ipc.register_rpc("perception.capture_training_image", _rpc_perception_capture_training_image)
+    ipc.register_rpc("motion.get_status", _rpc_motion_get_status)
+    ipc.register_rpc("tracking.get_status", _rpc_tracking_get_status)
+    ipc.register_rpc("tracking.get_tunable_params", _rpc_tracking_get_tunable_params)
+    ipc.register_rpc("tracking.set_tunable_param", _rpc_tracking_set_tunable_param)
+    ipc.register_rpc("vision.get_status", _rpc_vision_get_status)
+    ipc.register_rpc("vision.latest_jpeg", _rpc_vision_latest_jpeg)
+    ipc.register_rpc("vision.snapshot_jpeg", _rpc_vision_snapshot_jpeg)
+    ipc.register_rpc("camera2.get_status", _rpc_camera2_get_status)
+    ipc.register_rpc("camera2.latest_jpeg", _rpc_camera2_latest_jpeg)
+    ipc.register_rpc("camera2.snapshot_jpeg", _rpc_camera2_snapshot_jpeg)
+    ipc.register_rpc("depth.get_enabled_flags", _rpc_depth_get_enabled_flags)
 
     return run_services(services=services, unit_name="core")
 

@@ -61,6 +61,11 @@ _CORE_PUB = "ipc:///tmp/desktop-assistant.pub"
 # as of Phase 2b — see module docstring.
 _INTEGRATIONS_PUB = "ipc:///tmp/desktop-assistant-integrations.pub"
 
+# The web process's IPCBridge PUBs here as of Phase 3 — `WebService`'s own
+# music/podcast REST routes publish music.*/podcast.* commands directly onto
+# its own bus (not core's), so media must subscribe here too to see them.
+_WEB_PUB = "ipc:///tmp/desktop-assistant-web.pub"
+
 # This process's own endpoints — core's IPCBridge adds MEDIA_PUB as one of
 # its upstream_endpoints, symmetric to how it already does for thermal.
 MEDIA_PUB = "ipc:///tmp/desktop-assistant-media.pub"
@@ -91,7 +96,7 @@ def build_node(
         pub_endpoint=pub_endpoint,
         rep_endpoint=rep_endpoint,
         upstream_endpoints=(
-            [_CORE_PUB, _INTEGRATIONS_PUB] if upstream_endpoints is None else upstream_endpoints
+            [_CORE_PUB, _INTEGRATIONS_PUB, _WEB_PUB] if upstream_endpoints is None else upstream_endpoints
         ),
     )
 
