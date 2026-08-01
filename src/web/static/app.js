@@ -2401,6 +2401,37 @@ async function saveCam2Rotation() {
   setTimeout(() => { if (st) st.textContent = ""; }, 3000);
 }
 
+async function loadCamCaptureResolution() {
+  try {
+    const r = await fetch("/api/settings/camera/resolution");
+    if (!r.ok) return;
+    const d = await r.json();
+    const val = `${d.width}x${d.height}`;
+    const sel = el("cam-capture-resolution-select");
+    if (sel) {
+      const opts = Array.from(sel.options).map(o => o.value);
+      sel.value = opts.includes(val) ? val : "640x480";
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function saveCamCaptureResolution(val) {
+  const st = el("cam-capture-resolution-status");
+  const parts = val.split("x");
+  if (parts.length !== 2) return;
+  try {
+    const r = await fetch("/api/settings/camera/resolution", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ width: parseInt(parts[0], 10), height: parseInt(parts[1], 10) }),
+    });
+    if (st) { st.textContent = r.ok ? "Applied ✓" : "Error " + r.status; st.style.color = r.ok ? "var(--green)" : "var(--red)"; }
+  } catch (e) {
+    if (st) { st.textContent = "Error"; st.style.color = "var(--red)"; }
+  }
+  setTimeout(() => { if (st) st.textContent = ""; }, 4000);
+}
+
 async function loadStreamResolution() {
   try {
     const r = await fetch("/api/settings/camera/stream_resolution");
@@ -2861,6 +2892,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadGreetingSettings();
   loadCamRotation();
   loadCam2Rotation();
+  loadCamCaptureResolution();
   loadStreamResolution();
   loadCam2Resolutions();
   loadObjectDetectionEnabled();

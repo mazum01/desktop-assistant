@@ -871,7 +871,18 @@
 </div>
 </div>
 <div class="control-group">
-<label>Stream Resolution <small style="color:var(--text-muted)">(MJPEG output — camera FOV unchanged)</small></label>
+<label>Cam 1 Capture Resolution <small style="color:var(--text-muted)">(sensor resolution — restarts capture pipeline)</small></label>
+<div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
+<select id="cam-capture-resolution-select" onchange="saveCamCaptureResolution(this.value)" style="width:200px">
+<option selected="" value="640x480">640×480 (default)</option>
+<option value="1280x720">1280×720 (HD 720p)</option>
+<option value="1920x1080">1920×1080 (Full HD)</option>
+</select>
+<span class="qh-status" id="cam-capture-resolution-status"></span>
+</div>
+</div>
+<div class="control-group">
+<label>Cam 1 Stream Resolution <small style="color:var(--text-muted)">(MJPEG output — camera FOV unchanged)</small></label>
 <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
 <select id="cam-stream-resolution-select" onchange="saveStreamResolution(this.value)" style="width:200px">
 <option value="320x180">320×180 (low bandwidth)</option>
@@ -1085,7 +1096,7 @@
 </section>
 </div>
 </main>
-<script src="/static/app.js?v=1.42.4"></script>
+<script src="/static/app.js?v=1.42.5"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">
