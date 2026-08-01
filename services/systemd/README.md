@@ -42,6 +42,20 @@ target (see each unit file's `[Unit]` section for the exact list), so
 enabling any one of them also pulls its dependencies up, in the right boot
 order.
 
+> **Production note (this box):** the files above are the canonical
+> system-level units, but this box's passwordless sudo policy is scoped to
+> a fixed command list (`systemctl restart` on core/thermal/openclaw-gateway
+> only — not `daemon-reload`/`enable`/`cp` into `/etc/systemd/system/`).
+> `desktop-assistant-media.service`, `desktop-assistant-integrations.service`,
+> and `desktop-assistant-web.service` are therefore installed as **`--user`**
+> units instead (`~/.config/systemd/user/`, `systemctl --user enable --now`,
+> managed without sudo) — functionally identical (same `ExecStart`, env
+> vars, IPC socket paths), just a different manager. `src/watchdog/
+> watchdog.py`'s `ManagedService(..., user_unit=True)` flag tracks this per
+> service so health checks/auto-restart query the right systemd manager.
+> Only `desktop-assistant-thermal.service` and `desktop-assistant-core.service`
+> are true system-level units here.
+
 ## Observe
 
 ```bash

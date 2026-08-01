@@ -2,7 +2,7 @@
 title: Process Isolation Proposal — Fixing VERA's Monolithic Core
 date: 2026-07-18
 version: 1.47.0
-status: Phase 1 (media), Phase 2a (integrations: Telegram/Notification/Clock), Phase 2b (integrations: IoT/Skills), and Phase 3 (web) implemented — see §6 update below. Phase 3 is code-complete and test-verified but NOT YET deployed live (elevated risk — see §6 note).
+status: Phase 1 (media), Phase 2a (integrations: Telegram/Notification/Clock), Phase 2b (integrations: IoT/Skills), and Phase 3 (web) implemented AND deployed live (2026-08-01) — see §6 update below. All five processes (thermal/core/media/integrations/web) are running in production.
 ---
 
 # Process Isolation Proposal
@@ -27,11 +27,20 @@ proxy calls (`src/core/web_client.py`) or `bus.last(...)` fallbacks. See the
 "Phase 1", "Phase 2a", "Phase 2b", and "Phase 3" implementation-notes
 callouts in §6 for what actually shipped, including real bugs/gaps these
 splits surfaced and fixed. **Phase 3 is code-complete, unit- and
-integration-tested (`tests/test_web_process_split.py`), and the full suite
-passes (984+ tests) — but has NOT yet been deployed live**, since it's the
-highest-risk cutover (it directly affects the dashboard/API/camera streams
-the user relies on day-to-day, unlike the lower-visibility Phase 1/2a/2b
-satellite processes). `audio-voice` (Phase 4) remains unstarted.
+integration-tested (`tests/test_web_process_split.py`), the full suite
+passes (993 tests), and it has been deployed live** (2026-08-01) as a
+`--user` systemd unit (`~/.config/systemd/user/desktop-assistant-web.service`),
+the same pattern already used for media/integrations on this box. The
+rollout surfaced one real bug — `src/watchdog/watchdog.py`'s
+`ManagedService` for `desktop-assistant-core.service` still pointed its
+`http_check` at `localhost:8080/health`, which now belongs to `web`; this
+made the watchdog's orphan-port-holder safety net kill the freshly
+started `web` process within minutes, mistaking it for an orphan holding
+core's port. Fixed by moving the health check to a new
+`ManagedService(unit="desktop-assistant-web.service", user_unit=True, ...)`
+entry (commit `1895c66`). All five processes (thermal/core/media/
+integrations/web) are confirmed live and responding. `audio-voice`
+(Phase 4) remains unstarted.
 
 ---
 
@@ -401,7 +410,7 @@ biggest win on paper.**
    >    `integrations_main.py`'s existing `_CORE_PUB` upstream subscription.
    >    Neither direction needed new wiring — only the two proxies above and
    >    the `media_main.py` fix in note 3.
-5. **Phase 3 — `web` (done, not yet deployed live):** Decoupled the
+5. **Phase 3 — `web` (done, deployed live 2026-08-01):** Decoupled the
    remaining ~55 direct-object call sites (vision/tracking/motion/room/face/
    privacy/object/perception/camera2/depth) and extracted `WebService` into
    its own `src/assistant/web_main.py` process
@@ -473,10 +482,30 @@ biggest win on paper.**
    >    (the Anthropic-toggle GET route's fallback when `_room_svc` is
    >    unavailable) — missed in the original §5 count, added as
    >    `FaceServiceProxy` alongside the rest.
-   > 8. **Deliberately not yet deployed live.** Unlike Phase 1/2a/2b (lower-
-   >    visibility satellite processes), this cutover directly replaces the
-   >    dashboard/API/camera-stream process the user actively relies on —
-   >    flagged as elevated risk pending an explicit go-ahead on timing.
+   > 8. **Deployed live 2026-08-01** as a `--user` unit (same pattern as
+   >    media/integrations — this box's passwordless sudo doesn't cover
+   >    `daemon-reload`/`enable` for new system-level units). `media_main.py`/
+   >    `integrations_main.py` also needed a `systemctl --user restart` to
+   >    pick up the `_WEB_PUB` wiring code (they were still running
+   >    processes from before that change landed).
+   > 9. **Rollout bug found and fixed: watchdog killed the new `web`
+   >    process.** `src/watchdog/watchdog.py`'s `ManagedService` for
+   >    `desktop-assistant-core.service` still had
+   >    `http_check="http://localhost:8080/health"` — a leftover from when
+   >    core hosted the dashboard. Port 8080 (and `/health`) now belongs to
+   >    `web`. The watchdog's `_kill_orphan_port_holder()` safety net (runs
+   >    before a restart; resolves the port from `http_check` and kills
+   >    whatever holds it if that PID isn't the unit's own systemd MainPID)
+   >    found `web`'s PID instead of `core`'s, concluded `web` was an orphan
+   >    squatting on core's port, and SIGTERM'd it within minutes of the live
+   >    rollout — also triggering an unneeded `core` restart. Fixed by
+   >    removing `http_check` from the `core` entry and adding a new
+   >    `ManagedService(unit="desktop-assistant-web.service", user_unit=True,
+   >    http_check="http://localhost:8080/health")` instead (commit
+   >    `1895c66`). The watchdog process itself still needs its own restart
+   >    to load this fix — not in the passwordless sudo list, so it requires
+   >    a human with a password (`sudo systemctl restart
+   >    desktop-assistant-watchdog.service`).
 6. **Phase 4 (optional, higher risk) — `audio-voice` split from
    `vision-hailo`:** Only worth doing if profiling after phases 1–3 shows
    audio/voice latency is still affected by vision/Hailo load. Requires
@@ -527,16 +556,15 @@ To keep the growing number of cross-process links maintainable:
 VERA doesn't need a new framework — it needs to finish what the thermal
 process already proved works. The scaffolding for that (`ProcessNode`,
 `IPCClient`, and passing integration tests) is done, and four phases have
-now shipped: Phase 1 (`media`), Phase 2a (`integrations` —
-Telegram/Notification/Clock), Phase 2b (`integrations` — IoT/Skills), and
-Phase 3 (`web` — the FastAPI dashboard/API). All four splits validated the
-pattern end-to-end (Phase 1/2a/2b on real hardware, Phase 3 via the full
-test suite plus a dedicated `tests/test_web_process_split.py` integration
-suite) and each surfaced (and fixed) at least one genuine latent bug or gap
-the monolith had been hiding. Phase 3 is code-complete but intentionally
-**not yet deployed live** — it's the highest-risk cutover of the four,
-directly replacing the dashboard/API/camera-stream process, so the actual
-service restart is being held for an explicit go/no-go from the user on
-timing. The only phase left after that is the optional, higher-risk Phase 4
-(`audio-voice` split from `vision-hailo`), worth doing only if profiling
-shows it's still needed once Phase 3 is live.
+now shipped and are all live in production: Phase 1 (`media`), Phase 2a
+(`integrations` — Telegram/Notification/Clock), Phase 2b (`integrations` —
+IoT/Skills), and Phase 3 (`web` — the FastAPI dashboard/API, deployed
+2026-08-01). All four splits validated the pattern end-to-end (real
+hardware plus, for Phase 3, the full test suite and a dedicated
+`tests/test_web_process_split.py` integration suite) and each surfaced
+(and fixed) at least one genuine latent bug or gap the monolith had been
+hiding — Phase 3's rollout itself surfaced one more: a stale watchdog
+health-check mapping that briefly killed the newly-deployed `web` process
+(see §6 note 9), fixed same-day. The only phase left is the optional,
+higher-risk Phase 4 (`audio-voice` split from `vision-hailo`), worth doing
+only if profiling shows it's still needed now that Phase 3 is live.
