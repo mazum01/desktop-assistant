@@ -5,7 +5,11 @@ stuck.  Sends a Telegram notification whenever it intervenes.
 
 Services monitored
 ------------------
-* desktop-assistant-core    — systemctl + HTTP ping (localhost:8080/health)
+* desktop-assistant-core    — systemctl only (no HTTP interface; the
+                              dashboard/API — and its /health endpoint —
+                              moved to desktop-assistant-web per
+                              docs/architecture/PROCESS_ISOLATION_PROPOSAL.md
+                              Phase 3)
 * desktop-assistant-thermal — systemctl only (no HTTP interface)
 * desktop-assistant-media   — systemctl --user only (no HTTP interface; music +
                               podcast playback, split out of core per
@@ -18,6 +22,10 @@ Services monitored
                               Telegram + Notification + Clock, split out of
                               core per docs/architecture/PROCESS_ISOLATION_PROPOSAL.md
                               Phase 2a). Same --user-unit constraint as media.
+* desktop-assistant-web     — systemctl --user + HTTP ping (localhost:8080/health);
+                              dashboard/API/cameras, split out of core per
+                              docs/architecture/PROCESS_ISOLATION_PROPOSAL.md
+                              Phase 3. Same --user-unit constraint as media.
 * openclaw-gateway          — systemctl + HTTP ping (localhost:18789)
                               + journal scan for stuck "Bot not initialized" loop
                               + max-uptime restart (Telegram polling-stall guard)
@@ -905,7 +913,15 @@ def main() -> int:
         ),
         ManagedService(
             unit="desktop-assistant-core.service",
-            http_check="http://localhost:8080/health",
+            # NOTE: no http_check here anymore — port 8080 (and /health) moved
+            # to desktop-assistant-web.service per
+            # docs/architecture/PROCESS_ISOLATION_PROPOSAL.md Phase 3. Leaving
+            # the old "http://localhost:8080/health" check here was a real bug:
+            # _kill_orphan_port_holder() resolves the port from this URL,
+            # finds it's now held by web's PID (not core's systemd MainPID),
+            # and SIGTERMs the *web* process as a false "orphan" — discovered
+            # live during the Phase 3 rollout (2026-08-01) when this killed
+            # the freshly-deployed web process within minutes of going live.
         ),
         ManagedService(
             unit="desktop-assistant-media.service",
@@ -919,6 +935,15 @@ def main() -> int:
             # Telegram + Notification + Clock, split out of core per
             # docs/architecture/PROCESS_ISOLATION_PROPOSAL.md Phase 2a.
             # Same --user-unit constraint as media (see above).
+            user_unit=True,
+        ),
+        ManagedService(
+            unit="desktop-assistant-web.service",
+            # WebService (FastAPI dashboard/API), split out of core per
+            # docs/architecture/PROCESS_ISOLATION_PROPOSAL.md Phase 3.
+            # Owns port 8080 / GET /health now — see the NOTE on the core
+            # entry above for why this check must live here, not on core.
+            http_check="http://localhost:8080/health",
             user_unit=True,
         ),
         ManagedService(
