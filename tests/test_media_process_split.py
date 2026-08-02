@@ -9,6 +9,7 @@ See docs/architecture/PROCESS_ISOLATION_PROPOSAL.md §6 (Phase 1).
 
 import time
 import uuid
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -92,7 +93,34 @@ def test_music_get_state_rpc_round_trips_through_proxy(media_node):
     assert proxy.eq_preset == "flat"
 
 
-def test_music_set_volume_rpc_updates_state(media_node):
+def test_music_set_volume_rpc_updates_state(media_node, monkeypatch):
+    # MusicService.volume/set_volume/set_muted shell out to the real `wpctl`
+    # (PipeWire) binary, which isn't installed on CI runners. Since the media
+    # ProcessNode's services run as in-process threads (see Service.start()),
+    # patching the module-level subprocess calls here reaches the actual
+    # service thread and lets this stay a hermetic unit test rather than
+    # depending on real audio hardware.
+    import src.services.music_service as _music_module
+
+    state = {"volume": 0.0, "muted": False}
+
+    def fake_check_output(cmd, text=True):
+        assert cmd[:2] == ["wpctl", "get-volume"]
+        line = f"Volume: {state['volume']:.2f}"
+        if state["muted"]:
+            line += " [MUTED]"
+        return line
+
+    def fake_run(cmd, check=False, **kwargs):
+        if cmd[:2] == ["wpctl", "set-volume"]:
+            state["volume"] = float(cmd[3].rstrip("%")) / 100.0
+        elif cmd[:2] == ["wpctl", "set-mute"]:
+            state["muted"] = cmd[3] == "1"
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr(_music_module.subprocess, "check_output", fake_check_output)
+    monkeypatch.setattr(_music_module.subprocess, "run", fake_run)
+
     _core, _node, media_rep = media_node
     client = IPCClient(media_rep, timeout_ms=2000)
     proxy = MusicServiceProxy(client)

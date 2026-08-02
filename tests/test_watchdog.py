@@ -48,10 +48,18 @@ class TestManagedServiceSystemd:
         args = mock_run.call_args[0][0]
         assert args[:2] == ["systemctl", "is-active"]
 
-    def test_user_unit_injects_runtime_dir_env(self):
+    def test_user_unit_injects_runtime_dir_env(self, monkeypatch):
         # Watchdog runs as a system unit (no login-session bus), so
         # `systemctl --user` needs XDG_RUNTIME_DIR/DBUS_SESSION_BUS_ADDRESS
         # injected explicitly rather than relying on ambient environment.
+        # _systemctl_env() uses env.setdefault(...) on a copy of the real
+        # os.environ, so any ambient XDG_RUNTIME_DIR/DBUS_SESSION_BUS_ADDRESS
+        # (present when tests run inside a real login session, e.g. locally
+        # or on some CI runners) would silently win over the injected value
+        # and make this test's outcome depend on the machine it runs on.
+        # Clear them so the test exercises the injection path deterministically.
+        monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+        monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)
         svc = ManagedService(unit="fake.service", user_unit=True)
         with patch("subprocess.run") as mock_run, \
              patch("os.getuid", return_value=1000):
