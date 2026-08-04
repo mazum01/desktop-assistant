@@ -37,8 +37,14 @@ jobs:
           python -m pip install --upgrade pip
           # Install everything from requirements.txt, ignoring Pi-specific failures
           pip install -r requirements.txt || true
-          # Force-install the packages that CI absolutely needs (may have been skipped above)
-          pip install pytest numpy soundfile sounddevice fastapi httpx psutil ruamel.yaml pyzmq opencv-python-headless pyyaml paho-mqtt dropmqttapi yalesmartalarmclient
+          # Force-install the packages that CI absolutely needs (may have been skipped above).
+          # uvicorn is required here (not just fastapi/TestClient): on Python 3.13 the
+          # lgpio wheel build fails (no precompiled wheel yet, native build needs libs
+          # this runner lacks), which aborts the whole best-effort requirements.txt
+          # install above before uvicorn gets installed — breaking any test that calls
+          # WebService.start() (spins a real uvicorn server thread), even though
+          # `pip install -r requirements.txt` succeeds fine on 3.11/3.12.
+          pip install pytest numpy soundfile sounddevice fastapi "uvicorn[standard]" httpx psutil ruamel.yaml pyzmq opencv-python-headless pyyaml paho-mqtt dropmqttapi yalesmartalarmclient
 
       - name: Pytest
         env:
