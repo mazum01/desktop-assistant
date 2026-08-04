@@ -895,6 +895,68 @@ def test_get_servo_no_motion_svc_defaults_true():
     assert r.json()["enabled"] is True
 
 
+# ── Camera 2 frame subscription boot-race regression ──────────────────────────
+
+def test_frame2_subscription_survives_camera2_configured_check_failing_at_boot():
+    """Regression test for a real bug: at boot, this web process can start
+    (and reach WebService.start()) before core's raw_camera2 service has
+    registered its camera2.get_status RPC handler. The vision.frame2_ready
+    bus subscription used to be gated behind `if self._camera2_configured():`
+    — a one-shot check performed only once during start() — so a transient
+    RPC failure at that exact moment permanently skipped the subscription
+    for the process's whole lifetime, even though cam2 came up fine moments
+    later (confirmed live: /api/snapshot2 and rotation endpoints worked,
+    because they re-check on every request; only the /stream2 MJPEG feed
+    was silently broken, stuck at 0 fps).
+
+    Simulates that race with a camera2 proxy whose is_configured() fails for
+    the first few calls (mirrors real RPC timeouts before core's raw_camera2
+    has started) and succeeds afterwards. Asserts on the true observable
+    symptom — whether a frame published once camera2 is up actually reaches
+    `_latest_frame2` — rather than exact call counts, so it fails under the
+    old gated-subscription code (subscription was already skipped in
+    start(), so no frame ever arrives) and passes under the fix
+    (subscription is unconditional, so the frame flows once camera2 answers).
+    """
+    bus = MessageBus()
+    camera2 = MagicMock()
+    failures_before_ready = 3
+    calls = {"n": 0}
+
+    def _is_configured():
+        calls["n"] += 1
+        return calls["n"] > failures_before_ready
+
+    camera2.is_configured.side_effect = _is_configured
+    camera2.latest_jpeg.return_value = b"\xff\xd8fake-jpeg"
+
+    svc = WebService(bus=bus, port=18099, registry=_mock_registry(), camera2_service=camera2)
+    try:
+        svc.start()
+        # Wait for the server thread's event loop (and _frame2_event) to exist.
+        deadline = time.time() + 3.0
+        while svc._loop is None and time.time() < deadline:
+            time.sleep(0.02)
+        assert svc._loop is not None, "server thread never initialized its event loop"
+
+        # Exhaust the "still not ready" window — represents any polling
+        # (old start()'s gating check, other routes, etc.) that might have
+        # observed is_configured() == False before core's raw_camera2 truly
+        # came up.
+        for _ in range(failures_before_ready):
+            svc._camera2_configured()
+
+        bus.publish("vision.frame2_ready", {"index": 1, "ts": time.time()})
+        deadline = time.time() + 2.0
+        while svc._latest_frame2 is None and time.time() < deadline:
+            time.sleep(0.02)
+
+        assert svc._latest_frame2 == b"\xff\xd8fake-jpeg"
+        assert svc._cam2_frame_count == 1
+    finally:
+        svc.stop()
+
+
 def test_get_fan_control_points_from_thermal_runtime(tmp_path, monkeypatch):
     cfg = tmp_path / "thermal.yaml"
     cfg.write_text(

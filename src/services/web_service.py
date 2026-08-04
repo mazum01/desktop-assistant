@@ -847,10 +847,20 @@ class WebService:
         self._unsubs.append(
             self.bus.subscribe("vision.jpeg_ready", self._on_frame)
         )
-        if self._camera2_configured():
-            self._unsubs.append(
-                self.bus.subscribe("vision.frame2_ready", self._on_frame2)
-            )
+        # Always subscribe (don't gate on _camera2_configured() here): at boot,
+        # this web process can start and reach this line before core's
+        # raw_camera2 service has registered its camera2.get_status RPC
+        # handler, which made the one-shot _camera2_configured() check below
+        # fail transiently and permanently skip this subscription for the
+        # rest of the process's life — even though cam2 was healthy moments
+        # later (confirmed via /api/snapshot2, which re-checks on every
+        # request). _on_frame2() already re-checks _camera2_configured() on
+        # every event, so subscribing unconditionally is safe: if there's
+        # truly no second camera, RawCameraService never exists to publish
+        # this topic and the subscription is simply inert.
+        self._unsubs.append(
+            self.bus.subscribe("vision.frame2_ready", self._on_frame2)
+        )
         # Seed status from services that already started before us.
         for svc in self._all_services:
             if svc is self:
