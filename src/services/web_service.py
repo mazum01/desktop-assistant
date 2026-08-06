@@ -2797,6 +2797,12 @@ class WebService:
         @app.put("/api/music/eq/custom")
         async def api_custom_eq_set(body: _CustomEqBody):
             bands = [{"hz": b.hz, "gain_db": b.gain_db, "q": b.q} for b in body.bands]
+            try:
+                state_file = Path.home() / ".config" / "desktop-assistant" / "custom_eq.json"
+                state_file.parent.mkdir(parents=True, exist_ok=True)
+                state_file.write_text(json.dumps(bands))
+            except Exception as exc:
+                raise HTTPException(500, f"Unable to save custom EQ: {exc}")
             if self.bus:
                 self.bus.publish("av.set_custom_eq", {"bands": bands})
                 # Also update music_svc eq_preset tracker so UI stays consistent

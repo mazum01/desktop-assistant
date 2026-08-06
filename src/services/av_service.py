@@ -436,9 +436,6 @@ class AVService(Service):
         try:
             _STATE_DIR.mkdir(parents=True, exist_ok=True)
             _EQ_STATE_FILE.write_text(preset)
-            # Clear custom EQ file — named preset takes over
-            if _CUSTOM_EQ_STATE_FILE.exists():
-                _CUSTOM_EQ_STATE_FILE.unlink()
         except Exception as exc:
             log.warning("AVService: failed to persist EQ preset: %s", exc)
         log.info("AVService: EQ preset → %r", preset)

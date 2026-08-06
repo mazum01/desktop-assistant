@@ -344,6 +344,30 @@ def test_av_service_chime_with_overrides():
         svc.stop()
 
 
+def test_av_service_keeps_custom_eq_state_when_switching_to_named_preset(tmp_path, monkeypatch):
+    import src.services.av_service as _av_module
+
+    monkeypatch.setattr(_av_module, "_STATE_DIR", tmp_path)
+    monkeypatch.setattr(_av_module, "_EQ_STATE_FILE", tmp_path / "eq_preset.txt")
+    monkeypatch.setattr(_av_module, "_CUSTOM_EQ_STATE_FILE", tmp_path / "custom_eq.json")
+
+    bus = MessageBus()
+    svc, _, _, _ = _make_av(bus)
+    svc.start()
+    try:
+        bus.publish("av.set_custom_eq", {"bands": [{"hz": 1000, "gain_db": 3.0, "q": 1.0}]})
+        svc.wait_idle()
+        assert _av_module._CUSTOM_EQ_STATE_FILE.exists()
+
+        bus.publish("av.set_eq_preset", {"preset": "bass_boost"})
+        svc.wait_idle()
+
+        assert _av_module._EQ_STATE_FILE.read_text().strip() == "bass_boost"
+        assert _av_module._CUSTOM_EQ_STATE_FILE.exists()
+    finally:
+        svc.stop()
+
+
 def test_av_service_spectrum_test_publishes_current_tone():
     bus = MessageBus()
     svc, audio, _, _ = _make_av(bus)

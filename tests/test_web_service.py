@@ -1,4 +1,6 @@
 """Tests for WebService REST endpoints using FastAPI TestClient."""
+import json
+import pathlib
 import time
 import pytest
 from pathlib import Path
@@ -252,6 +254,28 @@ def test_audio_playback_endpoint_calls_av_service(app_client):
     data = r.json()
     assert data["ok"] is True
     assert data["seconds"] == pytest.approx(1.25)
+
+
+def test_put_custom_eq_persists_band_curve_and_get_returns_it(app_client, tmp_path, monkeypatch):
+    client, bus, svc = app_client
+    monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path))
+
+    bands = [
+        {"hz": 80, "gain_db": 4.0, "q": 1.0},
+        {"hz": 1000, "gain_db": -2.0, "q": 1.2},
+    ]
+
+    r = client.put("/api/music/eq/custom", json={"bands": bands})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+
+    state_file = tmp_path / ".config" / "desktop-assistant" / "custom_eq.json"
+    assert state_file.exists()
+    assert json.loads(state_file.read_text()) == bands
+
+    r2 = client.get("/api/music/eq/custom")
+    assert r2.status_code == 200
+    assert r2.json()["bands"] == bands
 
 
 def test_start_seeds_service_states_from_remote_node_status(monkeypatch):
