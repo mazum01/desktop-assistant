@@ -78,6 +78,7 @@ _INTEGRATIONS_PUB = "ipc:///tmp/desktop-assistant-integrations.pub"
 # REP (registered via `ipc.register_rpc(...)` in core_main.py), plus
 # media's/integrations' (unchanged from Phase 1/2b).
 _CORE_REP = "ipc:///tmp/desktop-assistant.rep"
+_THERMAL_REP = "ipc:///tmp/desktop-assistant-thermal.rep"
 _MEDIA_REP = "ipc:///tmp/desktop-assistant-media.rep"
 _INTEGRATIONS_REP = "ipc:///tmp/desktop-assistant-integrations.rep"
 
@@ -103,6 +104,7 @@ def build_node(
     rep_endpoint: str = WEB_REP,
     upstream_endpoints: Optional[list] = None,
     core_rep: str = _CORE_REP,
+    thermal_rep: str = _THERMAL_REP,
     media_rep: str = _MEDIA_REP,
     integrations_rep: str = _INTEGRATIONS_REP,
 ) -> ProcessNode:
@@ -146,6 +148,7 @@ def build_node(
     node.bus.subscribe("settings.quiet_hours_updated", _on_quiet_hours_updated)
 
     core_client = IPCClient(core_rep)
+    thermal_client = IPCClient(thermal_rep)
     media_client = IPCClient(media_rep)
     integrations_client = IPCClient(integrations_rep)
 
@@ -177,6 +180,12 @@ def build_node(
             podcast_service=podcast_proxy,
             skills_service=skills_proxy,
             iot_registry=iot_registry_proxy,
+            status_clients={
+                "core": core_client,
+                "thermal": thermal_client,
+                "media": media_client,
+                "integrations": integrations_client,
+            },
         )
         node.add_service(web_svc)
 
@@ -184,6 +193,9 @@ def build_node(
     # full wiring picture (tests) can introspect it; also keeps the
     # underlying REQ sockets from being garbage-collected mid-request.
     node._core_client = core_client  # noqa: SLF001
+    node._thermal_client = thermal_client  # noqa: SLF001
+    node._media_client = media_client  # noqa: SLF001
+    node._integrations_client = integrations_client  # noqa: SLF001
 
     if web_svc is not None:
         web_svc._all_services = node.services  # seed service registry at startup

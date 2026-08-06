@@ -97,6 +97,7 @@ from typing import Optional
 import psutil
 import zmq
 
+from src.core.ipc_client import IPCClient
 from src.core.quiet_hours import QuietHours
 from src.services.object_service import _build_scene_description
 
@@ -777,6 +778,7 @@ class WebService:
         iot_registry=None,
         privacy_service=None,
         api_key: str = "",
+        status_clients: Optional[dict[str, IPCClient]] = None,
     ) -> None:
         self.bus = bus
         self._host = host
@@ -806,6 +808,7 @@ class WebService:
         self._face_svc = face_service
         self._iot_registry = iot_registry
         self._privacy_svc = privacy_service
+        self._status_clients = dict(status_clients or {})
         self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
         self._thread: Optional[threading.Thread] = None
@@ -868,6 +871,7 @@ class WebService:
             _name = getattr(svc, "name", None)
             if _name and hasattr(svc, "is_running") and svc.is_running():
                 self._service_states[_name] = "running"
+        self._seed_remote_service_states()
 
         # Subscribe to service lifecycle events for the Services panel
         self._unsubs.append(
@@ -985,6 +989,51 @@ class WebService:
             self._cam2_frame_count += 1
             if self._loop is not None and self._frame2_event is not None:
                 self._loop.call_soon_threadsafe(self._frame2_event.set)
+
+    @staticmethod
+    def _coerce_service_state(entry) -> Optional[str]:
+        if isinstance(entry, str):
+            if entry in {"running", "stopped", "error"}:
+                return entry
+            return None
+        if not isinstance(entry, dict):
+            return None
+        if entry.get("running") is False:
+            return "stopped"
+        if entry.get("error"):
+            return "error"
+        if entry.get("running"):
+            return "running"
+        return None
+
+    def _seed_remote_service_states(self) -> None:
+        """Merge startup service snapshots from other process nodes.
+
+        After the process split, `self._all_services` only includes services
+        local to the web node (`ipc` + `web`). Other processes may have
+        published their `service.started` events long before this process came
+        up, and PUB/SUB does not replay history. Query each node's IPCBridge
+        `status` RPC once at startup so the Services card reflects the full
+        system immediately instead of only the two local services until some
+        future lifecycle event happens.
+        """
+        for node_name, client in self._status_clients.items():
+            reply = client.call({"cmd": "status"})
+            if not reply.get("ok"):
+                log.debug(
+                    "WebService could not seed services from %s node status: %s",
+                    node_name,
+                    reply.get("error", "unknown error"),
+                )
+                continue
+            status = reply.get("status")
+            services = status.get("services") if isinstance(status, dict) else None
+            if not isinstance(services, dict):
+                continue
+            for service_name, entry in services.items():
+                state = self._coerce_service_state(entry)
+                if state is not None:
+                    self._service_states[service_name] = state
 
     def _on_service_started(self, _topic, payload) -> None:
         if isinstance(payload, dict) and "name" in payload:

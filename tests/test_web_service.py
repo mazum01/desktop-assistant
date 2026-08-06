@@ -254,6 +254,56 @@ def test_audio_playback_endpoint_calls_av_service(app_client):
     assert data["seconds"] == pytest.approx(1.25)
 
 
+def test_start_seeds_service_states_from_remote_node_status(monkeypatch):
+    class _FakeClient:
+        def __init__(self, reply):
+            self.reply = reply
+            self.calls = []
+
+        def call(self, request, timeout_ms=None):
+            self.calls.append((request, timeout_ms))
+            return self.reply
+
+    bus = MessageBus()
+    core_client = _FakeClient({
+        "ok": True,
+        "status": {
+            "services": {
+                "vision": {"running": True, "ts": time.time()},
+                "tracking": {"running": True, "error": True, "ts": time.time()},
+                "room": {"running": False, "ts": time.time()},
+            }
+        },
+    })
+    media_client = _FakeClient({
+        "ok": True,
+        "status": {
+            "services": {
+                "music": {"running": True, "ts": time.time()},
+            }
+        },
+    })
+
+    monkeypatch.setattr(WebService, "_run_server", lambda self: None)
+
+    svc = WebService(
+        bus=bus,
+        port=18080,
+        registry=_mock_registry(),
+        status_clients={"core": core_client, "media": media_client},
+    )
+    svc.start()
+    try:
+        assert svc._service_states["vision"] == "running"
+        assert svc._service_states["tracking"] == "error"
+        assert svc._service_states["room"] == "stopped"
+        assert svc._service_states["music"] == "running"
+        assert core_client.calls == [({"cmd": "status"}, None)]
+        assert media_client.calls == [({"cmd": "status"}, None)]
+    finally:
+        svc.stop()
+
+
 def test_audio_mute_get_and_set(app_client):
     client, bus, svc = app_client
 

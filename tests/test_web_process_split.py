@@ -88,7 +88,7 @@ def web_and_core(tmp_path, monkeypatch):
     upstream-subscribes to, and a fake "core" REP endpoint registering the
     same RPC command names `core_main.py` does."""
     core_pub, core_rep = _unique_endpoints("core")
-    thermal_pub, _thermal_rep = _unique_endpoints("thermal")
+    thermal_pub, thermal_rep = _unique_endpoints("thermal")
     media_pub, media_rep = _unique_endpoints("media")
     integ_pub, integ_rep = _unique_endpoints("integrations")
     web_pub, web_rep = _unique_endpoints("web")
@@ -97,7 +97,7 @@ def web_and_core(tmp_path, monkeypatch):
         name="core", pub_endpoint=core_pub, rep_endpoint=core_rep,
         upstream_endpoints=[web_pub],  # mirrors core_main.py's _WEB_PUB addition
     )
-    thermal = ProcessNode(name="thermal", pub_endpoint=thermal_pub, rep_endpoint=_thermal_rep)
+    thermal = ProcessNode(name="thermal", pub_endpoint=thermal_pub, rep_endpoint=thermal_rep)
     media = ProcessNode(name="media", pub_endpoint=media_pub, rep_endpoint=media_rep)
     integrations = ProcessNode(name="integrations", pub_endpoint=integ_pub, rep_endpoint=integ_rep)
 
@@ -145,6 +145,7 @@ def web_and_core(tmp_path, monkeypatch):
         rep_endpoint=web_rep,
         upstream_endpoints=[core_pub, thermal_pub, media_pub, integ_pub],
         core_rep=core_rep,
+        thermal_rep=thermal_rep,
         media_rep=media_rep,
         integrations_rep=integ_rep,
     )
@@ -261,6 +262,59 @@ def test_core_originated_event_reaches_web_process(web_and_core):
 
     assert _wait_until(lambda: len(received) == 1)
     assert received[0]["name"] == "Ada"
+
+
+def test_web_service_seeds_remote_service_states_via_status_rpc(monkeypatch):
+    core_pub, core_rep = _unique_endpoints("seed-core")
+    thermal_pub, thermal_rep = _unique_endpoints("seed-thermal")
+    media_pub, media_rep = _unique_endpoints("seed-media")
+    integ_pub, integ_rep = _unique_endpoints("seed-integrations")
+    web_pub, web_rep = _unique_endpoints("seed-web")
+
+    core = ProcessNode(name="core", pub_endpoint=core_pub, rep_endpoint=core_rep, upstream_endpoints=[web_pub])
+    thermal = ProcessNode(name="thermal", pub_endpoint=thermal_pub, rep_endpoint=thermal_rep)
+    media = ProcessNode(name="media", pub_endpoint=media_pub, rep_endpoint=media_rep)
+    integrations = ProcessNode(name="integrations", pub_endpoint=integ_pub, rep_endpoint=integ_rep)
+
+    monkeypatch.setattr("src.services.web_service.WebService._run_server", lambda self: None)
+    node = build_node(
+        cfg={"web_dashboard": {"enabled": True, "port": 18098}},
+        pub_endpoint=web_pub,
+        rep_endpoint=web_rep,
+        upstream_endpoints=[core_pub, thermal_pub, media_pub, integ_pub],
+        core_rep=core_rep,
+        thermal_rep=thermal_rep,
+        media_rep=media_rep,
+        integrations_rep=integ_rep,
+    )
+
+    for n in (core, thermal, media, integrations):
+        for svc in n.services:
+            svc.start()
+
+    core.bus.publish("service.started", {"name": "vision"})
+    core.bus.publish("service.started", {"name": "tracking"})
+    core.bus.publish("service.stopped", {"name": "tracking"})
+    media.bus.publish("service.started", {"name": "music"})
+
+    assert _wait_until(lambda: bool(core.ipc._service_status.get("vision")))
+    assert _wait_until(lambda: bool(core.ipc._service_status.get("tracking")))
+    assert _wait_until(lambda: bool(media.ipc._service_status.get("music")))
+
+    for svc in node.services:
+        svc.start()
+
+    try:
+        web_svc = next(s for s in node.services if getattr(s, "name", "") == "web")
+        assert _wait_until(lambda: web_svc._service_states.get("vision") == "running")
+        assert web_svc._service_states["tracking"] == "stopped"
+        assert web_svc._service_states["music"] == "running"
+    finally:
+        for svc in reversed(node.services):
+            svc.stop()
+        for n in (integrations, media, thermal, core):
+            for svc in reversed(n.services):
+                svc.stop()
 
 
 def test_proxy_falls_back_gracefully_when_core_process_unreachable():
