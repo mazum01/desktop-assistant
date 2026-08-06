@@ -368,6 +368,27 @@ def test_av_service_keeps_custom_eq_state_when_switching_to_named_preset(tmp_pat
         svc.stop()
 
 
+def test_av_service_start_prefers_active_named_preset_over_saved_custom_curve(tmp_path, monkeypatch):
+    import src.services.av_service as _av_module
+
+    monkeypatch.setattr(_av_module, "_STATE_DIR", tmp_path)
+    monkeypatch.setattr(_av_module, "_EQ_STATE_FILE", tmp_path / "eq_preset.txt")
+    monkeypatch.setattr(_av_module, "_CUSTOM_EQ_STATE_FILE", tmp_path / "custom_eq.json")
+
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    _av_module._EQ_STATE_FILE.write_text("bass_boost")
+    _av_module._CUSTOM_EQ_STATE_FILE.write_text('[{"hz": 1000, "gain_db": 3.0, "q": 1.0}]')
+
+    bus = MessageBus()
+    svc, audio, _, _ = _make_av(bus)
+    svc.start()
+    try:
+        audio.set_eq_preset.assert_called_once_with("bass_boost")
+        audio.set_custom_eq_bands.assert_not_called()
+    finally:
+        svc.stop()
+
+
 def test_av_service_spectrum_test_publishes_current_tone():
     bus = MessageBus()
     svc, audio, _, _ = _make_av(bus)

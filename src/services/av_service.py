@@ -186,22 +186,41 @@ class AVService(Service):
 
         # Restore persisted EQ state
         _STATE_DIR.mkdir(parents=True, exist_ok=True)
-        if _CUSTOM_EQ_STATE_FILE.exists():
+        preset = ""
+        if _EQ_STATE_FILE.exists():
+            try:
+                preset = _EQ_STATE_FILE.read_text().strip()
+            except Exception as exc:
+                log.warning("AVService: failed to read EQ preset: %s", exc)
+                preset = ""
+        if preset == "custom":
+            if _CUSTOM_EQ_STATE_FILE.exists():
+                try:
+                    bands = json.loads(_CUSTOM_EQ_STATE_FILE.read_text())
+                    if self._audio is not None:
+                        self._audio.set_custom_eq_bands(bands)
+                    log.info("AVService: restored custom EQ (%d band(s))", len(bands))
+                except Exception as exc:
+                    log.warning("AVService: failed to restore custom EQ: %s", exc)
+            else:
+                log.warning("AVService: EQ preset is custom but no custom EQ bands were saved")
+        elif preset:
+            try:
+                if self._audio is not None:
+                    self._audio.set_eq_preset(preset)
+                log.info("AVService: restored EQ preset %r", preset)
+            except Exception as exc:
+                log.warning("AVService: failed to restore EQ preset %s: %s", preset, exc)
+        elif _CUSTOM_EQ_STATE_FILE.exists():
+            # Backward-compatible fallback: if only the custom curve remains,
+            # restore it even without an explicit preset marker.
             try:
                 bands = json.loads(_CUSTOM_EQ_STATE_FILE.read_text())
                 if self._audio is not None:
                     self._audio.set_custom_eq_bands(bands)
-                log.info("AVService: restored custom EQ (%d band(s))", len(bands))
+                log.info("AVService: restored legacy custom EQ (%d band(s))", len(bands))
             except Exception as exc:
                 log.warning("AVService: failed to restore custom EQ: %s", exc)
-        elif _EQ_STATE_FILE.exists():
-            try:
-                preset = _EQ_STATE_FILE.read_text().strip()
-                if preset and preset != "custom" and self._audio is not None:
-                    self._audio.set_eq_preset(preset)
-                log.info("AVService: restored EQ preset %r", preset)
-            except Exception as exc:
-                log.warning("AVService: failed to restore EQ preset: %s", exc)
 
         # Restore PipeWire system EQ (filter-chain config already on disk from
         # last session — just re-elect the EQ sink as default without restarting).
