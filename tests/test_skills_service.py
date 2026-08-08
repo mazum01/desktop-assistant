@@ -100,6 +100,7 @@ def test_skills_service_subscribes_and_dispatches():
 
     bus = MagicMock()
     svc = SkillsService(bus)
+    assert svc.name == "skills"
     svc.on_start()
     bus.subscribe.assert_any_call("av.utterance", svc._on_utterance)
 

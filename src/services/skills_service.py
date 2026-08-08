@@ -48,6 +48,8 @@ log = logging.getLogger(__name__)
 class SkillsService(Service):
     """Voice-intent dispatch service."""
 
+    name = "skills"
+
     def __init__(self, bus, quiet_hours=None) -> None:
         super().__init__(bus)
         self._quiet_hours = quiet_hours

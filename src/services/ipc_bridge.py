@@ -128,11 +128,15 @@ class IPCBridge(Service):
 
         # Track service.started / stopped for the status command.
         def _on_started(_topic, payload):
+            if getattr(self._injecting, "topic", None) == "service.started":
+                return
             if isinstance(payload, dict) and payload.get("name"):
                 self._service_status[payload["name"]] = {
                     "running": True, "ts": _time.time(),
                 }
         def _on_stopped(_topic, payload):
+            if getattr(self._injecting, "topic", None) == "service.stopped":
+                return
             if isinstance(payload, dict) and payload.get("name"):
                 self._service_status[payload["name"]] = {
                     "running": False, "ts": _time.time(),
@@ -150,6 +154,8 @@ class IPCBridge(Service):
         }
         def _make_err_handler(svc_name):
             def _on_err(_topic, _payload):
+                if getattr(self._injecting, "topic", None) == _topic:
+                    return
                 entry = self._service_status.get(svc_name)
                 if entry and entry.get("running"):
                     self._service_status[svc_name] = {**entry, "error": True}
@@ -164,6 +170,8 @@ class IPCBridge(Service):
         }
         def _make_recovery_handler(svc_name):
             def _on_ok(_topic, _payload):
+                if getattr(self._injecting, "topic", None) == _topic:
+                    return
                 entry = self._service_status.get(svc_name)
                 if entry and entry.get("error"):
                     self._service_status[svc_name] = {**entry, "error": False}

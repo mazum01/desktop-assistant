@@ -89,6 +89,7 @@ def main() -> int:
     ipc.register_rpc("fan_control_points.set", _rpc_set_fan_control_points)
     ipc.register_rpc("temp_blend.get",         _rpc_get_temp_blend)
     ipc.register_rpc("temp_blend.set",         _rpc_set_temp_blend)
+    ipc._all_services = [thermal, ipc]  # noqa: SLF001 - same-package wiring
 
     return run_services(
         services=[

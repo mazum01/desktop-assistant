@@ -108,6 +108,21 @@ def test_rpc_ping_works_out_of_the_box(two_nodes):
     assert client.ping() is True
 
 
+def test_status_reports_only_local_services_not_forwarded_upstream_events(two_nodes):
+    upstream, _downstream, _up_rep, down_rep = two_nodes
+
+    upstream.bus.publish("service.started", {"name": "ghost"})
+
+    assert _wait_until(lambda: True, timeout_s=0.2)
+    client = IPCClient(down_rep, timeout_ms=2000)
+    reply = client.call({"cmd": "status"})
+
+    assert reply["ok"] is True
+    services = reply["status"]["services"]
+    assert "ghost" not in services
+    assert "ipc_bridge" in services
+
+
 def test_ipc_client_times_out_cleanly_when_nothing_listening():
     client = IPCClient("ipc:///tmp/test-nobody-here.rep", timeout_ms=200)
     reply = client.call({"cmd": "ping"})

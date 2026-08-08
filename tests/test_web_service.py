@@ -328,6 +328,81 @@ def test_start_seeds_service_states_from_remote_node_status(monkeypatch):
         svc.stop()
 
 
+def test_status_snapshot_retries_remote_service_seed_after_startup_timeout(monkeypatch):
+    class _FakeClient:
+        def __init__(self):
+            self.calls = []
+            self.replies = [
+                {"ok": False, "error": "timeout"},
+                {"ok": True, "status": {"services": {"vision": {"running": True, "ts": time.time()}}}},
+            ]
+
+        def call(self, request, timeout_ms=None):
+            self.calls.append((request, timeout_ms))
+            idx = min(len(self.calls) - 1, len(self.replies) - 1)
+            return self.replies[idx]
+
+    bus = MessageBus()
+    core_client = _FakeClient()
+
+    monkeypatch.setattr(WebService, "_run_server", lambda self: None)
+
+    svc = WebService(
+        bus=bus,
+        port=18080,
+        registry=_mock_registry(),
+        status_clients={"core": core_client},
+    )
+    svc.start()
+    try:
+        assert "vision" not in svc._service_states
+        svc._next_remote_status_refresh_at = 0.0
+        snapshot = svc._build_status_snapshot()
+        assert snapshot["services"]["vision"] == "running"
+        assert core_client.calls == [({"cmd": "status"}, None), ({"cmd": "status"}, None)]
+    finally:
+        svc.stop()
+
+
+def test_status_snapshot_prunes_stale_remote_service_names(monkeypatch):
+    class _FakeClient:
+        def __init__(self):
+            self.calls = 0
+
+        def call(self, request, timeout_ms=None):
+            self.calls += 1
+            if self.calls == 1:
+                return {
+                    "ok": True,
+                    "status": {"services": {"service": {"running": False, "ts": time.time()}}},
+                }
+            return {
+                "ok": True,
+                "status": {"services": {"skills": {"running": True, "ts": time.time()}}},
+            }
+
+    bus = MessageBus()
+    client = _FakeClient()
+
+    monkeypatch.setattr(WebService, "_run_server", lambda self: None)
+
+    svc = WebService(
+        bus=bus,
+        port=18080,
+        registry=_mock_registry(),
+        status_clients={"integrations": client},
+    )
+    svc.start()
+    try:
+        assert svc._service_states["service"] == "stopped"
+        svc._next_remote_status_refresh_at = 0.0
+        snapshot = svc._build_status_snapshot()
+        assert "service" not in snapshot["services"]
+        assert snapshot["services"]["skills"] == "running"
+    finally:
+        svc.stop()
+
+
 def test_audio_mute_get_and_set(app_client):
     client, bus, svc = app_client
 

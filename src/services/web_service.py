@@ -110,6 +110,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _THERMAL_CONFIG_PATH = _PROJECT_ROOT / "config" / "thermal.yaml"
 _ASSISTANT_CONFIG_PATH = _PROJECT_ROOT / "config" / "assistant.yaml"
 _THERMAL_REP_ENDPOINT = "ipc:///tmp/desktop-assistant-thermal.rep"
+_REMOTE_STATUS_REFRESH_INTERVAL_S = 5.0
 
 
 # ── Process list helper ───────────────────────────────────────────────────────
@@ -809,6 +810,9 @@ class WebService:
         self._iot_registry = iot_registry
         self._privacy_svc = privacy_service
         self._status_clients = dict(status_clients or {})
+        self._next_remote_status_refresh_at: float = 0.0
+        self._local_service_names: set[str] = set()
+        self._remote_service_names_by_node: dict[str, set[str]] = {}
         self._all_services: list = []  # seeded by core_main after list is built
         self._server = None
         self._thread: Optional[threading.Thread] = None
@@ -871,7 +875,8 @@ class WebService:
             _name = getattr(svc, "name", None)
             if _name and hasattr(svc, "is_running") and svc.is_running():
                 self._service_states[_name] = "running"
-        self._seed_remote_service_states()
+                self._local_service_names.add(_name)
+        self._refresh_remote_service_states(force=True)
 
         # Subscribe to service lifecycle events for the Services panel
         self._unsubs.append(
@@ -1006,7 +1011,7 @@ class WebService:
             return "running"
         return None
 
-    def _seed_remote_service_states(self) -> None:
+    def _refresh_remote_service_states(self, force: bool = False) -> None:
         """Merge startup service snapshots from other process nodes.
 
         After the process split, `self._all_services` only includes services
@@ -1017,6 +1022,12 @@ class WebService:
         system immediately instead of only the two local services until some
         future lifecycle event happens.
         """
+        if not self._status_clients:
+            return
+        now = time.monotonic()
+        if not force and now < self._next_remote_status_refresh_at:
+            return
+        self._next_remote_status_refresh_at = now + _REMOTE_STATUS_REFRESH_INTERVAL_S
         for node_name, client in self._status_clients.items():
             reply = client.call({"cmd": "status"})
             if not reply.get("ok"):
@@ -1030,6 +1041,22 @@ class WebService:
             services = status.get("services") if isinstance(status, dict) else None
             if not isinstance(services, dict):
                 continue
+            current_names = set(services)
+            previous_names = self._remote_service_names_by_node.get(node_name, set())
+            self._remote_service_names_by_node[node_name] = current_names
+            other_remote_names = set().union(
+                *(
+                    names
+                    for other_node, names in self._remote_service_names_by_node.items()
+                    if other_node != node_name
+                )
+            )
+            for removed_name in previous_names - current_names:
+                if (
+                    removed_name not in other_remote_names
+                    and removed_name not in self._local_service_names
+                ):
+                    self._service_states.pop(removed_name, None)
             for service_name, entry in services.items():
                 state = self._coerce_service_state(entry)
                 if state is not None:
@@ -1096,6 +1123,7 @@ class WebService:
 
     def _build_status_snapshot(self) -> dict:
         """Pull latest status from the bus (same topics as IPC bridge)."""
+        self._refresh_remote_service_states()
         snapshot_topics = (
             "thermal.temp", "thermal.fan", "thermal.rpm",
             "motion.position",
