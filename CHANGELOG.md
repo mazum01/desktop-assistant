@@ -4,6 +4,29 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.47.1] - 2026-08-22
+### Added
+- Added a dedicated `DisplayService` (`src/services/display_service.py`) to
+  provide startup/restart status updates for an ESP32 display path, including
+  status mapping for `system.startup_status`, `service.started` /
+  `service.stopped`, `av.version_announced`, and major `*.error` topics. The
+  service emits `display.status` / `display.error` events and supports optional
+  BLE GATT writes when configured.
+- Added display configuration defaults in
+  `config/assistant.yaml` under `display` (BLE toggle, address/characteristic,
+  connect timeout, message length, expected services list).
+- Added unit coverage in `tests/test_display_service.py` for startup-status
+  relay, ready-state emission, and degraded error emission behavior.
+### Changed
+- `run_services(...)` now publishes `system.startup_status` lifecycle progress
+  during boot, diagnostics, readiness/degraded outcomes, and shutdown, so
+  display surfaces can show deterministic startup/restart progress.
+- `src/assistant/core_main.py` now instantiates and starts `DisplayService`
+  early so it can observe startup sequencing for the rest of core services.
+- Updated architecture documentation (`docs/architecture/architecture.dot`,
+  regenerated outputs, and `docs/architecture/README.md`) to include the new
+  display service, ESP32 BLE hardware link, and display/startup bus topics.
+
 ## [1.47.0] - 2026-07-21
 ### Added
 - **Process Isolation Phase 2a: extracted `TelegramService`, `NotificationService`,
