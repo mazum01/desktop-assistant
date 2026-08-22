@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-926 6528,-926 6528,4 -4,4"/>
 <text text-anchor="start" x="2974.5" y="-906.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="3084" y="-895" font-family="Helvetica,sans-Serif" font-size="10.00">v1.47.1 — display startup/restart status service + ESP32 BLE display link</text>
+<text text-anchor="start" x="3084" y="-895" font-family="Helvetica,sans-Serif" font-size="10.00">v1.47.2 — display startup/restart status service + ESP32 BLE display link</text>
 <g id="clust1" class="cluster">
 <title>cluster_hw</title>
 <path fill="#f5e9d8" stroke="black" d="M1140,-769C1140,-769 2361,-769 2361,-769 2367,-769 2373,-775 2373,-781 2373,-781 2373,-868 2373,-868 2373,-874 2367,-880 2361,-880 2361,-880 1140,-880 1140,-880 1134,-880 1128,-874 1128,-868 1128,-868 1128,-781 1128,-781 1128,-775 1134,-769 1140,-769"/>

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import queue
 import threading
 import time
 from dataclasses import dataclass, field
@@ -54,6 +55,9 @@ class DisplayService(Service):
         self._seen_started: set[str] = set()
         self._ble_lock = threading.Lock()
         self._ble_warned = False
+        self._ble_queue: "queue.Queue[bytes | None]" = queue.Queue(maxsize=128)
+        self._ble_worker: Optional[threading.Thread] = None
+        self._ble_stop = threading.Event()
 
     def set_expected_services(self, names: list[str]) -> None:
         self._cfg.expected_services = [n for n in names if n and n != self.name]
@@ -70,6 +74,14 @@ class DisplayService(Service):
             self.bus.subscribe("perception.error", self._on_perception_error),
         ]
         self._emit_status("boot", "Display status service online")
+        if self._cfg.ble_enabled:
+            self._ble_stop.clear()
+            self._ble_worker = threading.Thread(
+                target=self._ble_loop,
+                name="display-ble",
+                daemon=True,
+            )
+            self._ble_worker.start()
 
     def on_stop(self) -> None:
         for unsub in self._unsubs:
@@ -78,6 +90,14 @@ class DisplayService(Service):
             except Exception:
                 pass
         self._unsubs = []
+        self._ble_stop.set()
+        if self._ble_worker is not None:
+            try:
+                self._ble_queue.put_nowait(None)
+            except queue.Full:
+                pass
+            self._ble_worker.join(timeout=1.0)
+        self._ble_worker = None
 
     # ── Handlers ────────────────────────────────────────────────────────
 
@@ -145,8 +165,7 @@ class DisplayService(Service):
         }
         self.bus.publish("display.status", payload)
 
-        if self._cfg.enabled:
-            self._send_ble(payload)
+        self._send_ble(payload)
 
     @staticmethod
     def _payload_text(payload) -> str:
@@ -160,8 +179,32 @@ class DisplayService(Service):
         return str(payload)
 
     def _send_ble(self, payload: dict) -> None:
-        if not self._cfg.ble_enabled:
+        if not self._cfg.ble_enabled or self._ble_stop.is_set():
             return
+        encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        try:
+            self._ble_queue.put_nowait(encoded)
+        except queue.Full:
+            try:
+                _ = self._ble_queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                self._ble_queue.put_nowait(encoded)
+            except queue.Full:
+                pass
+
+    def _ble_loop(self) -> None:
+        while not self._ble_stop.is_set():
+            try:
+                encoded = self._ble_queue.get(timeout=0.25)
+            except queue.Empty:
+                continue
+            if encoded is None:
+                continue
+            self._write_ble_sync(encoded)
+
+    def _write_ble_sync(self, encoded: bytes) -> None:
         if not self._cfg.ble_address or not self._cfg.ble_characteristic_uuid:
             self._warn_ble_once("BLE display enabled without address/characteristic; skipping send")
             return
@@ -169,7 +212,6 @@ class DisplayService(Service):
             self._warn_ble_once("bleak not installed; BLE display transport disabled")
             return
 
-        encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         with self._ble_lock:
             try:
                 asyncio.run(self._ble_write(encoded))
@@ -177,6 +219,9 @@ class DisplayService(Service):
                 loop = asyncio.new_event_loop()
                 try:
                     loop.run_until_complete(self._ble_write(encoded))
+                except Exception:
+                    log.exception("DisplayService BLE write failed")
+                    self.bus.publish("display.error", {"error": "ble_write_failed", "ts": time.time()})
                 finally:
                     loop.close()
             except Exception:

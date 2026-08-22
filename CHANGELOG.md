@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.47.2] - 2026-08-22
+### Fixed
+- Fixed `DisplayService` BLE fallback error handling so exceptions raised from
+  the event-loop fallback path are caught, logged, and surfaced via
+  `display.error` instead of propagating out of the bus callback thread.
+- Fixed display service enablement wiring so `display.enabled: false` now
+  prevents startup of the service instead of only suppressing BLE writes.
+- Fixed startup-event bus responsiveness by moving BLE sends off the message
+  bus callback path into a dedicated background worker queue.
+
 ## [1.47.1] - 2026-08-22
 ### Added
 - Added a dedicated `DisplayService` (`src/services/display_service.py`) to

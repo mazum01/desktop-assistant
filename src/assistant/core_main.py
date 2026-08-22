@@ -360,17 +360,21 @@ def main() -> int:
         _led = ReSpeakerFlexLED(bus=bus, enabled=True)
 
     av = AVService(bus=bus, audio_output=_audio_out)
-    display_svc = DisplayService(
-        bus=bus,
-        config=DisplayServiceConfig(
-            enabled=bool(_display_cfg_raw.get("enabled", True)),
-            ble_enabled=bool(_display_cfg_raw.get("ble_enabled", False)),
-            ble_address=str(_display_cfg_raw.get("ble_address", "")),
-            ble_characteristic_uuid=str(_display_cfg_raw.get("ble_characteristic_uuid", "")),
-            connect_timeout_s=float(_display_cfg_raw.get("connect_timeout_s", 4.0)),
-            max_message_chars=int(_display_cfg_raw.get("max_message_chars", 96)),
-            expected_services=list(_display_cfg_raw.get("expected_services", [])),
-        ),
+    _display_enabled = bool(_display_cfg_raw.get("enabled", True))
+    display_svc = (
+        DisplayService(
+            bus=bus,
+            config=DisplayServiceConfig(
+                enabled=True,
+                ble_enabled=bool(_display_cfg_raw.get("ble_enabled", False)),
+                ble_address=str(_display_cfg_raw.get("ble_address", "")),
+                ble_characteristic_uuid=str(_display_cfg_raw.get("ble_characteristic_uuid", "")),
+                connect_timeout_s=float(_display_cfg_raw.get("connect_timeout_s", 4.0)),
+                max_message_chars=int(_display_cfg_raw.get("max_message_chars", 96)),
+                expected_services=list(_display_cfg_raw.get("expected_services", [])),
+            ),
+        )
+        if _display_enabled else None
     )
 
     # Wire LED ring to speech activity if respeaker_flex backend is active
@@ -480,7 +484,6 @@ def main() -> int:
         anthropic_enabled=_anthropic_enabled,
     )
     services = [
-        display_svc,
         motion_svc,
         vis,
         capture_svc,
@@ -574,7 +577,10 @@ def main() -> int:
     )
     services.append(privacy_svc)
 
-    if not _display_cfg_raw.get("expected_services"):
+    if display_svc is not None:
+        services.insert(0, display_svc)
+
+    if display_svc is not None and not _display_cfg_raw.get("expected_services"):
         display_svc.set_expected_services([s.name for s in services if s is not display_svc])
 
     # IoTService and SkillsService moved to the "integrations" process
