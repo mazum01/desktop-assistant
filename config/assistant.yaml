@@ -65,6 +65,14 @@ depth:
   mono_hef_path: /usr/local/hailo/resources/models/hailo8/scdepthv3.hef
   mono_rate_hz: 3.0
   num_disparities: 128
+display:
+  enabled: true
+  ble_enabled: false
+  ble_address: ''
+  ble_characteristic_uuid: ''
+  connect_timeout_s: 4.0
+  max_message_chars: 96
+  expected_services: []
 drop:
   alert_on_leak: true
   alert_on_salt_low: true

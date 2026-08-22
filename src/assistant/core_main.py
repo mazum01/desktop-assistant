@@ -26,6 +26,7 @@ from src.services.perception_service import PerceptionService, PerceptionConfig
 from src.services.raw_camera_service import RawCameraService, RawCameraConfig
 from src.services.stereo_service import StereoService, StereoConfig
 from src.services.dense_stereo_service import DenseStereoService, DenseStereoConfig
+from src.services.display_service import DisplayService, DisplayServiceConfig
 from src.services.mono_depth_service import MonoDepthService
 from src.services.telemetry_service import TelemetryService
 from src.services.tracking_service import TrackingService
@@ -350,6 +351,7 @@ def main() -> int:
     _audio_in  = create_audio_input(_audio_backend, _audio_backend_cfg)
     _audio_capture_cfg = _cfg.get("audio_capture", {})
     _voice_cfg_raw = _cfg.get("voice_commands", {})
+    _display_cfg_raw = _cfg.get("display", {})
 
     # Optional LED ring — only instantiated for respeaker_flex backend
     _led: "object | None" = None
@@ -358,6 +360,22 @@ def main() -> int:
         _led = ReSpeakerFlexLED(bus=bus, enabled=True)
 
     av = AVService(bus=bus, audio_output=_audio_out)
+    _display_enabled = bool(_display_cfg_raw.get("enabled", True))
+    display_svc = (
+        DisplayService(
+            bus=bus,
+            config=DisplayServiceConfig(
+                enabled=True,
+                ble_enabled=bool(_display_cfg_raw.get("ble_enabled", False)),
+                ble_address=str(_display_cfg_raw.get("ble_address", "")),
+                ble_characteristic_uuid=str(_display_cfg_raw.get("ble_characteristic_uuid", "")),
+                connect_timeout_s=float(_display_cfg_raw.get("connect_timeout_s", 4.0)),
+                max_message_chars=int(_display_cfg_raw.get("max_message_chars", 96)),
+                expected_services=list(_display_cfg_raw.get("expected_services", [])),
+            ),
+        )
+        if _display_enabled else None
+    )
 
     # Wire LED ring to speech activity if respeaker_flex backend is active
     if _led is not None:
@@ -558,6 +576,12 @@ def main() -> int:
         ),
     )
     services.append(privacy_svc)
+
+    if display_svc is not None:
+        services.insert(0, display_svc)
+
+    if display_svc is not None and not _display_cfg_raw.get("expected_services"):
+        display_svc.set_expected_services([s.name for s in services if s is not display_svc])
 
     # IoTService and SkillsService moved to the "integrations" process
     # (Phase 2b of docs/architecture/PROCESS_ISOLATION_PROPOSAL.md; see

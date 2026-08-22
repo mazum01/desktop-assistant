@@ -29,6 +29,7 @@ Sources of truth for these are the service modules under `src/services/`.
 Keep this list in sync with the diagram.
 
 * `service.started` / `service.stopped` (all services)
+* `system.startup_status` (runner startup/restart progress + ready/degraded state)
 * **thermal**: `thermal.temp`, `thermal.fan`, `thermal.rpm`, `thermal.critical`, `thermal.error`
 * **motion** (in): `motion.pan_to`, `motion.relax`, `motion.stop`
 * **motion** (out): `motion.position`, `motion.moved`
@@ -37,6 +38,7 @@ Keep this list in sync with the diagram.
 * **audio**: `audio.level`, `audio.chunk`, `audio.error`
 * **av** (in): `av.say`, `av.beep`, `av.utterance`, `av.announce_version`
 * **av** (out): `av.spoke`, `av.version_announced`
+* **display**: `display.status`, `display.error`
 * **telemetry**: `telemetry.flush` (out)
 
 ## Regenerating the diagram

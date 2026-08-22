@@ -36,15 +36,34 @@ def run_services(services: List[Service], unit_name: str) -> int:
     log.info("VERA [%s] v%s — starting", unit_name, get_version())
 
     started: List[Service] = []
+    bus = services[0].bus if services else None
+
+    def _emit_startup(state: str, message: str, **extra) -> None:
+        if bus is None:
+            return
+        payload = {
+            "state": state,
+            "message": message,
+            "unit": unit_name,
+            "ts": time.time(),
+        }
+        payload.update(extra)
+        bus.publish("system.startup_status", payload)
+
+    _emit_startup("booting", f"Starting {unit_name} services")
     for svc in services:
+        _emit_startup("starting_service", f"Starting {svc.name}", service=svc.name)
         try:
             svc.start()
             started.append(svc)
+            _emit_startup("service_started", f"{svc.name} started", service=svc.name)
         except Exception:
             log.exception("Failed to start service %s", svc.name)
+            _emit_startup("service_failed", f"{svc.name} failed to start", service=svc.name)
 
     if not started:
         log.error("No services started — exiting")
+        _emit_startup("failed", f"{unit_name} failed to start")
         return 1
 
     stopping = {"flag": False}
@@ -58,6 +77,7 @@ def run_services(services: List[Service], unit_name: str) -> int:
 
     log.info("[%s] %d service(s) running — entering main loop",
              unit_name, len(started))
+    _emit_startup("running_diagnostics", f"{unit_name} running startup diagnostics")
 
     # Boot self-test: a few seconds after services are up, sample telemetry
     # for obvious problems. If anything is red, ask the AV layer to speak.
@@ -67,11 +87,13 @@ def run_services(services: List[Service], unit_name: str) -> int:
         while not stopping["flag"]:
             time.sleep(0.5)
     finally:
+        _emit_startup("stopping", f"Stopping {unit_name} services")
         for svc in reversed(started):
             try:
                 svc.stop()
             except Exception:
                 log.exception("Error stopping %s", svc.name)
+        _emit_startup("stopped", f"{unit_name} services stopped")
 
     log.info("[%s] exited cleanly", unit_name)
     return 0
@@ -207,9 +229,21 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
                 for p in problems:
                     log.warning("  - %s", p)
                 bus.publish("av.say", {"text": "Boot self test failed. " + ". ".join(problems)})
+                bus.publish("system.startup_status", {
+                    "state": "degraded",
+                    "message": "Boot diagnostics found issues",
+                    "unit": unit_name,
+                    "ts": time.time(),
+                })
             else:
                 log.info("[%s] boot self-test OK", unit_name)
                 bus.publish("av.say", {"text": "All systems nominal. How may I help?"})
+                bus.publish("system.startup_status", {
+                    "state": "ready",
+                    "message": "All systems nominal",
+                    "unit": unit_name,
+                    "ts": time.time(),
+                })
             return
 
         # Core unit — full spoken readout.
@@ -224,11 +258,23 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
                 log.warning("  - %s", p)
             readout += "Warning. " + ". ".join(problems) + "."
             bus.publish("av.say", {"text": readout})
+            bus.publish("system.startup_status", {
+                "state": "degraded",
+                "message": "Boot diagnostics found issues",
+                "unit": unit_name,
+                "ts": time.time(),
+            })
         else:
             log.info("[%s] boot self-test OK", unit_name)
             greeting = _time_of_day_greeting()
             readout += f"{greeting}. I'm ready. How may I help?"
             bus.publish("av.say", {"text": readout})
+            bus.publish("system.startup_status", {
+                "state": "ready",
+                "message": "Desktop assistant ready",
+                "unit": unit_name,
+                "ts": time.time(),
+            })
 
     threading.Thread(
         target=_check_after_grace,
