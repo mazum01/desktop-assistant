@@ -96,3 +96,25 @@ def test_object_service_describe_event():
     assert len(spoken) == 1
     assert "text" in spoken[0]
     assert len(spoken[0]["text"]) > 0
+
+
+def test_object_service_find_object_query():
+    bus = MessageBus()
+    vis = _DummyVision()
+    svc = ObjectService(bus=bus, vision_service=vis)
+    svc.start()
+
+    spoken = []
+    bus.subscribe("av.say", lambda t, p: spoken.append(p))
+    bus.publish("perception.objects", {"objects": [
+        {"label": "cup", "confidence": 0.91, "bbox": [10, 10, 40, 40]},
+        {"label": "laptop", "confidence": 0.82, "bbox": [50, 50, 100, 100]},
+    ]})
+
+    result = svc.query_objects("mug", speak=True)
+    svc.stop()
+
+    assert result["ok"] is True
+    assert result["results"][0]["label"] == "cup"
+    assert spoken
+    assert "cup" in spoken[0]["text"]

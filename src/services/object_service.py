@@ -7,6 +7,8 @@ and publishes results on the bus.
 
 Also handles ``vision.describe`` — builds a natural-language description of
 everything currently seen (faces + objects) and speaks it via ``av.say``.
+It also handles ``vision.object_query`` so voice/CLI callers can ask for an
+object by a free-form phrase and get the closest detected match.
 
 Topics published
 ----------------
@@ -21,11 +23,15 @@ perception.objects
 object.enabled_changed
     {"enabled": bool}
 
+vision.object_query_result
+    {"ok": bool, "query": str, "terms": [...], "results": [...], "message": str}
+
 Topics subscribed
 -----------------
 vision.frame_ready       — triggers detection on the latest frame
 vision.describe          — triggers spoken scene description
 object.set_enabled       — ``{"enabled": bool}`` toggle detection at runtime
+vision.object_query      — ``{"query": str, "speak": bool}`` promptable object search
 """
 
 from __future__ import annotations
@@ -35,13 +41,14 @@ import logging
 import queue
 import threading
 import time
-from collections import Counter
+from collections import Counter, deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from src.core.bus import MessageBus
 from src.core.service import Service
+from src.perception.object_vocabulary import match_query_to_objects
 
 log = logging.getLogger(__name__)
 
@@ -53,8 +60,12 @@ _OBJ_DETECT_STATE_FILE  = _STATE_DIR / "object_detection_enabled.txt"
 class ObjectConfig:
     max_fps: float = 2.0        # object detection FPS (separate from face detection)
     conf_threshold: float = 0.40
+    min_box_area: int = 400      # discard tiny noisy boxes
     max_objects: int = 8        # cap on detections sent to the overlay per frame
     enabled: bool = True        # whether object detection runs at startup
+    temporal_confirmations: int = 2
+    iou_threshold: float = 0.50
+    open_vocab_threshold: float = 0.55
 
 
 class ObjectService(Service):
@@ -78,6 +89,7 @@ class ObjectService(Service):
         self._frame_queue: queue.Queue = queue.Queue(maxsize=1)
         self._worker: Optional[threading.Thread] = None
         self._stop_evt = threading.Event()
+        self._recent_detections: deque = deque(maxlen=max(2, self._cfg.temporal_confirmations))
 
     @property
     def detection_enabled(self) -> bool:
@@ -97,7 +109,11 @@ class ObjectService(Service):
 
         if self._detector is None:
             from src.perception.object_detector import ObjectDetector
-            self._detector = ObjectDetector(conf_threshold=self._cfg.conf_threshold)
+            self._detector = ObjectDetector(
+                conf_threshold=self._cfg.conf_threshold,
+                min_box_area=self._cfg.min_box_area,
+                iou_threshold=self._cfg.iou_threshold,
+            )
 
         self._stop_evt.clear()
         self._worker = threading.Thread(
@@ -113,6 +129,9 @@ class ObjectService(Service):
         )
         self._unsubs.append(
             self.bus.subscribe("object.set_enabled", self._on_set_enabled)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("vision.object_query", self._on_object_query)
         )
         log.info(
             "ObjectService started — backend=%s  max_fps=%.1f  enabled=%s",
@@ -185,6 +204,17 @@ class ObjectService(Service):
         text = _build_scene_description(faces_payload, objs_payload)
         self.bus.publish("av.say", {"text": text})
 
+    def _on_object_query(self, _topic, payload) -> None:
+        if self.bus is None:
+            return
+        query = ""
+        speak = True
+        if isinstance(payload, dict):
+            query = str(payload.get("query", "")).strip()
+            speak = bool(payload.get("speak", True))
+        result = self.query_objects(query, speak=speak)
+        self.bus.publish("vision.object_query_result", result)
+
     # ── Detection worker ───────────────────────────────────────────────
 
     def _detection_loop(self) -> None:
@@ -224,6 +254,7 @@ class ObjectService(Service):
             if len(detections) > self._cfg.max_objects:
                 detections = detections[:self._cfg.max_objects]
 
+            stable_detections = self._apply_temporal_filter(detections)
             src_h, src_w = frame.shape[:2]
             self.bus.publish(
                 "perception.objects",
@@ -235,9 +266,9 @@ class ObjectService(Service):
                             "confidence": d.confidence,
                             "bbox":       d.bbox,
                         }
-                        for d in detections
+                        for d in stable_detections
                     ],
-                    "count":    len(detections),
+                    "count":    len(stable_detections),
                     "backend":  self._detector.backend,
                     "frame_w":  src_w,
                     "frame_h":  src_h,
@@ -246,6 +277,58 @@ class ObjectService(Service):
             )
 
     # ── Internal ───────────────────────────────────────────────────────
+
+    @staticmethod
+    def _iou(box_a, box_b) -> float:
+        x1 = max(box_a[0], box_b[0])
+        y1 = max(box_a[1], box_b[1])
+        x2 = min(box_a[2], box_b[2])
+        y2 = min(box_a[3], box_b[3])
+        inter_w = max(0.0, x2 - x1)
+        inter_h = max(0.0, y2 - y1)
+        inter = inter_w * inter_h
+        area_a = max(0.0, (box_a[2] - box_a[0]) * (box_a[3] - box_a[1]))
+        area_b = max(0.0, (box_b[2] - box_b[0]) * (box_b[3] - box_b[1]))
+        union = area_a + area_b - inter
+        if union <= 0.0:
+            return 0.0
+        return inter / union
+
+    def _apply_temporal_filter(self, detections):
+        if not detections:
+            self._recent_detections.clear()
+            return []
+
+        prev = list(self._recent_detections)
+        kept = []
+        for det in detections:
+            if not prev:
+                kept.append(det)
+                continue
+            if any(
+                prev_det[0] == det.label and self._iou(prev_det[1], det.bbox) >= self._cfg.iou_threshold
+                for prev_det in prev
+            ):
+                kept.append(det)
+
+        self._recent_detections = deque(
+            [(det.label, det.bbox) for det in detections],
+            maxlen=max(2, self._cfg.temporal_confirmations),
+        )
+        return kept
+
+    def query_objects(self, query: str, *, speak: bool = True) -> dict:
+        """Resolve *query* against the latest detected objects."""
+        objs_payload = self.bus.last("perception.objects") if self.bus is not None else None
+        objects = []
+        if isinstance(objs_payload, dict):
+            objects = list(objs_payload.get("objects", []) or [])
+        result = match_query_to_objects(query, objects, threshold=self._cfg.open_vocab_threshold)
+        if not result["ok"] and not result.get("message"):
+            result["message"] = f"I don't see a good match for {query!r}."
+        if speak and self.bus is not None and result.get("message"):
+            self.bus.publish("av.say", {"text": result["message"]})
+        return result
 
     def _get_frame(self):
         if self._vision_svc is not None:

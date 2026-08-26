@@ -25,6 +25,7 @@ from src.core.service import Service
 from src.skills.base import SkillRegistry
 from src.skills.anthropic_toggle import AnthropicToggleSkill
 from src.skills.describe_scene import DescribeSceneSkill
+from src.skills.find_object import FindObjectSkill
 from src.skills.face_tracking_toggle import FaceTrackingToggleSkill
 from src.skills.greeting import GreetingSkill
 from src.skills.help_skill import HelpSkill
@@ -83,6 +84,7 @@ class SkillsService(Service):
             TellJokeSkill(),
             MeetFaceSkill(),
             DescribeSceneSkill(),
+            FindObjectSkill(),
             MotionControlSkill(),
             MusicControlSkill(),
             ObjectDetectToggleSkill(),

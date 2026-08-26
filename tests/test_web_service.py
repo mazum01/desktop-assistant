@@ -215,6 +215,37 @@ def test_vision_describe_returns_text_and_speaks(app_client):
     assert events[0]["text"] == data["description"]
 
 
+def test_vision_find_returns_match_and_speaks(app_client):
+    client, bus, svc = app_client
+    events = []
+    bus.subscribe("av.say", lambda t, p: events.append(p))
+    class _FakeObjectSvc:
+        def __init__(self, bus):
+            self._bus = bus
+
+        def query_objects(self, query, speak=True):
+            assert query == "mug"
+            if speak:
+                self._bus.publish("av.say", {"text": "I see cup for 'mug'."})
+            return {
+                "ok": True,
+                "query": query,
+                "terms": ["mug"],
+                "results": [{"label": "cup", "confidence": 0.9, "bbox": [10, 10, 40, 40]}],
+                "message": "I see cup for 'mug'.",
+            }
+
+    svc._object_svc = _FakeObjectSvc(bus)
+
+    r = client.post("/api/vision/find", json={"query": "mug"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["results"][0]["label"] == "cup"
+    assert events
+    assert "cup" in events[0]["text"]
+
+
 def test_audio_record_endpoint_calls_av_service(app_client):
     client, bus, svc = app_client
 

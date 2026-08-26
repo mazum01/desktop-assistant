@@ -4,6 +4,35 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.48.0] - 2026-08-26
+### Added
+- **Object detection upgraded to YOLO26m model** with improved accuracy and speed.
+  The detector now searches for available YOLO26 HEF files in config and system
+  paths, supporting yolo26m/yolo26s/yolo26n variants, and falls back to previous
+  models if not available. Maintains full COCO class compatibility.
+- **Per-class confidence thresholds** for more intelligent filtering. Each COCO
+  class (80 total) has a tuned confidence floor (0.25–0.35) so "person" is
+  stricter (0.35) while smaller objects like "bottle" and "cup" are more
+  permissive (0.25). Custom thresholds can be configured in code or via
+  future config file.
+- **Object vocabulary module** (`src/perception/object_vocabulary.py`) consolidates
+  COCO class ID ↔ name mappings, class groupings (e.g. "animals", "food", "furniture"),
+  and per-class metadata (aliases, visual similarities). Enables natural-language
+  queries and fuzzy matching for object searches.
+- **FindObjectSkill** — new voice skill responds to queries like "find the cup",
+  "do you see a cat?", "is there a dog?" by publishing a
+  `vision.object_query` topic so the vision service can perform real-time
+  fuzzy-matched object search and speak results.
+- **Web GUI object detection enhancements** — new API routes and panel for
+  object search, live detection overlay tuning, and class-specific confidence
+  slider controls.
+
+### Changed
+- `ObjectDetector` now supports configurable per-class confidence thresholds.
+- `ObjectService` enhanced to handle `vision.object_query` topic and publish
+  `vision.object_found` / `vision.object_not_found` events.
+- `SkillsService` wiring updated to include the new `FindObjectSkill`.
+
 ## [1.47.4] - 2026-08-26
 ### Fixed
 - **Web GUI audio volume and mute controls now work.** The music service was

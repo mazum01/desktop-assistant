@@ -272,6 +272,10 @@ class _SayBody(BaseModel):
     text: str
 
 
+class _VisionQueryBody(BaseModel):
+    query: str
+
+
 class _PanBody(BaseModel):
     angle: float
 
@@ -2243,6 +2247,13 @@ class WebService:
             description = _build_scene_description(faces_payload, objs_payload)
             self.bus.publish("av.say", {"text": description})
             return {"ok": True, "description": description}
+
+        @app.post("/api/vision/find")
+        async def api_vision_find(body: _VisionQueryBody):
+            if not self._object_svc:
+                raise HTTPException(503, "object service unavailable")
+            result = await asyncio.to_thread(self._object_svc.query_objects, body.query, True)
+            return {"ok": bool(result.get("ok", False)), **result}
 
         # ── Camera rotation ────────────────────────────────────────────
 

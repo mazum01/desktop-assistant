@@ -201,7 +201,11 @@ def main() -> int:
         enabled=bool(_obj_cfg_raw.get("enabled", True)),
         max_fps=float(_obj_cfg_raw.get("max_fps", 2.0)),
         conf_threshold=float(_obj_cfg_raw.get("conf_threshold", 0.40)),
+        min_box_area=int(_obj_cfg_raw.get("min_box_area", 400)),
         max_objects=int(_obj_cfg_raw.get("max_objects", 8)),
+        temporal_confirmations=int(_obj_cfg_raw.get("temporal_confirmations", 2)),
+        iou_threshold=float(_obj_cfg_raw.get("iou_threshold", 0.50)),
+        open_vocab_threshold=float(_obj_cfg_raw.get("open_vocab_threshold", 0.55)),
     )
 
     _room_cfg = _cfg.get("room_detection", {})

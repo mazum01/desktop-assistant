@@ -1,9 +1,5 @@
 anthropic_api:
-  # Master switch for all direct/indirect calls to the Anthropic Claude API.
-  # When false: RoomService skips cloud-assisted room identification, and
-  # FaceService skips OpenClaw greeting generation for any Anthropic/Claude
-  # model (other OpenClaw models, if configured, are unaffected).
-  enabled: true
+  enabled: false
 audio:
   backend: respeaker_flex
   default:
@@ -66,13 +62,13 @@ depth:
   mono_rate_hz: 3.0
   num_disparities: 128
 display:
-  enabled: true
-  ble_enabled: false
   ble_address: ''
   ble_characteristic_uuid: ''
+  ble_enabled: false
   connect_timeout_s: 4.0
-  max_message_chars: 96
+  enabled: true
   expected_services: []
+  max_message_chars: 96
 drop:
   alert_on_leak: true
   alert_on_salt_low: true
@@ -129,8 +125,12 @@ notifications:
 object_detection:
   conf_threshold: 0.4
   enabled: true
+  iou_threshold: 0.5
   max_fps: 1.5
   max_objects: 8
+  min_box_area: 400
+  open_vocab_threshold: 0.55
+  temporal_confirmations: 2
 podcast:
   auto_refresh_on_start: false
   enabled: true

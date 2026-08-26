@@ -1,14 +1,14 @@
 """
-Object detector — YOLOv8s on Hailo-8.
+Object detector — YOLO26m on Hailo-8.
 
-Wraps the ``yolov8s.hef`` model via :class:`~src.perception.hailo_inference.HailoInference`.
+Wraps the latest available YOLO26 HEF via :class:`~src.perception.hailo_inference.HailoInference`.
 Input: any RGB frame (letterboxed to 640×640 internally).
 Output: list of :class:`Detection` namedtuples.
 
 HEF I/O signature
 -----------------
-  Input  ``yolov8s/input_layer1``        (640, 640, 3)  uint8 RGB
-  Output ``yolov8s/yolov8_nms_postprocess`` (80, 5, 100) float32
+  Input  ``yolo26m/input_layer1``        (640, 640, 3)  uint8 RGB
+  Output ``yolo26m/yolo26_nms_postprocess`` (80, 5, 100) float32
 
 Output layout: ``output[class_id, coord_idx, det_idx]``
   coord_idx 0–3 = [y1, x1, y2, x2] normalised 0–1 (Hailo NMS convention)
@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -46,8 +46,97 @@ COCO_CLASSES: List[str] = [
     "hair drier", "toothbrush",
 ]
 
-_HEF_PATH = Path("/usr/local/hailo/resources/models/hailo8/yolov8s.hef")
-_TARGET_SIZE = 640  # YOLOv8s expects 640×640
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_HEF_CANDIDATES = [
+    _REPO_ROOT / "config" / "hailo" / "yolo26m.hef",
+    _REPO_ROOT / "config" / "hailo" / "yolo26s.hef",
+    _REPO_ROOT / "config" / "hailo" / "yolo26n.hef",
+    Path("/usr/local/hailo/resources/models/hailo8/yolo26m.hef"),
+    Path("/usr/local/hailo/resources/models/hailo8/yolo26s.hef"),
+    Path("/usr/local/hailo/resources/models/hailo8/yolo26n.hef"),
+]
+_TARGET_SIZE = 640  # YOLO26 expects 640×640
+_DEFAULT_CLASS_THRESHOLDS: Dict[str, float] = {
+    "person": 0.35,
+    "bicycle": 0.3,
+    "car": 0.3,
+    "motorcycle": 0.3,
+    "bus": 0.3,
+    "train": 0.3,
+    "truck": 0.3,
+    "boat": 0.3,
+    "traffic light": 0.3,
+    "fire hydrant": 0.3,
+    "stop sign": 0.3,
+    "parking meter": 0.3,
+    "bench": 0.25,
+    "bird": 0.25,
+    "cat": 0.3,
+    "dog": 0.3,
+    "horse": 0.3,
+    "sheep": 0.3,
+    "cow": 0.3,
+    "elephant": 0.3,
+    "bear": 0.3,
+    "zebra": 0.3,
+    "giraffe": 0.3,
+    "backpack": 0.25,
+    "umbrella": 0.25,
+    "handbag": 0.25,
+    "tie": 0.25,
+    "suitcase": 0.25,
+    "frisbee": 0.25,
+    "skis": 0.25,
+    "snowboard": 0.25,
+    "sports ball": 0.25,
+    "kite": 0.25,
+    "baseball bat": 0.25,
+    "baseball glove": 0.25,
+    "skateboard": 0.25,
+    "surfboard": 0.25,
+    "tennis racket": 0.25,
+    "bottle": 0.25,
+    "wine glass": 0.25,
+    "cup": 0.25,
+    "fork": 0.25,
+    "knife": 0.25,
+    "spoon": 0.25,
+    "bowl": 0.25,
+    "banana": 0.25,
+    "apple": 0.25,
+    "sandwich": 0.25,
+    "orange": 0.25,
+    "broccoli": 0.25,
+    "carrot": 0.25,
+    "hot dog": 0.25,
+    "pizza": 0.25,
+    "donut": 0.25,
+    "cake": 0.25,
+    "chair": 0.25,
+    "couch": 0.25,
+    "potted plant": 0.25,
+    "bed": 0.25,
+    "dining table": 0.25,
+    "toilet": 0.25,
+    "tv": 0.25,
+    "laptop": 0.25,
+    "mouse": 0.25,
+    "remote": 0.25,
+    "keyboard": 0.25,
+    "cell phone": 0.25,
+    "microwave": 0.2,
+    "oven": 0.2,
+    "toaster": 0.2,
+    "sink": 0.2,
+    "refrigerator": 0.2,
+    "book": 0.2,
+    "clock": 0.2,
+    "vase": 0.2,
+    "scissors": 0.2,
+    "teddy bear": 0.2,
+    "hair drier": 0.2,
+    "toothbrush": 0.2,
+}
 
 
 @dataclass
@@ -61,16 +150,31 @@ class Detection:
 
 class ObjectDetector:
     """
-    YOLOv8s object detector backed by Hailo-8.
+    YOLO26 object detector backed by Hailo-8.
 
     Parameters
     ----------
     conf_threshold : float
         Minimum confidence to report a detection (default 0.4).
+    min_box_area : int
+        Minimum bounding-box area in pixels before a detection is kept.
+    class_thresholds : dict[str, float]
+        Optional per-class confidence floor, used to reduce false positives.
+    iou_threshold : float
+        IoU threshold used to deduplicate overlapping detections in the same frame.
     """
 
-    def __init__(self, conf_threshold: float = 0.4) -> None:
+    def __init__(
+        self,
+        conf_threshold: float = 0.4,
+        min_box_area: int = 400,
+        class_thresholds: Optional[Dict[str, float]] = None,
+        iou_threshold: float = 0.55,
+    ) -> None:
         self._conf_threshold = conf_threshold
+        self._min_box_area = max(0, int(min_box_area))
+        self._iou_threshold = float(iou_threshold)
+        self._class_thresholds = {**_DEFAULT_CLASS_THRESHOLDS, **(class_thresholds or {})}
         self._engine = None
         self._sim = False
         self._backend = "sim"
@@ -85,14 +189,55 @@ class ObjectDetector:
         self._lb_pad_left: int = 0
         self._init_engine()
 
+    @staticmethod
+    def _iou(box_a: List[float], box_b: List[float]) -> float:
+        if len(box_a) != 4 or len(box_b) != 4:
+            return 0.0
+        x1 = max(box_a[0], box_b[0])
+        y1 = max(box_a[1], box_b[1])
+        x2 = min(box_a[2], box_b[2])
+        y2 = min(box_a[3], box_b[3])
+        inter_w = max(0.0, x2 - x1)
+        inter_h = max(0.0, y2 - y1)
+        inter = inter_w * inter_h
+        area_a = max(0.0, (box_a[2] - box_a[0]) * (box_a[3] - box_a[1]))
+        area_b = max(0.0, (box_b[2] - box_b[0]) * (box_b[3] - box_b[1]))
+        union = area_a + area_b - inter
+        if union <= 0.0:
+            return 0.0
+        return inter / union
+
+    def filter_detections(self, detections: List[Detection]) -> List[Detection]:
+        kept: List[Detection] = []
+        for det in sorted(detections, key=lambda d: d.confidence, reverse=True):
+            cls_threshold = self._class_thresholds.get(det.label, self._conf_threshold)
+            if det.confidence < cls_threshold:
+                continue
+            width = max(0.0, det.bbox[2] - det.bbox[0])
+            height = max(0.0, det.bbox[3] - det.bbox[1])
+            area = width * height
+            if self._min_box_area and area < self._min_box_area:
+                continue
+            if any(
+                d.label == det.label and self._iou(d.bbox, det.bbox) > self._iou_threshold
+                for d in kept
+            ):
+                continue
+            kept.append(det)
+        kept.sort(key=lambda d: d.confidence, reverse=True)
+        return kept
+
     def _init_engine(self) -> None:
         try:
             from src.perception.hailo_inference import HailoInference
-            engine = HailoInference(_HEF_PATH)
+            hef_path = next((p for p in _HEF_CANDIDATES if p.exists()), None)
+            if hef_path is None:
+                raise FileNotFoundError("No YOLO26 HEF found")
+            engine = HailoInference(hef_path)
             if engine.hardware_ready:
                 self._engine = engine
                 self._backend = "hailo"
-                log.info("ObjectDetector: Hailo-8 backend ready (yolov8s)")
+                log.info("ObjectDetector: Hailo-8 backend ready (%s)", hef_path.name)
             else:
                 log.warning("ObjectDetector: Hailo unavailable — sim mode (empty detections)")
                 self._sim = True
@@ -249,7 +394,7 @@ class ObjectDetector:
             log.warning("ObjectDetector: unrecognised output type %s — skipping", type(raw))
 
         detections.sort(key=lambda d: d.confidence, reverse=True)
-        return detections
+        return self.filter_detections(detections)
 
     def close(self) -> None:
         if self._engine is not None:

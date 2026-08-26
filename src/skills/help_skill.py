@@ -8,7 +8,7 @@ from typing import Optional
 from .base import Skill
 
 _CAPABILITIES = (
-    "I can tell you the time, tell a joke, or describe what I see. "
+    "I can tell you the time, tell a joke, describe what I see, or find objects by name. "
     "I can greet you, name faces, control music playback, pan my head, "
     "toggle face tracking, object detection, or quiet hours. "
     "I can also report my system temperature and CPU usage. "

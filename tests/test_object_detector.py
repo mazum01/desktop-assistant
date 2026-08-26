@@ -11,6 +11,9 @@ from src.perception.object_detector import ObjectDetector, COCO_CLASSES, Detecti
 def sim_detector():
     d = ObjectDetector.__new__(ObjectDetector)
     d._conf_threshold = 0.4
+    d._min_box_area = 400
+    d._iou_threshold = 0.55
+    d._class_thresholds = {**{k: 0.25 for k in COCO_CLASSES}, "person": 0.35}
     d._engine = None
     d._sim = True
     d._backend = "sim"
@@ -82,6 +85,23 @@ def test_decode_below_threshold(sim_detector):
     raw[0, 4, 0] = 0.2   # score below threshold
     results = sim_detector._decode(raw, 640, 480)
     assert results == []
+
+
+def test_filter_detections_removes_small_and_duplicate_boxes(sim_detector):
+    dets = [
+        Detection(label="person", class_id=0, confidence=0.9, bbox=[10.0, 10.0, 60.0, 60.0]),
+        Detection(label="person", class_id=0, confidence=0.8, bbox=[15.0, 15.0, 65.0, 65.0]),
+        Detection(label="bottle", class_id=39, confidence=0.6, bbox=[0.0, 0.0, 10.0, 10.0]),
+    ]
+    result = sim_detector.filter_detections(dets)
+    assert len(result) == 1
+    assert result[0].label == "person"
+
+
+def test_filter_detections_respects_class_threshold(sim_detector):
+    dets = [Detection(label="person", class_id=0, confidence=0.34, bbox=[0.0, 0.0, 100.0, 100.0])]
+    result = sim_detector.filter_detections(dets)
+    assert result == []
 
 
 def test_detection_dataclass():

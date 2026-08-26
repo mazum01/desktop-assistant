@@ -10,6 +10,7 @@ from src.skills.describe_scene import DescribeSceneSkill
 from src.skills.anthropic_toggle import AnthropicToggleSkill
 from src.skills.face_tracking_toggle import FaceTrackingToggleSkill
 from src.skills.greeting import GreetingSkill
+from src.skills.find_object import FindObjectSkill
 from src.skills.meet_face import MeetFaceSkill
 from src.skills.motion_control import MotionControlSkill
 from src.skills.music_control import MusicControlSkill
@@ -48,6 +49,31 @@ def test_describe_scene_publishes(monkeypatch):
     m = skill.match("what do you see")
     result = skill.handle("what do you see", m, bus)
     bus.publish.assert_called_once_with("vision.describe", {})
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# FindObjectSkill
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("text,expected", [
+    ("find the mug", "mug"),
+    ("look for a laptop", "laptop"),
+    ("do you see any headphones", "headphones"),
+])
+def test_find_object_matches(text, expected):
+    assert FindObjectSkill().match(text) is not None
+
+
+def test_find_object_publishes():
+    bus = make_bus()
+    skill = FindObjectSkill()
+    m = skill.match("find the mug")
+    result = skill.handle("find the mug", m, bus)
+    bus.publish.assert_called_once()
+    topic, payload = bus.publish.call_args.args
+    assert topic == "vision.object_query"
+    assert payload["query"] == "mug"
     assert result is None
 
 
