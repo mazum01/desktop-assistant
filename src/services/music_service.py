@@ -50,6 +50,46 @@ from src.core.service import Service
 
 log = logging.getLogger(__name__)
 
+def _get_default_sink() -> str:
+    """Get the default audio sink ID, or @DEFAULT_AUDIO_SINK@ if not discoverable."""
+    try:
+        # List all sinks and get the first one (most likely to be default)
+        out = subprocess.check_output(
+            ["wpctl", "status"], text=True
+        )
+        lines = out.split('\n')
+        in_sinks_section = False
+        for line in lines:
+            if 'Sinks:' in line:
+                in_sinks_section = True
+                continue
+            if in_sinks_section:
+                # Look for sink ID lines like "│  *   53. reSpeaker Flex..."
+                # or "│      53. reSpeaker Flex..."
+                line_stripped = line.strip()
+                if not line_stripped or 'Source' in line:
+                    break
+                # Extract sink ID: match digits followed by a period
+                parts = line_stripped.split()
+                for i, part in enumerate(parts):
+                    if part.isdigit() or (part.rstrip('.').isdigit() and part.endswith('.')):
+                        sink_id = part.rstrip('.')
+                        if sink_id.isdigit():
+                            return sink_id
+        return "@DEFAULT_AUDIO_SINK@"
+    except Exception as e:
+        log.debug("Failed to discover sink: %s", e)
+        return "@DEFAULT_AUDIO_SINK@"
+
+_CACHED_SINK_ID: Optional[str] = None
+
+def _get_sink_id() -> str:
+    """Get cached sink ID or discover it."""
+    global _CACHED_SINK_ID
+    if _CACHED_SINK_ID is None:
+        _CACHED_SINK_ID = _get_default_sink()
+    return _CACHED_SINK_ID
+
 _PIANOBAR_CONFIG_DIR  = Path.home() / ".config" / "pianobar"
 _PIANOBAR_CONFIG      = _PIANOBAR_CONFIG_DIR / "config"
 _PIANOBAR_FIFO        = _PIANOBAR_CONFIG_DIR / "ctl"
@@ -140,8 +180,9 @@ class MusicService(Service):
     def volume(self) -> int:
         """Return current system volume as 0–100, or -1 on error."""
         try:
+            sink_id = _get_sink_id()
             out = subprocess.check_output(
-                ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], text=True
+                ["wpctl", "get-volume", sink_id], text=True
             )
             # Output: "Volume: 0.42" or "Volume: 0.42 [MUTED]"
             val = float(out.split()[1])
@@ -153,8 +194,9 @@ class MusicService(Service):
     def muted(self) -> bool:
         """Return True when the default sink is muted."""
         try:
+            sink_id = _get_sink_id()
             out = subprocess.check_output(
-                ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], text=True
+                ["wpctl", "get-volume", sink_id], text=True
             )
             return "[MUTED]" in out
         except Exception:
@@ -164,8 +206,9 @@ class MusicService(Service):
         """Set system volume to level (0–100)."""
         level = max(0, min(100, level))
         try:
+            sink_id = _get_sink_id()
             subprocess.run(
-                ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{level}%"],
+                ["wpctl", "set-volume", sink_id, f"{level}%"],
                 check=True,
             )
         except Exception:
@@ -174,8 +217,9 @@ class MusicService(Service):
     def set_muted(self, muted: bool) -> None:
         """Mute/unmute the default sink."""
         try:
+            sink_id = _get_sink_id()
             subprocess.run(
-                ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1" if muted else "0"],
+                ["wpctl", "set-mute", sink_id, "1" if muted else "0"],
                 check=True,
             )
         except Exception:

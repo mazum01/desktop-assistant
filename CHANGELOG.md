@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.47.4] - 2026-08-26
+### Fixed
+- **Web GUI audio volume and mute controls now work.** The music service was
+  using the `@DEFAULT_AUDIO_SINK@` alias which was not configured in
+  PipeWire/WirePlumber, causing the `wpctl` commands to fail and always return
+  -1. The service now dynamically discovers the audio sink ID from the
+  `wpctl status` output on startup and caches it for efficient reuse. Volume
+  and mute controls from the web dashboard now properly control the
+  reSpeaker Flex audio output.
+
 ## [1.47.3] - 2026-08-26
 ### Fixed
 - **Camera 0 (primary camera) stream now renders properly.** The vision service
