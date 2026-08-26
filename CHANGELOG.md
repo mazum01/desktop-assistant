@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.48.2] - 2026-08-26
+### Fixed
+- **Volume level now persists across daemon restarts** — MusicService now saves
+  the user-configured volume level to ~/.config/desktop-assistant/music_volume.txt
+  and restores it on startup instead of defaulting to 100%.
+
 ## [1.48.1] - 2026-08-26
 ### Added
 - **Semantic object color coding on camera overlay** — objects now render with
