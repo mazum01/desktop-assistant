@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.47.3] - 2026-08-26
+### Fixed
+- **Camera 0 (primary camera) stream now renders properly.** The vision service
+  was publishing a `vision.error` event at startup because PipeWire/WirePlumber
+  were holding exclusive locks on the camera device files (`/dev/media0`), causing
+  Camera 0 to fall back to simulation mode. The issue was resolved by ensuring
+  these processes release their camera device file descriptors before the vision
+  service starts. Camera 0 stream now initializes successfully and displays
+  in the web dashboard alongside Camera 2.
+
 ## [1.47.2] - 2026-08-22
 ### Fixed
 - Fixed `DisplayService` BLE fallback error handling so exceptions raised from
