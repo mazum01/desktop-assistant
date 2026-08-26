@@ -4,6 +4,28 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.48.3] - 2026-08-26
+### Fixed
+- **Volume no longer resets to 100% on restart** — MusicService (media unit)
+  restored the saved level correctly, but `pipewire_eq.ensure_default()` in the
+  core unit hardcoded `wpctl set-volume <eq-sink> 1.0` and ran after it, wiping
+  the user's setting on every core-service start, reboot, and EQ preset change.
+  Regression introduced in v1.39.47.
+- **`_get_eq_sink_id()` returned the wrong PipeWire node** — the `wpctl status`
+  fast path matched any line containing "DA Equalizer", so it also hit port rows
+  (`108. output_FR > DA Equalizer:playback_FR`) and the "Default Configured
+  Devices" row (`0. Audio/Sink effect_input.da_eq`). It returned a port ID or
+  `0`, so `set-default`/`set-volume` were aimed at a non-sink node — which is why
+  a restored 30% came back as 28%. Lookup now uses `pw-dump` with an exact
+  `node.name` + `media.class` match, with an anchored regex as fallback.
+- The EQ sink now takes the persisted level; only the downstream reSpeaker
+  hardware sink stays pinned to unity so it can't attenuate the EQ output.
+
+### Added
+- `src/audio/volume_state.py` — single source of truth for the persisted output
+  volume, shared by `MusicService` and `pipewire_eq` so the two processes can no
+  longer disagree about the level.
+
 ## [1.48.2] - 2026-08-26
 ### Fixed
 - **Volume level now persists across daemon restarts** — MusicService now saves

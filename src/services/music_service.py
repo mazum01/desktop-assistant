@@ -45,6 +45,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from src.audio import volume_state
 from src.core.bus import MessageBus
 from src.core.service import Service
 
@@ -98,7 +99,6 @@ _PIANOBAR_META_JSON   = _PIANOBAR_CONFIG_DIR / "da-meta.json"
 
 _DA_STATE_DIR         = Path.home() / ".config" / "desktop-assistant"
 _MUSIC_EQ_STATE_FILE  = _DA_STATE_DIR / "music_eq_preset.txt"
-_MUSIC_VOLUME_STATE_FILE = _DA_STATE_DIR / "music_volume.txt"
 
 _RE_SONG           = re.compile(r'\|>\s+"(.+?)"\s+by\s+"(.+?)"\s+on\s+"(.+?)"')
 _RE_STATION        = re.compile(r'^\s*(\d+)\)\s+(?:[qQ]\s+)?(.+?)$')
@@ -213,11 +213,7 @@ class MusicService(Service):
                 check=True,
             )
             # Persist volume to survive daemon restarts
-            try:
-                _DA_STATE_DIR.mkdir(parents=True, exist_ok=True)
-                _MUSIC_VOLUME_STATE_FILE.write_text(str(level))
-            except Exception as exc:
-                log.warning("MusicService: failed to persist volume: %s", exc)
+            volume_state.save_volume(level)
         except Exception:
             log.exception("set_volume(%d) failed", level)
 
@@ -284,17 +280,10 @@ class MusicService(Service):
             except Exception as exc:
                 log.warning("MusicService: failed to restore EQ preset: %s", exc)
         # Restore persisted volume level
-        if _MUSIC_VOLUME_STATE_FILE.exists():
-            try:
-                saved = _MUSIC_VOLUME_STATE_FILE.read_text().strip()
-                level = int(saved)
-                if 0 <= level <= 100:
-                    self.set_volume(level)
-                    log.info("MusicService: restored volume to %d%%", level)
-                else:
-                    log.warning("MusicService: invalid saved volume %d, skipping", level)
-            except Exception as exc:
-                log.warning("MusicService: failed to restore volume: %s", exc)
+        level = volume_state.load_volume()
+        if level is not None:
+            self.set_volume(level)
+            log.info("MusicService: restored volume to %d%%", level)
         self._unsubs += [
             self.bus.subscribe("music.play",         self._on_play),
             self.bus.subscribe("music.stop",         self._on_stop),

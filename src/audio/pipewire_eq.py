@@ -26,15 +26,24 @@ double-processed.
 from __future__ import annotations
 
 import logging
+import re
 import subprocess
 import time
 from pathlib import Path
 from typing import Optional
 
+from src.audio import volume_state
+
 log = logging.getLogger(__name__)
 
 _CONF_DIR  = Path.home() / ".config" / "pipewire" / "filter-chain.conf.d"
 _CONF_FILE = _CONF_DIR / "da-eq.conf"
+
+# Matches the DA EQ sink's node row in `wpctl status`, e.g.
+#   " |  *   41. effect_input.da_eq    [Audio/Sink]"
+# Anchored to the "NN. effect_input.da_eq" pair so port rows and the
+# "Default Configured Devices" summary row can't match.
+_RE_WPCTL_EQ_NODE = re.compile(r"(?:^|\s)(\d+)\.\s+effect_input\.da_eq(?:\s|$)")
 
 # Flag set True after a successful apply_* call.
 _active: bool = False
@@ -165,27 +174,20 @@ def _restart_filter_chain() -> bool:
 
 
 def _get_eq_sink_id() -> Optional[str]:
-    """Return the PipeWire node ID of the DA Equalizer sink, or None.
+    """Return the PipeWire node ID of the DA Equalizer *sink*, or None.
 
-    First tries wpctl status (fast).  Falls back to pw-dump if the
-    filter-chain node doesn't appear in the wpctl Filters section
-    (can happen when WirePlumber hasn't re-indexed the node yet, or
-    when the node was registered before the session default changed).
+    Uses ``pw-dump`` as the authoritative source: it matches the node by exact
+    ``node.name`` and media class, so it can never confuse the sink with one of
+    its ports or with the ``effect_output.da_eq`` capture stream.
+
+    A ``wpctl status`` text scan is kept only as a fallback for when pw-dump is
+    unavailable. That scan is anchored to the ``NN. effect_input.da_eq`` node
+    line — an earlier loose ``"DA Equalizer" in line`` match also hit port rows
+    ("108. output_FR > DA Equalizer:playback_FR") and the "Default Configured
+    Devices" row ("0. Audio/Sink effect_input.da_eq"), returning a port ID or 0
+    and sending every subsequent set-volume/set-default call to the wrong node.
     """
-    # Fast path: wpctl status
-    try:
-        r = subprocess.run(
-            ["wpctl", "status"], capture_output=True, text=True, timeout=5
-        )
-        for line in r.stdout.splitlines():
-            if "DA Equalizer" in line or "effect_input.da_eq" in line:
-                token = line.split(".")[0].strip().lstrip("*").strip()
-                if token.isdigit():
-                    return token
-    except Exception as exc:
-        log.warning("pipewire_eq: wpctl status failed: %s", exc)
-
-    # Fallback: pw-dump
+    # Authoritative: pw-dump (exact node.name + media.class match).
     import json as _json
     try:
         r = subprocess.run(
@@ -195,10 +197,23 @@ def _get_eq_sink_id() -> Optional[str]:
             if obj.get("type") != "PipeWire:Interface:Node":
                 continue
             props = obj.get("info", {}).get("props", {})
-            if props.get("node.name") == "effect_input.da_eq":
+            if (props.get("node.name") == "effect_input.da_eq"
+                    and props.get("media.class") == "Audio/Sink"):
                 return str(obj["id"])
     except Exception as exc:
-        log.debug("pipewire_eq: pw-dump fallback failed: %s", exc)
+        log.debug("pipewire_eq: pw-dump lookup failed: %s", exc)
+
+    # Fallback: wpctl status, anchored to the node line.
+    try:
+        r = subprocess.run(
+            ["wpctl", "status"], capture_output=True, text=True, timeout=5
+        )
+        for line in r.stdout.splitlines():
+            m = _RE_WPCTL_EQ_NODE.search(line)
+            if m:
+                return m.group(1)
+    except Exception as exc:
+        log.warning("pipewire_eq: wpctl status failed: %s", exc)
     return None
 
 
@@ -211,6 +226,18 @@ def _set_sink_volume(sink_id: str, volume: float) -> None:
         )
     except Exception as exc:
         log.debug("pipewire_eq: set-volume failed: %s", exc)
+
+
+def _restore_volumes(sink_id: str) -> None:
+    """Give the EQ sink the user's persisted volume, and unity-pin the hw sink.
+
+    The EQ sink is the one the user actually controls, so it must carry the
+    saved level — hardcoding 1.0 here reset the volume to 100% on every core
+    service start. The reSpeaker hw sink sits downstream of the EQ and is
+    always pinned to unity so it never attenuates the EQ output.
+    """
+    _set_sink_volume(sink_id, volume_state.load_scalar(1.0))
+    _pin_hardware_sink_volume(1.0)
 
 
 def _pin_hardware_sink_volume(volume: float = 1.0) -> None:
@@ -370,8 +397,7 @@ def ensure_default() -> None:
     sink_id = _get_eq_sink_id()
     if sink_id:
         _set_default_sink(sink_id)
-        _set_sink_volume(sink_id, 1.0)
-        _pin_hardware_sink_volume(1.0)
+        _restore_volumes(sink_id)
         _active = True
         log.info("pipewire_eq: restored DA Equalizer as default sink (id %s)", sink_id)
     else:
@@ -409,8 +435,7 @@ def _apply_bands(bands: list, label: str = "") -> bool:
     ok = _set_default_sink(sink_id)
     if ok:
         _active = True
-        _set_sink_volume(sink_id, 1.0)
-        _pin_hardware_sink_volume(1.0)
+        _restore_volumes(sink_id)
         log.info("pipewire_eq: applied %s — sink %s set as default", label, sink_id)
         # Move in-flight streams (e.g. pianobar) to the new EQ sink so the
         # preset change is heard immediately without restarting any client.
