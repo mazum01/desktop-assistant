@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.48.1] - 2026-08-26
+### Added
+- **Semantic object color coding on camera overlay** — objects now render with
+  class-based colors instead of uniform cyan. People appear in red, animals in orange,
+  furniture in brown, food in green/yellow, electronics in purple. This visual grouping
+  makes it easier to distinguish object types at a glance during live detection.
+  Fallback to cyan for unknown classes ensures robustness.
+
 ## [1.48.0] - 2026-08-26
 ### Added
 - **Object detection upgraded to YOLO26m model** with improved accuracy and speed.

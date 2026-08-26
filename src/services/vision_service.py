@@ -53,8 +53,103 @@ from src.core.service import Service
 
 log = logging.getLogger(__name__)
 
-# Object box colour (BGR)
+# Object box colour (BGR) — used as default fallback
 _CYAN = (255, 212, 0)   # #00d4ff
+
+# Semantic object colors (BGR) — categorized by object type
+_OBJECT_SEMANTIC_COLORS = {
+    # People & Animals (red/orange tones)
+    "person":      (0,     0,   255),   # red
+    "bicycle":     (0,   165, 255),   # orange
+    "motorcycle":  (0,   140, 255),   # dark orange
+    "car":         (0,   100, 255),   # red-orange
+    "truck":       (0,    80, 200),   # darker red-orange
+    "bus":         (0,   120, 255),   # orange
+    "train":       (0,   100, 200),   # dark orange
+    "airplane":    (0,   150, 255),   # light orange
+    "boat":        (0,   130, 200),   # medium orange
+    
+    # Animals (yellow-orange tones)
+    "bird":        (0,   180,  220),   # light orange
+    "cat":         (0,   165,  255),   # orange
+    "dog":         (0,   150,  255),   # orange
+    "horse":       (0,   140,  200),   # dark orange
+    "sheep":       (34,  139,   34),   # forest green
+    "cow":         (139,   69,   19),   # saddle brown
+    "elephant":    (128,   64,    0),   # dark brown
+    "bear":        (101,   67,   33),   # brown
+    "zebra":       (150,  150,  150),   # gray
+    "giraffe":     (100,  149,  237),   # cornflower blue
+    
+    # Furniture (brown/gray tones)
+    "bench":       (128,   64,    0),   # dark brown
+    "chair":       (139,   69,   19),   # saddle brown
+    "couch":       (160,   82,   45),   # sienna
+    "bed":         (169,  169,  169),   # dark gray
+    "dining table":(101,   67,   33),   # brown
+    "toilet":      (192,  192,  192),   # silver
+    "potted plant":(34,  139,   34),   # forest green
+    
+    # Food (green/yellow tones)
+    "banana":      (0,   215,  255),   # gold
+    "apple":       (0,   165,   0),   # dark green
+    "sandwich":    (139,   69,   19),   # brown
+    "orange":      (0,   165,  255),   # orange
+    "broccoli":    (34,  139,   34),   # forest green
+    "carrot":      (0,   140,  255),   # orange
+    "hot dog":     (139,   69,   19),   # brown
+    "pizza":       (0,   140,  255),   # orange
+    "donut":       (139,   69,   19),   # brown
+    "cake":        (200,  130,   50),   # chocolate
+    "bottle":      (0,   100,  205),   # dodger blue
+    "wine glass":  (128,    0,  128),   # purple
+    "cup":         (255,  165,    0),   # orange
+    "bowl":        (192,  192,  192),   # silver
+    "fork":        (192,  192,  192),   # silver
+    "knife":       (192,  192,  192),   # silver
+    "spoon":       (192,  192,  192),   # silver
+    
+    # Electronics (purple/blue tones)
+    "tv":          (128,    0,  128),   # purple
+    "laptop":      (75,    0,  130),   # indigo
+    "mouse":       (100,  149,  237),   # cornflower blue
+    "remote":      (72,   61,  139),   # dark slate blue
+    "keyboard":    (70,   130,  180),   # steel blue
+    "cell phone":  (25,    25,  112),   # midnight blue
+    "microwave":   (70,   130,  180),   # steel blue
+    "oven":        (105,  105,  105),   # dim gray
+    "toaster":     (112,  128,  144),   # slate gray
+    "sink":        (192,  192,  192),   # silver
+    "refrigerator":(105,  105,  105),   # dim gray
+    "book":        (139,   69,   19),   # saddle brown
+    "clock":       (70,   130,  180),   # steel blue
+    
+    # Misc (varied)
+    "traffic light":(0,   215,  255),   # gold
+    "fire hydrant": (0,     0,  255),   # red
+    "stop sign":   (0,     0,  255),   # red
+    "parking meter":(128,  128,    0),   # olive
+    "backpack":    (139,   69,   19),   # brown
+    "umbrella":    (255,  165,    0),   # orange
+    "handbag":     (139,   69,   19),   # brown
+    "tie":         (128,    0,  128),   # purple
+    "suitcase":    (139,   69,   19),   # brown
+    "frisbee":     (255,  165,    0),   # orange
+    "skis":        (192,  192,  192),   # silver
+    "snowboard":   (192,  192,  192),   # silver
+    "sports ball": (0,   215,  255),   # gold
+    "kite":        (255,  165,    0),   # orange
+    "baseball bat":(139,   69,   19),   # brown
+    "baseball glove":(139, 69,   19),   # brown
+    "skateboard":  (255,  165,    0),   # orange
+    "surfboard":   (0,   100,  205),   # dodger blue
+    "tennis racket":(128,   0,  128),   # purple
+    "vase":        (200,  130,   50),   # chocolate
+    "scissors":    (192,  192,  192),   # silver
+    "teddy bear":  (200,  130,   50),   # chocolate
+    "hair drier":  (128,    0,  128),   # purple
+    "toothbrush":  (0,   165,  255),   # orange
+}
 
 # Distinct face colours (BGR) — visually separated, readable on camera backgrounds
 _FACE_COLORS = [
@@ -331,6 +426,18 @@ def _scale_bboxes(detections: list, sx: float, sy: float) -> list:
     return out
 
 
+def _object_color(label: str) -> tuple:
+    """Return BGR color for an object class label.
+    
+    Uses semantic colors from _OBJECT_SEMANTIC_COLORS (people=red, animals=orange,
+    furniture=brown, food=green/yellow, electronics=purple, etc.).
+    Falls back to cyan for unknown classes.
+    """
+    if label in _OBJECT_SEMANTIC_COLORS:
+        return _OBJECT_SEMANTIC_COLORS[label]
+    return _CYAN
+
+
 def _confidence_ring_color(match_score: float, face_id: str | None) -> tuple:
     """Return BGR ring colour based on face-match confidence.
 
@@ -508,14 +615,16 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
             continue
         x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
         box_thick = max(1, round(scale))
-        cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), _CYAN, box_thick, cv2.LINE_AA)
+        label = obj.get('label', '?')
+        obj_color = _object_color(label)
+        cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), obj_color, box_thick, cv2.LINE_AA)
         conf  = obj.get("confidence", 0)
-        label = f"{obj.get('label', '?')} {int(conf * 100)}%"
+        label_text = f"{label} {int(conf * 100)}%"
         ly    = max(10, y1 - 4)
         font_scale = max(0.8, 1.1 * scale)
         font_thick = max(1, round(scale))   # 1 at 640×480
-        _put_text_outlined(frame_bgr, label, (x1, ly),
-                           cv2.FONT_HERSHEY_SIMPLEX, font_scale, _CYAN, font_thick)
+        _put_text_outlined(frame_bgr, label_text, (x1, ly),
+                           cv2.FONT_HERSHEY_SIMPLEX, font_scale, obj_color, font_thick)
 
 
 # Privacy overlay colours
