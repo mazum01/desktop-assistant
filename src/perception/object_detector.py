@@ -1,5 +1,5 @@
 """
-Object detector — YOLO26n on Hailo-8 (split HEF + ONNX postprocessing).
+Object detector — YOLO26m on Hailo-8 (split HEF + ONNX postprocessing).
 
 YOLO26 (Ultralytics, 2026) is NMS-free by design: the HEF only runs the
 backbone/detection-head "neural processing" and outputs raw per-scale
@@ -8,25 +8,33 @@ output for YOLO26 the way there was for YOLOv8/v11 — the final box
 assignment/decoding step is done by a small companion ONNX model run on
 the host CPU via onnxruntime. This module wires both stages together:
 
-  1. HailoInference runs ``yolo26n.hef`` and returns 6 raw conv tensors.
+  1. HailoInference runs ``yolo26m.hef`` and returns 6 raw conv tensors.
   2. Those tensors are fed into ``yolo26n_postprocessing.onnx`` (a lightweight
-     ONNX Runtime session) which reproduces the final decode step.
+     ONNX Runtime session — this decode op has no learned weights tied to
+     model size, so the same sidecar works for any YOLO26 HEF variant)
+     which reproduces the final decode step.
   3. The ONNX output (300, 6) = [x1, y1, x2, y2, score, class_id] in
      640x640 pixel space is converted into :class:`Detection` objects.
 
-HEF I/O signature (yolo26n)
----------------------------
-  Input  ``yolo26n/input_layer1``  (640, 640, 3) uint8 RGB
-  Output ``yolo26n/conv61``  (80, 80, 4)   regression, scale 1/8
-  Output ``yolo26n/conv77``  (40, 40, 4)   regression, scale 1/16
-  Output ``yolo26n/conv91``  (20, 20, 4)   regression, scale 1/32
-  Output ``yolo26n/conv64``  (80, 80, 80)  classification, scale 1/8
-  Output ``yolo26n/conv80``  (40, 40, 80)  classification, scale 1/16
-  Output ``yolo26n/conv94``  (20, 20, 80)  classification, scale 1/32
+HEF I/O signature (yolo26m — conv layer numbers only, shapes are identical
+across YOLO26 sizes since they're purely a function of the 640x640 input
+and 80-class COCO head):
+---------------------------------------------------------------------
+  Input  ``yolo26m/input_layer1``  (640, 640, 3) uint8 RGB
+  Output ``yolo26m/conv71``  (80, 80, 4)   regression, scale 1/8
+  Output ``yolo26m/conv87``  (40, 40, 4)   regression, scale 1/16
+  Output ``yolo26m/conv101`` (20, 20, 4)   regression, scale 1/32
+  Output ``yolo26m/conv74``  (80, 80, 80)  classification, scale 1/8
+  Output ``yolo26m/conv90``  (40, 40, 80)  classification, scale 1/16
+  Output ``yolo26m/conv104`` (20, 20, 80)  classification, scale 1/32
 
-Only YOLO26n has an officially published Hailo-8 HEF + ONNX postprocessing
-sidecar pair (Hailo does not ship yolo26s/yolo26m for Hailo-8 object
-detection); larger sizes are pose-estimation only and target Hailo-10H.
+Hailo's Model Zoo (v2.19+) publishes yolo26n/s/m HEFs for Hailo-8 (see
+https://github.com/hailo-ai/hailo_model_zoo — HAILO8 object detection
+table). We use yolo26m over yolo26n for materially better accuracy
+(~52.3 vs ~40.0 mAP on COCO) at the cost of throughput (~95 vs ~427 FPS
+on Hailo-8) — acceptable since this assistant only needs a few detections
+per second, not video-rate throughput. yolo26n remains available as a
+fallback candidate. Larger l/x sizes are not published for Hailo-8.
 
 Gracefully falls back to returning an empty list when the Hailo device,
 HEF, or ONNX sidecar is unavailable.
@@ -43,17 +51,31 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-# Maps HEF conv output name -> (expected CHW shape) for the ONNX postprocessing
-# model's inputs. Order/names must match yolo26n_postprocessing.onnx exactly.
-_ONNX_INPUT_NAMES: Dict[str, str] = {
-    "conv61": "/model.23/one2one_cv2.0/one2one_cv2.0.2/Conv_output_0",
-    "conv77": "/model.23/one2one_cv2.1/one2one_cv2.1.2/Conv_output_0",
-    "conv91": "/model.23/one2one_cv2.2/one2one_cv2.2.2/Conv_output_0",
-    "conv64": "/model.23/one2one_cv3.0/one2one_cv3.0.2/Conv_output_0",
-    "conv80": "/model.23/one2one_cv3.1/one2one_cv3.1.2/Conv_output_0",
-    "conv94": "/model.23/one2one_cv3.2/one2one_cv3.2.2/Conv_output_0",
+# Maps HEF conv output name -> ONNX postprocessing model input name. The conv
+# layer *numbers* differ per YOLO26 size (n/s/m each get compiled with a
+# different internal layer count) but the postprocessing ONNX sidecar itself
+# is size-agnostic (pure box-decode/top-k math, no learned weights) — same
+# yolo26n_postprocessing.onnx file works for every size, only this name map
+# changes.
+_ONNX_INPUT_NAMES_BY_VARIANT: Dict[str, Dict[str, str]] = {
+    "yolo26n": {
+        "conv61": "/model.23/one2one_cv2.0/one2one_cv2.0.2/Conv_output_0",
+        "conv77": "/model.23/one2one_cv2.1/one2one_cv2.1.2/Conv_output_0",
+        "conv91": "/model.23/one2one_cv2.2/one2one_cv2.2.2/Conv_output_0",
+        "conv64": "/model.23/one2one_cv3.0/one2one_cv3.0.2/Conv_output_0",
+        "conv80": "/model.23/one2one_cv3.1/one2one_cv3.1.2/Conv_output_0",
+        "conv94": "/model.23/one2one_cv3.2/one2one_cv3.2.2/Conv_output_0",
+    },
+    "yolo26m": {
+        "conv71":  "/model.23/one2one_cv2.0/one2one_cv2.0.2/Conv_output_0",
+        "conv87":  "/model.23/one2one_cv2.1/one2one_cv2.1.2/Conv_output_0",
+        "conv101": "/model.23/one2one_cv2.2/one2one_cv2.2.2/Conv_output_0",
+        "conv74":  "/model.23/one2one_cv3.0/one2one_cv3.0.2/Conv_output_0",
+        "conv90":  "/model.23/one2one_cv3.1/one2one_cv3.1.2/Conv_output_0",
+        "conv104": "/model.23/one2one_cv3.2/one2one_cv3.2.2/Conv_output_0",
+    },
 }
-_ONNX_REG_CHANNELS = 4  # regression heads (conv61/77/91) have 4 channels (box params)
+_ONNX_REG_CHANNELS = 4  # regression heads have 4 channels (box params)
 
 # ── COCO-80 class labels ───────────────────────────────────────────────────
 COCO_CLASSES: List[str] = [
@@ -73,11 +95,15 @@ COCO_CLASSES: List[str] = [
 ]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-# YOLO26n is the only size Hailo publishes a Hailo-8 HEF + ONNX postprocessing
-# sidecar for; yolo26s/yolo26m are not available for this hardware.
+# YOLO26m gives materially better accuracy than yolo26n (~52.3 vs ~40.0 mAP)
+# at acceptable throughput cost for this assistant's needs; yolo26n.hef is
+# kept as a fallback candidate if yolo26m is ever unavailable. Both variants
+# use the same yolo26n_postprocessing.onnx sidecar (see _ONNX_INPUT_NAMES_BY_VARIANT).
 _HEF_CANDIDATES = [
-    _REPO_ROOT / "config" / "hailo" / "yolo26n.hef",
-    Path("/usr/local/hailo/resources/models/hailo8/yolo26n.hef"),
+    (_REPO_ROOT / "config" / "hailo" / "yolo26m.hef", "yolo26m"),
+    (Path("/usr/local/hailo/resources/models/hailo8/yolo26m.hef"), "yolo26m"),
+    (_REPO_ROOT / "config" / "hailo" / "yolo26n.hef", "yolo26n"),
+    (Path("/usr/local/hailo/resources/models/hailo8/yolo26n.hef"), "yolo26n"),
 ]
 _ONNX_SIDECAR_CANDIDATES = [
     _REPO_ROOT / "config" / "hailo" / "yolo26n_postprocessing.onnx",
@@ -205,6 +231,7 @@ class ObjectDetector:
         self._class_thresholds = {**_DEFAULT_CLASS_THRESHOLDS, **(class_thresholds or {})}
         self._engine = None
         self._onnx_session = None
+        self._onnx_input_names: Dict[str, str] = {}
         self._sim = False
         self._backend = "sim"
         # Reusable model-input buffer; always 640×640×3 (model input size, not video resolution).
@@ -259,13 +286,14 @@ class ObjectDetector:
     def _init_engine(self) -> None:
         try:
             from src.perception.hailo_inference import HailoInference
-            hef_path = next((p for p in _HEF_CANDIDATES if p.exists()), None)
-            if hef_path is None:
-                raise FileNotFoundError("No YOLO26n HEF found")
+            match = next(((p, variant) for p, variant in _HEF_CANDIDATES if p.exists()), None)
+            if match is None:
+                raise FileNotFoundError("No YOLO26 HEF found (yolo26m or yolo26n)")
+            hef_path, variant = match
             onnx_path = next((p for p in _ONNX_SIDECAR_CANDIDATES if p.exists()), None)
             if onnx_path is None:
                 raise FileNotFoundError(
-                    "No YOLO26n ONNX postprocessing sidecar found — YOLO26 is "
+                    "No YOLO26 ONNX postprocessing sidecar found — YOLO26 is "
                     "NMS-free and requires this companion model to decode boxes"
                 )
 
@@ -276,10 +304,11 @@ class ObjectDetector:
             if engine.hardware_ready:
                 self._engine = engine
                 self._onnx_session = onnx_session
+                self._onnx_input_names = _ONNX_INPUT_NAMES_BY_VARIANT[variant]
                 self._backend = "hailo"
                 log.info(
-                    "ObjectDetector: Hailo-8 backend ready (%s + %s)",
-                    hef_path.name, onnx_path.name,
+                    "ObjectDetector: Hailo-8 backend ready (%s [%s] + %s)",
+                    hef_path.name, variant, onnx_path.name,
                 )
             else:
                 log.warning("ObjectDetector: Hailo unavailable — sim mode (empty detections)")
@@ -320,9 +349,9 @@ class ObjectDetector:
         ``[x1, y1, x2, y2, score, class_id]`` in 640×640 pixel space.
         """
         onnx_inputs: Dict[str, np.ndarray] = {}
-        for conv_name, onnx_name in _ONNX_INPUT_NAMES.items():
+        for conv_name, onnx_name in self._onnx_input_names.items():
             # HEF output dict keys are prefixed with the network name, e.g.
-            # "yolo26n/conv61" — match by suffix so this works regardless of prefix.
+            # "yolo26m/conv71" — match by suffix so this works regardless of prefix.
             hef_key = next(
                 (k for k in hef_outputs if k.split("/")[-1] == conv_name), None
             )

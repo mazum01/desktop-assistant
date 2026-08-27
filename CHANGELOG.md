@@ -4,6 +4,37 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.48.5] - 2026-08-27
+### Changed
+- **Switched object detection from `yolo26n` (nano) to `yolo26m`** for
+  materially better accuracy (~52.3 vs ~40.0 mAP on COCO, per Hailo's Model
+  Zoo benchmarks) at the cost of throughput (~95 vs ~427 FPS on Hailo-8).
+  Acceptable trade-off since `ObjectService` only needs a few detections per
+  second. `object_detector.py` now tries `yolo26m.hef` first and falls back
+  to `yolo26n.hef` if unavailable; both use the same
+  `yolo26n_postprocessing.onnx` sidecar since that ONNX model is a
+  size-agnostic decode step (no learned weights, just box-decode/top-k math)
+  — only the HEF conv-layer name mapping differs per variant.
+- **Correction**: the v1.48.4 changelog entry claiming Hailo doesn't publish
+  `yolo26m`/`yolo26s` HEFs for Hailo-8 object detection was based on
+  `hailo-apps`'s standalone-app resource list, not the full Hailo Model Zoo.
+  Hailo Model Zoo v2.19+ does publish official `yolo26n`/`yolo26s`/`yolo26m`
+  HEFs compiled for Hailo-8 (confirmed via
+  `hailo_model_zoo/docs/public_models/HAILO8/HAILO8_object_detection.rst`
+  and by downloading/parsing `yolo26m.hef` directly with `hailortcli`).
+
+### Investigated
+- A giraffe portrait (framed monochrome close-up illustration) hanging on
+  the wall was reported as never being detected, even though clearly
+  visible in frame. Live debug logging confirmed the model (both `yolo26n`
+  and `yolo26m`) assigns **zero** of the 300 raw output slots to the
+  "giraffe" class for this scene — not a below-threshold score, but no
+  proposal at all for that image region. Upgrading to `yolo26m` did not
+  change this outcome, which rules out simple model-capacity as the sole
+  explanation. This appears to be a genuine detection blind spot for this
+  specific image (small, monochrome, stylized close-up against a plain
+  background/mat) rather than a code bug — no further code fix identified.
+
 ## [1.48.4] - 2026-08-27
 ### Fixed
 - **Object detection boxes were meaningless and mislabeled (e.g. "pizza" for a

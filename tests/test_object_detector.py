@@ -4,7 +4,9 @@ Tests for ObjectDetector (sim mode — no Hailo device required).
 import numpy as np
 import pytest
 
-from src.perception.object_detector import ObjectDetector, COCO_CLASSES, Detection
+from src.perception.object_detector import (
+    ObjectDetector, COCO_CLASSES, Detection, _ONNX_INPUT_NAMES_BY_VARIANT,
+)
 
 
 @pytest.fixture
@@ -16,6 +18,7 @@ def sim_detector():
     d._class_thresholds = {**{k: 0.25 for k in COCO_CLASSES}, "person": 0.35}
     d._engine = None
     d._onnx_session = None
+    d._onnx_input_names = _ONNX_INPUT_NAMES_BY_VARIANT["yolo26n"]
     d._sim = True
     d._backend = "sim"
     d._letterbox_buf = np.zeros((640, 640, 3), dtype=np.uint8)
