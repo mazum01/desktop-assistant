@@ -118,3 +118,69 @@ def test_object_service_find_object_query():
     assert result["results"][0]["label"] == "cup"
     assert spoken
     assert "cup" in spoken[0]["text"]
+
+
+# ── _apply_hold (cooldown before removal) ───────────────────────────────────
+
+class _FakeDet:
+    def __init__(self, label, confidence, bbox):
+        self.label = label
+        self.confidence = confidence
+        self.class_id = 0
+        self.bbox = bbox
+
+
+def _make_svc(hold_seconds=2.0):
+    bus = MessageBus()
+    vis = _DummyVision()
+    return ObjectService(bus=bus, vision_service=vis, config=ObjectConfig(hold_seconds=hold_seconds))
+
+
+def test_hold_keeps_briefly_missed_detection():
+    svc = _make_svc(hold_seconds=2.0)
+    det = _FakeDet("chair", 0.9, [10, 10, 50, 50])
+
+    held = svc._apply_hold([det], now=100.0)
+    assert [d.label for d in held] == ["chair"]
+
+    # Detector misses it this frame, but well within the hold window.
+    held = svc._apply_hold([], now=101.0)
+    assert [d.label for d in held] == ["chair"]
+
+
+def test_hold_drops_detection_after_window_elapses():
+    svc = _make_svc(hold_seconds=2.0)
+    det = _FakeDet("chair", 0.9, [10, 10, 50, 50])
+
+    svc._apply_hold([det], now=100.0)
+    held = svc._apply_hold([], now=103.0)  # 3s later, past the 2s hold window
+    assert held == []
+
+
+def test_hold_refreshes_on_matching_redetection():
+    svc = _make_svc(hold_seconds=2.0)
+    det1 = _FakeDet("chair", 0.9, [10, 10, 50, 50])
+    det2 = _FakeDet("chair", 0.85, [12, 12, 52, 52])  # same object, slightly moved
+
+    svc._apply_hold([det1], now=100.0)
+    svc._apply_hold([det2], now=101.5)
+    # Even though 3s have passed since the *original* sighting, the object
+    # was refreshed at 101.5, so it should survive at 103.0 (1.5s since refresh).
+    held = svc._apply_hold([], now=103.0)
+    assert [d.label for d in held] == ["chair"]
+
+
+def test_hold_new_object_appears_immediately():
+    svc = _make_svc(hold_seconds=2.0)
+    det = _FakeDet("cup", 0.8, [0, 0, 20, 20])
+    held = svc._apply_hold([det], now=50.0)
+    assert [d.label for d in held] == ["cup"]
+
+
+def test_hold_disabled_clears_state():
+    bus = MessageBus()
+    vis = _DummyVision()
+    svc = ObjectService(bus=bus, vision_service=vis, config=ObjectConfig(hold_seconds=2.0))
+    svc._held = {1: {"det": _FakeDet("chair", 0.9, [0, 0, 10, 10]), "last_seen": 100.0}}
+    svc._on_set_enabled("object.set_enabled", {"enabled": False})
+    assert svc._held == {}

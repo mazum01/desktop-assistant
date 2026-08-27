@@ -125,6 +125,7 @@ notifications:
 object_detection:
   conf_threshold: 0.4
   enabled: true
+  hold_seconds: 2.0
   iou_threshold: 0.5
   max_fps: 1.5
   max_objects: 8

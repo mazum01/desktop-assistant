@@ -66,6 +66,7 @@ class ObjectConfig:
     temporal_confirmations: int = 2
     iou_threshold: float = 0.50
     open_vocab_threshold: float = 0.55
+    hold_seconds: float = 2.0   # keep a missed detection visible this long before dropping it
 
 
 class ObjectService(Service):
@@ -90,6 +91,12 @@ class ObjectService(Service):
         self._worker: Optional[threading.Thread] = None
         self._stop_evt = threading.Event()
         self._recent_detections: deque = deque(maxlen=max(2, self._cfg.temporal_confirmations))
+        # Sticky "held" detections — carries a detection forward across frames
+        # where the detector momentarily misses it, so overlay boxes/labels
+        # don't flicker in and out. Keyed by an opaque id; each entry tracks
+        # the last-seen detection plus a monotonic timestamp.
+        self._held: dict = {}
+        self._held_seq: int = 0
 
     @property
     def detection_enabled(self) -> bool:
@@ -186,6 +193,9 @@ class ObjectService(Service):
                     self._frame_queue.get_nowait()
                 except Exception:
                     break
+            # Clear held/recent state so stale boxes don't reappear on re-enable.
+            self._recent_detections.clear()
+            self._held.clear()
         # Persist so the setting survives daemon restarts.
         try:
             _STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -255,6 +265,7 @@ class ObjectService(Service):
                 detections = detections[:self._cfg.max_objects]
 
             stable_detections = self._apply_temporal_filter(detections)
+            held_detections = self._apply_hold(stable_detections, now)
             src_h, src_w = frame.shape[:2]
             self.bus.publish(
                 "perception.objects",
@@ -266,9 +277,9 @@ class ObjectService(Service):
                             "confidence": d.confidence,
                             "bbox":       d.bbox,
                         }
-                        for d in stable_detections
+                        for d in held_detections
                     ],
-                    "count":    len(stable_detections),
+                    "count":    len(held_detections),
                     "backend":  self._detector.backend,
                     "frame_w":  src_w,
                     "frame_h":  src_h,
@@ -316,6 +327,43 @@ class ObjectService(Service):
             maxlen=max(2, self._cfg.temporal_confirmations),
         )
         return kept
+
+    def _apply_hold(self, confirmed_detections, now: float):
+        """
+        Smooth detections over time so a briefly-missed object doesn't
+        instantly disappear from the overlay/bus. A detection that matches
+        (same label + overlapping box) an already-held entry refreshes it;
+        an unmatched held entry is kept — using its last-known box/score —
+        until ``hold_seconds`` elapses since it was last actually seen, then
+        it's dropped. New detections become new held entries immediately.
+        """
+        matched_ids: set = set()
+        for det in confirmed_detections:
+            match_id = None
+            for hid, entry in self._held.items():
+                if hid in matched_ids:
+                    continue
+                if entry["det"].label == det.label and self._iou(entry["det"].bbox, det.bbox) >= self._cfg.iou_threshold:
+                    match_id = hid
+                    break
+            if match_id is None:
+                self._held_seq += 1
+                match_id = self._held_seq
+            self._held[match_id] = {"det": det, "last_seen": now}
+            matched_ids.add(match_id)
+
+        # Drop held entries that have aged past the hold window without a
+        # fresh match this frame.
+        expired = [
+            hid for hid, entry in self._held.items()
+            if hid not in matched_ids and now - entry["last_seen"] > self._cfg.hold_seconds
+        ]
+        for hid in expired:
+            del self._held[hid]
+
+        held_detections = [entry["det"] for entry in self._held.values()]
+        held_detections.sort(key=lambda d: d.confidence, reverse=True)
+        return held_detections[:self._cfg.max_objects]
 
     def query_objects(self, query: str, *, speak: bool = True) -> dict:
         """Resolve *query* against the latest detected objects."""

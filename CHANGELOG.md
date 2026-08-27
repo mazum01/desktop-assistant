@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.48.6] - 2026-08-27
+### Added
+- **Object detection "hold" cooldown** — detected objects now stay visible in
+  `perception.objects` for a grace period (`hold_seconds`, default 2.0s)
+  after the detector momentarily misses them, instead of instantly vanishing
+  and reappearing (flickering) frame-to-frame. A new detection matching an
+  already-held one (same label + overlapping box) refreshes its hold timer;
+  unmatched held entries expire only once `hold_seconds` has elapsed since
+  they were last actually seen. New objects still appear immediately — only
+  removal is smoothed. Configurable via `object_detection.hold_seconds` in
+  `config/assistant.yaml`. Held state is cleared whenever object detection
+  is disabled so stale boxes don't reappear on re-enable.
+
 ## [1.48.5] - 2026-08-27
 ### Changed
 - **Switched object detection from `yolo26n` (nano) to `yolo26m`** for
