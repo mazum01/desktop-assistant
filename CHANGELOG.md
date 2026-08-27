@@ -4,6 +4,35 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.48.4] - 2026-08-27
+### Fixed
+- **Object detection boxes were meaningless and mislabeled (e.g. "pizza" for a
+  lamp)** — the v1.48.0 upgrade to `yolo26m.hef` regressed detection because
+  YOLO26 is architecturally NMS-free: the HEF only outputs raw per-scale
+  regression/classification conv tensors, not a Hailo NMS-postprocessed
+  `[y1,x1,y2,x2,score]` tensor like YOLOv8/v11. `object_detector.py` decoded
+  those raw conv tensors as if they were finished detections, producing
+  arbitrary boxes and classes.
+- Also, only `yolo26n` (nano) has an official Hailo-8 HEF + ONNX
+  postprocessing sidecar published by Hailo; `yolo26s`/`yolo26m` HEFs for
+  Hailo-8 object detection don't exist (403 from Hailo's S3 bucket) — those
+  sizes are only shipped for pose estimation on the newer Hailo-10H chip.
+
+### Changed
+- Replaced `config/hailo/yolo26m.hef` with `config/hailo/yolo26n.hef` plus its
+  companion `config/hailo/yolo26n_postprocessing.onnx` sidecar (downloaded
+  from Hailo's official S3 resources, matching the `hailo-ai/hailo-apps`
+  reference pipeline).
+- `ObjectDetector` now runs a split HEF + ONNX pipeline: Hailo inference
+  produces 6 raw conv tensors (3 regression, 3 classification), which are
+  mapped to the ONNX postprocessing model's inputs (NHWC→NCHW) and run
+  through `onnxruntime` to obtain the final `(300, 6)` `[x1,y1,x2,y2,score,
+  class_id]` detections in 640×640 pixel space. `_decode()` was rewritten to
+  consume this format instead of the old Hailo-NMS list/tensor format.
+- Added `onnxruntime` as an explicit project dependency in `requirements.txt`.
+- `config/hailo/*.onnx` added to `.gitignore` (model assets are not committed,
+  matching the existing `*.hef` convention).
+
 ## [1.48.3] - 2026-08-26
 ### Fixed
 - **Volume no longer resets to 100% on restart** — MusicService (media unit)

@@ -1,21 +1,35 @@
 """
-Object detector — YOLO26m on Hailo-8.
+Object detector — YOLO26n on Hailo-8 (split HEF + ONNX postprocessing).
 
-Wraps the latest available YOLO26 HEF via :class:`~src.perception.hailo_inference.HailoInference`.
-Input: any RGB frame (letterboxed to 640×640 internally).
-Output: list of :class:`Detection` namedtuples.
+YOLO26 (Ultralytics, 2026) is NMS-free by design: the HEF only runs the
+backbone/detection-head "neural processing" and outputs raw per-scale
+regression + classification conv tensors. There is no on-device NMS
+output for YOLO26 the way there was for YOLOv8/v11 — the final box
+assignment/decoding step is done by a small companion ONNX model run on
+the host CPU via onnxruntime. This module wires both stages together:
 
-HEF I/O signature
------------------
-  Input  ``yolo26m/input_layer1``        (640, 640, 3)  uint8 RGB
-  Output ``yolo26m/yolo26_nms_postprocess`` (80, 5, 100) float32
+  1. HailoInference runs ``yolo26n.hef`` and returns 6 raw conv tensors.
+  2. Those tensors are fed into ``yolo26n_postprocessing.onnx`` (a lightweight
+     ONNX Runtime session) which reproduces the final decode step.
+  3. The ONNX output (300, 6) = [x1, y1, x2, y2, score, class_id] in
+     640x640 pixel space is converted into :class:`Detection` objects.
 
-Output layout: ``output[class_id, coord_idx, det_idx]``
-  coord_idx 0–3 = [y1, x1, y2, x2] normalised 0–1 (Hailo NMS convention)
-  coord_idx 4   = detection confidence score
+HEF I/O signature (yolo26n)
+---------------------------
+  Input  ``yolo26n/input_layer1``  (640, 640, 3) uint8 RGB
+  Output ``yolo26n/conv61``  (80, 80, 4)   regression, scale 1/8
+  Output ``yolo26n/conv77``  (40, 40, 4)   regression, scale 1/16
+  Output ``yolo26n/conv91``  (20, 20, 4)   regression, scale 1/32
+  Output ``yolo26n/conv64``  (80, 80, 80)  classification, scale 1/8
+  Output ``yolo26n/conv80``  (40, 40, 80)  classification, scale 1/16
+  Output ``yolo26n/conv94``  (20, 20, 80)  classification, scale 1/32
 
-Gracefully falls back to returning an empty list when the Hailo device
-or HEF file is unavailable.
+Only YOLO26n has an officially published Hailo-8 HEF + ONNX postprocessing
+sidecar pair (Hailo does not ship yolo26s/yolo26m for Hailo-8 object
+detection); larger sizes are pose-estimation only and target Hailo-10H.
+
+Gracefully falls back to returning an empty list when the Hailo device,
+HEF, or ONNX sidecar is unavailable.
 """
 
 from __future__ import annotations
@@ -28,6 +42,18 @@ from typing import Dict, List, Optional
 import numpy as np
 
 log = logging.getLogger(__name__)
+
+# Maps HEF conv output name -> (expected CHW shape) for the ONNX postprocessing
+# model's inputs. Order/names must match yolo26n_postprocessing.onnx exactly.
+_ONNX_INPUT_NAMES: Dict[str, str] = {
+    "conv61": "/model.23/one2one_cv2.0/one2one_cv2.0.2/Conv_output_0",
+    "conv77": "/model.23/one2one_cv2.1/one2one_cv2.1.2/Conv_output_0",
+    "conv91": "/model.23/one2one_cv2.2/one2one_cv2.2.2/Conv_output_0",
+    "conv64": "/model.23/one2one_cv3.0/one2one_cv3.0.2/Conv_output_0",
+    "conv80": "/model.23/one2one_cv3.1/one2one_cv3.1.2/Conv_output_0",
+    "conv94": "/model.23/one2one_cv3.2/one2one_cv3.2.2/Conv_output_0",
+}
+_ONNX_REG_CHANNELS = 4  # regression heads (conv61/77/91) have 4 channels (box params)
 
 # ── COCO-80 class labels ───────────────────────────────────────────────────
 COCO_CLASSES: List[str] = [
@@ -47,13 +73,15 @@ COCO_CLASSES: List[str] = [
 ]
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+# YOLO26n is the only size Hailo publishes a Hailo-8 HEF + ONNX postprocessing
+# sidecar for; yolo26s/yolo26m are not available for this hardware.
 _HEF_CANDIDATES = [
-    _REPO_ROOT / "config" / "hailo" / "yolo26m.hef",
-    _REPO_ROOT / "config" / "hailo" / "yolo26s.hef",
     _REPO_ROOT / "config" / "hailo" / "yolo26n.hef",
-    Path("/usr/local/hailo/resources/models/hailo8/yolo26m.hef"),
-    Path("/usr/local/hailo/resources/models/hailo8/yolo26s.hef"),
     Path("/usr/local/hailo/resources/models/hailo8/yolo26n.hef"),
+]
+_ONNX_SIDECAR_CANDIDATES = [
+    _REPO_ROOT / "config" / "hailo" / "yolo26n_postprocessing.onnx",
+    Path("/usr/local/hailo/resources/models/hailo8/yolo26n_postprocessing.onnx"),
 ]
 _TARGET_SIZE = 640  # YOLO26 expects 640×640
 _DEFAULT_CLASS_THRESHOLDS: Dict[str, float] = {
@@ -176,6 +204,7 @@ class ObjectDetector:
         self._iou_threshold = float(iou_threshold)
         self._class_thresholds = {**_DEFAULT_CLASS_THRESHOLDS, **(class_thresholds or {})}
         self._engine = None
+        self._onnx_session = None
         self._sim = False
         self._backend = "sim"
         # Reusable model-input buffer; always 640×640×3 (model input size, not video resolution).
@@ -232,12 +261,26 @@ class ObjectDetector:
             from src.perception.hailo_inference import HailoInference
             hef_path = next((p for p in _HEF_CANDIDATES if p.exists()), None)
             if hef_path is None:
-                raise FileNotFoundError("No YOLO26 HEF found")
+                raise FileNotFoundError("No YOLO26n HEF found")
+            onnx_path = next((p for p in _ONNX_SIDECAR_CANDIDATES if p.exists()), None)
+            if onnx_path is None:
+                raise FileNotFoundError(
+                    "No YOLO26n ONNX postprocessing sidecar found — YOLO26 is "
+                    "NMS-free and requires this companion model to decode boxes"
+                )
+
+            import onnxruntime as ort
+            onnx_session = ort.InferenceSession(str(onnx_path))
+
             engine = HailoInference(hef_path)
             if engine.hardware_ready:
                 self._engine = engine
+                self._onnx_session = onnx_session
                 self._backend = "hailo"
-                log.info("ObjectDetector: Hailo-8 backend ready (%s)", hef_path.name)
+                log.info(
+                    "ObjectDetector: Hailo-8 backend ready (%s + %s)",
+                    hef_path.name, onnx_path.name,
+                )
             else:
                 log.warning("ObjectDetector: Hailo unavailable — sim mode (empty detections)")
                 self._sim = True
@@ -256,27 +299,50 @@ class ObjectDetector:
         Returns a list of :class:`Detection` objects sorted by confidence
         descending. Returns an empty list in sim mode or on error.
         """
-        if self._sim or self._engine is None:
+        if self._sim or self._engine is None or self._onnx_session is None:
             return []
 
         src_h, src_w = frame.shape[:2]
         try:
             inp = self._letterbox(frame)
-            outputs = self._engine.infer({"input_layer1": inp})
+            hef_outputs = self._engine.infer({"input_layer1": inp})
+            onnx_out = self._run_onnx_postprocess(hef_outputs)
         except Exception as exc:
             log.error("ObjectDetector.detect: inference failed — %s", exc)
             return []
 
-        # Find the NMS output tensor (name may vary by HEF version)
-        nms_key = next(
-            (k for k in outputs if "nms" in k.lower() or "postprocess" in k.lower()),
-            next(iter(outputs), None),
-        )
-        if nms_key is None or nms_key not in outputs:
-            return []
+        return self._decode(onnx_out, src_w, src_h)
 
-        raw = outputs[nms_key]  # shape (80, 5, 100) after batch-dim strip
-        return self._decode(raw, src_w, src_h)
+    def _run_onnx_postprocess(self, hef_outputs: Dict[str, np.ndarray]) -> np.ndarray:
+        """
+        Map raw HEF conv-tensor outputs to the ONNX postprocessing model's
+        inputs, run it, and return the ``(300, 6)`` detection tensor
+        ``[x1, y1, x2, y2, score, class_id]`` in 640×640 pixel space.
+        """
+        onnx_inputs: Dict[str, np.ndarray] = {}
+        for conv_name, onnx_name in _ONNX_INPUT_NAMES.items():
+            # HEF output dict keys are prefixed with the network name, e.g.
+            # "yolo26n/conv61" — match by suffix so this works regardless of prefix.
+            hef_key = next(
+                (k for k in hef_outputs if k.split("/")[-1] == conv_name), None
+            )
+            if hef_key is None:
+                raise ValueError(f"Expected HEF output for '{conv_name}' not found "
+                                  f"(available: {list(hef_outputs.keys())})")
+            tensor = np.asarray(hef_outputs[hef_key], dtype=np.float32)
+            # Hailo delivers NHWC; the ONNX model expects NCHW.
+            if tensor.ndim == 3:  # (H, W, C) -> (1, C, H, W)
+                tensor = np.transpose(tensor, (2, 0, 1))[np.newaxis]
+            elif tensor.ndim == 4 and tensor.shape[-1] in (_ONNX_REG_CHANNELS, len(COCO_CLASSES)):
+                tensor = np.transpose(tensor, (0, 3, 1, 2))  # NHWC -> NCHW
+            onnx_inputs[onnx_name] = tensor
+
+        output_names = [o.name for o in self._onnx_session.get_outputs()]
+        results = self._onnx_session.run(output_names, onnx_inputs)
+        out = np.asarray(results[0], dtype=np.float32)
+        if out.ndim == 3:  # strip batch dim
+            out = out[0]
+        return out
 
     # ── Internal ───────────────────────────────────────────────────────
 
@@ -307,19 +373,16 @@ class ObjectDetector:
 
     def _decode(
         self,
-        raw,
+        raw: np.ndarray,
         src_w: int,
         src_h: int,
     ) -> List[Detection]:
-        """Decode NMS output into :class:`Detection` objects.
+        """Decode the YOLO26 ONNX postprocessing output into :class:`Detection` objects.
 
-        Hailo's NMS postprocess output at runtime is a **list** of 80 per-class
-        arrays, each shaped ``(N, 5)`` where N is the number of detections for
-        that class and the 5 columns are ``[y1, x1, y2, x2, score]`` in
-        normalised 0–1 coordinates (Hailo convention, y before x).
-
-        The HEF metadata reports ``(80, 5, 100)`` as the max-capacity shape, but
-        the actual runtime value is the variable-length list format.
+        *raw* is the ``(300, 6)`` tensor produced by the postprocessing ONNX
+        model: each row is ``[x1, y1, x2, y2, score, class_id]`` in 640×640
+        pixel space (YOLO26 is NMS-free — this is already the final,
+        de-duplicated detection set; no on-device NMS output exists).
         """
         # Reuse cached letterbox params when possible (avoids duplicate float math).
         if (src_h, src_w) == self._lb_src_shape:
@@ -335,63 +398,31 @@ class ObjectDetector:
 
         detections: List[Detection] = []
 
-        # ── List format (runtime NMS output) ──────────────────────────
-        if isinstance(raw, (list, tuple)):
-            for cls_id, cls_dets in enumerate(raw):
-                if cls_id >= len(COCO_CLASSES):
-                    break
-                if cls_dets is None or len(cls_dets) == 0:
-                    continue
-                arr = np.asarray(cls_dets, dtype=np.float32)
-                if arr.ndim == 1:
-                    arr = arr[np.newaxis]  # single detection → (1, 5)
-                for det in arr:
-                    if len(det) < 5:
-                        continue
-                    score = float(det[4])
-                    if score < self._conf_threshold:
-                        continue
-                    y1n, x1n, y2n, x2n = float(det[0]), float(det[1]), float(det[2]), float(det[3])
-                    x1 = max(0.0, (x1n * _TARGET_SIZE - pad_left) / scale)
-                    y1 = max(0.0, (y1n * _TARGET_SIZE - pad_top)  / scale)
-                    x2 = min(float(src_w), (x2n * _TARGET_SIZE - pad_left) / scale)
-                    y2 = min(float(src_h), (y2n * _TARGET_SIZE - pad_top)  / scale)
-                    if x2 <= x1 or y2 <= y1:
-                        continue
-                    detections.append(Detection(
-                        label=COCO_CLASSES[cls_id],
-                        class_id=cls_id,
-                        confidence=round(score, 3),
-                        bbox=[round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
-                    ))
+        if not isinstance(raw, np.ndarray) or raw.ndim != 2 or raw.shape[-1] < 6:
+            log.warning("ObjectDetector: unrecognised ONNX output shape %s — skipping",
+                        getattr(raw, "shape", type(raw)))
+            return []
 
-        # ── Fixed tensor format (80, 5, 100) — fallback ───────────────
-        elif isinstance(raw, np.ndarray) and raw.ndim == 3:
-            num_classes, _, max_det = raw.shape
-            for cls_id in range(min(num_classes, len(COCO_CLASSES))):
-                for det_id in range(max_det):
-                    score = float(raw[cls_id, 4, det_id])
-                    if score < self._conf_threshold:
-                        continue
-                    y1n = float(raw[cls_id, 0, det_id])
-                    x1n = float(raw[cls_id, 1, det_id])
-                    y2n = float(raw[cls_id, 2, det_id])
-                    x2n = float(raw[cls_id, 3, det_id])
-                    x1 = max(0.0, (x1n * _TARGET_SIZE - pad_left) / scale)
-                    y1 = max(0.0, (y1n * _TARGET_SIZE - pad_top)  / scale)
-                    x2 = min(float(src_w), (x2n * _TARGET_SIZE - pad_left) / scale)
-                    y2 = min(float(src_h), (y2n * _TARGET_SIZE - pad_top)  / scale)
-                    if x2 <= x1 or y2 <= y1:
-                        continue
-                    detections.append(Detection(
-                        label=COCO_CLASSES[cls_id],
-                        class_id=cls_id,
-                        confidence=round(score, 3),
-                        bbox=[round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
-                    ))
-
-        else:
-            log.warning("ObjectDetector: unrecognised output type %s — skipping", type(raw))
+        for row in raw:
+            score = float(row[4])
+            if score < self._conf_threshold:
+                continue
+            cls_id = int(row[5])
+            if cls_id < 0 or cls_id >= len(COCO_CLASSES):
+                continue
+            x1p, y1p, x2p, y2p = float(row[0]), float(row[1]), float(row[2]), float(row[3])
+            x1 = max(0.0, (x1p - pad_left) / scale)
+            y1 = max(0.0, (y1p - pad_top) / scale)
+            x2 = min(float(src_w), (x2p - pad_left) / scale)
+            y2 = min(float(src_h), (y2p - pad_top) / scale)
+            if x2 <= x1 or y2 <= y1:
+                continue
+            detections.append(Detection(
+                label=COCO_CLASSES[cls_id],
+                class_id=cls_id,
+                confidence=round(score, 3),
+                bbox=[round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
+            ))
 
         detections.sort(key=lambda d: d.confidence, reverse=True)
         return self.filter_detections(detections)
@@ -403,3 +434,4 @@ class ObjectDetector:
             except Exception:
                 pass
             self._engine = None
+        self._onnx_session = None

@@ -16,6 +16,7 @@ dist/
 # Piper voice models (large binaries — download via scripts/download_voices.sh)
 config/piper/*.onnx
 config/hailo/*.hef
+config/hailo/*.onnx
 
 # C++ extension build artifacts
 src/perception/scrfd_decode/build/
