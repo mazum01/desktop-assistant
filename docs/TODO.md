@@ -102,6 +102,45 @@ Smoke-test scripts for each component (`scripts/test_<device>.py` exits 0).
   Requires `src/hardware/servo.py` rewrite + Pi hardware UART freed up.
   See `PROJECT_PHASES.md § Future Upgrades` for wiring and library details.
 
+## Waveshare ESP32-C6 LCD
+
+Implementation backlog for the [Waveshare ESP32-C6-LCD-1.47](https://www.waveshare.com/product/esp32-related/boards-kits/esp32-c6/esp32-c6-lcd-1.47.htm).
+The LCD process runs as Arduino C++ firmware on the ESP32 and communicates with
+VERA through the established BLE GATT path.
+
+- [x] **Define hardware and display requirements** — target the non-touch
+  ESP32-C6 board with its 1.47-inch 172×320 ST7789 SPI TFT and BLE 5. The
+  primary UX is an animated emotional mouth (neutral, listening, speaking,
+  happy, sad, surprised, and error); the secondary UX is compact startup,
+  restart, version, ready, degraded, and error text/iconography. Confirm exact
+  GPIO mapping and display orientation from the board schematic during
+  implementation. See the
+  [manufacturer documentation](https://docs.waveshare.com/ESP32-C6-LCD-1.47).
+- [ ] **Create the managed Arduino firmware project** — add the ESP32 Arduino
+  source, sketch metadata, board configuration, library dependencies, and
+  project documentation.
+- [ ] **Establish the Arduino CLI toolchain** — use the latest suitable Arduino
+  CLI workflow to install/configure the ESP32 board core and required libraries,
+  with reproducible project-local build commands.
+- [ ] **Implement the ESP32 BLE GATT display protocol** — add advertising,
+  service/characteristic handling, framing, validation, reconnect behavior, and
+  parsing compatible with `DisplayService`.
+- [ ] **Implement the expressive mouth renderer** — render the primary animated
+  emotional mouth states with smooth timing and a safe neutral/error fallback.
+- [ ] **Implement startup/status rendering** — render concise boot progress,
+  service status, ready, degraded, version, and error information as text or
+  icons appropriate to the display resolution.
+- [ ] **Automate firmware build and upload** — provide Arduino CLI commands or
+  scripts for compiling and, when the device is connected and permissions
+  allow it, uploading firmware to the ESP32. Surface missing port, board,
+  dependency, and permission errors explicitly.
+- [ ] **Integrate host events with the ESP32 firmware** — extend the host
+  `DisplayService` and configuration to send mouth/emotion commands and
+  startup/status messages while preserving disabled/unconfigured behavior.
+- [ ] **Validate the Waveshare device end to end** — test BLE discovery and
+  reconnect, mouth animation, startup/status rendering, orientation, refresh
+  performance, and failure recovery; document wiring, flashing, and operation.
+
 ## Audio
 - [x] reSpeaker mic capture — RESOLVED in v1.41.0 via `src/audio/pw_input.py`
       (`PipeWireMicInput`): a non-blocking `pw-record` subprocess feeds the

@@ -109,3 +109,11 @@ The CLI entry point is `scripts/desktop-assistant` (symlinked to `/usr/local/bin
 Failure to keep `cmd_help()` in sync with the registered subparsers is a bug, not a
 style issue. Fix it in the same commit as the CLI change.
 
+## 9. Commit After Every Prompt
+
+- After completing the work requested by each user prompt, commit all resulting
+  changes to the current branch in use.
+- Do not leave completed work uncommitted between prompts. Include the required
+  version bump, changelog entry, and Co-authored-by trailer for each commit.
+- Keep unrelated pre-existing user changes intact and do not commit them unless
+  they are part of the requested work or are explicitly requested.

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.48.7] - 2026-08-28
+### Changed
+- Added an agent imperative requiring completed work from each user prompt to
+  be committed to the current branch, while preserving unrelated user changes.
+- Persisted the Waveshare ESP32-C6 LCD implementation backlog in `docs/TODO.md`.
+
 ## [1.48.6] - 2026-08-27
 ### Added
 - **Object detection "hold" cooldown** — detected objects now stay visible in
