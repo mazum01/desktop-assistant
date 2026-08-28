@@ -116,9 +116,9 @@ VERA through the established BLE GATT path.
   GPIO mapping and display orientation from the board schematic during
   implementation. See the
   [manufacturer documentation](https://docs.waveshare.com/ESP32-C6-LCD-1.47).
-- [ ] **Create the managed Arduino firmware project** — add the ESP32 Arduino
+- [x] **Create the managed Arduino firmware project** — add the ESP32 Arduino
   source, sketch metadata, board configuration, library dependencies, and
-  project documentation.
+  project documentation under `firmware/vera_display`.
 - [ ] **Establish the Arduino CLI toolchain** — use the latest suitable Arduino
   CLI workflow to install/configure the ESP32 board core and required libraries,
   with reproducible project-local build commands.

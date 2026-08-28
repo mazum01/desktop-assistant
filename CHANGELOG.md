@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.48.8] - 2026-08-28
+### Added
+- Created the managed Arduino firmware scaffold in `firmware/vera_display` for
+  the Waveshare ESP32-C6-LCD-1.47, including the ESP32-C6/ST7789 board contract,
+  verified initial pin mapping, brightness safety limit, and dependency record.
+- Documented the firmware boundary in the repository layout and architecture
+  diagram. BLE protocol, mouth animation, and startup rendering remain separate
+  follow-up tasks.
+
 ## [1.48.7] - 2026-08-28
 ### Changed
 - Added an agent imperative requiring completed work from each user prompt to

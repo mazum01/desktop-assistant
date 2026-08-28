@@ -27,6 +27,7 @@ head, and temperature-controlled cooling.
 ## Repo Layout
 ```
 config/          runtime configuration
+firmware/        Arduino firmware for attached ESP32 display hardware
 docs/            printable design docs (incl. architecture/ proposals)
 hardware/        per-device drivers and notes (audio, perception, servo, thermal, vision)
 .github/skills/  OpenClaw AI gateway skills (Telegram/Claude integration)
