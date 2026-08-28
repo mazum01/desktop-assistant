@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.48.11] - 2026-08-28
+### Fixed
+- Corrected the Arduino CLI registry package name to `GFX Library for Arduino`,
+  which provides the Arduino GFX headers used by the display firmware.
+
 ## [1.48.9] - 2026-08-28
 ### Added
 - Added a reproducible Arduino CLI workflow for the Waveshare ESP32-C6 LCD:
