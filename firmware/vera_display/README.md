@@ -24,5 +24,23 @@ schematic during hardware validation before production flashing.
 BLE GATT protocol, mouth animation, and startup/status rendering are separate
 implementation tasks so each can be tested independently.
 
-`libraries.txt` records the external Arduino library dependency. The Arduino
-CLI setup and version pinning are handled by the next toolchain task.
+`libraries.txt` records the external Arduino library dependency.
+
+## Arduino CLI workflow
+
+The project includes [`arduino-cli.yaml`](../arduino-cli.yaml) with Espressif's
+official board package index. The board core must be ESP32 3.0.0 or newer, as
+required by Waveshare. Install the latest Arduino CLI using its
+[official installation instructions](https://arduino.github.io/arduino-cli/latest/installation/),
+then run:
+
+```bash
+./firmware/build_esp32_display.sh
+VERA_ESP32_PORT=/dev/ttyACM0 ./firmware/upload_esp32_display.sh
+```
+
+The scripts keep Arduino CLI data and downloads under `firmware/` (ignored by
+Git), install the ESP32 core and Arduino GFX dependency, and use
+`esp32:esp32:esp32c6` by default. Override the board or CLI executable with
+`VERA_ESP32_FQBN` or `ARDUINO_CLI` when needed. Upload requires a connected
+board and permission to access its serial port.

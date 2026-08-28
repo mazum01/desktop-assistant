@@ -119,9 +119,9 @@ VERA through the established BLE GATT path.
 - [x] **Create the managed Arduino firmware project** — add the ESP32 Arduino
   source, sketch metadata, board configuration, library dependencies, and
   project documentation under `firmware/vera_display`.
-- [ ] **Establish the Arduino CLI toolchain** — use the latest suitable Arduino
+- [x] **Establish the Arduino CLI toolchain** — use the latest suitable Arduino
   CLI workflow to install/configure the ESP32 board core and required libraries,
-  with reproducible project-local build commands.
+  with reproducible project-local build commands in `firmware/`.
 - [ ] **Implement the ESP32 BLE GATT display protocol** — add advertising,
   service/characteristic handling, framing, validation, reconnect behavior, and
   parsing compatible with `DisplayService`.

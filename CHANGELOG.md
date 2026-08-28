@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.48.9] - 2026-08-28
+### Added
+- Added a reproducible Arduino CLI workflow for the Waveshare ESP32-C6 LCD:
+  official Espressif board index, ESP32 3.x core requirement, Arduino GFX
+  dependency installation, project-local CLI data directories, build script,
+  and explicit serial-port upload script.
+
 ## [1.48.8] - 2026-08-28
 ### Added
 - Created the managed Arduino firmware scaffold in `firmware/vera_display` for
