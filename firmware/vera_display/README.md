@@ -20,11 +20,27 @@ schematic during hardware validation before production flashing.
 
 ## Project layout
 
-`vera_display.ino` is intentionally a small, compilable board scaffold. The
-BLE GATT protocol, mouth animation, and startup/status rendering are separate
-implementation tasks so each can be tested independently.
+`vera_display.ino` implements the board scaffold plus the BLE GATT link
+described in [`ble_protocol.h`](./ble_protocol.h): a NimBLE server
+advertising as `VERA-Display`, a write characteristic for host->device JSON
+commands, and a notify characteristic for device->host JSON acks/status.
+Mouth animation and startup/status rendering are separate follow-on tasks;
+`"mouth"` and `"status"` commands are already parsed and acknowledged so the
+protocol can be validated end-to-end ahead of the renderers landing.
 
-`libraries.txt` records the external Arduino library dependency.
+`libraries.txt` records the external Arduino library dependencies.
+
+## BLE protocol
+
+- Service UUID, characteristic UUIDs, and device name are defined once in
+  `ble_protocol.h` and must match `DisplayServiceConfig` on the host
+  (`ble_address`, `ble_characteristic_uuid`, `ble_status_characteristic_uuid`).
+- Messages are newline-terminated JSON objects. BLE writes/notifications may
+  fragment a message across multiple MTU-sized chunks; both sides
+  concatenate bytes until a `\n` is seen before parsing.
+- On connect, the firmware notifies a `{"event":"hello",...}` message; on
+  disconnect it automatically resumes advertising so the host can reconnect
+  without a firmware reboot.
 
 ## Arduino CLI workflow
 

@@ -35,6 +35,7 @@ class DisplayServiceConfig:
     ble_enabled: bool = False
     ble_address: str = ""
     ble_characteristic_uuid: str = ""
+    ble_status_characteristic_uuid: str = ""
     connect_timeout_s: float = 4.0
     max_message_chars: int = 96
     expected_services: list[str] = field(default_factory=list)
@@ -165,7 +166,7 @@ class DisplayService(Service):
         }
         self.bus.publish("display.status", payload)
 
-        self._send_ble(payload)
+        self.send_command("status", state=payload["state"], message=text)
 
     @staticmethod
     def _payload_text(payload) -> str:
@@ -178,10 +179,21 @@ class DisplayService(Service):
                 return str(payload.get("message"))
         return str(payload)
 
+    def send_command(self, cmd: str, **fields) -> None:
+        """Queue a framed JSON command for the ESP32 display firmware.
+
+        Matches the wire protocol in firmware/vera_display/ble_protocol.h:
+        one newline-terminated JSON object per message, e.g.
+        {"cmd": "mouth", "state": "listening"}.
+        """
+        message = {"cmd": cmd, **fields}
+        self._send_ble(message)
+
     def _send_ble(self, payload: dict) -> None:
         if not self._cfg.ble_enabled or self._ble_stop.is_set():
             return
-        encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        line = json.dumps(payload, separators=(",", ":"), ensure_ascii=False) + "\n"
+        encoded = line.encode("utf-8")
         try:
             self._ble_queue.put_nowait(encoded)
         except queue.Full:

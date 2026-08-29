@@ -1,3 +1,5 @@
 # Required by the completed firmware tasks.
 # Keep versions pinned when the Arduino CLI workflow is finalized.
 GFX Library for Arduino
+NimBLE-Arduino
+ArduinoJson

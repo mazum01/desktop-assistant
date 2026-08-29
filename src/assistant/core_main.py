@@ -374,6 +374,9 @@ def main() -> int:
                 ble_enabled=bool(_display_cfg_raw.get("ble_enabled", False)),
                 ble_address=str(_display_cfg_raw.get("ble_address", "")),
                 ble_characteristic_uuid=str(_display_cfg_raw.get("ble_characteristic_uuid", "")),
+                ble_status_characteristic_uuid=str(
+                    _display_cfg_raw.get("ble_status_characteristic_uuid", "")
+                ),
                 connect_timeout_s=float(_display_cfg_raw.get("connect_timeout_s", 4.0)),
                 max_message_chars=int(_display_cfg_raw.get("max_message_chars", 96)),
                 expected_services=list(_display_cfg_raw.get("expected_services", [])),

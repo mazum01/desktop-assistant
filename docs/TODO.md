@@ -122,7 +122,7 @@ VERA through the established BLE GATT path.
 - [x] **Establish the Arduino CLI toolchain** — use the latest suitable Arduino
   CLI workflow to install/configure the ESP32 board core and required libraries,
   with reproducible project-local build commands in `firmware/`.
-- [ ] **Implement the ESP32 BLE GATT display protocol** — add advertising,
+- [x] **Implement the ESP32 BLE GATT display protocol** — add advertising,
   service/characteristic handling, framing, validation, reconnect behavior, and
   parsing compatible with `DisplayService`.
 - [ ] **Implement the expressive mouth renderer** — render the primary animated

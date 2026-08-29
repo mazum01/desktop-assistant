@@ -20,4 +20,6 @@ export ARDUINO_DOWNLOADS_DIR="$FIRMWARE_DIR/.arduino-downloads"
 "$CLI" --config-file "$CLI_CONFIG" core update-index
 "$CLI" --config-file "$CLI_CONFIG" core install esp32:esp32
 "$CLI" --config-file "$CLI_CONFIG" lib install "GFX Library for Arduino"
+"$CLI" --config-file "$CLI_CONFIG" lib install "NimBLE-Arduino"
+"$CLI" --config-file "$CLI_CONFIG" lib install "ArduinoJson"
 "$CLI" --config-file "$CLI_CONFIG" compile --fqbn "$FQBN" "$SKETCH_DIR"

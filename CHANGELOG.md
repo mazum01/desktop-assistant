@@ -4,6 +4,34 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.49.0] - 2026-08-29
+### Added
+- Implemented the ESP32 BLE GATT display protocol (`lcd-ble-protocol`):
+  - `firmware/vera_display/ble_protocol.h` defines the shared wire format:
+    a NimBLE service (`VERA-Display`) with a write characteristic for
+    host->device JSON commands and a notify characteristic for
+    device->host JSON acks/status, newline-terminated and safe to
+    fragment across BLE MTU-sized chunks.
+  - `firmware/vera_display/vera_display.ino` now advertises the service,
+    parses `"cmd":"mouth"`/`"status"`/`"ping"` commands, acknowledges
+    unknown commands/malformed JSON instead of dropping them silently,
+    sends a `"hello"` event on connect, and automatically resumes
+    advertising on disconnect so the host can reconnect without a
+    firmware reboot.
+  - `src/services/display_service.py` gained a public `send_command()`
+    method and a `ble_status_characteristic_uuid` config field; status
+    events are now sent as framed `{"cmd":"status",...}` messages instead
+    of raw unframed JSON, matching the new firmware protocol.
+  - Added matching UUIDs to `config/assistant.yaml` and wired the new
+    config field through `src/assistant/core_main.py`.
+  - Added `NimBLE-Arduino` and `ArduinoJson` to the Arduino CLI build
+    (`firmware/build_esp32_display.sh`, `libraries.txt`). Verified the
+    firmware compiles cleanly (708772 bytes / 54% flash, 23584 bytes / 7%
+    RAM) via `arduino-cli` for `esp32:esp32:esp32c6`.
+  - Added `tests/test_display_service.py` coverage for `send_command()`
+    framing and the BLE-disabled no-op path. Full suite (1037 tests via
+    Python `pytest`, plus the Arduino compile check) passes.
+
 ## [1.48.13] - 2026-08-29
 ### Added
 - Added `.gitignore` entries for Arduino CLI generated caches
