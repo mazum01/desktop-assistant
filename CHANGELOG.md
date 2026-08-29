@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.48.12] - 2026-08-29
+### Fixed
+- Fixed `firmware/upload_esp32_display.sh` not setting `ARDUINO_DATA_DIR`/
+  `ARDUINO_DOWNLOADS_DIR` before invoking `arduino-cli upload`. The build step
+  (run as a subprocess) installed the ESP32 core into the project-local
+  `firmware/.arduino-data`, but those env vars didn't propagate back to the
+  parent shell, so the subsequent upload command looked in the default
+  Arduino data directory and failed with `platform esp32:esp32 is not
+  installed` even though it was. Verified end-to-end: successfully compiled
+  and flashed `vera_display.ino` to a Waveshare ESP32-C6-LCD-1.47 connected
+  via USB at `/dev/ttyACM0`.
+
 ## [1.48.11] - 2026-08-28
 ### Fixed
 - Corrected the Arduino CLI registry package name to `GFX Library for Arduino`,

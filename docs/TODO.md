@@ -130,10 +130,11 @@ VERA through the established BLE GATT path.
 - [ ] **Implement startup/status rendering** — render concise boot progress,
   service status, ready, degraded, version, and error information as text or
   icons appropriate to the display resolution.
-- [ ] **Automate firmware build and upload** — provide Arduino CLI commands or
+- [x] **Automate firmware build and upload** — provide Arduino CLI commands or
   scripts for compiling and, when the device is connected and permissions
   allow it, uploading firmware to the ESP32. Surface missing port, board,
-  dependency, and permission errors explicitly.
+  dependency, and permission errors explicitly. Verified end-to-end against a
+  Waveshare ESP32-C6-LCD-1.47 connected via USB.
 - [ ] **Integrate host events with the ESP32 firmware** — extend the host
   `DisplayService` and configuration to send mouth/emotion commands and
   startup/status messages while preserving disabled/unconfigured behavior.

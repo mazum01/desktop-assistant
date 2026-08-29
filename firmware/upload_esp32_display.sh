@@ -20,5 +20,8 @@ if [[ -z "$PORT" ]]; then
     exit 2
 fi
 
+export ARDUINO_DATA_DIR="$FIRMWARE_DIR/.arduino-data"
+export ARDUINO_DOWNLOADS_DIR="$FIRMWARE_DIR/.arduino-downloads"
+
 "$ROOT/firmware/build_esp32_display.sh"
 "$CLI" --config-file "$CLI_CONFIG" upload --fqbn "$FQBN" --port "$PORT" "$SKETCH_DIR"
