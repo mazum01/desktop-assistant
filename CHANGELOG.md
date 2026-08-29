@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.48.13] - 2026-08-29
+### Added
+- Added `.gitignore` entries for Arduino CLI generated caches
+  (`firmware/.arduino-data/`, `firmware/.arduino-downloads/`, top-level
+  `.arduino-data/`/`.arduino-downloads/`/`libraries/`) so the board core,
+  toolchain, and library caches created by `firmware/build_esp32_display.sh`
+  and `firmware/upload_esp32_display.sh` can no longer be accidentally
+  staged/committed. These directories had to be manually cleaned up before
+  every commit touching firmware so far.
+### Verified
+- Re-ran `firmware/upload_esp32_display.sh` against the physical Waveshare
+  ESP32-C6-LCD-1.47 at `/dev/ttyACM0` a second time to confirm the
+  env-var propagation fix from 1.48.12 is reliable/repeatable. Build and
+  flash succeeded cleanly with no large downloads needed (core/toolchain/
+  library already cached locally).
+
 ## [1.48.12] - 2026-08-29
 ### Fixed
 - Fixed `firmware/upload_esp32_display.sh` not setting `ARDUINO_DATA_DIR`/

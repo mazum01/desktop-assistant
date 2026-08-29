@@ -32,3 +32,10 @@ config/runtime_state.yaml
 config/iot_devices.json
 config/secrets.yaml
 config/face_gallery/
+
+# Arduino CLI generated caches (firmware build/upload tooling)
+firmware/.arduino-data/
+firmware/.arduino-downloads/
+.arduino-data/
+.arduino-downloads/
+libraries/
