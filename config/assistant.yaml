@@ -140,12 +140,12 @@ privacy:
   announce: false
   announce_text: I'll give you some privacy.
   clear_frames: 4
-  cooldown_s: 5.0
-  enabled: true
+  cooldown_s: 5
+  enabled: false
   idle_rate_hz: 0.25
   look_away_angle_deg: 45
   person_hold_s: 8.0
-  rate_hz: 1.0
+  rate_hz: 1
   require_person: true
   resume_text: Are you decent?
   threshold: 0.7
@@ -184,7 +184,7 @@ telegram:
   - It is now
   - The time is
 tts:
-  output_gain: 1.1
+  output_gain: 1.38
   piper_length_scale: 1.15
   piper_noise_scale: 0.3
   piper_noise_w: 0.5

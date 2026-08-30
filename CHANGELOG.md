@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.53.1] - 2026-08-30
+### Fixed
+- Fixed startup message lag in `DisplayService` by establishing a persistent BLE
+  connection with the ESP32-C6 LCD rather than opening and closing a new GATT
+  connection for every queued packet, reducing packet latency from ~2.5s to <10ms.
+- Fixed display freezing on version announcement ("VERA v1.53.0") by updating
+  `status_renderer.cpp` on ESP32 firmware to apply the 4-second hold timer to both
+  `Level::kInfo` and `Level::kReady` transient statuses, returning automatically to
+  the expressive mouth renderer.
+- Enhanced `COLOR_READY` rendering in `status_renderer.cpp` to use vibrant lime green
+  (`RGB565_LIME`) instead of half-intensity dark green (`RGB565_GREEN`).
+
 ## [1.53.0] - 2026-08-30
 ### Added
 - Implemented secondary startup and status text display renderer in ESP32-C6

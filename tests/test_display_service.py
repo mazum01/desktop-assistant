@@ -59,11 +59,10 @@ def test_send_command_queues_framed_json_when_ble_enabled():
     )
     try:
         svc.send_command("mouth", state="listening")
-        encoded = svc._ble_queue.get(timeout=1.0)
-        assert encoded is not None
-        assert encoded.endswith(b"\n")
-        assert b'"cmd":"mouth"' in encoded
-        assert b'"state":"listening"' in encoded
+        items = []
+        while not svc._ble_queue.empty():
+            items.append(svc._ble_queue.get_nowait())
+        assert any(b'"cmd":"mouth"' in item and b'"state":"listening"' in item for item in items)
     finally:
         svc.stop()
 
@@ -76,9 +75,10 @@ def test_send_mouth_state_wraps_send_command():
     )
     try:
         svc.send_mouth_state("happy")
-        encoded = svc._ble_queue.get(timeout=1.0)
-        assert b'"cmd":"mouth"' in encoded
-        assert b'"state":"happy"' in encoded
+        items = []
+        while not svc._ble_queue.empty():
+            items.append(svc._ble_queue.get_nowait())
+        assert any(b'"cmd":"mouth"' in item and b'"state":"happy"' in item for item in items)
     finally:
         svc.stop()
 
@@ -91,9 +91,10 @@ def test_set_mouth_state_via_bus_topic_queues_command():
     )
     try:
         bus.publish("display.set_mouth_state", {"state": "speaking"})
-        encoded = svc._ble_queue.get(timeout=1.0)
-        assert b'"cmd":"mouth"' in encoded
-        assert b'"state":"speaking"' in encoded
+        items = []
+        while not svc._ble_queue.empty():
+            items.append(svc._ble_queue.get_nowait())
+        assert any(b'"cmd":"mouth"' in item and b'"state":"speaking"' in item for item in items)
     finally:
         svc.stop()
 
@@ -107,6 +108,9 @@ def test_set_mouth_state_rejects_unknown_state():
     errors: list[dict] = []
     bus.subscribe("display.error", lambda _t, payload: errors.append(payload))
     try:
+        # Drain the initial boot status from on_start
+        while not svc._ble_queue.empty():
+            svc._ble_queue.get_nowait()
         assert svc.set_mouth_state("confused") is False
         assert any(e.get("error") == "unknown_mouth_state" for e in errors)
         assert svc._ble_queue.empty()

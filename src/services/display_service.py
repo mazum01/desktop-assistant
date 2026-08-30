@@ -264,49 +264,60 @@ class DisplayService(Service):
                 pass
 
     def _ble_loop(self) -> None:
+        try:
+            asyncio.run(self._ble_worker_async())
+        except Exception:
+            log.exception("DisplayService BLE worker loop failed")
+
+    async def _interruptible_sleep(self, seconds: float) -> None:
+        steps = max(1, int(seconds / 0.1))
+        for _ in range(steps):
+            if self._ble_stop.is_set():
+                break
+            await asyncio.sleep(0.1)
+
+    async def _ble_worker_async(self) -> None:
         while not self._ble_stop.is_set():
-            try:
-                encoded = self._ble_queue.get(timeout=0.25)
-            except queue.Empty:
+            if not self._cfg.ble_address or not self._cfg.ble_characteristic_uuid:
+                self._warn_ble_once("BLE display enabled without address/characteristic; skipping send")
+                await self._interruptible_sleep(1.0)
                 continue
-            if encoded is None:
+            if not _BLEAK_AVAILABLE or BleakClient is None:
+                self._warn_ble_once("bleak not installed; BLE display transport disabled")
+                await self._interruptible_sleep(1.0)
                 continue
-            self._write_ble_sync(encoded)
 
-    def _write_ble_sync(self, encoded: bytes) -> None:
-        if not self._cfg.ble_address or not self._cfg.ble_characteristic_uuid:
-            self._warn_ble_once("BLE display enabled without address/characteristic; skipping send")
-            return
-        if not _BLEAK_AVAILABLE:
-            self._warn_ble_once("bleak not installed; BLE display transport disabled")
-            return
-
-        with self._ble_lock:
             try:
-                asyncio.run(self._ble_write(encoded))
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                try:
-                    loop.run_until_complete(self._ble_write(encoded))
-                except Exception:
-                    log.exception("DisplayService BLE write failed")
-                    self.bus.publish("display.error", {"error": "ble_write_failed", "ts": time.time()})
-                finally:
-                    loop.close()
-            except Exception:
-                log.exception("DisplayService BLE write failed")
-                self.bus.publish("display.error", {"error": "ble_write_failed", "ts": time.time()})
+                log.info("DisplayService: connecting to BLE display (%s)...", self._cfg.ble_address)
+                async with BleakClient(
+                    self._cfg.ble_address,
+                    timeout=float(self._cfg.connect_timeout_s),
+                ) as client:
+                    log.info("DisplayService: connected to BLE display (%s)", self._cfg.ble_address)
+                    while not self._ble_stop.is_set() and client.is_connected:
+                        try:
+                            encoded = self._ble_queue.get(timeout=0.05)
+                        except queue.Empty:
+                            await asyncio.sleep(0.01)
+                            continue
 
-    async def _ble_write(self, encoded: bytes) -> None:
-        async with BleakClient(  # type: ignore[misc]
-            self._cfg.ble_address,
-            timeout=float(self._cfg.connect_timeout_s),
-        ) as client:
-            await client.write_gatt_char(
-                self._cfg.ble_characteristic_uuid,
-                encoded,
-                response=False,
-            )
+                        if encoded is None or self._ble_stop.is_set():
+                            return
+
+                        try:
+                            await client.write_gatt_char(
+                                self._cfg.ble_characteristic_uuid,
+                                encoded,
+                                response=False,
+                            )
+                        except Exception:
+                            log.exception("DisplayService BLE write failed")
+                            self.bus.publish("display.error", {"error": "ble_write_failed", "ts": time.time()})
+                            break
+            except Exception as exc:
+                if not self._ble_stop.is_set():
+                    log.debug("DisplayService BLE connection error: %s (retrying in 2s)", exc)
+                    await self._interruptible_sleep(2.0)
 
     def _warn_ble_once(self, message: str) -> None:
         if self._ble_warned:

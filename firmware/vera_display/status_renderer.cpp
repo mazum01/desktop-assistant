@@ -171,7 +171,10 @@ void update() {
     draw(g_message.c_str(), color_for(g_level));
     g_dirty = false;
   }
-  if (g_level == Level::kReady && !g_ready_cleared &&
+  // Transient statuses (ready and info/version) expire after a hold period
+  // so the display returns to the expressive mouth shape; warning/error
+  // statuses persist until resolved or overridden.
+  if ((g_level == Level::kReady || g_level == Level::kInfo) && !g_ready_cleared &&
       millis() - g_shown_at_ms >= READY_HOLD_MS) {
     g_ready_cleared = true;
     g_ready_just_expired = true;
