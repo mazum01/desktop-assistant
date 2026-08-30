@@ -62,9 +62,9 @@ depth:
   mono_rate_hz: 3.0
   num_disparities: 128
 display:
-  ble_address: ''
+  ble_address: 'AC:EB:E6:23:EC:76'
   ble_characteristic_uuid: d741e8c9-f156-4c47-808f-f28ccd2760f2
-  ble_enabled: false
+  ble_enabled: true
   ble_status_characteristic_uuid: 6a1e2c0a-6b8e-4a8a-9a7a-6c9c3e6b6a5e
   connect_timeout_s: 4.0
   enabled: true

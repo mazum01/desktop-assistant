@@ -4,6 +4,28 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.52.0] - 2026-08-30
+### Added
+- Added `bleak` to `requirements.txt` (the BLE display transport was silently
+  disabled at runtime because `bleak` was never actually installed —
+  `DisplayService` logged "bleak not installed; BLE display transport
+  disabled" on every attempt). Installed for the system interpreter used by
+  `desktop-assistant-core.service`.
+- Configured `config/assistant.yaml`'s `display.ble_address` /
+  `display.ble_enabled` for the physical Waveshare ESP32-C6-LCD-1.47
+  (re-flashed after an earlier interrupted upload left it running no
+  application code / not advertising BLE).
+- Verified the full BLE pipeline end-to-end: scanned/discovered
+  `VERA-Display`, connected, wrote a `{"cmd":"mouth","state":"happy"}`
+  command over the `d741e8c9-...` characteristic, and confirmed the ESP32
+  rendered and animated the corresponding mouth shape on the physical LCD.
+- Added `lcd-mouth-shape-design` follow-up todo: the current
+  `mouth_renderer.cpp` renders every emotional state as the same abstract
+  rounded-rect "pill" (only size/roundness/animation speed/color differ),
+  so "happy" currently just looks like a slowly pulsing blue bar rather than
+  a smile. Tracked in `docs/TODO.md` and the SQL `todos` table for a future
+  pass at emotion-accurate mouth geometry.
+
 ## [1.51.0] - 2026-08-30
 ### Added
 - Added a CLI command to set the LCD display's mouth/emotion state:

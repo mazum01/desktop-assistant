@@ -138,9 +138,24 @@ VERA through the established BLE GATT path.
 - [ ] **Integrate host events with the ESP32 firmware** — extend the host
   `DisplayService` and configuration to send mouth/emotion commands and
   startup/status messages while preserving disabled/unconfigured behavior.
+  Mouth/emotion path done (v1.51.0/1.52.0): `vera display mouth <state>` CLI,
+  `display.set_mouth_state` bus topic, `DisplayService.set_mouth_state()`
+  validation. Startup/status message wiring still outstanding.
 - [ ] **Validate the Waveshare device end to end** — test BLE discovery and
   reconnect, mouth animation, startup/status rendering, orientation, refresh
   performance, and failure recovery; document wiring, flashing, and operation.
+  BLE discovery/connect/write and live mouth-state rendering verified
+  end-to-end against the physical device (v1.52.0); startup/status rendering,
+  reconnect-after-drop, and long-run reliability still to validate.
+- [ ] **Design emotion-accurate mouth shapes** — `mouth_renderer.cpp` currently
+  renders every state as the same abstract rounded-rect "pill" (only
+  width/height/corner-radius/animation speed/color vary per state); verified
+  live that "happy" just looks like a slowly pulsing blue bar, not a smile.
+  Redesign per-state geometry/drawing so neutral/listening/speaking/happy/sad/
+  surprised/error render as recognizable mouth shapes (upward curve for happy,
+  downward curve for sad, open oval for surprised, etc.) using Arduino_GFX
+  primitives beyond simple rounded rectangles, then re-flash and visually
+  validate each state on the physical Waveshare ESP32-C6-LCD-1.47.
 
 ## Audio
 - [x] reSpeaker mic capture — RESOLVED in v1.41.0 via `src/audio/pw_input.py`
