@@ -16,6 +16,12 @@
 
 #include <Arduino.h>
 
+// Forward-declared in the global namespace (matches Arduino_GFX_Library.h)
+// so this header stays cheap to include; the concrete Arduino_GFX_Library.h
+// is only pulled in by mouth_renderer.cpp and status_renderer.cpp (which
+// shares the same display instance via vera_mouth::gfx()).
+class Arduino_GFX;
+
 namespace vera_mouth {
 
 // Supported emotional states. UNKNOWN/ERROR both fall back to a safe,
@@ -50,4 +56,17 @@ void set_state(State state);
 // actual redraws so it is safe to call every loop iteration.
 void update();
 
+// Forces the next update() call to fully clear and redraw the mouth,
+// even if the animated bounding box hasn't changed. Needed after another
+// renderer (e.g. status_renderer) has drawn over the whole screen, so the
+// mouth's own erase-previous-rect optimization doesn't leave stale pixels.
+void force_redraw();
+
+// Returns the shared display instance (owned by this module) so other
+// renderers (status_renderer) can draw on the same physical screen
+// without opening a second SPI/display instance. Valid only after
+// begin() has been called; returns nullptr otherwise.
+Arduino_GFX *gfx();
+
 }  // namespace vera_mouth
+

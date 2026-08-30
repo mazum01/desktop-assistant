@@ -3,10 +3,11 @@
  *
  * Owns the board/display pin contract plus the BLE GATT link to the
  * Raspberry Pi host (src/services/display_service.py). See
- * ble_protocol.h for the wire format. Mouth/startup rendering is
- * implemented in later firmware tasks; command parsing here already
- * recognizes "mouth" and "status" commands so those renderers can be
- * dropped in without touching the BLE plumbing.
+ * ble_protocol.h for the wire format. "mouth" commands drive
+ * mouth_renderer (primary emotional expression); "status" commands drive
+ * status_renderer (secondary boot/service/ready/degraded/error text).
+ * The two renderers share one physical screen and are mutually exclusive
+ * — see DisplayMode below.
  */
 
 #include <Arduino.h>
@@ -15,6 +16,7 @@
 
 #include "ble_protocol.h"
 #include "mouth_renderer.h"
+#include "status_renderer.h"
 
 namespace vera_display {
 
@@ -33,11 +35,25 @@ void initialize_hardware() {
   // own default drive level, not by a duty cycle here.
   digitalWrite(LCD_BL, HIGH);
   vera_mouth::begin();
+  vera_status::begin();
 }
 
 }  // namespace vera_display
 
 namespace {
+
+// The mouth (primary) and status (secondary) renderers share one
+// physical screen and are mutually exclusive: whichever command arrived
+// most recently owns the display. A status message holds the screen
+// until superseded by another status, or (for the transient "ready"
+// state only) until its hold period elapses, at which point control
+// reverts to the mouth renderer.
+enum class DisplayMode {
+  kMouth,
+  kStatus,
+};
+
+DisplayMode g_display_mode = DisplayMode::kMouth;
 
 NimBLEServer *g_server = nullptr;
 NimBLECharacteristic *g_command_char = nullptr;
@@ -74,6 +90,25 @@ void send_hello() {
   send_status(doc);
 }
 
+// Maps a DisplayService status "state" string (see
+// src/services/display_service.py: boot, service_started,
+// service_stopped, version, ready, degraded, status/generic, and
+// upstream error topics normalized to "degraded") to a rendering level.
+// Anything unrecognized renders as plain info text rather than being
+// rejected, since the host may introduce new state names.
+vera_status::Level level_for_state(const char *state_name) {
+  if (strcmp(state_name, "ready") == 0) {
+    return vera_status::Level::kReady;
+  }
+  if (strcmp(state_name, "degraded") == 0) {
+    return vera_status::Level::kDegraded;
+  }
+  if (strcmp(state_name, "error") == 0) {
+    return vera_status::Level::kError;
+  }
+  return vera_status::Level::kInfo;
+}
+
 // Dispatches one fully-buffered, newline-terminated JSON command. Unknown
 // commands/states are ack'd with ok=false rather than dropped silently so
 // the host can detect a protocol mismatch.
@@ -105,28 +140,33 @@ void handle_command(const String &line) {
       return;
     }
     vera_mouth::set_state(state);
+    if (g_display_mode != DisplayMode::kMouth) {
+      g_display_mode = DisplayMode::kMouth;
+      vera_mouth::force_redraw();
+    }
     send_ack("mouth", true);
     return;
   }
   if (strcmp(cmd, "status") == 0) {
-    // TODO(lcd-startup-renderer): render startup/status text or iconography.
     const char *state_name = doc["state"] | "";
+    const char *message = doc["message"] | "";
     if (strlen(state_name) == 0) {
       send_ack("status", false, "missing_state");
       return;
     }
-    // Until the dedicated startup/status renderer lands, at least reflect
-    // a degraded/error condition on the mouth as a safe visual fallback
-    // so a real problem is never silently invisible on the device.
-    if (strcmp(state_name, "degraded") == 0 || strcmp(state_name, "error") == 0) {
-      vera_mouth::set_state(vera_mouth::State::kError);
-    }
+    vera_status::Level level = level_for_state(state_name);
+    // Fall back to the state name itself when no message text was sent
+    // (e.g. a bare {"cmd":"status","state":"ready"}), so the screen never
+    // shows a blank status.
+    vera_status::show(level, strlen(message) > 0 ? message : state_name);
+    g_display_mode = DisplayMode::kStatus;
     send_ack("status", true);
     return;
   }
 
   send_ack(cmd, false, "unknown_cmd");
 }
+
 
 // Splits the growing receive buffer on '\n' terminators, dispatching each
 // complete line. Handles BLE writes that fragment a single JSON message
@@ -210,6 +250,14 @@ void setup() {
 }
 
 void loop() {
-  vera_mouth::update();
+  if (g_display_mode == DisplayMode::kStatus) {
+    vera_status::update();
+    if (vera_status::consume_ready_expired()) {
+      g_display_mode = DisplayMode::kMouth;
+      vera_mouth::force_redraw();
+    }
+  } else {
+    vera_mouth::update();
+  }
   delay(20);
 }

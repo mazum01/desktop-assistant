@@ -127,26 +127,29 @@ VERA through the established BLE GATT path.
   parsing compatible with `DisplayService`.
 - [x] **Implement the expressive mouth renderer** — render the primary animated
   emotional mouth states with smooth timing and a safe neutral/error fallback.
-- [ ] **Implement startup/status rendering** — render concise boot progress,
+- [x] **Implement startup/status rendering** — render concise boot progress,
   service status, ready, degraded, version, and error information as text or
-  icons appropriate to the display resolution.
+  icons appropriate to the display resolution. Implemented in `status_renderer.h/.cpp`
+  with color-coded states (white info, bright lime ready, yellow degraded, red error),
+  word wrapping, and auto-reverting ready-hold timeout.
 - [x] **Automate firmware build and upload** — provide Arduino CLI commands or
   scripts for compiling and, when the device is connected and permissions
   allow it, uploading firmware to the ESP32. Surface missing port, board,
   dependency, and permission errors explicitly. Verified end-to-end against a
   Waveshare ESP32-C6-LCD-1.47 connected via USB.
-- [ ] **Integrate host events with the ESP32 firmware** — extend the host
+- [x] **Integrate host events with the ESP32 firmware** — extend the host
   `DisplayService` and configuration to send mouth/emotion commands and
   startup/status messages while preserving disabled/unconfigured behavior.
   Mouth/emotion path done (v1.51.0/1.52.0): `vera display mouth <state>` CLI,
   `display.set_mouth_state` bus topic, `DisplayService.set_mouth_state()`
-  validation. Startup/status message wiring still outstanding.
+  validation. Startup/status message path verified live end-to-end via
+  daemon restart and bus publish events.
 - [ ] **Validate the Waveshare device end to end** — test BLE discovery and
   reconnect, mouth animation, startup/status rendering, orientation, refresh
   performance, and failure recovery; document wiring, flashing, and operation.
-  BLE discovery/connect/write and live mouth-state rendering verified
-  end-to-end against the physical device (v1.52.0); startup/status rendering,
-  reconnect-after-drop, and long-run reliability still to validate.
+  BLE discovery/connect/write, live mouth-state rendering, and startup/status text
+  rendering verified end-to-end against the physical device; reconnect-after-drop
+  and long-run reliability still to validate.
 - [ ] **Design emotion-accurate mouth shapes** — `mouth_renderer.cpp` currently
   renders every state as the same abstract rounded-rect "pill" (only
   width/height/corner-radius/animation speed/color vary per state); verified

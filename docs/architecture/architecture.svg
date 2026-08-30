@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-926 6632,-926 6632,4 -4,4"/>
 <text text-anchor="start" x="3026.5" y="-906.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="3185" y="-895" font-family="Helvetica,sans-Serif" font-size="10.00">v1.48.8 — managed ESP32&#45;C6 LCD firmware scaffold</text>
+<text text-anchor="start" x="3193.5" y="-895" font-family="Helvetica,sans-Serif" font-size="10.00">v1.53.0 — ESP32&#45;C6 LCD startup &amp; status display</text>
 <g id="clust1" class="cluster">
 <title>cluster_hw</title>
 <path fill="#f5e9d8" stroke="black" d="M20,-769C20,-769 1304,-769 1304,-769 1310,-769 1316,-775 1316,-781 1316,-781 1316,-868 1316,-868 1316,-874 1310,-880 1304,-880 1304,-880 20,-880 20,-880 14,-880 8,-874 8,-868 8,-868 8,-781 8,-781 8,-775 14,-769 20,-769"/>

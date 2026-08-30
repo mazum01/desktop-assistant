@@ -62,7 +62,7 @@ depth:
   mono_rate_hz: 3.0
   num_disparities: 128
 display:
-  ble_address: 'AC:EB:E6:23:EC:76'
+  ble_address: AC:EB:E6:23:EC:76
   ble_characteristic_uuid: d741e8c9-f156-4c47-808f-f28ccd2760f2
   ble_enabled: true
   ble_status_characteristic_uuid: 6a1e2c0a-6b8e-4a8a-9a7a-6c9c3e6b6a5e
@@ -140,12 +140,12 @@ privacy:
   announce: false
   announce_text: I'll give you some privacy.
   clear_frames: 4
-  cooldown_s: 5
-  enabled: false
+  cooldown_s: 5.0
+  enabled: true
   idle_rate_hz: 0.25
   look_away_angle_deg: 45
   person_hold_s: 8.0
-  rate_hz: 1
+  rate_hz: 1.0
   require_person: true
   resume_text: Are you decent?
   threshold: 0.7

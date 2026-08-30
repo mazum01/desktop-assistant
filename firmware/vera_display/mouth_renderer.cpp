@@ -201,4 +201,12 @@ void update() {
   draw_frame(/*force=*/false);
 }
 
+void force_redraw() {
+  g_have_prev = false;
+}
+
+Arduino_GFX *gfx() {
+  return g_gfx;
+}
+
 }  // namespace vera_mouth

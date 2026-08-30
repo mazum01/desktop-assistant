@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.53.0] - 2026-08-30
+### Added
+- Implemented secondary startup and status text display renderer in ESP32-C6
+  firmware (`status_renderer.h` / `status_renderer.cpp`), sharing the ST7789 display
+  instance with the mouth renderer via `vera_mouth::gfx()`.
+- Added word-wrapped multi-line text rendering with color-coded status levels:
+  white for general info/boot, vibrant lime green for ready, yellow for degraded,
+  and red for errors.
+- Wired dual-mode switching in `vera_display.ino`: displays status text on incoming
+  `"status"` BLE commands and automatically returns to the mouth renderer after a
+  4-second hold period for `"ready"` status events, or when an explicit mouth command arrives.
+- Verified live end-to-end integration with `desktop-assistant-core` daemon: boot,
+  service progress, degraded alerts, and ready transitions render properly on the
+  physical 172x320 LCD via BLE.
+
 ## [1.52.0] - 2026-08-30
 ### Added
 - Added `bleak` to `requirements.txt` (the BLE display transport was silently
