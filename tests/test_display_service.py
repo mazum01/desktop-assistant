@@ -68,10 +68,16 @@ def test_send_command_queues_framed_json_when_ble_enabled():
         svc.stop()
 
 
-def test_send_command_noop_when_ble_disabled():
-    bus, svc, _emitted = _start_service(ble_enabled=False)
+def test_send_mouth_state_wraps_send_command():
+    bus, svc, _emitted = _start_service(
+        ble_enabled=True,
+        ble_address="AA:BB:CC:DD:EE:FF",
+        ble_characteristic_uuid="d741e8c9-f156-4c47-808f-f28ccd2760f2",
+    )
     try:
-        svc.send_command("mouth", state="listening")
-        assert svc._ble_queue.empty()
+        svc.send_mouth_state("happy")
+        encoded = svc._ble_queue.get(timeout=1.0)
+        assert b'"cmd":"mouth"' in encoded
+        assert b'"state":"happy"' in encoded
     finally:
         svc.stop()

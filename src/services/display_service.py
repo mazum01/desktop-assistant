@@ -189,6 +189,16 @@ class DisplayService(Service):
         message = {"cmd": cmd, **fields}
         self._send_ble(message)
 
+    def send_mouth_state(self, state: str) -> None:
+        """Convenience wrapper for {"cmd": "mouth", "state": state}.
+
+        Valid states match firmware/vera_display/mouth_renderer.h:
+        neutral, listening, speaking, happy, sad, surprised, error.
+        Full host-side wiring (e.g. driving this from conversation/audio
+        state) is tracked separately as the host-integration task.
+        """
+        self.send_command("mouth", state=str(state).strip())
+
     def _send_ble(self, payload: dict) -> None:
         if not self._cfg.ble_enabled or self._ble_stop.is_set():
             return

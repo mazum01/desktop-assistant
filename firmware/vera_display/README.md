@@ -20,13 +20,20 @@ schematic during hardware validation before production flashing.
 
 ## Project layout
 
-`vera_display.ino` implements the board scaffold plus the BLE GATT link
-described in [`ble_protocol.h`](./ble_protocol.h): a NimBLE server
-advertising as `VERA-Display`, a write characteristic for host->device JSON
-commands, and a notify characteristic for device->host JSON acks/status.
-Mouth animation and startup/status rendering are separate follow-on tasks;
-`"mouth"` and `"status"` commands are already parsed and acknowledged so the
-protocol can be validated end-to-end ahead of the renderers landing.
+`vera_display.ino` implements the board scaffold, BLE GATT link (see
+[BLE protocol](#ble-protocol) below), and dispatches `"mouth"` commands to the
+mouth renderer. Startup/status rendering (text/iconography) is a separate
+follow-on task; `"status"` commands with a `degraded`/`error` state are
+reflected onto the mouth as a safe fallback until that renderer lands.
+
+`mouth_renderer.h`/`mouth_renderer.cpp` render the primary "mouth imitation"
+display using `Arduino_GFX` (`Arduino_ESP32SPI` + `Arduino_ST7789`). Each
+emotional state (`neutral`, `listening`, `speaking`, `happy`, `sad`,
+`surprised`, `error`) maps to a small geometry/animation parameter set
+(width/height fraction, corner radius, oscillation amplitude and period)
+rather than a bitmap, so expressions are cheap to draw at ~15 fps and easy to
+retune. An unrecognized state defaults to the `error` rendering (distinct red
+color) rather than silently freezing on stale content.
 
 `libraries.txt` records the external Arduino library dependencies.
 

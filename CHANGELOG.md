@@ -4,6 +4,30 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.50.0] - 2026-08-29
+### Added
+- Implemented the expressive mouth display renderer (`lcd-mouth-renderer`):
+  - `firmware/vera_display/mouth_renderer.h`/`.cpp` render a primary
+    "mouth imitation" using `Arduino_GFX` (`Arduino_ESP32SPI` +
+    `Arduino_ST7789`), with per-state geometry/animation parameters for
+    `neutral`, `listening`, `speaking`, `happy`, `sad`, `surprised`, and
+    `error`. Unrecognized/error states render a distinct fallback shape
+    instead of freezing or crashing.
+  - `vera_display.ino` now parses `"cmd":"mouth"` BLE commands into mouth
+    states and acks `unknown_state` for unrecognized values; `"status"`
+    commands with a `degraded`/`error` state also drive the mouth to the
+    error rendering as a safe fallback until the dedicated startup/status
+    renderer lands.
+  - `src/services/display_service.py` gained a `send_mouth_state()`
+    convenience wrapper around `send_command()`.
+  - Backlight is now driven HIGH (previously LOW/off in the scaffold) so
+    the display is actually visible once rendering begins.
+  - Added `tests/test_display_service.py` coverage for
+    `send_mouth_state()`. Full suite (1037 tests) passes.
+  - Verified end-to-end: firmware compiles (781944 bytes / 59% flash,
+    25032 bytes / 7% RAM) and was flashed and verified on the physical
+    Waveshare ESP32-C6-LCD-1.47 at `/dev/ttyACM0`.
+
 ## [1.49.0] - 2026-08-29
 ### Added
 - Implemented the ESP32 BLE GATT display protocol (`lcd-ble-protocol`):

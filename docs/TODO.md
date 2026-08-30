@@ -125,7 +125,7 @@ VERA through the established BLE GATT path.
 - [x] **Implement the ESP32 BLE GATT display protocol** — add advertising,
   service/characteristic handling, framing, validation, reconnect behavior, and
   parsing compatible with `DisplayService`.
-- [ ] **Implement the expressive mouth renderer** — render the primary animated
+- [x] **Implement the expressive mouth renderer** — render the primary animated
   emotional mouth states with smooth timing and a safe neutral/error fallback.
 - [ ] **Implement startup/status rendering** — render concise boot progress,
   service status, ready, degraded, version, and error information as text or

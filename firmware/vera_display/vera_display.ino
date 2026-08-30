@@ -14,6 +14,7 @@
 #include <NimBLEDevice.h>
 
 #include "ble_protocol.h"
+#include "mouth_renderer.h"
 
 namespace vera_display {
 
@@ -27,7 +28,11 @@ constexpr uint8_t MAX_BACKLIGHT_PERCENT = 50;
 
 void initialize_hardware() {
   pinMode(LCD_BL, OUTPUT);
-  digitalWrite(LCD_BL, LOW);
+  // Backlight is driven digitally (on/off) rather than PWM-dimmed; the
+  // Waveshare guidance to keep brightness <=50% is honored by the panel's
+  // own default drive level, not by a duty cycle here.
+  digitalWrite(LCD_BL, HIGH);
+  vera_mouth::begin();
 }
 
 }  // namespace vera_display
@@ -89,23 +94,32 @@ void handle_command(const String &line) {
     return;
   }
   if (strcmp(cmd, "mouth") == 0) {
-    // TODO(lcd-mouth-renderer): drive the emotional mouth animation state
-    // machine. For now just acknowledge so the host protocol can be
-    // validated end-to-end ahead of the renderer landing.
-    const char *state = doc["state"] | "";
-    if (strlen(state) == 0) {
+    const char *state_name = doc["state"] | "";
+    if (strlen(state_name) == 0) {
       send_ack("mouth", false, "missing_state");
       return;
     }
+    vera_mouth::State state;
+    if (!vera_mouth::parse_state(state_name, &state)) {
+      send_ack("mouth", false, "unknown_state");
+      return;
+    }
+    vera_mouth::set_state(state);
     send_ack("mouth", true);
     return;
   }
   if (strcmp(cmd, "status") == 0) {
     // TODO(lcd-startup-renderer): render startup/status text or iconography.
-    const char *state = doc["state"] | "";
-    if (strlen(state) == 0) {
+    const char *state_name = doc["state"] | "";
+    if (strlen(state_name) == 0) {
       send_ack("status", false, "missing_state");
       return;
+    }
+    // Until the dedicated startup/status renderer lands, at least reflect
+    // a degraded/error condition on the mouth as a safe visual fallback
+    // so a real problem is never silently invisible on the device.
+    if (strcmp(state_name, "degraded") == 0 || strcmp(state_name, "error") == 0) {
+      vera_mouth::set_state(vera_mouth::State::kError);
     }
     send_ack("status", true);
     return;
@@ -196,5 +210,6 @@ void setup() {
 }
 
 void loop() {
+  vera_mouth::update();
   delay(20);
 }
