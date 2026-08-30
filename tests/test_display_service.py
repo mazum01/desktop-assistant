@@ -81,3 +81,45 @@ def test_send_mouth_state_wraps_send_command():
         assert b'"state":"happy"' in encoded
     finally:
         svc.stop()
+
+
+def test_set_mouth_state_via_bus_topic_queues_command():
+    bus, svc, _emitted = _start_service(
+        ble_enabled=True,
+        ble_address="AA:BB:CC:DD:EE:FF",
+        ble_characteristic_uuid="d741e8c9-f156-4c47-808f-f28ccd2760f2",
+    )
+    try:
+        bus.publish("display.set_mouth_state", {"state": "speaking"})
+        encoded = svc._ble_queue.get(timeout=1.0)
+        assert b'"cmd":"mouth"' in encoded
+        assert b'"state":"speaking"' in encoded
+    finally:
+        svc.stop()
+
+
+def test_set_mouth_state_rejects_unknown_state():
+    bus, svc, _emitted = _start_service(
+        ble_enabled=True,
+        ble_address="AA:BB:CC:DD:EE:FF",
+        ble_characteristic_uuid="d741e8c9-f156-4c47-808f-f28ccd2760f2",
+    )
+    errors: list[dict] = []
+    bus.subscribe("display.error", lambda _t, payload: errors.append(payload))
+    try:
+        assert svc.set_mouth_state("confused") is False
+        assert any(e.get("error") == "unknown_mouth_state" for e in errors)
+        assert svc._ble_queue.empty()
+    finally:
+        svc.stop()
+
+
+def test_set_mouth_state_rejects_when_ble_disabled():
+    bus, svc, _emitted = _start_service(ble_enabled=False)
+    errors: list[dict] = []
+    bus.subscribe("display.error", lambda _t, payload: errors.append(payload))
+    try:
+        assert svc.set_mouth_state("happy") is False
+        assert any(e.get("error") == "ble_disabled" for e in errors)
+    finally:
+        svc.stop()

@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.51.0] - 2026-08-30
+### Added
+- Added a CLI command to set the LCD display's mouth/emotion state:
+  `vera display mouth <state>` (choices: `neutral`, `listening`,
+  `speaking`, `happy`, `sad`, `surprised`, `error`). Publishes
+  `display.set_mouth_state` on the bus.
+- `src/services/display_service.py` now subscribes to
+  `display.set_mouth_state` and exposes `set_mouth_state()`, which
+  validates the requested state and publishes a `display.error` event
+  (`unknown_mouth_state` / `ble_disabled`) when the command can't be
+  honored, instead of silently failing.
+- Added `cmd_help()` entry and unit tests
+  (`tests/test_display_service.py`) covering the new bus handler and
+  validation paths. Full suite (1040 tests) passes.
+
 ## [1.50.0] - 2026-08-29
 ### Added
 - Implemented the expressive mouth display renderer (`lcd-mouth-renderer`):

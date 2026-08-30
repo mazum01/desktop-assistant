@@ -29,6 +29,9 @@ except Exception:  # pragma: no cover - environment-dependent import
     _BLEAK_AVAILABLE = False
 
 
+MOUTH_STATES = ("neutral", "listening", "speaking", "happy", "sad", "surprised", "error")
+
+
 @dataclass
 class DisplayServiceConfig:
     enabled: bool = True
@@ -73,6 +76,7 @@ class DisplayService(Service):
             self.bus.subscribe("vision.error", self._on_vision_error),
             self.bus.subscribe("audio.error", self._on_audio_error),
             self.bus.subscribe("perception.error", self._on_perception_error),
+            self.bus.subscribe("display.set_mouth_state", self._on_set_mouth_state),
         ]
         self._emit_status("boot", "Display status service online")
         if self._cfg.ble_enabled:
@@ -149,6 +153,14 @@ class DisplayService(Service):
     def _on_perception_error(self, _topic, payload) -> None:
         self._emit_status("degraded", f"Perception issue: {self._payload_text(payload)}")
 
+    def _on_set_mouth_state(self, _topic, payload) -> None:
+        state = ""
+        if isinstance(payload, dict):
+            state = str(payload.get("state", "")).strip()
+        elif payload:
+            state = str(payload).strip()
+        self.set_mouth_state(state)
+
     # ── Emission / BLE transport ────────────────────────────────────────
 
     def _emit_status(self, state: str, message: str) -> None:
@@ -194,10 +206,45 @@ class DisplayService(Service):
 
         Valid states match firmware/vera_display/mouth_renderer.h:
         neutral, listening, speaking, happy, sad, surprised, error.
-        Full host-side wiring (e.g. driving this from conversation/audio
-        state) is tracked separately as the host-integration task.
+        This performs no validation/error-reporting; prefer
+        set_mouth_state() for host-driven commands (e.g. CLI/bus/voice).
         """
         self.send_command("mouth", state=str(state).strip())
+
+    def set_mouth_state(self, state: str) -> bool:
+        """Validate and send a mouth emotion state, reporting clear errors.
+
+        Returns True if the command was queued for BLE delivery, False if
+        rejected (unknown state) or undeliverable (BLE disabled/unconfigured).
+        A display.error event is published in the False case so CLI/voice
+        callers and other services can surface why it failed.
+        """
+        normalized = str(state).strip().lower()
+        if normalized not in MOUTH_STATES:
+            message = (
+                f"Unknown mouth state '{state}'; expected one of: "
+                f"{', '.join(MOUTH_STATES)}"
+            )
+            log.warning("%s", message)
+            self.bus.publish(
+                "display.error", {"error": "unknown_mouth_state", "message": message, "ts": time.time()}
+            )
+            return False
+
+        if not self._cfg.ble_enabled:
+            message = "BLE display disabled; cannot set mouth state"
+            log.warning("%s", message)
+            self.bus.publish(
+                "display.error", {"error": "ble_disabled", "message": message, "ts": time.time()}
+            )
+            return False
+
+        if not self._cfg.ble_address or not self._cfg.ble_characteristic_uuid:
+            self._warn_ble_once("BLE display enabled without address/characteristic; skipping send")
+            return False
+
+        self.send_mouth_state(normalized)
+        return True
 
     def _send_ble(self, payload: dict) -> None:
         if not self._cfg.ble_enabled or self._ble_stop.is_set():

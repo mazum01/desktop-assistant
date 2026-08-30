@@ -184,6 +184,27 @@ def cmd_pan(args) -> int:
     return 0 if r.get("ok") else 1
 
 
+DISPLAY_MOUTH_STATES = ("neutral", "listening", "speaking", "happy", "sad", "surprised", "error")
+
+
+def cmd_display_mouth(args) -> int:
+    state = args.state.strip().lower()
+    if state not in DISPLAY_MOUTH_STATES:
+        print(
+            f"Unknown mouth state '{args.state}'; expected one of: "
+            f"{', '.join(DISPLAY_MOUTH_STATES)}",
+            file=sys.stderr,
+        )
+        return 1
+    r = _request({
+        "cmd": "publish",
+        "topic": "display.set_mouth_state",
+        "payload": {"state": state},
+    })
+    print(json.dumps(r, indent=2))
+    return 0 if r.get("ok") else 1
+
+
 def cmd_servo_enable(_args) -> int:
     r = _request({
         "cmd": "publish",
@@ -1819,6 +1840,9 @@ def cmd_help(args) -> int:
                             "                  person-seek enable    Pan toward detected persons (no face locked).\n"
                             "                  person-seek disable   Ignore body detections; face tracking only.\n"
                             "                  person-seek status    Show current state.",
+        "display":          "Control the ESP32-C6 LCD display (BLE). Sub-commands:\n"
+                            "                  display mouth <state>   Set mouth/emotion state: neutral, listening,\n"
+                            "                                          speaking, happy, sad, surprised, error.",
         "system":           "System management. Sub-commands:\n"
                             "                  system ping             Round-trip latency check.\n"
                             "                  system restart          Restart vera-core service.\n"
@@ -3290,6 +3314,14 @@ def main() -> int:
     ps_sub.add_parser("enable",  help="Pan toward detected persons (full-body) when no face locked").set_defaults(func=cmd_person_seek_enable)
     ps_sub.add_parser("disable", help="Ignore person detections; rely on face tracking only").set_defaults(func=cmd_person_seek_disable)
     ps_sub.add_parser("status",  help="Show current person seek state").set_defaults(func=cmd_person_seek_status)
+
+    # ── Display (ESP32-C6 LCD) subcommands ───────────────────────────
+    disp_sp = sub.add_parser("display", help="Control the ESP32-C6 LCD display (BLE)")
+    disp_sub = disp_sp.add_subparsers(dest="disp_cmd", metavar="<subcommand>")
+    disp_sub.required = True
+    dmp = disp_sub.add_parser("mouth", help="Set mouth/emotion state on the LCD display")
+    dmp.add_argument("state", choices=DISPLAY_MOUTH_STATES, help="Mouth state to display")
+    dmp.set_defaults(func=cmd_display_mouth)
 
     sp = sub.add_parser("watch", help="Stream all bus events")
     sp.add_argument("--topic", default="", help="Topic prefix filter (default: all)")
