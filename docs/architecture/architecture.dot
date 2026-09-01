@@ -13,7 +13,7 @@ digraph VERA {
     ranksep=0.6;
     fontname="Helvetica";
     labelloc="t";
-    label=<<b>VERA — Vision-Enabled Reasoning Agent — System Architecture</b><br/><font point-size="10">v1.53.1 — ESP32-C6 LCD startup &amp; status display</font>>;
+    label=<<b>VERA — Vision-Enabled Reasoning Agent — System Architecture</b><br/><font point-size="10">v1.53.2 — ESP32-C6 LCD startup &amp; status display</font>>;
     fontsize=16;
 
     node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin=0.15];

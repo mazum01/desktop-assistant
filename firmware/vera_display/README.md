@@ -18,6 +18,46 @@ over BLE GATT.
 The pin mapping and display orientation must be verified against the board
 schematic during hardware validation before production flashing.
 
+## Hardware validation results (physical Waveshare ESP32-C6-LCD-1.47)
+
+Validated end-to-end against the physical board (firmware v1.53.1):
+
+- **BLE discovery/pairing**: device advertises as `VERA-Display`
+  (`AC:EB:E6:23:EC:76`); `DisplayService` on the host connects directly by
+  address (no interactive pairing required) using `bleak`.
+- **Persistent connection**: `DisplayService` holds one long-lived
+  `BleakClient` session instead of reconnecting per message — connect takes
+  ~1-1.5s once, then writes complete in <10ms each.
+- **Reconnect after drop**: forcing a BLE disconnect (e.g. `Device1.Disconnect`
+  over D-Bus, host reboot, or ESP32 reset) is detected within one queue-write
+  attempt and `DisplayService` automatically reconnects, typically within ~1s.
+- **Stale-connection recovery**: if the host process is killed uncleanly,
+  BlueZ can be left believing it still holds a connection to the device even
+  though nothing is attached, which makes `bleak`'s scan-based connect fail
+  permanently with `BleakDeviceNotFoundError`. `DisplayService` detects this
+  ("was not found" error) and force-clears the stale state via
+  `org.bluez.Device1.Disconnect` over D-Bus before retrying, self-healing
+  without manual `bluetoothctl` intervention.
+- **Mouth animations**: all seven states (`neutral`, `listening`, `speaking`,
+  `happy`, `sad`, `surprised`, `error`) verified visually via
+  `da display mouth <state>`.
+- **Startup/status text**: `status_renderer.cpp` renders boot progress,
+  service-ready, degraded, and error text over the mouth display. Transient
+  states (`info`/`ready`, including version announcements) auto-revert to the
+  mouth renderer after a 4s hold (`READY_HOLD_MS`); `degraded`/`error` persist
+  until resolved.
+- **Orientation**: confirmed correct (text and mouth shapes render right-side
+  up, matching the board's physical mounting) at the pin mapping above; no
+  rotation offset needed in `Arduino_GFX` setup.
+- **Refresh performance**: mouth animation renders smoothly at its ~15 fps
+  target with no visible tearing; status text redraws are event-driven (no
+  polling) so there is no added draw overhead when idle.
+- **Failure recovery operational note**: if the display ever gets stuck
+  disconnected, first try `bluetoothctl -- disconnect <addr>`; if BlueZ still
+  reports `Connected: yes` afterward, the daemon's own auto-recovery will
+  clear it within a couple of retry cycles (~2-4s) — no manual `remove`/re-pair
+  is required in normal operation.
+
 ## Project layout
 
 `vera_display.ino` implements the board scaffold, BLE GATT link (see

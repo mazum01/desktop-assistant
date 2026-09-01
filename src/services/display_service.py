@@ -316,8 +316,36 @@ class DisplayService(Service):
                             break
             except Exception as exc:
                 if not self._ble_stop.is_set():
-                    log.debug("DisplayService BLE connection error: %s (retrying in 2s)", exc)
+                    log.warning("DisplayService BLE connection error: %s (retrying in 2s)", exc)
+                    if "was not found" in str(exc):
+                        # BlueZ can be left thinking it still holds a connection
+                        # from a previous process (e.g. after an unclean daemon
+                        # restart), which makes bleak's scan-based connect fail
+                        # with BleakDeviceNotFoundError forever since the device
+                        # never shows up as a fresh discoverable peripheral.
+                        # Force-clear that stale state via BlueZ's D-Bus API so
+                        # the next connect attempt can succeed.
+                        await self._force_clear_stale_connection()
                     await self._interruptible_sleep(2.0)
+
+    async def _force_clear_stale_connection(self) -> None:
+        address = self._cfg.ble_address
+        if not address:
+            return
+        object_path = f"/org/bluez/hci0/dev_{address.replace(':', '_')}"
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "gdbus", "call", "--system",
+                "--dest", "org.bluez",
+                "--object-path", object_path,
+                "--method", "org.bluez.Device1.Disconnect",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await asyncio.wait_for(proc.wait(), timeout=5.0)
+            log.info("DisplayService: cleared stale BlueZ connection state for %s", address)
+        except Exception:
+            log.debug("DisplayService: could not clear stale BlueZ state for %s", address)
 
     def _warn_ble_once(self, message: str) -> None:
         if self._ble_warned:

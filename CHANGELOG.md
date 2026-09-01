@@ -4,6 +4,24 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.53.2] - 2026-09-01
+### Fixed
+- Fixed `DisplayService` getting permanently stuck retrying BLE connection
+  with `BleakDeviceNotFoundError` after an unclean daemon restart. BlueZ can
+  be left believing it still holds a stale connection to the ESP32 display
+  even though the previous process is gone, which prevents `bleak`'s
+  scan-based connect from ever finding the device again. `DisplayService`
+  now detects this failure mode and force-clears the stale BlueZ connection
+  state via `org.bluez.Device1.Disconnect` over D-Bus before retrying,
+  self-healing within a couple of retry cycles with no manual
+  `bluetoothctl` intervention.
+### Added
+- Completed hardware validation of the physical Waveshare ESP32-C6-LCD-1.47:
+  verified BLE discovery/reconnect, all seven mouth animation states,
+  startup/status text rendering and auto-revert timing, display orientation,
+  and refresh performance. Documented results and operational recovery notes
+  in `firmware/vera_display/README.md`.
+
 ## [1.53.1] - 2026-08-30
 ### Fixed
 - Fixed startup message lag in `DisplayService` by establishing a persistent BLE
