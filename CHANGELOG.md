@@ -4,6 +4,31 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.54.0] - 2026-09-01
+### Added
+- Added BLE OTA (over-the-air) firmware update capability to the ESP32-C6
+  display firmware, using the
+  [`NimBLEOta`](https://github.com/h2zero/NimBLEOta) library (MIT licensed,
+  compatible with the already-vendored NimBLE-Arduino v2.5.1). It isn't in
+  the Arduino Library Manager index, so `build_esp32_display.sh` now fetches
+  it directly from its upstream git repo on every build. Future firmware
+  builds can be pushed over BLE without a USB cable via the new
+  `firmware/upload_esp32_display_ble.sh` script and
+  `firmware/nimbleota_uploader.py` (chunked 4KB sectors, CRC16 verification,
+  automatic retry-on-error).
+- `vera_display.ino` now starts a second GATT service (UUID `0x8018`)
+  alongside the existing mouth/status command service, raises the BLE MTU
+  to 517 bytes for efficient firmware transfer, and surfaces OTA
+  progress/completion/error states on-screen via the existing
+  `status_renderer` (auto-reboots into the new firmware on completion).
+- `firmware/build_esp32_display.sh` now auto-mirrors the vendored
+  `NimBLEOta` library into the resolved Arduino sketchbook libraries
+  directory on every build, since it isn't published in the Arduino
+  Library Manager index.
+- Documented the one-time USB bootstrap requirement (the very first
+  OTA-capable build must still be flashed over USB) and the full BLE OTA
+  workflow in `firmware/vera_display/README.md`.
+
 ## [1.53.2] - 2026-09-01
 ### Fixed
 - Fixed `DisplayService` getting permanently stuck retrying BLE connection

@@ -13,6 +13,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <NimBLEDevice.h>
+#include <NimBLEOta.h>
 
 #include "ble_protocol.h"
 #include "mouth_renderer.h"
@@ -60,6 +61,8 @@ NimBLECharacteristic *g_command_char = nullptr;
 NimBLECharacteristic *g_status_char = nullptr;
 bool g_connected = false;
 String g_rx_buffer;
+
+NimBLEOta g_ota;
 
 void send_status(JsonDocument &doc) {
   if (g_status_char == nullptr || !g_connected) {
@@ -217,8 +220,67 @@ class ServerCallbacks : public NimBLEServerCallbacks {
   }
 };
 
+// Reports BLE OTA firmware upload progress on-screen via the status
+// renderer, reusing the existing "info"/"degraded"/"error" status levels
+// so an OTA in progress is visible even if the host's DisplayService isn't
+// actively driving normal mouth/status commands. The mouth renderer is
+// intentionally left running its own update() as usual; switching to
+// kStatus here just makes the OTA progress visible.
+class OtaStatusCallbacks : public NimBLEOtaCallbacks {
+  void onStart(NimBLEOta *ota, uint32_t firmwareSize, NimBLEOta::Reason reason) override {
+    if (reason == NimBLEOta::Reconnected) {
+      ota->stopAbortTimer();
+    }
+    char msg[48];
+    snprintf(msg, sizeof(msg), "OTA update starting\n(%lu bytes)", static_cast<unsigned long>(firmwareSize));
+    vera_status::show(vera_status::Level::kInfo, msg);
+    g_display_mode = DisplayMode::kStatus;
+  }
+
+  void onProgress(NimBLEOta *ota, uint32_t current, uint32_t total) override {
+    char msg[32];
+    int percent = total > 0 ? static_cast<int>((static_cast<uint64_t>(current) * 100) / total) : 0;
+    snprintf(msg, sizeof(msg), "OTA update\n%d%%", percent);
+    vera_status::show(vera_status::Level::kInfo, msg);
+  }
+
+  void onStop(NimBLEOta *ota, NimBLEOta::Reason reason) override {
+    if (reason == NimBLEOta::Disconnected) {
+      // Give the host a window to reconnect and resume before giving up;
+      // the OTA state (partial write handle) is preserved until then.
+      ota->startAbortTimer(30);
+      vera_status::show(vera_status::Level::kDegraded, "OTA paused\n(disconnected)");
+      return;
+    }
+    if (reason == NimBLEOta::StopCmd) {
+      ota->abortUpdate();
+    }
+    vera_status::show(vera_status::Level::kDegraded, "OTA update stopped");
+  }
+
+  void onComplete(NimBLEOta *ota) override {
+    vera_status::show(vera_status::Level::kReady, "OTA complete\nRebooting...");
+    delay(1500);
+    ESP.restart();
+  }
+
+  void onError(NimBLEOta *ota, esp_err_t err, NimBLEOta::Reason reason) override {
+    char msg[32];
+    snprintf(msg, sizeof(msg), "OTA error %d", static_cast<int>(err));
+    vera_status::show(vera_status::Level::kError, msg);
+    if (reason == NimBLEOta::FlashError) {
+      ota->abortUpdate();
+    }
+  }
+} g_ota_callbacks;
+
 void start_ble() {
   NimBLEDevice::init(vera_ble::DEVICE_NAME);
+  // OTA firmware transfer needs a larger MTU than the default 23 bytes to
+  // move 4KB sectors efficiently; this is safe to raise unconditionally
+  // since our own command/status JSON messages already tolerate
+  // fragmentation across MTU-sized chunks.
+  NimBLEDevice::setMTU(517);
   g_server = NimBLEDevice::createServer();
   g_server->setCallbacks(new ServerCallbacks());
 
@@ -235,8 +297,15 @@ void start_ble() {
 
   service->start();
 
+  // Separate GATT service (UUID 0x8018) for BLE firmware updates, so a
+  // subsequent firmware build can be pushed over the same BLE radio
+  // without a USB cable. See firmware/vera_display/README.md for the
+  // host-side upload workflow.
+  g_ota.start(&g_ota_callbacks);
+
   NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
   advertising->addServiceUUID(vera_ble::SERVICE_UUID);
+  advertising->addServiceUUID(g_ota.getServiceUUID());
   advertising->setName(vera_ble::DEVICE_NAME);
   advertising->start();
 }

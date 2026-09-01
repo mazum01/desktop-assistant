@@ -1,5 +1,6 @@
-# Required by the completed firmware tasks.
+// Required by the completed firmware tasks.
 # Keep versions pinned when the Arduino CLI workflow is finalized.
 GFX Library for Arduino
 NimBLE-Arduino
 ArduinoJson
+NimBLEOta (fetched from https://github.com/h2zero/NimBLEOta.git via --git-url — not in Arduino Library Manager index; see build_esp32_display.sh)

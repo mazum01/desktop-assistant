@@ -36,6 +36,7 @@ config/face_gallery/
 # Arduino CLI generated caches (firmware build/upload tooling)
 firmware/.arduino-data/
 firmware/.arduino-downloads/
+firmware/.arduino-build-ble-ota/
 .arduino-data/
 .arduino-downloads/
 libraries/

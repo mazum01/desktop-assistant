@@ -107,3 +107,52 @@ Git), install the ESP32 core and Arduino GFX dependency, and use
 `esp32:esp32:esp32c6` by default. Override the board or CLI executable with
 `VERA_ESP32_FQBN` or `ARDUINO_CLI` when needed. Upload requires a connected
 board and permission to access its serial port.
+
+## BLE OTA firmware updates
+
+Firmware v1.54.0+ includes [`NimBLEOta`](https://github.com/h2zero/NimBLEOta)
+(fetched automatically by `build_esp32_display.sh` from its upstream git
+repo, MIT licensed), which adds a
+second GATT service (UUID `0x8018`) so subsequent firmware builds can be
+pushed over the same BLE radio without a USB cable, using the same `bleak`
+dependency the host already relies on for `DisplayService`.
+
+- `vera_display.ino` starts the OTA service (`g_ota.start(&g_ota_callbacks)`)
+  alongside the existing mouth/status command service, and raises the BLE
+  MTU to 517 bytes so 4KB firmware sectors transfer efficiently.
+- OTA progress, completion, pause-on-disconnect, and error states are
+  surfaced on-screen via the existing `status_renderer` (`"OTA update NN%"`,
+  `"OTA complete\nRebooting..."`, etc.), so progress is visible even without
+  a host driving normal status commands.
+- On completion the ESP32 automatically restarts into the new firmware
+  (`ESP.restart()`); if the BLE link drops mid-update, the partial write is
+  held open for 30s to allow the uploader to reconnect and resume before
+  the update is aborted.
+
+**One-time bootstrap requirement**: this OTA capability does not exist on a
+device running older firmware, so the *first* build containing `NimBLEOta`
+must still be flashed once over USB serial with the existing workflow above.
+Every build after that can be pushed over BLE.
+
+To push a new build over BLE once the device has OTA-capable firmware:
+
+```bash
+VERA_ESP32_BLE_ADDRESS=AC:EB:E6:23:EC:76 ./firmware/upload_esp32_display_ble.sh
+```
+
+This compiles the sketch, locates the resulting `.bin`, and streams it to the
+device using `firmware/nimbleota_uploader.py` (a copy of NimBLEOta's
+bundled uploader script)
+uploader (chunked 4KB sectors with CRC16 verification and automatic
+retry-on-error, per the NimBLEOta wire protocol). `VERA_ESP32_BLE_ADDRESS`
+defaults to the address already configured in `config/assistant.yaml`
+(`display.ble_address`). Because the ESP32-C6's default partition table
+(`Default 4MB with spiffs`) includes dual OTA app slots, no partition scheme
+change is required.
+
+**Note**: `DisplayService` on the host holds its own persistent BLE
+connection to the display for mouth/status commands. NimBLE on the ESP32-C6
+supports up to 4 simultaneous connections by default, so the OTA uploader can
+connect alongside it; if the upload appears to hang, stop
+`desktop-assistant-core.service` first to free up the connection slot and
+rule out any BLE contention.
