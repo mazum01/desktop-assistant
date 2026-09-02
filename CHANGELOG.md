@@ -4,6 +4,35 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.54.2] - 2026-09-01
+### Fixed
+- Fixed the audio volume-reset-to-100%-on-restart / web GUI volume
+  control regression. Root cause: `MusicService._get_default_sink()`
+  discovers the "default" sink by scanning `wpctl status`'s "Sinks:"
+  section — but the DA Equalizer filter-chain node (`effect_input.da_eq`,
+  the node the user's persisted volume is actually applied to, and the
+  node PipeWire's `default.audio.sink` metadata correctly points at) is
+  listed under "Filters:", not "Sinks:". This predates the EQ feature
+  (v1.7.0 vs v1.8.7) and was never updated, so `MusicService` — which
+  backs both the persisted-volume restore on startup and the web GUI
+  volume slider — silently targeted the raw reSpeaker hardware sink
+  instead. That hardware sink is unconditionally pinned to 100% by
+  `pipewire_eq._pin_hardware_sink_volume()` on every core-service
+  restart/EQ-preset-change (by design, so it never attenuates the EQ
+  output), which is why the volume kept "resetting to 100%" even though
+  `src/audio/volume_state.py` (added in v1.48.3) was persisting and
+  restoring the level correctly the whole time — it was just being
+  applied to the wrong node.
+- Added `pipewire_eq.get_active_sink_id()`, reusing the same
+  pw-dump-based node resolution already used internally for the EQ
+  volume-restore path, and wired `MusicService._get_default_sink()` to
+  prefer it. The web GUI volume control and persisted-volume restore
+  now both correctly target the DA Equalizer sink.
+- Verified live on hardware: web GUI `PUT /api/music/volume` now
+  audibly and measurably changes `wpctl get-volume` on the EQ sink
+  (node 46), and a core+media service restart correctly restores the
+  persisted level (42%) instead of resetting to 100%.
+
 ## [1.54.1] - 2026-09-01
 ### Fixed
 - Fixed `firmware/nimbleota_uploader.py` calling `_acquire_mtu()` on the

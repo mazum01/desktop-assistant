@@ -52,7 +52,25 @@ from src.core.service import Service
 log = logging.getLogger(__name__)
 
 def _get_default_sink() -> str:
-    """Get the default audio sink ID, or @DEFAULT_AUDIO_SINK@ if not discoverable."""
+    """Get the default audio sink ID, or @DEFAULT_AUDIO_SINK@ if not discoverable.
+
+    Prefers the DA Equalizer filter-chain sink (the node the user's
+    persisted volume actually applies to) when the PipeWire EQ is active.
+    That node lives under wpctl status's "Filters:" section, not
+    "Sinks:", so the naive "first row under Sinks:" scan below always
+    picked the raw reSpeaker hardware sink instead — which
+    pipewire_eq._pin_hardware_sink_volume() unconditionally re-pins to
+    100% on every restart/preset change. That mismatch was the volume
+    reset regression: this function never touched the sink the user's
+    volume was persisted against.
+    """
+    try:
+        from src.audio import pipewire_eq
+        eq_sink_id = pipewire_eq.get_active_sink_id()
+        if eq_sink_id:
+            return eq_sink_id
+    except Exception as exc:
+        log.debug("Failed to resolve DA EQ sink, falling back: %s", exc)
     try:
         # List all sinks and get the first one (most likely to be default)
         out = subprocess.check_output(
@@ -85,11 +103,24 @@ def _get_default_sink() -> str:
 _CACHED_SINK_ID: Optional[str] = None
 
 def _get_sink_id() -> str:
-    """Get cached sink ID or discover it."""
+    """Get cached sink ID or discover it.
+
+    Only the DA-EQ-resolved sink ID is cached; the raw-hw-sink fallback
+    (used when the EQ filter-chain isn't up yet) is deliberately never
+    cached, so a transient startup race doesn't pin this service to the
+    wrong node for its entire lifetime.
+    """
     global _CACHED_SINK_ID
-    if _CACHED_SINK_ID is None:
-        _CACHED_SINK_ID = _get_default_sink()
-    return _CACHED_SINK_ID
+    if _CACHED_SINK_ID is not None:
+        return _CACHED_SINK_ID
+    sink_id = _get_default_sink()
+    try:
+        from src.audio import pipewire_eq
+        if pipewire_eq.get_active_sink_id() == sink_id:
+            _CACHED_SINK_ID = sink_id
+    except Exception:
+        pass
+    return sink_id
 
 _PIANOBAR_CONFIG_DIR  = Path.home() / ".config" / "pianobar"
 _PIANOBAR_CONFIG      = _PIANOBAR_CONFIG_DIR / "config"

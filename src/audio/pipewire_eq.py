@@ -356,6 +356,27 @@ def is_configured() -> bool:
     return _CONF_FILE.exists()
 
 
+def get_active_sink_id() -> Optional[str]:
+    """Return the PipeWire node ID that actually carries the user's volume.
+
+    The DA Equalizer filter-chain sink (``effect_input.da_eq``) is what the
+    user's persisted volume is applied to — but it appears under
+    ``wpctl status``'s "Filters:" section, not "Sinks:", so naive sink
+    discovery (matching the first row under "Sinks:") silently resolves to
+    the raw reSpeaker hardware sink instead. That hardware sink is
+    unconditionally pinned to 100% by ``_pin_hardware_sink_volume()`` on
+    every restart/preset change, which is why callers that bypassed this
+    function saw the volume "reset to 100%" and the web GUI volume slider
+    have no audible effect (it was changing the wrong node's volume).
+
+    Falls back to None when the EQ isn't configured, so callers can fall
+    back to their own default-sink discovery.
+    """
+    if not is_configured():
+        return None
+    return _get_eq_sink_id()
+
+
 def apply_preset(preset: str) -> bool:
     """Apply a named EQ preset via PipeWire filter-chain.
 
