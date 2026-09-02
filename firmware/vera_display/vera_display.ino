@@ -233,7 +233,7 @@ class OtaStatusCallbacks : public NimBLEOtaCallbacks {
     }
     char msg[48];
     snprintf(msg, sizeof(msg), "OTA update starting\n(%lu bytes)", static_cast<unsigned long>(firmwareSize));
-    vera_status::show(vera_status::Level::kInfo, msg);
+    vera_status::show(vera_status::Level::kProgress, msg);
     g_display_mode = DisplayMode::kStatus;
   }
 
@@ -241,7 +241,7 @@ class OtaStatusCallbacks : public NimBLEOtaCallbacks {
     char msg[32];
     int percent = total > 0 ? static_cast<int>((static_cast<uint64_t>(current) * 100) / total) : 0;
     snprintf(msg, sizeof(msg), "OTA update\n%d%%", percent);
-    vera_status::show(vera_status::Level::kInfo, msg);
+    vera_status::show(vera_status::Level::kProgress, msg);
   }
 
   void onStop(NimBLEOta *ota, NimBLEOta::Reason reason) override {

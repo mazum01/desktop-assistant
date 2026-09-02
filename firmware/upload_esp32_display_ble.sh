@@ -97,5 +97,10 @@ step_done
 # ── Upload ─────────────────────────────────────────────────────────────
 step "Uploading firmware over BLE OTA"
 info "this takes several minutes; progress is reported per 4KB sector"
-vrun "$PYTHON" -u "$UPLOADER" "$BIN_FILE" "$ADDRESS"
-step_done "device will reboot into the new firmware"
+if vrun "$PYTHON" -u "$UPLOADER" "$BIN_FILE" "$ADDRESS"; then
+    step_done "device will reboot into the new firmware"
+else
+    rc=$?
+    step_done "upload FAILED (exit $rc) — firmware was not applied"
+    exit "$rc"
+fi

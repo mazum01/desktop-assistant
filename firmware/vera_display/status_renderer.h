@@ -24,6 +24,7 @@ namespace vera_status {
 enum class Level {
   kInfo,       // boot, service_started, service_stopped, version, generic status
   kReady,      // ready
+  kProgress,   // long-running operation (e.g. OTA); persists until replaced
   kDegraded,   // degraded
   kError,      // error
 };

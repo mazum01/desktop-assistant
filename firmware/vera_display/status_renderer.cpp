@@ -51,6 +51,8 @@ uint16_t color_for(Level level) {
       return COLOR_DEGRADED;
     case Level::kError:
       return COLOR_ERROR;
+    case Level::kProgress:
+      return COLOR_READY;
     case Level::kInfo:
     default:
       return COLOR_INFO;

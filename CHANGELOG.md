@@ -4,6 +4,26 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.54.4] - 2026-09-02
+### Fixed
+- BLE OTA uploader no longer calls `BleakClient._backend._acquire_mtu()`,
+  which invoked BlueZ `AcquireWrite` on the OTA firmware characteristic and
+  took exclusive ownership of it, silently discarding every subsequent
+  firmware write. The negotiated MTU is now read from the BlueZ `MTU` D-Bus
+  property instead — same 517 bytes, no side effects.
+- Added ACK timeouts (`VERA_OTA_ACK_TIMEOUT`, default 15s) to the OTA start
+  and per-sector waits. Previously a stalled transfer blocked forever and was
+  indistinguishable from a slow one.
+- `upload_esp32_display_ble.sh` now propagates the uploader's exit code
+  instead of always reporting success, and the uploader's bare
+  `except: sys.exit(0)` no longer masks failures as exit code 0.
+- OTA progress on the display now uses a new `kProgress` status level that
+  persists, instead of `kInfo` which auto-expired after 4s and reverted to
+  the mouth mid-update.
+
+### Added
+- `VERA_OTA_CHUNK_DELAY` to pace write-without-response chunks.
+
 ## [1.54.3] - 2026-09-02
 ### Added
 - `firmware/lib_log.sh`: shared step/timing/color logging helpers for the

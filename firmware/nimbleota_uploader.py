@@ -5,6 +5,7 @@
 import asyncio
 import argparse
 import os
+import subprocess
 import sys
 import time
 from bleak import BleakScanner, uuids, BleakClient
@@ -31,6 +32,15 @@ FW_ACK_CRC_ERROR = 0x0001
 FW_ACK_SECTOR_ERROR = 0x0002
 FW_ACK_LEN_ERROR = 0x0003
 RSP_CRC_ERROR = 0xFFFF
+# Seconds to wait for a device ACK before declaring the transfer stalled.
+# Without this the uploader blocks forever and looks identical to a slow
+# transfer, which is exactly what a silent OTA failure looks like.
+ACK_TIMEOUT = float(os.environ.get("VERA_OTA_ACK_TIMEOUT", "15"))
+# Seconds to pause between write-without-response chunks. Write-without-
+# response is unacknowledged, so bursting a whole 4KB sector can overrun the
+# BLE controller buffers and silently drop packets.
+WRITE_RESPONSE = os.environ.get("VERA_OTA_WRITE_RESPONSE", "0") == "1"
+CHUNK_DELAY = float(os.environ.get("VERA_OTA_CHUNK_DELAY", "0.01"))
 
 def parse_args():
     parser = argparse.ArgumentParser(description="OTA Update Script")
@@ -78,8 +88,81 @@ async def cmd_notification_handler(sender, data, queue):
 
         await queue.put(rsp)
 
-async def upload_sector(client, sector, sec_idx):
-    max_bytes = min(512, client.mtu_size - 3) - 3 # 3 bytes for the packet header, 3 bytes for the BLE overhead
+def _read_mtu_from_dbus(char_path):
+    """Read the live BlueZ MTU property for a characteristic D-Bus path.
+
+    bleak's cached property dict is populated during service discovery, which
+    happens before MTU negotiation completes, so it usually lacks the "MTU"
+    key. Querying BlueZ directly gets the real negotiated value without the
+    side effects of AcquireWrite.
+    """
+    try:
+        out = subprocess.run(
+            ["busctl", "get-property", "org.bluez", char_path,
+             "org.bluez.GattCharacteristic1", "MTU"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if out.returncode == 0:
+            # Output looks like: q 517
+            parts = out.stdout.split()
+            if len(parts) == 2 and parts[1].isdigit():
+                vlog(f"MTU: from busctl on {char_path} -> {parts[1]}")
+                return int(parts[1])
+        vlog(f"MTU: busctl returned rc={out.returncode} {out.stdout.strip()}"
+             f"{out.stderr.strip()}")
+    except Exception as err:
+        vlog(f"MTU: busctl lookup failed: {err}")
+    return None
+
+
+def _read_char_mtu(client, char_uuid):
+    """Return the negotiated ATT MTU for a characteristic, or None.
+
+    Reads the BlueZ "MTU" D-Bus property directly. Unlike
+    BleakClient._backend._acquire_mtu() this has no side effects and does not
+    take ownership of the characteristic.
+    """
+    try:
+        char = client.services.get_characteristic(char_uuid)
+        if char is None:
+            vlog("MTU: characteristic not found")
+            return None
+        # Preferred: bleak computes this from the BlueZ "MTU" property as
+        # MTU - 3. It is a property, so read it defensively.
+        try:
+            size = char.max_write_without_response_size
+            if size and size > 20:
+                vlog(f"MTU: from max_write_without_response_size ({size})")
+                return int(size) + 3
+        except Exception as err:
+            vlog(f"MTU: max_write_without_response_size failed: {err}")
+        # Fallback: read the MTU straight off D-Bus. bleak caches the BlueZ
+        # property dict at service-discovery time, before the MTU has been
+        # negotiated, so the cached copy often has no "MTU" key at all. The
+        # live object always does once connected.
+        for attr in ("obj", "_properties"):
+            raw = getattr(char, attr, None)
+            props = None
+            path = None
+            if isinstance(raw, tuple) and len(raw) == 2 and isinstance(raw[1], dict):
+                path, props = raw
+            elif isinstance(raw, dict):
+                props = raw
+            if props and "MTU" in props:
+                vlog(f"MTU: from {attr}['MTU']")
+                return int(props["MTU"])
+            if path:
+                mtu = _read_mtu_from_dbus(path)
+                if mtu:
+                    return mtu
+        vlog("MTU: no usable MTU source on characteristic")
+    except Exception as err:
+        vlog(f"MTU property read failed: {err}")
+    return None
+
+
+async def upload_sector(client, sector, sec_idx, mtu=23):
+    max_bytes = min(512, mtu - 3) - 3 # 3 bytes for the packet header, 3 bytes for the BLE overhead
     chunks = [sector[i:i+max_bytes] for i in range(0, len(sector), max_bytes)]
     for sequence, chunk in enumerate(chunks):
         if sequence == len(chunks) - 1:
@@ -88,30 +171,60 @@ async def upload_sector(client, sector, sec_idx):
         data = sec_idx.to_bytes(2, byteorder='little')
         data += sequence.to_bytes(1, byteorder='little')
         data += chunk
-        await client.write_gatt_char(OTA_FIRMWARE_UUID, data, response=False)
+        await client.write_gatt_char(OTA_FIRMWARE_UUID, data, response=WRITE_RESPONSE)
+        # Write-without-response has no flow control, so a burst of large
+        # chunks can overrun the controller's buffers and silently drop
+        # packets. The device only ACKs once it has seen every packet in a
+        # sector, so a single dropped chunk stalls the transfer forever.
+        if CHUNK_DELAY:
+            await asyncio.sleep(CHUNK_DELAY)
 
 async def connect_to_device(address, file_size, sectors):
     try:
         vlog(f"Connecting to {address} (scanning)...")
         async with BleakClient(address) as client:
             print(f"Connected to {address}", flush=True)
-            # bleak defaults to the minimum BLE ATT MTU (23 bytes) unless we
-            # explicitly negotiate the real MTU BlueZ agreed on with the
-            # peer. Without this, each firmware chunk is ~17 bytes instead
-            # of up to ~509 bytes, making the transfer ~20x slower.
-            try:
-                await client._backend._acquire_mtu()
-                print(f"Negotiated MTU: {client.mtu_size} bytes "
-                      f"({min(512, client.mtu_size - 3) - 3} bytes usable per chunk)",
+            # bleak's mtu_size defaults to the 23-byte ATT minimum unless the
+            # MTU has been acquired. Do NOT use client._backend._acquire_mtu()
+            # here: it calls BlueZ's AcquireWrite on the first
+            # write-without-response characteristic, which for this device is
+            # the OTA firmware characteristic itself. AcquireWrite hands that
+            # characteristic to a dedicated file descriptor and takes exclusive
+            # ownership, so subsequent write_gatt_char() calls are silently
+            # discarded and the device never ACKs a sector.
+            #
+            # BlueZ >= 5.62 exposes the negotiated MTU as a plain readable
+            # D-Bus property on each characteristic, so read that instead --
+            # same value, no side effects.
+            mtu = _read_char_mtu(client, OTA_FIRMWARE_UUID)
+            if mtu:
+                negotiated_mtu = mtu
+                print(f"Negotiated MTU: {mtu} bytes "
+                      f"({min(512, mtu - 3) - 3} bytes usable per chunk)",
                       flush=True)
-            except Exception as mtu_err:
-                print(f"Could not acquire MTU ({mtu_err}), using default "
-                      f"{client.mtu_size} — transfer will be slow", flush=True)
+            else:
+                negotiated_mtu = 23
+                print("Could not read MTU property (BlueZ < 5.62?), using "
+                      "default 23 — transfer will be slow", flush=True)
             vlog(f"Services: {[s.uuid for s in client.services]}")
             queue = asyncio.Queue()
             await client.start_notify(OTA_COMMAND_UUID, lambda sender,
                                       data: asyncio.create_task(cmd_notification_handler(sender, data, queue)))
             vlog(f"Subscribed to command characteristic {OTA_COMMAND_UUID}")
+
+            # NOTE: deliberately NOT sending a stop command here.
+            #
+            # NimBLEOta::abortUpdate() calls esp_ota_abort(m_writeHandle)
+            # unconditionally without clearing m_writeHandle afterwards, so
+            # a stop sent when no update is running hands ESP-IDF a stale
+            # handle and can crash/reset the device (observed as the BLE
+            # link dropping mid-handshake with "Service Discovery has not
+            # been performed yet").
+            #
+            # A stop is also unnecessary: commandOnWrite() already handles a
+            # start arriving while an update is in progress -- it resumes if
+            # the file length matches, and aborts cleanly on its own if it
+            # does not.
             print(f"Sending start command (firmware {file_size} bytes, "
                   f"{len(sectors)} sectors)", flush=True)
             command = bytearray(20)
@@ -119,9 +232,26 @@ async def connect_to_device(address, file_size, sectors):
             command[2:6] = file_size.to_bytes(4, byteorder='little')
             crc16 = crc16_ccitt(command[0:18])
             command[18:20] = crc16.to_bytes(2, byteorder='little')
+            start_attempts = 0
             while True:
                 await client.write_gatt_char(OTA_COMMAND_UUID, command)
-                ack = await queue.get()
+                try:
+                    ack = await asyncio.wait_for(queue.get(), timeout=ACK_TIMEOUT)
+                except asyncio.TimeoutError:
+                    start_attempts += 1
+                    if start_attempts < 3:
+                        print(f"No response to start command "
+                              f"(attempt {start_attempts}/3), retrying...",
+                              flush=True)
+                        await asyncio.sleep(2)
+                        continue
+                    print(f"\nTimed out after {ACK_TIMEOUT:.0f}s waiting for the "
+                          f"device to acknowledge the start command "
+                          f"({start_attempts} attempts).\n"
+                          f"The OTA service is present but not responding. "
+                          f"Power-cycle the display and retry.", flush=True)
+                    await client.disconnect()
+                    return False
                 if ack != RSP_CRC_ERROR:
                     break
 
@@ -137,8 +267,30 @@ async def connect_to_device(address, file_size, sectors):
                     sector = sectors[sec_idx]
                     vlog(f"sending sector {sec_idx} ({len(sector)} bytes)")
                     await upload_sector(client, sector,
-                                         sec_idx if len(sector) == 4098 else 0xFFFF) # send last sector as 0xFFFF
-                    ack, rsp_sector = await queue.get()
+                                         sec_idx if len(sector) == 4098 else 0xFFFF, # send last sector as 0xFFFF
+                                         negotiated_mtu)
+                    try:
+                        ack, rsp_sector = await asyncio.wait_for(queue.get(),
+                                                                 timeout=ACK_TIMEOUT)
+                    except asyncio.TimeoutError:
+                        print(f"\nTimed out after {ACK_TIMEOUT:.0f}s waiting for "
+                              f"an ACK on sector {sec_idx}/{sec_count}.", flush=True)
+                        if sec_idx == 0:
+                            print("The device accepted the start command but "
+                                  "never acknowledged the first sector.\n"
+                                  "This usually means it is still holding OTA "
+                                  "state from an interrupted run: NimBLEOta\n"
+                                  "silently drops sectors whose index does not "
+                                  "match the one it expects.\n"
+                                  "Power-cycle the display and retry.",
+                                  flush=True)
+                        else:
+                            print("The device stopped acknowledging mid-transfer "
+                                  "(link dropped or flash error).\n"
+                                  "Check the display for an OTA error message.",
+                                  flush=True)
+                        await client.disconnect()
+                        return False
 
                     if ack == FW_ACK_SUCCESS:
                         done = sec_idx + 1
@@ -157,6 +309,7 @@ async def connect_to_device(address, file_size, sectors):
                                   f"{int(elapsed) // 60}m{int(elapsed) % 60:02d}s "
                                   f"({retries} retries)", flush=True)
                             await client.disconnect()
+                            return True
                         sec_idx += 1
                         continue
 
@@ -173,10 +326,11 @@ async def connect_to_device(address, file_size, sectors):
                     else:
                         print(f"\nUnknown error (ack={ack:#06x})", flush=True)
                         await client.disconnect()
-                        break
+                        return False
             else:
                 print(f"Start command rejected (ack={ack:#06x})", flush=True)
                 await client.disconnect()
+                return False
 
     except Exception as e:
         print(f"{type(e).__name__}: {e}", flush=True)
@@ -246,9 +400,14 @@ async def main():
                 print(f"Selected: {device.name} - {device.address}")
                 mac_address = device.address
 
-        await connect_to_device(mac_address, file_size, sectors)
+        ok = await connect_to_device(mac_address, file_size, sectors)
+        if ok is False:
+            sys.exit(1)
 
-    except:
-        sys.exit(0)
+    except SystemExit:
+        raise
+    except Exception as err:
+        print(f"{type(err).__name__}: {err}", flush=True)
+        sys.exit(1)
 
 asyncio.run(main())
