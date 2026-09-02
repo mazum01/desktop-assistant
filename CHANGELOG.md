@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.55.0] - 2026-09-02
+### Added
+- `firmware/debug_esp32_ota.sh`: builds and flashes the display firmware with
+  `DebugLevel=verbose` and `CDCOnBoot=cdc`, then tails the serial console, so
+  NimBLEOta's own `NIMBLE_LOGE`/`NIMBLE_LOGW` output is visible during a BLE
+  OTA attempt. The stock build uses `DebugLevel=none`, which compiles those
+  log calls out entirely — the reason the sector-0 stall has produced no
+  diagnostic output on the device side.
+
 ## [1.54.5] - 2026-09-02
 ### Added
 - `VERA_OTA_MTU` to force a specific MTU for BLE OTA chunk sizing (e.g.
