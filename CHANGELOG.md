@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.54.5] - 2026-09-02
+### Added
+- `VERA_OTA_MTU` to force a specific MTU for BLE OTA chunk sizing (e.g.
+  `VERA_OTA_MTU=23` for the minimum ATT MTU), for isolating device-side
+  large-write problems.
+
+### Notes
+- BLE OTA still stalls at sector 0 on this device. Ruled out so far: MTU size
+  (23 and 517 both fail identically), ACK timeout length (90s), chunk pacing,
+  acknowledged vs unacknowledged writes, stale OTA state, and pairing. The
+  device accepts the start command (ACK 0x0000, "OTA starting" on screen) but
+  sends no indication on the firmware characteristic, which corresponds to a
+  silent `return` in NimBLEOta's `firmwareOnWrite()`. USB flashing is
+  unaffected and remains the reliable path.
+
 ## [1.54.4] - 2026-09-02
 ### Fixed
 - BLE OTA uploader no longer calls `BleakClient._backend._acquire_mtu()`,

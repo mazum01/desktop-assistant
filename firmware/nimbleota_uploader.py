@@ -41,6 +41,10 @@ ACK_TIMEOUT = float(os.environ.get("VERA_OTA_ACK_TIMEOUT", "15"))
 # BLE controller buffers and silently drop packets.
 WRITE_RESPONSE = os.environ.get("VERA_OTA_WRITE_RESPONSE", "0") == "1"
 CHUNK_DELAY = float(os.environ.get("VERA_OTA_CHUNK_DELAY", "0.01"))
+# Force a specific MTU for chunk sizing, e.g. VERA_OTA_MTU=23 to fall back to
+# the minimum ATT MTU. Useful for isolating large-write problems on the
+# device side. 0 (default) uses the link's negotiated MTU.
+MTU_OVERRIDE = int(os.environ.get("VERA_OTA_MTU", "0"))
 
 def parse_args():
     parser = argparse.ArgumentParser(description="OTA Update Script")
@@ -197,7 +201,12 @@ async def connect_to_device(address, file_size, sectors):
             # D-Bus property on each characteristic, so read that instead --
             # same value, no side effects.
             mtu = _read_char_mtu(client, OTA_FIRMWARE_UUID)
-            if mtu:
+            if MTU_OVERRIDE:
+                negotiated_mtu = MTU_OVERRIDE
+                print(f"Using forced MTU: {negotiated_mtu} bytes "
+                      f"({min(512, negotiated_mtu - 3) - 3} bytes usable per "
+                      f"chunk; link negotiated {mtu or 'unknown'})", flush=True)
+            elif mtu:
                 negotiated_mtu = mtu
                 print(f"Negotiated MTU: {mtu} bytes "
                       f"({min(512, mtu - 3) - 3} bytes usable per chunk)",
