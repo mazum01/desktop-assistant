@@ -42,4 +42,4 @@ if [[ -z "$BIN_FILE" ]]; then
 fi
 
 printf 'Uploading %s to %s over BLE OTA...\n' "$BIN_FILE" "$ADDRESS"
-"$PYTHON" "$UPLOADER" "$BIN_FILE" "$ADDRESS"
+"$PYTHON" -u "$UPLOADER" "$BIN_FILE" "$ADDRESS"

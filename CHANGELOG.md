@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.54.1] - 2026-09-01
+### Fixed
+- Fixed `firmware/nimbleota_uploader.py` calling `_acquire_mtu()` on the
+  wrong object (`BleakClient` instead of `client._backend`), which
+  silently fell back to the default 23-byte ATT MTU and made BLE OTA
+  firmware transfers ~20x slower than necessary.
+- Added a live in-place progress bar and unbuffered output
+  (`upload_esp32_display_ble.sh` now runs Python with `-u`) so BLE OTA
+  transfer progress is visible in real time instead of only at the end.
+- Verified end-to-end: bootstrapped the ESP32-C6 display over USB with
+  OTA-capable firmware, then successfully pushed a firmware update over
+  BLE OTA; device rebooted and reconnected cleanly, display responsive
+  afterward.
+
 ## [1.54.0] - 2026-09-01
 ### Added
 - Added BLE OTA (over-the-air) firmware update capability to the ESP32-C6

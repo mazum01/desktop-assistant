@@ -83,11 +83,20 @@ async def upload_sector(client, sector, sec_idx):
 async def connect_to_device(address, file_size, sectors):
     try:
         async with BleakClient(address) as client:
-            print(f"Connected to {address}")
+            print(f"Connected to {address}", flush=True)
+            # bleak defaults to the minimum BLE ATT MTU (23 bytes) unless we
+            # explicitly negotiate the real MTU BlueZ agreed on with the
+            # peer. Without this, each firmware chunk is ~17 bytes instead
+            # of up to ~509 bytes, making the transfer ~20x slower.
+            try:
+                await client._backend._acquire_mtu()
+                print(f"Negotiated MTU: {client.mtu_size}", flush=True)
+            except Exception as mtu_err:
+                print(f"Could not acquire MTU ({mtu_err}), using default", flush=True)
             queue = asyncio.Queue()
             await client.start_notify(OTA_COMMAND_UUID, lambda sender,
                                       data: asyncio.create_task(cmd_notification_handler(sender, data, queue)))
-            print("Sending start command")
+            print("Sending start command", flush=True)
             command = bytearray(20)
             command[0:2] = START_COMMAND.to_bytes(2, byteorder='little')
             command[2:6] = file_size.to_bytes(4, byteorder='little')
@@ -102,37 +111,41 @@ async def connect_to_device(address, file_size, sectors):
             if ack == ACK_ACCEPTED:
                 await client.start_notify(OTA_FIRMWARE_UUID, lambda sender,
                                           data: asyncio.create_task(fw_notification_handler(sender, data, queue)))
-                print("Sending firmware...")
+                print("Sending firmware...", flush=True)
                 sec_idx = 0
                 sec_count = len(sectors)
                 while sec_idx < sec_count:
                     sector = sectors[sec_idx]
-                    print(f"Sector {sec_idx}: {len(sector)} bytes")
                     await upload_sector(client, sector,
                                          sec_idx if len(sector) == 4098 else 0xFFFF) # send last sector as 0xFFFF
                     ack, rsp_sector = await queue.get()
 
                     if ack == FW_ACK_SUCCESS:
-                        print(round(sec_idx / (sec_count - 1) * 100, 1), '% complete')
+                        pct = round(sec_idx / (sec_count - 1) * 100, 1)
+                        bar_filled = int(pct / 100 * 30)
+                        bar = "#" * bar_filled + "-" * (30 - bar_filled)
+                        print(f"\r[{bar}] {pct:5.1f}%  sector {sec_idx + 1}/{sec_count}",
+                              end='', flush=True)
                         if sec_idx == sec_count - 1:
-                            print("OTA update complete")
+                            print("\nOTA update complete", flush=True)
                             await client.disconnect()
                         sec_idx += 1
                         continue
 
                     if ack == FW_ACK_CRC_ERROR or ack == FW_ACK_LEN_ERROR or ack == RSP_CRC_ERROR:
-                        print("Length Error" if ack == FW_ACK_LEN_ERROR else "CRC Error", "- Retrying sector")
+                        print("\n" + ("Length Error" if ack == FW_ACK_LEN_ERROR else "CRC Error") +
+                              f" - Retrying sector {sec_idx}", flush=True)
 
                     elif ack == FW_ACK_SECTOR_ERROR:
-                        print(f"Sector Error, sending sector: {rsp_sector}")
+                        print(f"\nSector Error, sending sector: {rsp_sector}", flush=True)
                         sec_idx = rsp_sector
 
                     else:
-                        print("Unknown error")
+                        print("\nUnknown error", flush=True)
                         await client.disconnect()
                         break
             else:
-                print("Start command rejected")
+                print("Start command rejected", flush=True)
                 await client.disconnect()
 
     except Exception as e:
