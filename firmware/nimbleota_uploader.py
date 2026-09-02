@@ -6,7 +6,17 @@ import asyncio
 import argparse
 import os
 import sys
+import time
 from bleak import BleakScanner, uuids, BleakClient
+
+VERBOSE = os.environ.get("VERA_VERBOSE") == "1"
+
+
+def vlog(msg):
+    """Print *msg* only when VERA_VERBOSE=1 is set in the environment."""
+    if VERBOSE:
+        print(f"    [dbg] {msg}", flush=True)
+
 
 OTA_SERVICE_UUID = uuids.normalize_uuid_16(0x8018)
 OTA_COMMAND_UUID = uuids.normalize_uuid_16(0x8022)
@@ -82,6 +92,7 @@ async def upload_sector(client, sector, sec_idx):
 
 async def connect_to_device(address, file_size, sectors):
     try:
+        vlog(f"Connecting to {address} (scanning)...")
         async with BleakClient(address) as client:
             print(f"Connected to {address}", flush=True)
             # bleak defaults to the minimum BLE ATT MTU (23 bytes) unless we
@@ -90,13 +101,19 @@ async def connect_to_device(address, file_size, sectors):
             # of up to ~509 bytes, making the transfer ~20x slower.
             try:
                 await client._backend._acquire_mtu()
-                print(f"Negotiated MTU: {client.mtu_size}", flush=True)
+                print(f"Negotiated MTU: {client.mtu_size} bytes "
+                      f"({min(512, client.mtu_size - 3) - 3} bytes usable per chunk)",
+                      flush=True)
             except Exception as mtu_err:
-                print(f"Could not acquire MTU ({mtu_err}), using default", flush=True)
+                print(f"Could not acquire MTU ({mtu_err}), using default "
+                      f"{client.mtu_size} — transfer will be slow", flush=True)
+            vlog(f"Services: {[s.uuid for s in client.services]}")
             queue = asyncio.Queue()
             await client.start_notify(OTA_COMMAND_UUID, lambda sender,
                                       data: asyncio.create_task(cmd_notification_handler(sender, data, queue)))
-            print("Sending start command", flush=True)
+            vlog(f"Subscribed to command characteristic {OTA_COMMAND_UUID}")
+            print(f"Sending start command (firmware {file_size} bytes, "
+                  f"{len(sectors)} sectors)", flush=True)
             command = bytearray(20)
             command[0:2] = START_COMMAND.to_bytes(2, byteorder='little')
             command[2:6] = file_size.to_bytes(4, byteorder='little')
@@ -114,42 +131,59 @@ async def connect_to_device(address, file_size, sectors):
                 print("Sending firmware...", flush=True)
                 sec_idx = 0
                 sec_count = len(sectors)
+                started = time.monotonic()
+                retries = 0
                 while sec_idx < sec_count:
                     sector = sectors[sec_idx]
+                    vlog(f"sending sector {sec_idx} ({len(sector)} bytes)")
                     await upload_sector(client, sector,
                                          sec_idx if len(sector) == 4098 else 0xFFFF) # send last sector as 0xFFFF
                     ack, rsp_sector = await queue.get()
 
                     if ack == FW_ACK_SUCCESS:
-                        pct = round(sec_idx / (sec_count - 1) * 100, 1)
+                        done = sec_idx + 1
+                        pct = done / sec_count * 100
                         bar_filled = int(pct / 100 * 30)
                         bar = "#" * bar_filled + "-" * (30 - bar_filled)
-                        print(f"\r[{bar}] {pct:5.1f}%  sector {sec_idx + 1}/{sec_count}",
+                        elapsed = time.monotonic() - started
+                        rate = (done * 4096) / elapsed if elapsed > 0 else 0
+                        eta = (sec_count - done) * (elapsed / done) if done else 0
+                        print(f"\r[{bar}] {pct:5.1f}%  sector {done}/{sec_count}  "
+                              f"{rate / 1024:.1f} KiB/s  ETA {int(eta) // 60}m{int(eta) % 60:02d}s"
+                              f"{f'  retries {retries}' if retries else ''}   ",
                               end='', flush=True)
                         if sec_idx == sec_count - 1:
-                            print("\nOTA update complete", flush=True)
+                            print(f"\nOTA update complete in "
+                                  f"{int(elapsed) // 60}m{int(elapsed) % 60:02d}s "
+                                  f"({retries} retries)", flush=True)
                             await client.disconnect()
                         sec_idx += 1
                         continue
 
                     if ack == FW_ACK_CRC_ERROR or ack == FW_ACK_LEN_ERROR or ack == RSP_CRC_ERROR:
+                        retries += 1
                         print("\n" + ("Length Error" if ack == FW_ACK_LEN_ERROR else "CRC Error") +
                               f" - Retrying sector {sec_idx}", flush=True)
 
                     elif ack == FW_ACK_SECTOR_ERROR:
+                        retries += 1
                         print(f"\nSector Error, sending sector: {rsp_sector}", flush=True)
                         sec_idx = rsp_sector
 
                     else:
-                        print("\nUnknown error", flush=True)
+                        print(f"\nUnknown error (ack={ack:#06x})", flush=True)
                         await client.disconnect()
                         break
             else:
-                print("Start command rejected", flush=True)
+                print(f"Start command rejected (ack={ack:#06x})", flush=True)
                 await client.disconnect()
 
     except Exception as e:
-        print(f"{e}")
+        print(f"{type(e).__name__}: {e}", flush=True)
+        if VERBOSE:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
 
 async def main():
     devices = []

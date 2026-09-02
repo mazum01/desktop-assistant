@@ -4,6 +4,27 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.54.3] - 2026-09-02
+### Added
+- `firmware/lib_log.sh`: shared step/timing/color logging helpers for the
+  firmware scripts, gated on `VERA_VERBOSE=1`.
+- Verbose, numbered step output with elapsed timers in
+  `build_esp32_display.sh` and `upload_esp32_display_ble.sh`; `VERA_VERBOSE=1`
+  echoes each command and passes `-v` through to `arduino-cli`.
+- `VERA_SKIP_BUILD=1` to re-upload an existing binary without recompiling.
+- BLE OTA progress bar now reports throughput and ETA alongside sector count.
+
+### Changed
+- `upload_esp32_display_ble.sh` now automatically pauses
+  `desktop-assistant-core.service` and drops its BLE link before uploading,
+  restoring it on exit via a `trap` (including on failure or interrupt).
+  Previously this had to be done by hand or the upload failed with a
+  misleading "device not found".
+- The upload script compiles once instead of twice by passing
+  `BUILD_OUTPUT_DIR` through to the build script, roughly halving build time.
+- Documented the script options and BLE link handover in
+  `firmware/vera_display/README.md`.
+
 ## [1.54.2] - 2026-09-01
 ### Fixed
 - Fixed the audio volume-reset-to-100%-on-restart / web GUI volume

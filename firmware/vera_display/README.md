@@ -142,17 +142,42 @@ VERA_ESP32_BLE_ADDRESS=AC:EB:E6:23:EC:76 ./firmware/upload_esp32_display_ble.sh
 
 This compiles the sketch, locates the resulting `.bin`, and streams it to the
 device using `firmware/nimbleota_uploader.py` (a copy of NimBLEOta's
-bundled uploader script)
-uploader (chunked 4KB sectors with CRC16 verification and automatic
+bundled uploader script;
+chunked 4KB sectors with CRC16 verification and automatic
 retry-on-error, per the NimBLEOta wire protocol). `VERA_ESP32_BLE_ADDRESS`
 defaults to the address already configured in `config/assistant.yaml`
 (`display.ble_address`). Because the ESP32-C6's default partition table
 (`Default 4MB with spiffs`) includes dual OTA app slots, no partition scheme
 change is required.
 
-**Note**: `DisplayService` on the host holds its own persistent BLE
-connection to the display for mouth/status commands. NimBLE on the ESP32-C6
-supports up to 4 simultaneous connections by default, so the OTA uploader can
-connect alongside it; if the upload appears to hang, stop
-`desktop-assistant-core.service` first to free up the connection slot and
-rule out any BLE contention.
+**Automatic BLE link handover**: `DisplayService` on the host holds a
+persistent BLE connection to the display. While it is connected the ESP32
+stops advertising, so the uploader's scan-based connect fails with
+`Device with address ... was not found`. The upload script therefore pauses
+`desktop-assistant-core.service` (`kill -STOP`, since `systemctl stop` is not
+in the passwordless sudo allowlist and killing it would trip
+`Restart=on-failure`) and drops the link before uploading, then resumes the
+service on exit — including on failure or `Ctrl-C`, via a shell `trap`.
+
+### Script options
+
+Both `build_esp32_display.sh` and `upload_esp32_display_ble.sh` print
+numbered, timed steps. Useful environment variables:
+
+| Variable | Effect |
+| --- | --- |
+| `VERA_VERBOSE=1` | Echo every command before running it, pass `-v` to `arduino-cli`, and print per-sector BLE debug output |
+| `VERA_SKIP_BUILD=1` | Upload the existing `.bin` without recompiling (upload script only) |
+| `VERA_ESP32_BLE_ADDRESS` | Target BLE MAC address |
+| `VERA_ESP32_FQBN` | Override the board FQBN |
+| `VERA_PYTHON` | Interpreter used to run the uploader |
+
+The transfer reports live progress with throughput and ETA:
+
+```
+[##########--------------------]  34.4%  sector 67/195  12.4 KiB/s  ETA 0m41s
+```
+
+If you see `Could not acquire MTU ... using default 23` instead of
+`Negotiated MTU: 517 bytes`, the transfer will still succeed but runs roughly
+20x slower, since each chunk carries 17 bytes instead of 509.
