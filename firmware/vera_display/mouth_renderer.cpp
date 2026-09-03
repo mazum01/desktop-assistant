@@ -34,7 +34,8 @@ constexpr uint16_t COLOR_ERROR = RGB565_RED;
 constexpr unsigned long FRAME_PERIOD_MS = 66;  // ~15 fps
 
 Arduino_DataBus *g_bus = nullptr;
-Arduino_GFX *g_gfx = nullptr;
+Arduino_GFX *g_panel = nullptr;   // physical ST7789 (SPI output target)
+Arduino_GFX *g_gfx = nullptr;     // offscreen canvas all drawing goes through
 
 State g_current_state = State::kNeutral;
 unsigned long g_last_frame_ms = 0;
@@ -45,13 +46,27 @@ unsigned long g_state_started_ms = 0;
 int16_t g_prev_x = 0, g_prev_y = 0, g_prev_w = 0, g_prev_h = 0;
 bool g_have_prev = false;
 
+// Shape "family" — how the mouth is actually drawn, independent of its
+// animated size. Curve-based shapes use Arduino_GFX::fillArc() to draw a
+// genuine smile/frown arc instead of an abstract rounded rectangle.
+enum class Shape {
+  kBar,     // flat/rounded bar (neutral, listening, error)
+  kSmile,   // upward curve, like a smiling mouth (happy)
+  kFrown,   // downward curve (sad)
+  kOval,    // filled open-mouth ellipse (speaking, surprised)
+};
+
 struct Geometry {
+  Shape shape;
   // Mouth bounding box is expressed as a fraction of display width/height
-  // so it scales correctly regardless of rotation, and a corner radius
-  // fraction (of half-height) controlling how "open"/curved it looks.
+  // so it scales correctly regardless of rotation.
   float width_frac;
   float height_frac;
+  // kBar only: corner radius fraction (of half-height).
   float radius_frac;
+  // kSmile/kFrown only: how deep the curve bulges, as a fraction of the
+  // bounding box height. 0 = flat line, 1 = a full half-circle.
+  float curve_frac;
   // Animation amplitude: how much height_frac oscillates per animation
   // cycle. 0 = static.
   float bounce_frac;
@@ -61,13 +76,17 @@ struct Geometry {
 };
 
 const Geometry &geometry_for(State state) {
-  static const Geometry kNeutral{0.5f, 0.10f, 0.5f, 0.0f, 1000, COLOR_MOUTH};
-  static const Geometry kListening{0.45f, 0.16f, 0.6f, 0.15f, 900, COLOR_MOUTH};
-  static const Geometry kSpeaking{0.55f, 0.22f, 0.35f, 0.55f, 260, COLOR_MOUTH};
-  static const Geometry kHappy{0.6f, 0.32f, 1.0f, 0.05f, 1400, COLOR_MOUTH};
-  static const Geometry kSad{0.5f, 0.10f, 0.0f, 0.0f, 1000, COLOR_MOUTH};
-  static const Geometry kSurprised{0.32f, 0.32f, 1.0f, 0.08f, 500, COLOR_MOUTH};
-  static const Geometry kError{0.5f, 0.08f, 0.0f, 0.0f, 1000, COLOR_ERROR};
+  static const Geometry kNeutral{Shape::kBar, 0.5f, 0.10f, 0.5f, 0.0f, 0.0f, 1000, COLOR_MOUTH};
+  static const Geometry kListening{Shape::kBar, 0.45f, 0.16f, 0.6f, 0.0f, 0.15f, 900, COLOR_MOUTH};
+  // Speaking previously bounced from 0.22 to 0.77 height every 260ms, which
+  // reads as flicker rather than a talking motion at 15fps. Reduced
+  // amplitude and slowed the period so the oval's size changes are visible
+  // as smooth pulsing across several frames instead of a jarring jump.
+  static const Geometry kSpeaking{Shape::kOval, 0.55f, 0.28f, 0.0f, 0.0f, 0.22f, 420, COLOR_MOUTH};
+  static const Geometry kHappy{Shape::kSmile, 0.62f, 0.34f, 0.0f, 0.6f, 0.05f, 1400, COLOR_MOUTH};
+  static const Geometry kSad{Shape::kFrown, 0.5f, 0.28f, 0.0f, 0.45f, 0.0f, 1000, COLOR_MOUTH};
+  static const Geometry kSurprised{Shape::kOval, 0.32f, 0.32f, 0.0f, 0.0f, 0.08f, 500, COLOR_MOUTH};
+  static const Geometry kError{Shape::kBar, 0.5f, 0.08f, 0.0f, 0.0f, 0.0f, 1000, COLOR_ERROR};
 
   switch (state) {
     case State::kNeutral:
@@ -113,6 +132,34 @@ void compute_frame_rect(const Geometry &geo, unsigned long elapsed_ms, int16_t *
   *y = static_cast<int16_t>((screen_h - height) / 2.0f);
 }
 
+// Draws a smile/frown as a thick curved stroke (a parabolic arc sampled as
+// overlapping filled circles), rather than an abstract rounded rectangle.
+// `bulge_down` true draws a smile (curves downward like a "U", i.e. corners
+// turn up); false draws a frown (curves upward, corners turn down).
+void draw_curve(int16_t x, int16_t y, int16_t w, int16_t h, float curve_frac, bool bulge_down,
+                 uint16_t color) {
+  int16_t cx = x + w / 2;
+  int16_t cy = y + h / 2;
+  float half_w = w / 2.0f;
+  float bulge = curve_frac * static_cast<float>(h) * (bulge_down ? 1.0f : -1.0f);
+  // Stroke thickness scales with the box height so the curve reads as a
+  // mouth outline rather than a hairline, and never drops below something
+  // visible on a 172x320 panel.
+  int16_t thickness = static_cast<int16_t>(h * 0.32f);
+  if (thickness < 4) {
+    thickness = 4;
+  }
+  int16_t stroke_r = thickness / 2;
+
+  constexpr int kSegments = 18;
+  for (int i = 0; i <= kSegments; ++i) {
+    float t = -1.0f + 2.0f * static_cast<float>(i) / static_cast<float>(kSegments);
+    int16_t px = cx + static_cast<int16_t>(t * half_w);
+    int16_t py = cy + static_cast<int16_t>(bulge * (1.0f - t * t));
+    g_gfx->fillCircle(px, py, stroke_r, color);
+  }
+}
+
 void draw_frame(bool force) {
   if (g_gfx == nullptr) {
     return;
@@ -127,14 +174,29 @@ void draw_frame(bool force) {
     return;
   }
 
-  if (g_have_prev) {
-    g_gfx->fillRoundRect(g_prev_x, g_prev_y, g_prev_w, g_prev_h, g_prev_w / 2, COLOR_BG);
-  } else {
-    g_gfx->fillScreen(COLOR_BG);
-  }
+  // Drawing happens entirely in the offscreen canvas (RAM), so there's no
+  // SPI cost to redrawing the whole frame instead of erasing just the
+  // previous rect -- and it removes the erase/redraw race that caused
+  // visible artifacts when a frame was drawn out of sync with the panel.
+  g_gfx->fillScreen(COLOR_BG);
 
-  int16_t radius = static_cast<int16_t>((h / 2) * geo.radius_frac);
-  g_gfx->fillRoundRect(x, y, w, h, radius, geo.color);
+  switch (geo.shape) {
+    case Shape::kSmile:
+      draw_curve(x, y, w, h, geo.curve_frac, /*bulge_down=*/true, geo.color);
+      break;
+    case Shape::kFrown:
+      draw_curve(x, y, w, h, geo.curve_frac, /*bulge_down=*/false, geo.color);
+      break;
+    case Shape::kOval:
+      g_gfx->fillEllipse(x + w / 2, y + h / 2, w / 2, h / 2, geo.color);
+      break;
+    case Shape::kBar:
+    default: {
+      int16_t radius = static_cast<int16_t>((h / 2) * geo.radius_frac);
+      g_gfx->fillRoundRect(x, y, w, h, radius, geo.color);
+      break;
+    }
+  }
 
   g_prev_x = x;
   g_prev_y = y;
@@ -171,7 +233,15 @@ bool parse_state(const char *name, State *out) {
 
 void begin() {
   g_bus = new Arduino_ESP32SPI(PIN_DC, PIN_CS, PIN_SCLK, PIN_MOSI, -1 /* MISO unused */);
-  g_gfx = new Arduino_ST7789(g_bus, PIN_RST, DISPLAY_ROTATION, true /* IPS panel */);
+  g_panel = new Arduino_ST7789(g_bus, PIN_RST, DISPLAY_ROTATION, true /* IPS panel */);
+  g_panel->begin();
+
+  // All drawing (mouth + status renderer) happens into this offscreen
+  // canvas; nothing reaches the panel until flush() below. A full
+  // 172x320x16bpp frame is ~110KB, comfortably inside the ESP32-C6's free
+  // heap (~300KB with this sketch), so buffering the whole screen is
+  // simpler and cheaper than a partial/dirty-rect scheme.
+  g_gfx = new Arduino_Canvas(g_panel->width(), g_panel->height(), g_panel);
   g_gfx->begin();
   g_gfx->fillScreen(COLOR_BG);
 
@@ -179,6 +249,7 @@ void begin() {
   g_state_started_ms = millis();
   g_have_prev = false;
   draw_frame(/*force=*/true);
+  flush();
 }
 
 void set_state(State state) {
@@ -199,6 +270,7 @@ void update() {
   }
   g_last_frame_ms = now;
   draw_frame(/*force=*/false);
+  flush();
 }
 
 void force_redraw() {
@@ -207,6 +279,15 @@ void force_redraw() {
 
 Arduino_GFX *gfx() {
   return g_gfx;
+}
+
+void flush() {
+  if (g_gfx == nullptr) {
+    return;
+  }
+  // static_cast is safe: g_gfx is always constructed as an Arduino_Canvas
+  // in begin(); the base-class pointer is only for API cleanliness.
+  static_cast<Arduino_Canvas *>(g_gfx)->flush();
 }
 
 }  // namespace vera_mouth

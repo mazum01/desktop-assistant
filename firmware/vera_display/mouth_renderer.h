@@ -62,11 +62,26 @@ void update();
 // mouth's own erase-previous-rect optimization doesn't leave stale pixels.
 void force_redraw();
 
-// Returns the shared display instance (owned by this module) so other
+// Returns the shared drawing surface (owned by this module) so other
 // renderers (status_renderer) can draw on the same physical screen
 // without opening a second SPI/display instance. Valid only after
 // begin() has been called; returns nullptr otherwise.
+//
+// This is an offscreen canvas, not the physical display: all drawing
+// (fillScreen, fillRoundRect, text, arcs, ...) happens into an in-RAM
+// framebuffer. Nothing appears on the physical panel until flush() is
+// called, which pushes the whole frame to the ST7789 in one SPI burst.
+// This is what eliminates flicker/tearing from partially-clocked-out
+// erase+redraw sequences -- the panel only ever shows a fully composited
+// frame. Callers that draw via gfx() must call flush() once per frame
+// after they're done drawing.
 Arduino_GFX *gfx();
+
+// Pushes the offscreen canvas contents to the physical display in one
+// SPI transaction. Must be called once after any drawing via gfx()
+// (mouth_renderer calls this itself from update(); status_renderer must
+// call it after its own draw calls).
+void flush();
 
 }  // namespace vera_mouth
 

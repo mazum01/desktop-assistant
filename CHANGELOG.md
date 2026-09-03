@@ -4,6 +4,27 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.57.0] - 2026-09-03
+### Changed
+- **Mouth display now renders via an offscreen framebuffer.** `vera_display`'s
+  `mouth_renderer` and `status_renderer` previously drew straight to the
+  ST7789 panel over SPI (erase-previous-rect then draw-new-rect as two
+  separate transactions), which caused visible flicker and redraw artifacts
+  whenever a frame was drawn out of sync with the panel refresh. Both
+  renderers now draw into an `Arduino_Canvas` (a 172x320x16bpp RAM
+  framebuffer, ~110KB) and flush the whole frame to the panel in a single
+  SPI burst per update, eliminating the erase/redraw race.
+- **Mood shapes redesigned as genuine curves instead of rounded rectangles.**
+  Happy is now an upward smile arc, sad a downward frown arc, speaking a
+  pulsing open oval, and surprised a round open-mouth ellipse; neutral,
+  listening, and error remain flat/rounded bars. Implemented with
+  `Arduino_GFX::fillEllipse()` and a parabolic stroke (`fillCircle()` swept
+  along a curve) for the smile/frown shapes.
+### Fixed
+- Tuned the speaking animation's bounce amplitude/period (was 0.22-0.77
+  height oscillating every 260ms, which itself read as flicker at the
+  renderer's 15fps cap); reduced to a smaller, slower pulse.
+
 ## [1.56.0] - 2026-09-03
 ### Fixed
 - **BLE OTA firmware upload now completes successfully** (previously stalled

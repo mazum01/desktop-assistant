@@ -171,6 +171,7 @@ void show(Level level, const char *message) {
 void update() {
   if (g_dirty) {
     draw(g_message.c_str(), color_for(g_level));
+    vera_mouth::flush();
     g_dirty = false;
   }
   // Transient statuses (ready and info/version) expire after a hold period
