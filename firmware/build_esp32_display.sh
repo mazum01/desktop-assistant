@@ -58,12 +58,28 @@ step_done
 # instead (requires explicitly opting into --git-url, which arduino-cli
 # disables by default since it can install untrusted code).
 step "Ensuring NimBLEOta (BLE OTA support)"
-if [[ -d "$(pwd)/libraries/NimBLEOta" ]]; then
-    info "already present at $(pwd)/libraries/NimBLEOta"
+NIMBLEOTA_DIR="$FIRMWARE_DIR/libraries/NimBLEOta"
+if [[ -d "$NIMBLEOTA_DIR" ]]; then
+    info "already present at $NIMBLEOTA_DIR"
 else
     info "not installed — fetching from https://github.com/h2zero/NimBLEOta.git"
     ARDUINO_LIBRARY_ENABLE_UNSAFE_INSTALL=true vrun "$CLI" --config-file "$CLI_CONFIG" \
         lib install --git-url https://github.com/h2zero/NimBLEOta.git
+fi
+
+# The upstream library is gitignored (fetched at build time), so any local
+# fix must be re-applied every time it's freshly cloned. Fixes a bug where
+# NimBLEOta.cpp's SendAck path calls the handle-less indicate(), which
+# routes through ble_gatts_chr_updated() and can silently drop the OTA
+# progress indication (while still reporting success) if the outbound mbuf
+# pool is exhausted by the preceding sector write burst — this stalls BLE
+# OTA uploads at sector 0. See CHANGELOG for the btmon trace that isolated it.
+NIMBLEOTA_PATCH="$FIRMWARE_DIR/patches/nimbleota_direct_ack.patch"
+if grep -q "connInfo.getConnHandle()" "$NIMBLEOTA_DIR/NimBLEOta.cpp" 2>/dev/null; then
+    info "direct-ack patch already applied"
+else
+    info "applying direct-ack patch to NimBLEOta.cpp"
+    vrun patch -p1 -d "$NIMBLEOTA_DIR" < "$NIMBLEOTA_PATCH"
 fi
 step_done
 

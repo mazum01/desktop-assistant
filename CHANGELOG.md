@@ -4,6 +4,38 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.56.0] - 2026-09-03
+### Fixed
+- **BLE OTA firmware upload now completes successfully** (previously stalled
+  forever at sector 0 — see 1.55.1 notes). Root cause was on the **device**
+  side after all, contrary to the 1.55.1 conclusion: `NimBLEOta::SendAck`
+  called the handle-less `indicate()` overload, which routes through
+  `ble_gatts_chr_updated()` instead of `ble_gattc_indicate_custom()`. That
+  path enqueues the indication for delivery and unconditionally returns
+  `true`, ignoring the actual send result — so when the outbound mbuf pool
+  was exhausted by the preceding burst of 4KB sector writes, the indication
+  was silently dropped while `indicate()` still reported success. A `btmon`
+  HCI trace proved the indication never reached the radio (no
+  `Handle Value Indication` on the wire after the write burst, versus two
+  earlier indications on the same connection that were sent and confirmed
+  cleanly before any bulk writes). Fixed by passing the value and this
+  peer's connection handle explicitly
+  (`indicate(fwAck, FW_ACK_LENGTH, connInfo.getConnHandle())`), which takes
+  the direct `ble_gattc_indicate_custom()` path and propagates real failures
+  instead of masking them. Verified end-to-end: `OTA update complete in
+  0m39s (0 retries)`.
+- **Correction to 1.55.1**: the `indicate()` return value on this code path
+  carries no delivery information — it does not mean ATT-layer peer
+  confirmation as previously assumed. That mistaken inference is what led
+  the earlier investigation to conclude (incorrectly) that BlueZ was
+  dropping a confirmed indication.
+### Added
+- `firmware/patches/nimbleota_direct_ack.patch` — the NimBLEOta fix above,
+  applied automatically by `build_esp32_display.sh` after the library is
+  fetched, since `firmware/libraries/` is gitignored and re-fetched from
+  upstream on a clean checkout. The build step is idempotent (checks for
+  the patch marker before applying).
+
 ## [1.55.1] - 2026-09-02
 ### Notes
 - BLE OTA sector-0 stall traced to the **host** side, not the device. With a

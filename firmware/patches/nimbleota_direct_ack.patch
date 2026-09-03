@@ -1,0 +1,26 @@
+--- a/NimBLEOta.cpp
++++ b/NimBLEOta.cpp	2026-09-03 05:22:24.061980350 -0400
+@@ -141,7 +141,11 @@
+     fwAck[18]        = crc & 0xff;
+     fwAck[19]        = (crc & 0xff00) >> 8;
+     pCharacteristic->setValue(fwAck, FW_ACK_LENGTH);
+-    pCharacteristic->indicate();
++    // Send directly to this peer's connection handle rather than the
++    // handle-less indicate(), which routes through ble_gatts_chr_updated()
++    // and silently drops the indication (while still reporting success) if
++    // the outbound mbuf pool is exhausted by the preceding write burst.
++    pCharacteristic->indicate(fwAck, FW_ACK_LENGTH, connInfo.getConnHandle());
+ 
+     if (otaResp == otaFwSuccess) {
+         m_pOta->m_sector++;
+@@ -272,7 +276,9 @@
+     cmdAck[18] = crc;
+     cmdAck[19] = (crc >> 8) & 0xff;
+     pCharacteristic->setValue(cmdAck, CMD_ACK_LENGTH);
+-    pCharacteristic->indicate();
++    // See firmwareOnWrite() above: send directly to the peer's connection
++    // handle so failures are surfaced instead of silently swallowed.
++    pCharacteristic->indicate(cmdAck, CMD_ACK_LENGTH, connInfo.getConnHandle());
+ }
+ 
+ void NimBLEOta::NimBLEOtaCharacteristicCallbacks::onSubscribe(NimBLECharacteristic* pChar,
