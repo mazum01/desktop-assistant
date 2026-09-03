@@ -150,15 +150,18 @@ VERA through the established BLE GATT path.
   BLE discovery/connect/write, live mouth-state rendering, and startup/status text
   rendering verified end-to-end against the physical device; reconnect-after-drop
   and long-run reliability still to validate.
-- [ ] **Design emotion-accurate mouth shapes** — `mouth_renderer.cpp` currently
-  renders every state as the same abstract rounded-rect "pill" (only
-  width/height/corner-radius/animation speed/color vary per state); verified
-  live that "happy" just looks like a slowly pulsing blue bar, not a smile.
-  Redesign per-state geometry/drawing so neutral/listening/speaking/happy/sad/
-  surprised/error render as recognizable mouth shapes (upward curve for happy,
-  downward curve for sad, open oval for surprised, etc.) using Arduino_GFX
-  primitives beyond simple rounded rectangles, then re-flash and visually
-  validate each state on the physical Waveshare ESP32-C6-LCD-1.47.
+- [x] **Design emotion-accurate mouth shapes** — RESOLVED in v1.57.0.
+  `mouth_renderer.cpp`/`status_renderer.cpp` now draw into an offscreen
+  `Arduino_Canvas` framebuffer (eliminating the flicker/redraw artifacts from
+  direct-to-panel SPI draws) and render genuine per-state curves instead of a
+  uniform rounded-rect pill: happy is an upward smile arc, sad a downward
+  frown arc, speaking a pulsing open oval, surprised a round open-mouth
+  ellipse, with neutral/listening/error remaining flat/rounded bars.
+  Implemented with `Arduino_GFX::fillEllipse()` and a parabolic
+  `fillCircle()`-swept stroke for the smile/frown curves. Flashed and
+  visually validated on the physical Waveshare ESP32-C6-LCD-1.47, including a
+  follow-up tuning pass on the speaking animation's bounce amplitude/period
+  that was itself causing flicker at the renderer's 15fps cap.
 
 ## Audio
 - [x] reSpeaker mic capture — RESOLVED in v1.41.0 via `src/audio/pw_input.py`
