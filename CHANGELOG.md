@@ -4,6 +4,38 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.55.1] - 2026-09-02
+### Notes
+- BLE OTA sector-0 stall traced to the **host** side, not the device. With a
+  `DebugLevel=verbose` build plus temporary `printf` instrumentation inside
+  `NimBLEOta::firmwareOnWrite()`, the device was shown to do everything
+  correctly: it receives all 9 chunks (`total length:4096`), passes the CRC
+  check, completes `esp_ota_write`, reaches `SendAck`, and calls `indicate()`
+  — which **returns true**, meaning the peer confirmed the indication at the
+  ATT layer. Despite that, bleak receives no notification and BlueZ emits no
+  `PropertiesChanged` D-Bus signal for the firmware characteristic.
+- Newly ruled out this round (in addition to the 1.54.5 list):
+  - Subscription ordering — subscribing to the firmware characteristic before
+    the start command changes nothing.
+  - Subscription state — BlueZ reports `Notifying: true` and the live CCCD
+    reads back `0x0002` (indications enabled) on both OTA characteristics.
+  - `AcquireNotify` vs `StartNotify` — both fail identically.
+  - BlueZ value caching / duplicate-suppression — stamping a unique sequence
+    byte into every ACK payload (so no two are identical) does not help.
+  - Burst size / flow control — a **single 19-byte write** that deliberately
+    triggers the `sector length error` path also receives no ACK, so this is
+    unrelated to MTU, chunking, or controller buffer overrun.
+  - Characteristic-specific fault — mirroring the same ACK onto the command
+    characteristic (which successfully delivered the start ACK moments
+    earlier) is also lost, so delivery stalls for the whole connection after
+    the first write to the firmware characteristic.
+- Concretely: exactly one inbound D-Bus signal arrives per connection (the
+  start-command ACK on `char0018`); every subsequent indication is confirmed
+  on the wire but never surfaced to the application. Environment is BlueZ
+  5.82 with NimBLE-Arduino 2.5.1 / NimBLEOta 0.2.0. This is consistent with
+  upstream issue h2zero/NimBLEOta#4.
+- USB flashing remains the reliable path and is unaffected.
+
 ## [1.55.0] - 2026-09-02
 ### Added
 - `firmware/debug_esp32_ota.sh`: builds and flashes the display firmware with

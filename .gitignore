@@ -37,6 +37,7 @@ config/face_gallery/
 firmware/.arduino-data/
 firmware/.arduino-downloads/
 firmware/.arduino-build-ble-ota/
+firmware/.arduino-build-ota-debug/
 .arduino-data/
 .arduino-downloads/
 libraries/
