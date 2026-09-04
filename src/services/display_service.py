@@ -3,6 +3,19 @@ ESP32 display status service.
 
 Publishes human-readable startup/restart status updates and optionally writes
 them to an ESP32 over BLE.
+
+Topics subscribed:
+    display.set_mouth_state {"state": str}   — set mouth emotion (see MOUTH_STATES)
+    av.speaking_started     {"text", "ts"}   — switch mouth to "speaking"
+    av.spoke                {"text", "ts"}   — TTS finished; switch mouth back to "neutral"
+    system.startup_status, service.started, service.stopped,
+    av.version_announced, thermal.error, vision.error, audio.error,
+    perception.error        — surfaced as status text on the display
+
+The speaking/neutral mouth transitions are automatic and best-effort: they
+are skipped when the BLE display is disabled, and any other explicit
+display.set_mouth_state request (CLI/voice/skills) simply overrides whatever
+state is currently shown.
 """
 
 from __future__ import annotations
@@ -77,6 +90,8 @@ class DisplayService(Service):
             self.bus.subscribe("audio.error", self._on_audio_error),
             self.bus.subscribe("perception.error", self._on_perception_error),
             self.bus.subscribe("display.set_mouth_state", self._on_set_mouth_state),
+            self.bus.subscribe("av.speaking_started", self._on_speaking_started),
+            self.bus.subscribe("av.spoke", self._on_spoke),
         ]
         self._emit_status("boot", "Display status service online")
         if self._cfg.ble_enabled:
@@ -160,6 +175,16 @@ class DisplayService(Service):
         elif payload:
             state = str(payload).strip()
         self.set_mouth_state(state)
+
+    def _on_speaking_started(self, _topic, _payload) -> None:
+        """Switch the mouth display to 'speaking' while TTS audio is playing."""
+        if self._cfg.ble_enabled:
+            self.set_mouth_state("speaking")
+
+    def _on_spoke(self, _topic, _payload) -> None:
+        """Return the mouth display to 'neutral' once TTS playback finishes."""
+        if self._cfg.ble_enabled:
+            self.set_mouth_state("neutral")
 
     # ── Emission / BLE transport ────────────────────────────────────────
 

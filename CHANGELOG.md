@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.58.1] - 2026-09-04
+### Added
+- **Mouth display now auto-switches to "speaking" while VERA is talking**,
+  and back to "neutral" once TTS playback finishes. `DisplayService`
+  subscribes to the existing `av.speaking_started`/`av.spoke` bus events
+  (already used by `TrackingService` for head-nod motion) and drives the
+  mouth state automatically — no explicit `display.set_mouth_state` call
+  needed for ordinary speech. Skipped when the BLE display is disabled.
+  Any explicit mouth-state request (CLI/voice/skills) still simply
+  overrides whatever is currently shown.
+
 ## [1.58.0] - 2026-09-04
 ### Fixed
 - **`RoomService`'s periodic panoramic sweep now obeys quiet hours.** The
