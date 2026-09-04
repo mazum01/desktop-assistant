@@ -157,6 +157,7 @@ def build_node(
     podcast_proxy = PodcastServiceProxy(media_client)
     iot_registry_proxy = IoTRegistryProxy(integrations_client)
     skills_proxy = SkillsServiceProxy(integrations_client)
+    av_proxy = core_proxies["av"]
 
     web_svc: Optional[WebService] = None
     if web_enabled:
@@ -198,7 +199,13 @@ def build_node(
     node._integrations_client = integrations_client  # noqa: SLF001
 
     if web_svc is not None:
-        web_svc._all_services = node.services  # seed service registry at startup
+        # `_get_service_by_name("av")` (used by /api/audio/* routes) walks
+        # `_all_services` looking for an object with `.name == "av"` — the
+        # real AVService stays in core, so seed the AV proxy here too
+        # (mirrors how RoomService/etc. proxies are already passed in as
+        # constructor kwargs above, but "av" routes look it up by name
+        # instead of a dedicated kwarg).
+        web_svc._all_services = list(node.services) + [av_proxy]
 
     return node
 

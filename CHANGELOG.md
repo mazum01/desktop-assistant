@@ -4,6 +4,26 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.58.2] - 2026-09-04
+### Fixed
+- **Web GUI audio buttons (Repeat, Record, Playback, Spectrum Test, Voice
+  Gain) always failed silently** since `WebService` moved into its own
+  process (Phase 3 of the process-isolation split). Those routes looked up
+  the real `AVService` via `self._get_service_by_name("av")`, which only
+  searches `WebService._all_services` — populated from the *web* process's
+  own service list, which never contained the real `AVService` (it lives in
+  `core`). The lookup always returned `None`, so every route 503'd; the
+  Repeat button's JS then reported the misleading "Nothing to repeat"
+  even when there was a recent utterance to repeat.
+  Added `AVServiceProxy` (`src/core/web_client.py`) — new RPC handlers in
+  `core_main.py` (`av.record_clip`, `av.play_recording`,
+  `av.repeat_last_spoken`, `av.play_spectrum_test`,
+  `av.get_voice_output_gain`, `av.set_voice_output_gain`) — and seeded it
+  into `WebService._all_services` in `web_main.py` so
+  `_get_service_by_name("av")` now resolves correctly across the process
+  boundary. Verified end-to-end: repeat, record, and voice-gain routes all
+  now round-trip successfully.
+
 ## [1.58.1] - 2026-09-04
 ### Added
 - **Mouth display now auto-switches to "speaking" while VERA is talking**,

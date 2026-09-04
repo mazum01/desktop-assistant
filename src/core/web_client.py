@@ -121,6 +121,74 @@ class ObjectDetectionServiceProxy:
         return bool(reply.get("enabled", default))
 
 
+class AVServiceProxy:
+    """Proxies `WebService`'s `/api/audio/{record,playback,repeat,spectrum-test,
+    voice-gain}` routes, which call the real `AVService` (stays in `core`)
+    via `self._get_service_by_name("av")`. `name = "av"` so that lookup
+    finds this proxy in `WebService._all_services` (seeded from
+    `node.services` in web_main.py, which never includes core-resident
+    services like the real `AVService`)."""
+
+    name = "av"
+
+    def __init__(self, client: IPCClient) -> None:
+        self._client = client
+
+    def record_clip(self, seconds: float = 5.0, path: Optional[str] = None) -> dict:
+        reply = self._client.call(
+            {"cmd": "av.record_clip", "seconds": seconds, "path": path}, timeout_ms=max(30000, int(seconds * 1000) + 30000)
+        )
+        if not reply.get("ok"):
+            raise RuntimeError(reply.get("error", "record_clip failed"))
+        return reply.get("result", {})
+
+    def play_recording(self, path: Optional[str] = None) -> dict:
+        reply = self._client.call({"cmd": "av.play_recording", "path": path}, timeout_ms=90000)
+        if not reply.get("ok"):
+            if reply.get("not_found"):
+                raise FileNotFoundError(reply.get("error", "recording not found"))
+            raise RuntimeError(reply.get("error", "play_recording failed"))
+        return reply.get("result", {})
+
+    def repeat_last_spoken(self) -> dict:
+        reply = self._client.call({"cmd": "av.repeat_last_spoken"})
+        if not reply.get("ok"):
+            return {"ok": False, "error": reply.get("error", "unavailable")}
+        return reply.get("result", {"ok": False, "error": "unknown"})
+
+    def play_spectrum_test(
+        self,
+        bins: int = 48,
+        sample_rate: int = 16000,
+        max_hz: Optional[float] = None,
+        note_duration: float = 2.0,
+        gap: float = 0.333,
+    ) -> dict:
+        reply = self._client.call({
+            "cmd": "av.play_spectrum_test",
+            "bins": bins,
+            "sample_rate": sample_rate,
+            "max_hz": max_hz,
+            "note_duration": note_duration,
+            "gap": gap,
+        })
+        if not reply.get("ok"):
+            raise RuntimeError(reply.get("error", "play_spectrum_test failed"))
+        return reply.get("result", {})
+
+    def get_voice_output_gain(self) -> float:
+        reply = self._client.call({"cmd": "av.get_voice_output_gain"})
+        if not reply.get("ok"):
+            raise RuntimeError(reply.get("error", "get_voice_output_gain failed"))
+        return float(reply.get("gain", 1.0))
+
+    def set_voice_output_gain(self, gain: float) -> float:
+        reply = self._client.call({"cmd": "av.set_voice_output_gain", "gain": gain})
+        if not reply.get("ok"):
+            raise RuntimeError(reply.get("error", "set_voice_output_gain failed"))
+        return float(reply.get("gain", gain))
+
+
 class PerceptionServiceProxy:
     """Proxies `WebService`'s `POST /api/faces/{id}/train` action."""
 
@@ -289,4 +357,5 @@ def build_web_proxies(rep_endpoint: str, timeout_ms: int = 2000) -> dict:
         "vision": VisionServiceProxy(client),
         "camera2": Camera2ServiceProxy(client),
         "depth": DepthServicesProxy(client),
+        "av": AVServiceProxy(client),
     }

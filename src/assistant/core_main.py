@@ -760,6 +760,45 @@ def main() -> int:
             },
         }
 
+    def _rpc_av_record_clip(msg):
+        try:
+            result = av.record_clip(seconds=float(msg.get("seconds", 5.0)), path=msg.get("path"))
+            return {"ok": True, "result": result}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def _rpc_av_play_recording(msg):
+        try:
+            result = av.play_recording(path=msg.get("path"))
+            return {"ok": True, "result": result}
+        except FileNotFoundError as exc:
+            return {"ok": False, "error": str(exc), "not_found": True}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def _rpc_av_repeat_last_spoken(_msg):
+        return {"ok": True, "result": av.repeat_last_spoken()}
+
+    def _rpc_av_play_spectrum_test(msg):
+        try:
+            result = av.play_spectrum_test(
+                bins=int(msg.get("bins", 48)),
+                sample_rate=int(msg.get("sample_rate", 16000)),
+                max_hz=msg.get("max_hz"),
+                note_duration=float(msg.get("note_duration", 2.0)),
+                gap=float(msg.get("gap", 0.333)),
+            )
+            return {"ok": True, "result": result}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def _rpc_av_get_voice_output_gain(_msg):
+        return {"ok": True, "gain": float(av.get_voice_output_gain())}
+
+    def _rpc_av_set_voice_output_gain(msg):
+        gain = av.set_voice_output_gain(float(msg.get("gain", 1.0)))
+        return {"ok": True, "gain": float(gain)}
+
     ipc.register_rpc("room.get_status", _rpc_room_get_status)
     ipc.register_rpc("face.get_anthropic_enabled", _rpc_face_get_anthropic_enabled)
     ipc.register_rpc("face.get_greeting_settings", _rpc_face_get_greeting_settings)
@@ -777,6 +816,12 @@ def main() -> int:
     ipc.register_rpc("camera2.latest_jpeg", _rpc_camera2_latest_jpeg)
     ipc.register_rpc("camera2.snapshot_jpeg", _rpc_camera2_snapshot_jpeg)
     ipc.register_rpc("depth.get_enabled_flags", _rpc_depth_get_enabled_flags)
+    ipc.register_rpc("av.record_clip", _rpc_av_record_clip)
+    ipc.register_rpc("av.play_recording", _rpc_av_play_recording)
+    ipc.register_rpc("av.repeat_last_spoken", _rpc_av_repeat_last_spoken)
+    ipc.register_rpc("av.play_spectrum_test", _rpc_av_play_spectrum_test)
+    ipc.register_rpc("av.get_voice_output_gain", _rpc_av_get_voice_output_gain)
+    ipc.register_rpc("av.set_voice_output_gain", _rpc_av_set_voice_output_gain)
 
     return run_services(services=services, unit_name="core")
 
