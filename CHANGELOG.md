@@ -4,6 +4,35 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.58.3] - 2026-09-04
+### Fixed
+- **Audio only worked after manually re-selecting the reSpeaker in the RPi
+  desktop audio settings, the web GUI volume slider had no audible effect,
+  and the equalizer appeared non-functional — all after a cold boot.**
+  Root cause: `pipewire_eq.ensure_default()` (called once from
+  `AVService.on_start()` at every core-service start, including boot) did a
+  single un-retried lookup for the `effect_input.da_eq` filter-chain sink
+  and gave up silently if not found. On a warm service *restart* PipeWire/
+  WirePlumber/filter-chain are already up, so the lookup always succeeded
+  instantly — masking the bug in every prior investigation/test. On a real
+  *cold boot*, `filter-chain.service` (which creates the EQ node) races
+  against `desktop-assistant-core.service` enumerating the USB reSpeaker
+  and spinning up the filter graph, and can lose that race. When it did,
+  the raw reSpeaker/HDMI hardware sink was left as the system default
+  permanently — with no self-healing — until a human manually reselected
+  the reSpeaker in a desktop audio panel, which is exactly the action that
+  re-elects the EQ sink as default. Since the web GUI volume slider and the
+  EQ presets both target the EQ sink (per the v1.54.2 fix), neither had any
+  audible effect while the raw hardware sink was in control.
+- Fixed by making `ensure_default()` poll for the EQ sink for up to ~15 s
+  (matching the retry pattern already used by `_apply_bands()` after a
+  filter-chain restart) instead of giving up after one lookup, and logging
+  a warning (instead of a silent info line) if the sink still never
+  appears so the failure is visible in the journal going forward.
+- Added `tests/test_pipewire_eq.py::test_ensure_default_retries_until_sink_appears`
+  and `::test_ensure_default_gives_up_after_max_retries` to cover the retry
+  behavior and prevent this regressing again.
+
 ## [1.58.2] - 2026-09-04
 ### Fixed
 - **Web GUI audio buttons (Repeat, Record, Playback, Spectrum Test, Voice

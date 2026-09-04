@@ -135,3 +135,57 @@ def test_apply_bands_restart_failure_returns_false(monkeypatch, tmp_path):
     assert result is False
 
 
+
+
+def test_ensure_default_retries_until_sink_appears(monkeypatch, tmp_path):
+    """ensure_default() must retry (like _apply_bands) instead of giving up
+    on a single lookup — a cold boot can have filter-chain still spinning up
+    the effect_input.da_eq node by the time AVService.on_start() runs, even
+    though the same lookup succeeds instantly on a warm service restart."""
+    conf_file = tmp_path / "da-eq.conf"
+    conf_file.write_text("# config")
+    monkeypatch.setattr(_pweq, "_CONF_FILE", conf_file)
+    monkeypatch.setattr(_pweq.time, "sleep", lambda _: None)
+
+    calls = {"n": 0}
+
+    def _flaky_lookup():
+        calls["n"] += 1
+        return "146" if calls["n"] >= 3 else None
+
+    monkeypatch.setattr(_pweq, "_get_eq_sink_id", _flaky_lookup)
+    set_default_calls = []
+    monkeypatch.setattr(_pweq, "_set_default_sink",
+                         lambda sid: set_default_calls.append(sid) or True)
+    monkeypatch.setattr(_pweq, "_restore_volumes", lambda sid: None)
+
+    _pweq.ensure_default()
+
+    assert calls["n"] == 3
+    assert set_default_calls == ["146"]
+    assert _pweq.is_active() is True
+
+
+def test_ensure_default_gives_up_after_max_retries(monkeypatch, tmp_path):
+    """If the sink never appears, ensure_default() must not hang forever or
+    silently mark itself active."""
+    conf_file = tmp_path / "da-eq.conf"
+    conf_file.write_text("# config")
+    monkeypatch.setattr(_pweq, "_CONF_FILE", conf_file)
+    monkeypatch.setattr(_pweq.time, "sleep", lambda _: None)
+    monkeypatch.setattr(_pweq, "_active", False)
+
+    calls = {"n": 0}
+
+    def _never_appears():
+        calls["n"] += 1
+        return None
+
+    monkeypatch.setattr(_pweq, "_get_eq_sink_id", _never_appears)
+    monkeypatch.setattr(_pweq, "_set_default_sink",
+                         lambda sid: pytest.fail("should not be called"))
+
+    _pweq.ensure_default()
+
+    assert calls["n"] == 50
+    assert _pweq.is_active() is False

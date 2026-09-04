@@ -411,18 +411,42 @@ def ensure_default() -> None:
 
     Called at service startup — no restart needed because filter-chain
     already loaded the persisted config on boot.
+
+    On a cold boot, ``filter-chain.service`` (which creates the
+    ``effect_input.da_eq`` node) races against ``desktop-assistant-core``
+    starting up — PipeWire/WirePlumber/filter-chain can take a couple of
+    seconds longer to enumerate the reSpeaker and spin up the filter graph
+    than AVService takes to reach this call. A single un-retried lookup
+    here silently lost that race on boot (though it reliably succeeded on
+    a plain service *restart*, since PipeWire/filter-chain were already
+    warm) — leaving the raw reSpeaker/HDMI sink as the system default
+    forever, with no self-healing, until a human manually re-selected the
+    reSpeaker in the desktop audio panel. That single manual reselect is
+    exactly what re-elects the EQ sink as default, matching the reported
+    "audio only works after I select the reSpeaker" symptom. Poll like
+    ``_apply_bands()`` does after a filter-chain restart.
     """
     global _active
     if not _CONF_FILE.exists():
         return
-    sink_id = _get_eq_sink_id()
+    # Cold boot can take much longer than a warm service restart for
+    # PipeWire/WirePlumber/filter-chain to enumerate the USB reSpeaker and
+    # spin up the filter graph, so poll far longer here (~15 s) than the
+    # ~3 s used after an already-warm filter-chain restart in _apply_bands().
+    sink_id: Optional[str] = None
+    for _ in range(50):
+        sink_id = _get_eq_sink_id()
+        if sink_id:
+            break
+        time.sleep(0.3)
     if sink_id:
         _set_default_sink(sink_id)
         _restore_volumes(sink_id)
         _active = True
         log.info("pipewire_eq: restored DA Equalizer as default sink (id %s)", sink_id)
     else:
-        log.info("pipewire_eq: DA EQ config exists but sink not found — skipping")
+        log.warning("pipewire_eq: DA EQ config exists but sink did not appear after boot — "
+                     "audio may default to the raw hardware sink until manually reselected")
 
 
 # ── Internal ──────────────────────────────────────────────────────────────────
