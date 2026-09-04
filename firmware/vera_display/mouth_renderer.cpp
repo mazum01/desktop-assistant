@@ -76,17 +76,19 @@ struct Geometry {
 };
 
 const Geometry &geometry_for(State state) {
-  static const Geometry kNeutral{Shape::kBar, 0.5f, 0.10f, 0.5f, 0.0f, 0.0f, 1000, COLOR_MOUTH};
-  static const Geometry kListening{Shape::kBar, 0.45f, 0.16f, 0.6f, 0.0f, 0.15f, 900, COLOR_MOUTH};
+  static const Geometry kNeutral{Shape::kBar, 0.42f, 0.09f, 1.0f, 0.0f, 0.0f, 1000, COLOR_MOUTH};
+  static const Geometry kListening{Shape::kBar, 0.38f, 0.14f, 1.0f, 0.0f, 0.15f, 900, COLOR_MOUTH};
   // Speaking previously bounced from 0.22 to 0.77 height every 260ms, which
   // reads as flicker rather than a talking motion at 15fps. Reduced
   // amplitude and slowed the period so the oval's size changes are visible
   // as smooth pulsing across several frames instead of a jarring jump.
-  static const Geometry kSpeaking{Shape::kOval, 0.55f, 0.28f, 0.0f, 0.0f, 0.22f, 420, COLOR_MOUTH};
-  static const Geometry kHappy{Shape::kSmile, 0.62f, 0.34f, 0.0f, 0.6f, 0.05f, 1400, COLOR_MOUTH};
-  static const Geometry kSad{Shape::kFrown, 0.5f, 0.28f, 0.0f, 0.45f, 0.0f, 1000, COLOR_MOUTH};
-  static const Geometry kSurprised{Shape::kOval, 0.32f, 0.32f, 0.0f, 0.0f, 0.08f, 500, COLOR_MOUTH};
-  static const Geometry kError{Shape::kBar, 0.5f, 0.08f, 0.0f, 0.0f, 0.0f, 1000, COLOR_ERROR};
+  static const Geometry kSpeaking{Shape::kOval, 0.5f, 0.26f, 0.0f, 0.0f, 0.20f, 420, COLOR_MOUTH};
+  // Bold, chunky crescent smile/frown modeled after a rounded-cap "flat
+  // bottom U" style (thick stroke, wide reach) rather than a thin arc.
+  static const Geometry kHappy{Shape::kSmile, 0.7f, 0.4f, 0.0f, 0.7f, 0.05f, 1400, COLOR_MOUTH};
+  static const Geometry kSad{Shape::kFrown, 0.62f, 0.34f, 0.0f, 0.55f, 0.0f, 1000, COLOR_MOUTH};
+  static const Geometry kSurprised{Shape::kOval, 0.34f, 0.34f, 0.0f, 0.0f, 0.08f, 500, COLOR_MOUTH};
+  static const Geometry kError{Shape::kBar, 0.42f, 0.08f, 0.0f, 0.0f, 0.0f, 1000, COLOR_ERROR};
 
   switch (state) {
     case State::kNeutral:
@@ -132,31 +134,33 @@ void compute_frame_rect(const Geometry &geo, unsigned long elapsed_ms, int16_t *
   *y = static_cast<int16_t>((screen_h - height) / 2.0f);
 }
 
-// Draws a smile/frown as a thick curved stroke (a parabolic arc sampled as
-// overlapping filled circles), rather than an abstract rounded rectangle.
-// `bulge_down` true draws a smile (curves downward like a "U", i.e. corners
-// turn up); false draws a frown (curves upward, corners turn down).
+// Draws a smile/frown as a solid half-moon ("D") shape: a filled ellipse
+// with the far half clipped away by painting over it with the background
+// color, leaving a solid rounded crescent rather than a thin stroke.
+// `bulge_down` true keeps the bottom arc (reads as an upward smile);
+// false keeps the top arc (reads as a downward frown).
 void draw_curve(int16_t x, int16_t y, int16_t w, int16_t h, float curve_frac, bool bulge_down,
                  uint16_t color) {
-  int16_t cx = x + w / 2;
-  int16_t cy = y + h / 2;
-  float half_w = w / 2.0f;
-  float bulge = curve_frac * static_cast<float>(h) * (bulge_down ? 1.0f : -1.0f);
-  // Stroke thickness scales with the box height so the curve reads as a
-  // mouth outline rather than a hairline, and never drops below something
-  // visible on a 172x320 panel.
-  int16_t thickness = static_cast<int16_t>(h * 0.32f);
-  if (thickness < 4) {
-    thickness = 4;
+  // The "mouth box" height controls the crescent's thickness; make the
+  // full ellipse taller than the box so that only the outer arc portion
+  // we keep is the fraction curve_frac of that taller ellipse's radius,
+  // giving a fuller, chunkier crescent instead of a thin sliver.
+  int16_t rx = w / 2;
+  int16_t ry = static_cast<int16_t>((h / 2) / (curve_frac > 0.05f ? curve_frac : 0.05f));
+  if (ry < h / 2) {
+    ry = h / 2;
   }
-  int16_t stroke_r = thickness / 2;
+  int16_t cx = x + w / 2;
+  int16_t cy = bulge_down ? (y - ry + h) : (y + ry);
 
-  constexpr int kSegments = 18;
-  for (int i = 0; i <= kSegments; ++i) {
-    float t = -1.0f + 2.0f * static_cast<float>(i) / static_cast<float>(kSegments);
-    int16_t px = cx + static_cast<int16_t>(t * half_w);
-    int16_t py = cy + static_cast<int16_t>(bulge * (1.0f - t * t));
-    g_gfx->fillCircle(px, py, stroke_r, color);
+  g_gfx->fillEllipse(cx, cy, rx, ry, color);
+
+  // Clip away the half of the ellipse outside the mouth box by painting
+  // over it with the background color -- leaves a solid D-shaped crescent.
+  if (bulge_down) {
+    g_gfx->fillRect(x - 2, cy - ry - 2, w + 4, (cy - y) + 1, COLOR_BG);
+  } else {
+    g_gfx->fillRect(x - 2, y + h, w + 4, (cy + ry) - (y + h) + 2, COLOR_BG);
   }
 }
 

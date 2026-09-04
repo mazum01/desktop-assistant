@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.57.1] - 2026-09-03
+### Changed
+- **Smile/frown mouth shapes redrawn as solid crescents instead of curved
+  strokes.** User feedback on v1.57.0 was that the arc-stroke smile/frown
+  looked thin/wrong compared to a chatbot-style reference (bold, solid
+  half-moon "D" shapes). Replaced the parabolic-stroke sweep with a filled
+  ellipse clipped to its bottom half (smile) or top half (frown) via a
+  background-color overpaint, producing a solid rounded crescent. Also
+  reduced neutral/listening/error bar widths slightly and boosted
+  happy/sad box size for a bolder overall look, closer to the reference
+  chatbot mouth style.
+
 ## [1.57.0] - 2026-09-03
 ### Changed
 - **Mouth display now renders via an offscreen framebuffer.** `vera_display`'s
