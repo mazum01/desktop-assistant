@@ -480,7 +480,13 @@ def main() -> int:
     # Let AVService record clips from the already-running capture stream
     # instead of opening a second (conflicting) input device.
     av.set_capture_service(capture_svc)
-    room_svc = RoomService(bus=bus, vision_service=vis, cfg=_room_cfg, anthropic_enabled=_anthropic_enabled)
+    room_svc = RoomService(
+        bus=bus,
+        vision_service=vis,
+        cfg=_room_cfg,
+        anthropic_enabled=_anthropic_enabled,
+        quiet_hours=_qh,
+    )
     face_svc = FaceService(
         bus=bus,
         greeting_cooldown_min=_greeting_cooldown_min,

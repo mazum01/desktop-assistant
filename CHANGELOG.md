@@ -4,6 +4,34 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.58.0] - 2026-09-04
+### Fixed
+- **`RoomService`'s periodic panoramic sweep now obeys quiet hours.** The
+  autonomous room-change-check sweep (`_check_scene`, run on a timer) was
+  always publishing `motion.pan_to` with `override_quiet: True`, so the
+  servo would move to scan the room even during quiet hours — unlike
+  `MotionService`/`FaceService`, which correctly suppress autonomous motion
+  during quiet hours. `RoomService` now accepts a `quiet_hours` dependency
+  (wired from the same shared `QuietHours` instance in `core_main.py`) and
+  skips the autonomous sample entirely while quiet hours are active.
+  User-initiated captures (`room set`, boot-time confirmation) are
+  unaffected and still move the servo immediately, since those are a
+  direct response to a user action rather than autonomous behavior.
+
+### Added
+- **Persistent on/off switch for periodic room-change checking**, exposed
+  across every interface:
+  - CLI: `da room-checking enable|disable|status`.
+  - Web API: `GET`/`PUT /api/settings/room-checking`.
+  - Web GUI: new toggle in the System panel ("Room-change checking").
+  - New bus topics `room.set_checking_enabled` (in) and
+    `room.checking_enabled_changed` (out).
+  - State persists across restarts in
+    `~/.config/desktop-assistant/room_checking_enabled.txt`, following the
+    same pattern as the existing object-detection/anthropic toggles. New
+    `checking_enabled` config default (`true`) added under
+    `room_detection:` in `config/assistant.yaml`.
+
 ## [1.57.1] - 2026-09-03
 ### Changed
 - **Smile/frown mouth shapes redrawn as solid crescents instead of curved

@@ -1939,6 +1939,12 @@ def cmd_help(args) -> int:
                             "                  room get                      Show the current room name.\n"
                             "                  room set <name>               Set the room (e.g. room set Living Room).\n"
                             "                  VERA auto-detects sustained scene changes and prompts verbally.",
+        "room-checking":    "Enable or disable periodic room-change checking (the panoramic servo\n"
+                            "                  sweep RoomService runs every few minutes). Obeys quiet hours.\n"
+                            "                  Sub-commands:\n"
+                            "                  room-checking enable        Turn on periodic room-change checking.\n"
+                            "                  room-checking disable       Turn off periodic room-change checking.\n"
+                            "                  room-checking status        Show current state.",
         "radon":            "EcoQube radon monitor. Sub-commands:\n"
                             "                  radon status                  Show current pCi/L, Bq/m³, and EPA alert level.\n"
                             "                  radon announce                Speak the current radon level via TTS.",
@@ -2612,6 +2618,35 @@ def cmd_room_set(args) -> int:
     else:
         print(json.dumps(r, indent=2))
     return 0 if r.get("ok") else 1
+
+
+def cmd_room_checking(args) -> int:
+    """Enable/disable or show the state of periodic room-change checking."""
+    if args.action == "status":
+        try:
+            d = _http_get("/api/settings/room-checking")
+            enabled = d.get("enabled", True)
+            print(f"Room checking: {'enabled' if enabled else 'disabled'}")
+        except Exception:
+            r = _request({"cmd": "last", "topic": "room.checking_enabled_changed"})
+            payload = r.get("payload")
+            if isinstance(payload, dict):
+                enabled = payload.get("enabled", True)
+                print(f"Room checking: {'enabled' if enabled else 'disabled'}")
+            else:
+                print("Room checking: status unknown")
+        return 0
+    enabled = args.action == "enable"
+    try:
+        d = _http_put("/api/settings/room-checking", {"enabled": enabled})
+        ok = d.get("ok", True)
+    except Exception:
+        r = _request({"cmd": "publish", "topic": "room.set_checking_enabled",
+                      "payload": {"enabled": enabled}})
+        ok = r.get("ok", False)
+    label = "enabled" if enabled else "disabled"
+    print(f"Room checking {label}." if ok else "Error toggling room checking.")
+    return 0 if ok else 1
 
 
 def cmd_version(_args) -> int:
@@ -3481,6 +3516,14 @@ def main() -> int:
     room_set_sp = room_sub.add_parser("set", help="Set the current room name (e.g. vera room set Living Room)")
     room_set_sp.add_argument("name", nargs="+", help="Room name (can contain spaces)")
     room_set_sp.set_defaults(func=cmd_room_set)
+
+    # ── room-checking subcommand group ────────────────────────────────
+    rc_sp = sub.add_parser("room-checking", help="Enable/disable periodic room-change checking")
+    rc_sub = rc_sp.add_subparsers(dest="action", metavar="<subcommand>")
+    rc_sub.required = True
+    rc_sub.add_parser("enable",  help="Turn on periodic room-change checking").set_defaults(func=cmd_room_checking)
+    rc_sub.add_parser("disable", help="Turn off periodic room-change checking").set_defaults(func=cmd_room_checking)
+    rc_sub.add_parser("status",  help="Show current state").set_defaults(func=cmd_room_checking)
 
     radon_sp = sub.add_parser("radon", help="EcoQube radon monitor")
     radon_sp.set_defaults(func=lambda _a: (print("Usage: vera radon status | vera radon announce"), 1)[1])

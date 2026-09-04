@@ -54,26 +54,41 @@ The ``embedding`` key is new; old state files without it fall back to the
 brightness-histogram comparison method automatically.
 
 Topics subscribed:
-    room.set              {"name": str}     — explicitly set the current room
-    motion.position       {"angle": float}  — track current servo angle
-    vision.depth_map      {…}               — cache latest stereo depth map
-    vision.mono_depth_map {…}               — cache latest mono depth map
-    perception.faces      {"faces": […]}    — cache latest face count; samples
-                                             are skipped while faces are present
+    room.set                    {"name": str}     — explicitly set the current room
+    room.set_checking_enabled   {"enabled": bool} — turn periodic room-change checking on/off
+    motion.position             {"angle": float}  — track current servo angle
+    vision.depth_map            {…}               — cache latest stereo depth map
+    vision.mono_depth_map       {…}               — cache latest mono depth map
+    perception.faces            {"faces": […]}    — cache latest face count; samples
+                                                     are skipped while faces are present
 
 Topics published:
-    room.updated   {"name": str}   — fired whenever the room name changes
-    av.say         {"text": str}   — spoken prompts (unknown room, divergence)
-    motion.pan_to  {"angle", …}    — servo pan during signature sweep
-    tracking.set_face_tracking {"enabled": bool}  — paused during sweep
+    room.updated                {"name": str}     — fired whenever the room name changes
+    room.checking_enabled_changed {"enabled": bool} — fired whenever the checking switch changes
+    av.say                      {"text": str}     — spoken prompts (unknown room, divergence)
+    motion.pan_to                {"angle", …}     — servo pan during signature sweep
+    tracking.set_face_tracking  {"enabled": bool} — paused during sweep
 
 Configuration (config/assistant.yaml — room_detection section):
+    checking_enabled    bool   whether periodic room-change checking runs at startup
+                               (default true); the runtime value is persisted to
+                               ~/.config/desktop-assistant/room_checking_enabled.txt
+                               and overrides this default on subsequent restarts.
     sample_interval_s   float  interval between scene comparisons (default 600 s)
     consec_diverged     int    consecutive diverged samples before prompt (default 3)
     similarity_thresh   float  cosine similarity below this = "looks different" (default 0.85)
     prompt_cooldown_s   float  minimum seconds between prompts (default 1800 s)
     low_light_thresh    float  mean brightness below this skips the sample (default 15.0)
     skip_when_faces     bool   skip sample when faces are visible (default true)
+
+Quiet hours
+-----------
+The periodic panoramic sweep moves the servo and is autonomous motion, so it
+is gated by quiet hours (via the ``quiet_hours`` constructor argument) just
+like other autonomous motion — samples are skipped entirely while quiet
+hours are active rather than overriding the lockout. User-initiated captures
+(explicit ``room.set``, boot-time confirmation) still move the servo
+immediately since those are a direct response to a user action.
 """
 
 from __future__ import annotations
@@ -96,6 +111,9 @@ from src.core.service import Service
 log = logging.getLogger(__name__)
 
 _STATE_PATH = Path(__file__).parents[2] / "config" / "room_state.json"
+
+_STATE_DIR = Path.home() / ".config" / "desktop-assistant"
+_ROOM_CHECKING_STATE_FILE = _STATE_DIR / "room_checking_enabled.txt"
 
 # Default values — overridden by config/assistant.yaml room_detection section
 _DEFAULT_SAMPLE_INTERVAL_S: float = 600.0   # check scene every 10 minutes
@@ -232,11 +250,13 @@ class RoomService(Service):
         state_path: Path = _STATE_PATH,
         cfg: Optional[dict] = None,
         anthropic_enabled: bool = True,
+        quiet_hours=None,
     ) -> None:
         super().__init__(bus=bus)
         self._vision_svc = vision_service
         self._state_path = state_path
         self._anthropic_enabled: bool = bool(anthropic_enabled)
+        self._quiet_hours = quiet_hours
 
         # Runtime tunables (from config, with defaults)
         _cfg = cfg or {}
@@ -257,6 +277,13 @@ class RoomService(Service):
         )
         self._skip_when_faces: bool = bool(
             _cfg.get("skip_when_faces", _DEFAULT_SKIP_WHEN_FACES)
+        )
+
+        # Whether periodic room-change checking (the panoramic servo sweep)
+        # runs at all. Persisted across restarts independently of the
+        # room_detection config default, so a user's runtime toggle sticks.
+        self._checking_enabled: bool = bool(
+            _cfg.get("checking_enabled", True)
         )
 
         # Room state
@@ -293,6 +320,10 @@ class RoomService(Service):
         self._timer_thread: Optional[threading.Thread] = None
 
     # ── Properties ────────────────────────────────────────────────────
+
+    @property
+    def checking_enabled(self) -> bool:
+        return self._checking_enabled
 
     @property
     def room_name(self) -> Optional[str]:
@@ -341,17 +372,20 @@ class RoomService(Service):
             "skip_when_faces": self._skip_when_faces,
             "sample_interval_s": self._sample_interval_s,
             "anthropic_enabled": self._anthropic_enabled,
+            "checking_enabled": self._checking_enabled,
         }
 
 
     def on_start(self) -> None:
         self._load_state()
-        self.bus.subscribe("room.set",               self._on_set)
-        self.bus.subscribe("motion.position",        self._on_motion_position)
-        self.bus.subscribe("vision.depth_map",       self._on_depth_map)
-        self.bus.subscribe("vision.mono_depth_map",  self._on_mono_depth_map)
-        self.bus.subscribe("perception.faces",       self._on_faces)
-        self.bus.subscribe("anthropic.set_enabled",  self._on_set_anthropic_enabled)
+        self._load_checking_enabled()
+        self.bus.subscribe("room.set",                    self._on_set)
+        self.bus.subscribe("motion.position",              self._on_motion_position)
+        self.bus.subscribe("vision.depth_map",             self._on_depth_map)
+        self.bus.subscribe("vision.mono_depth_map",        self._on_mono_depth_map)
+        self.bus.subscribe("perception.faces",             self._on_faces)
+        self.bus.subscribe("anthropic.set_enabled",        self._on_set_anthropic_enabled)
+        self.bus.subscribe("room.set_checking_enabled",    self._on_set_checking_enabled)
         self._stop_evt.clear()
         self._timer_thread = threading.Thread(
             target=self._sample_loop, name="room-sampler", daemon=True
@@ -414,6 +448,39 @@ class RoomService(Service):
                 "RoomService: Anthropic API %s",
                 "enabled" if self._anthropic_enabled else "disabled",
             )
+
+    def _on_set_checking_enabled(self, _topic, payload) -> None:
+        if not isinstance(payload, dict) or "enabled" not in payload:
+            return
+        self._checking_enabled = bool(payload["enabled"])
+        log.info(
+            "RoomService: room checking %s",
+            "enabled" if self._checking_enabled else "disabled",
+        )
+        if not self._checking_enabled:
+            # Reset divergence tracking so re-enabling doesn't immediately
+            # fire a stale prompt built up before the toggle.
+            with self._lock:
+                self._consec_diverged = 0
+        try:
+            _STATE_DIR.mkdir(parents=True, exist_ok=True)
+            _ROOM_CHECKING_STATE_FILE.write_text(
+                "true" if self._checking_enabled else "false"
+            )
+        except Exception as exc:
+            log.warning("RoomService: failed to persist checking_enabled state: %s", exc)
+        if self.bus is not None:
+            self.bus.publish("room.checking_enabled_changed", {"enabled": self._checking_enabled})
+
+    def _load_checking_enabled(self) -> None:
+        """Restore the persisted room-checking on/off switch (survives restarts)."""
+        if _ROOM_CHECKING_STATE_FILE.exists():
+            try:
+                saved = _ROOM_CHECKING_STATE_FILE.read_text().strip().lower()
+                self._checking_enabled = saved != "false"
+                log.info("RoomService: restored checking_enabled=%s", self._checking_enabled)
+            except Exception as exc:
+                log.warning("RoomService: failed to restore checking_enabled state: %s", exc)
 
     def _on_faces(self, _topic, payload) -> None:
         """Cache the number of faces currently visible."""
@@ -579,6 +646,20 @@ class RoomService(Service):
     def _check_scene(self) -> None:
         """Capture panoramic signature; compare with baseline; prompt if diverged long enough."""
         self._last_check_ts = time.monotonic()
+
+        if not self._checking_enabled:
+            self._last_skip_reason = "checking_disabled"
+            log.debug("RoomService: room checking disabled — skipping sample")
+            return
+
+        # Quiet hours: the sample requires a servo sweep, which used to
+        # ignore quiet hours entirely (a regression — it previously obeyed
+        # the quiet-hours lockout like all other autonomous motion). Skip
+        # the whole sample rather than silently overriding quiet hours.
+        if self._quiet_hours is not None and self._quiet_hours.is_quiet():
+            self._last_skip_reason = "quiet_hours"
+            log.debug("RoomService: quiet hours active — skipping room sweep")
+            return
 
         # Face-skip: if faces are visible, the embedding would include person
         # edges that aren't part of the room structure — defer judgment.

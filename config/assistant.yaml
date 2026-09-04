@@ -160,6 +160,7 @@ radon:
   telegram_alert_cooldown_s: 7200
   telegram_alert_pcil: 1.5
 room_detection:
+  checking_enabled: true
   consec_diverged: 3
   low_light_thresh: 15.0
   prompt_cooldown_s: 1800

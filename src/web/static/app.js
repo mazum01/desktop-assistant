@@ -1704,6 +1704,25 @@ async function saveAnthropicEnabled(enabled) {
   } catch (e) { /* ignore */ }
 }
 
+async function loadRoomCheckingEnabled() {
+  try {
+    const r = await fetch("/api/settings/room-checking");
+    if (!r.ok) return;
+    const d = await r.json();
+    el("room-checking-enabled").checked = !!d.enabled;
+  } catch (e) { /* ignore */ }
+}
+
+async function saveRoomCheckingEnabled(enabled) {
+  try {
+    await fetch("/api/settings/room-checking", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+  } catch (e) { /* ignore */ }
+}
+
 async function loadPrivacySettings() {
   const st = el("privacy-status");
   try {
@@ -2897,6 +2916,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadCam2Resolutions();
   loadObjectDetectionEnabled();
   loadAnthropicEnabled();
+  loadRoomCheckingEnabled();
   loadPrivacySettings();
   loadMusicStatus();
   loadPodcasts();

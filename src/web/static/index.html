@@ -916,6 +916,12 @@
 <span>Anthropic Claude API (room ID + OpenClaw greetings)</span>
 </label>
 </div>
+<div class="row-input" style="margin-top:6px">
+<label class="qh-toggle" style="margin:0">
+<input id="room-checking-enabled" onchange="saveRoomCheckingEnabled(this.checked)" type="checkbox"/>
+<span>Room-change checking (periodic panoramic servo sweep; obeys quiet hours)</span>
+</label>
+</div>
 </div>
 </div>
 </section>
@@ -1034,6 +1040,7 @@
 <tr><td><code>da random-motion enable</code></td><td>Idle gaze drifts</td></tr>
 <tr><td><code>da object-detection enable</code></td><td>Enable COCO object classification</td></tr>
 <tr><td><code>da object-detection disable</code></td><td>Disable object classification</td></tr>
+<tr><td><code>da room-checking enable/disable</code></td><td>Enable or disable periodic room-change checking</td></tr>
 <tr><td><code>da anthropic enable</code></td><td>Enable Anthropic Claude API use</td></tr>
 <tr><td><code>da anthropic disable</code></td><td>Disable Anthropic Claude API use</td></tr>
 <tr><td><code>da system ping</code></td><td>Confirm daemon is running</td></tr>

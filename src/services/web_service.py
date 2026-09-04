@@ -43,6 +43,8 @@ GET  /api/settings/random-motion  Get random motion enabled state
 PUT  /api/settings/random-motion  Set random motion  body: {"enabled": bool}
 GET  /api/settings/object-detection  Get object detection enabled state
 PUT  /api/settings/object-detection  Set object detection  body: {"enabled": bool}
+GET  /api/settings/room-checking  Get room-change checking enabled state
+PUT  /api/settings/room-checking  Set room-change checking  body: {"enabled": bool}
 GET  /api/settings/fan/control-points  Get fan control points
 PUT  /api/settings/fan/control-points  Set fan control points body: {"points": [{"temp_c": float, "duty": float}]}
 GET  /api/settings/fan/temp-blend      Get temp blend weights
@@ -1463,6 +1465,19 @@ class WebService:
             if self.bus:
                 self.bus.publish("room.set", {"name": body.name})
             return {"ok": True, "name": body.name}
+
+        @app.get("/api/settings/room-checking")
+        async def api_get_room_checking():
+            if not self._room_svc:
+                return {"enabled": True}
+            status = await asyncio.to_thread(self._room_svc.get_status)
+            return {"enabled": status.get("checking_enabled", True)}
+
+        @app.put("/api/settings/room-checking")
+        async def api_put_room_checking(body: _ServoBody):
+            if self.bus:
+                self.bus.publish("room.set_checking_enabled", {"enabled": body.enabled})
+            return {"ok": True, "enabled": body.enabled}
 
         @app.put("/api/faces/{face_id}")
         async def api_rename_face(face_id: str, body: _RenameBody):
