@@ -168,6 +168,19 @@ VERA through the established BLE GATT path.
       (`PipeWireMicInput`): a non-blocking `pw-record` subprocess feeds the
       AudioCaptureService. Clean, bounded shutdown (restart ~4s). Config:
       `audio.default.input_device_name: pipewire`.
+- [ ] **Web GUI volume control still non-functional** — the stale PipeWire
+  sink-ID cache fixed in v1.60.0 (cached node IDs are now re-validated and
+  writes are return-code checked with one retry) was verified working from a
+  direct `MusicService.set_volume()` call on the live sink, but the user
+  reports the *web GUI* slider still has no effect. The remaining fault is
+  therefore somewhere in the web path rather than in `music_service`:
+  candidates are the `PUT /api/music/volume` route resolving a different
+  service instance than the one holding the corrected cache, the web service
+  running in a separate process with its own module-level `_CACHED_SINK_ID`,
+  or the front-end not actually issuing the request. Reproduce by moving the
+  slider while watching `wpctl get-volume <live-eq-sink-id>` and the web
+  service journal; confirm whether the request reaches the route at all
+  before touching `music_service` again.
 
 ---
 

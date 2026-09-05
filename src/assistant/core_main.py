@@ -380,10 +380,38 @@ def main() -> int:
                 connect_timeout_s=float(_display_cfg_raw.get("connect_timeout_s", 4.0)),
                 max_message_chars=int(_display_cfg_raw.get("max_message_chars", 96)),
                 expected_services=list(_display_cfg_raw.get("expected_services", [])),
+                spectrum_enabled=bool(_display_cfg_raw.get("spectrum_enabled", True)),
+                spectrum_max_fps=float(_display_cfg_raw.get("spectrum_max_fps", 12.0)),
+                spectrum_max_bands=int(_display_cfg_raw.get("spectrum_max_bands", 12)),
             ),
         )
         if _display_enabled else None
     )
+
+    # Playback spectrum analyzer feeding the display's graphic-EQ
+    # visualization. Only useful when the display is present and its
+    # visualization is enabled, so it's skipped entirely otherwise rather
+    # than holding a PipeWire monitor capture nobody consumes.
+    _spectrum_cfg_raw = _cfg.get("playback_spectrum", {}) or {}
+    _spectrum_svc = None
+    if (
+        display_svc is not None
+        and bool(_display_cfg_raw.get("spectrum_enabled", True))
+        and bool(_spectrum_cfg_raw.get("enabled", True))
+    ):
+        from src.services.playback_spectrum_service import (
+            PlaybackSpectrumConfig, PlaybackSpectrumService,
+        )
+        _spectrum_svc = PlaybackSpectrumService(
+            bus=bus,
+            config=PlaybackSpectrumConfig(
+                sink_name=str(_spectrum_cfg_raw.get("sink_name", "")),
+                bands=int(_display_cfg_raw.get("spectrum_max_bands", 12)),
+                fps=float(_display_cfg_raw.get("spectrum_max_fps", 12.0)),
+                floor_db=float(_spectrum_cfg_raw.get("floor_db", -70.0)),
+                ceiling_db=float(_spectrum_cfg_raw.get("ceiling_db", -10.0)),
+            ),
+        )
 
     # Wire LED ring to speech activity if respeaker_flex backend is active
     if _led is not None:
@@ -593,6 +621,9 @@ def main() -> int:
 
     if display_svc is not None:
         services.insert(0, display_svc)
+
+    if _spectrum_svc is not None:
+        services.append(_spectrum_svc)
 
     if display_svc is not None and not _display_cfg_raw.get("expected_services"):
         display_svc.set_expected_services([s.name for s in services if s is not display_svc])

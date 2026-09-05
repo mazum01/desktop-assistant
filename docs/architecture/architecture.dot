@@ -13,7 +13,7 @@ digraph VERA {
     ranksep=0.6;
     fontname="Helvetica";
     labelloc="t";
-    label=<<b>VERA — Vision-Enabled Reasoning Agent — System Architecture</b><br/><font point-size="10">v1.54.0 — ESP32-C6 LCD startup/status display + BLE OTA</font>>;
+    label=<<b>VERA — Vision-Enabled Reasoning Agent — System Architecture</b><br/><font point-size="10">v1.61.0 — playback spectrum visualization on the ESP32-C6 mouth display</font>>;
     fontsize=16;
 
     node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin=0.15];
@@ -114,9 +114,10 @@ digraph VERA {
         svc_audio   [label="AudioCaptureService\n→ audio.level / chunk\n+ latest_chunk()",                          fillcolor="#a8d88d"];
         svc_voice   [label="VoiceCommandService\n← audio stream/VAD\n→ voice.state / wake / transcript / intent\n→ av.utterance (routed transcript)\nwake-window + dialog context", fillcolor="#a8d88d"];
         svc_av      [label="AVService\n← av.say / beep / utterance / announce_version\n→ av.spoke / av.speaking_started / version_announced", fillcolor="#a8d88d"];
-        svc_display [label="DisplayService\n← system.startup_status / service.started / *.error\n→ display.status / display.error\n(optional BLE write to ESP32)", fillcolor="#a8d88d"];
+        svc_display [label="DisplayService\n← system.startup_status / service.started / *.error\n← display.spectrum / av.speaking_started / av.spoke\n→ display.status / display.error\n(BLE write to ESP32: status / mouth / eq)", fillcolor="#a8d88d"];
         fw_display [label="Arduino firmware\nfirmware/vera_display\n(ESP32-C6 process boundary)\nNimBLEOta service (BLE OTA, 0x8018)", fillcolor="#a8d88d"];
         svc_perception [label="PerceptionService\n← vision.frame_ready\n→ perception.faces / perception.error\n+ FaceEmbedder (ArcFace) + FaceRegistry", fillcolor="#a8d88d"];
+        svc_spectrum [label="PlaybackSpectrumService\n← music.state_changed / podcast.playback\npw-record on sink monitor + FFT\n→ display.spectrum", fillcolor="#a8d88d"];
         svc_telemetry [label="TelemetryService\n← thermal.* / motion.position / audio.level\n→ telemetry.flush\nSQLite ring buffer", fillcolor="#a8d88d"];
         svc_ipc     [label="IPCBridge (core)\nPUB ipc:///tmp/desktop-assistant.pub\nREP ipc:///tmp/desktop-assistant.rep\nSUB ← thermal.pub (upstream)\ncmds: ping / topics / last / publish / status", fillcolor="#a8d88d"];
         svc_face    [label="FaceService\n← perception.faces / face.meet\n→ av.say (greetings)\n→ face.identified\ncooldown-based re-greet", fillcolor="#a8d88d"];
@@ -157,7 +158,7 @@ digraph VERA {
     hw_spk    -> drv_aout   [label="USB"];
     hw_hailo  -> drv_hailo  [label="PCIe"];
     hw_display -> fw_display [label="SPI + GPIO", color="#aa6600"];
-    svc_display -> fw_display [label="BLE GATT", color="#aa6600"];
+    svc_display -> fw_display [label="BLE GATT\nstatus / mouth / eq", color="#aa6600"];
     ext_ota -> fw_display [label="BLE GATT (OTA)", color="#aa6600", style="dashed"];
 
     drv_hailo -> drv_facedet;
@@ -215,6 +216,8 @@ digraph VERA {
     svc_audio -> svc_voice  [label="latest_chunk() + chunk_index()", style=dashed, color="#888888"];
     core_bus -> svc_av      [color="#226622"];
     svc_av   -> core_bus    [color="#226622"];
+    core_bus -> svc_spectrum [color="#226622"];
+    svc_spectrum -> core_bus [color="#226622"];
     core_bus -> svc_display [color="#226622"];
     svc_display -> core_bus [color="#226622"];
     core_bus -> svc_perception [color="#226622"];
@@ -257,6 +260,7 @@ digraph VERA {
     svc_voice   -> core_svc [style=dotted];
     svc_av      -> core_svc [style=dotted];
     svc_display -> core_svc [style=dotted];
+    svc_spectrum -> core_svc [style=dotted];
     svc_perception -> core_svc [style=dotted];
     svc_telemetry -> core_svc [style=dotted];
     svc_ipc     -> core_svc [style=dotted];
@@ -284,5 +288,5 @@ digraph VERA {
     // ─────────────────────────────────────────────────────────────────
     // Boot ordering
     // ─────────────────────────────────────────────────────────────────
-    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_voice; svc_av; svc_display; svc_perception; svc_telemetry; svc_ipc; svc_face; svc_track; svc_web; svc_clock; svc_object; svc_skills; svc_notif; svc_music; svc_podcast; svc_media_ipc;}
+    {rank=same; svc_thermal; svc_motion; svc_vision; svc_audio; svc_voice; svc_av; svc_display; svc_spectrum; svc_perception; svc_telemetry; svc_ipc; svc_face; svc_track; svc_web; svc_clock; svc_object; svc_skills; svc_notif; svc_music; svc_podcast; svc_media_ipc;}
 }

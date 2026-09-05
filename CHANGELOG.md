@@ -4,6 +4,32 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.61.0] - 2026-09-05
+### Added
+- Real-time graphic-EQ visualization on the ESP32-C6 mouth display. A new
+  `PlaybackSpectrumService` taps the final playback mix, computes a 12-band
+  log-spaced FFT, and publishes `display.spectrum` at 12 fps; `DisplayService`
+  forwards frames to the firmware as a new BLE `eq` command, and a new
+  `eq_renderer` draws height-coloured bars with peak-hold markers.
+- Spectrum tuning knobs under `display:` in `config/assistant.yaml`
+  (`spectrum_enabled`, `spectrum_max_bands`, `spectrum_max_fps`).
+
+### Changed
+- Speech takes priority over the visualization: while VERA is speaking, spectrum
+  frames are dropped and the talking animation is shown, resuming the bars
+  afterwards. The firmware self-clears the bars when playback stops.
+- Capture only runs while music or a podcast is actually playing, so the
+  `pw-record` tap is idle at rest.
+- Band normalization now applies a +12 dB/decade spectral tilt and a
+  -72/-24 dBFS window so upper bands respond to normal program material
+  instead of sitting near zero.
+
+### Fixed
+- Playback is captured by explicitly `pw-link`-ing the sink's monitor ports to
+  an unconnected capture node. Relying on `pw-record --target <sink>` caused
+  WirePlumber to route the stream to the default *source*, silently capturing
+  microphone audio instead of the playback mix.
+
 ## [1.60.0] - 2026-09-05
 ### Added
 - Broadband makeup gain stage (`MAKEUP_GAIN_DB`, +3 dB) in the PipeWire

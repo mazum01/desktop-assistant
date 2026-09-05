@@ -16,6 +16,7 @@
 #include <NimBLEOta.h>
 
 #include "ble_protocol.h"
+#include "eq_renderer.h"
 #include "mouth_renderer.h"
 #include "status_renderer.h"
 
@@ -37,6 +38,7 @@ void initialize_hardware() {
   digitalWrite(LCD_BL, HIGH);
   vera_mouth::begin();
   vera_status::begin();
+  vera_eq::begin();
 }
 
 }  // namespace vera_display
@@ -52,6 +54,7 @@ namespace {
 enum class DisplayMode {
   kMouth,
   kStatus,
+  kEq,
 };
 
 DisplayMode g_display_mode = DisplayMode::kMouth;
@@ -143,11 +146,48 @@ void handle_command(const String &line) {
       return;
     }
     vera_mouth::set_state(state);
+    // Speech/emotion outranks the music visualization: drop the bars so the
+    // mouth is visible immediately.
+    vera_eq::clear();
     if (g_display_mode != DisplayMode::kMouth) {
       g_display_mode = DisplayMode::kMouth;
       vera_mouth::force_redraw();
     }
     send_ack("mouth", true);
+    return;
+  }
+  if (strcmp(cmd, "eq") == 0) {
+    JsonArrayConst bins = doc["bins"].as<JsonArrayConst>();
+    if (bins.isNull()) {
+      send_ack("eq", false, "missing_bins");
+      return;
+    }
+    // An empty array is the host's explicit "playback stopped" signal:
+    // stop the visualization and hand the screen back to the mouth.
+    if (bins.size() == 0) {
+      vera_eq::clear();
+      if (g_display_mode == DisplayMode::kEq) {
+        g_display_mode = DisplayMode::kMouth;
+        vera_mouth::force_redraw();
+      }
+      send_ack("eq", true);
+      return;
+    }
+    float values[vera_eq::MAX_BANDS];
+    size_t n = 0;
+    for (JsonVariantConst v : bins) {
+      if (n >= vera_eq::MAX_BANDS) {
+        break;
+      }
+      values[n++] = v.as<float>();
+    }
+    vera_eq::set_bands(values, n);
+    // A status message still outranks the visualization, so boot/error text
+    // is never hidden by music bars.
+    if (g_display_mode != DisplayMode::kStatus) {
+      g_display_mode = DisplayMode::kEq;
+    }
+    send_ack("eq", true);
     return;
   }
   if (strcmp(cmd, "status") == 0) {
@@ -322,6 +362,14 @@ void loop() {
   if (g_display_mode == DisplayMode::kStatus) {
     vera_status::update();
     if (vera_status::consume_ready_expired()) {
+      g_display_mode = DisplayMode::kMouth;
+      vera_mouth::force_redraw();
+    }
+  } else if (g_display_mode == DisplayMode::kEq) {
+    vera_eq::update();
+    // The renderer self-clears when host frames stop arriving; follow it
+    // back to the mouth so the panel never sits on a frozen spectrum.
+    if (!vera_eq::is_active()) {
       g_display_mode = DisplayMode::kMouth;
       vera_mouth::force_redraw();
     }

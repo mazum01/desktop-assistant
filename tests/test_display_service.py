@@ -1,3 +1,4 @@
+from unittest.mock import MagicMock
 from src.core.bus import MessageBus
 from src.services.display_service import DisplayService, DisplayServiceConfig
 
@@ -127,3 +128,76 @@ def test_set_mouth_state_rejects_when_ble_disabled():
         assert any(e.get("error") == "ble_disabled" for e in errors)
     finally:
         svc.stop()
+
+
+# ── Graphic-EQ spectrum routing ─────────────────────────────────────────
+#
+# Speech must always outrank the music/podcast visualization: an in-flight
+# spectrum frame can't be allowed to paint over the talking animation.
+
+def _spectrum_svc():
+    from src.services.display_service import DisplayService, DisplayServiceConfig
+
+    svc = DisplayService(
+        bus=MagicMock(),
+        config=DisplayServiceConfig(ble_enabled=True, spectrum_enabled=True),
+    )
+    svc.send_command = MagicMock()
+    return svc
+
+
+def test_spectrum_frame_forwarded_as_eq_command():
+    svc = _spectrum_svc()
+    svc._on_spectrum("display.spectrum", {"bins": [0.1, 0.5, 0.9]})
+    svc.send_command.assert_called_once()
+    assert svc.send_command.call_args.args[0] == "eq"
+    assert svc.send_command.call_args.kwargs["bins"] == [0.1, 0.5, 0.9]
+
+
+def test_spectrum_suppressed_while_speaking():
+    svc = _spectrum_svc()
+    svc._on_speaking_started("av.speaking_started", {})
+    svc.send_command.reset_mock()
+    svc._on_spectrum("display.spectrum", {"bins": [0.4, 0.4]})
+    svc.send_command.assert_not_called()
+
+
+def test_spectrum_resumes_after_speech_finishes():
+    svc = _spectrum_svc()
+    svc._on_speaking_started("av.speaking_started", {})
+    svc._on_spoke("av.spoke", {})
+    svc.send_command.reset_mock()
+    svc._last_spectrum_sent = 0.0
+    svc._on_spectrum("display.spectrum", {"bins": [0.4, 0.4]})
+    svc.send_command.assert_called_once()
+
+
+def test_spectrum_values_clamped_and_truncated():
+    svc = _spectrum_svc()
+    svc._cfg.spectrum_max_bands = 3
+    svc._on_spectrum("display.spectrum", {"bins": [-1.0, 2.0, 0.5, 0.7, 0.9]})
+    bins = svc.send_command.call_args.kwargs["bins"]
+    assert bins == [0.0, 1.0, 0.5]
+
+
+def test_spectrum_rate_limited():
+    svc = _spectrum_svc()
+    svc._cfg.spectrum_max_fps = 1.0
+    svc._on_spectrum("display.spectrum", {"bins": [0.5]})
+    svc._on_spectrum("display.spectrum", {"bins": [0.6]})
+    assert svc.send_command.call_count == 1
+
+
+def test_spectrum_ignored_when_disabled():
+    svc = _spectrum_svc()
+    svc._cfg.spectrum_enabled = False
+    svc._on_spectrum("display.spectrum", {"bins": [0.5]})
+    svc.send_command.assert_not_called()
+
+
+def test_spectrum_ignores_malformed_payloads():
+    svc = _spectrum_svc()
+    for bad in (None, {}, {"bins": []}, {"bins": "nope"}, {"bins": ["x"]}):
+        svc._last_spectrum_sent = 0.0
+        svc._on_spectrum("display.spectrum", bad)
+    svc.send_command.assert_not_called()

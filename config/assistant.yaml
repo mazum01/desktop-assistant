@@ -70,6 +70,9 @@ display:
   enabled: true
   expected_services: []
   max_message_chars: 96
+  spectrum_enabled: true
+  spectrum_max_bands: 12
+  spectrum_max_fps: 12.0
 drop:
   alert_on_leak: true
   alert_on_salt_low: true

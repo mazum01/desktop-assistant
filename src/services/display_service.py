@@ -55,6 +55,12 @@ class DisplayServiceConfig:
     connect_timeout_s: float = 4.0
     max_message_chars: int = 96
     expected_services: list[str] = field(default_factory=list)
+    # Real-time graphic-EQ visualization of music/podcast playback.
+    spectrum_enabled: bool = True
+    # BLE write throughput, not the display, is the limiting factor here, so
+    # frames are dropped rather than queued above this rate.
+    spectrum_max_fps: float = 12.0
+    spectrum_max_bands: int = 12
 
 
 class DisplayService(Service):
@@ -75,6 +81,8 @@ class DisplayService(Service):
         self._ble_queue: "queue.Queue[bytes | None]" = queue.Queue(maxsize=128)
         self._ble_worker: Optional[threading.Thread] = None
         self._ble_stop = threading.Event()
+        self._speaking = False
+        self._last_spectrum_sent = 0.0
 
     def set_expected_services(self, names: list[str]) -> None:
         self._cfg.expected_services = [n for n in names if n and n != self.name]
@@ -90,6 +98,7 @@ class DisplayService(Service):
             self.bus.subscribe("audio.error", self._on_audio_error),
             self.bus.subscribe("perception.error", self._on_perception_error),
             self.bus.subscribe("display.set_mouth_state", self._on_set_mouth_state),
+            self.bus.subscribe("display.spectrum", self._on_spectrum),
             self.bus.subscribe("av.speaking_started", self._on_speaking_started),
             self.bus.subscribe("av.spoke", self._on_spoke),
         ]
@@ -177,14 +186,59 @@ class DisplayService(Service):
         self.set_mouth_state(state)
 
     def _on_speaking_started(self, _topic, _payload) -> None:
-        """Switch the mouth display to 'speaking' while TTS audio is playing."""
+        """Switch the mouth display to 'speaking' while TTS audio is playing.
+
+        Speech outranks the music/podcast spectrum visualization: the mouth
+        command itself clears the bars on the device, and the ``_speaking``
+        flag suppresses further spectrum frames so an in-flight EQ update
+        can't paint over the talking animation mid-sentence.
+        """
+        self._speaking = True
         if self._cfg.ble_enabled:
             self.set_mouth_state("speaking")
 
     def _on_spoke(self, _topic, _payload) -> None:
-        """Return the mouth display to 'neutral' once TTS playback finishes."""
+        """Return the mouth display to 'neutral' once TTS playback finishes.
+
+        If music/podcast playback is still running, the next spectrum frame
+        re-takes the display on its own, so there's nothing extra to do here.
+        """
+        self._speaking = False
         if self._cfg.ble_enabled:
             self.set_mouth_state("neutral")
+
+    def _on_spectrum(self, _topic, payload) -> None:
+        """Forward a playback spectrum frame to the device as an 'eq' command.
+
+        Frames are dropped (not queued) while speaking, and rate-limited to
+        the configured cadence: BLE writes are the bottleneck here, and a
+        backed-up queue would render stale spectrum data seconds late.
+        """
+        if not self._cfg.ble_enabled or not self._cfg.spectrum_enabled:
+            return
+        if self._speaking:
+            return
+        if not isinstance(payload, dict):
+            return
+        bins = payload.get("bins")
+        if not isinstance(bins, (list, tuple)) or not bins:
+            return
+
+        now = time.monotonic()
+        min_interval = 1.0 / max(1.0, float(self._cfg.spectrum_max_fps))
+        if now - self._last_spectrum_sent < min_interval:
+            return
+        self._last_spectrum_sent = now
+
+        try:
+            values = [round(max(0.0, min(1.0, float(v))), 3) for v in bins]
+        except (TypeError, ValueError):
+            return
+        max_bands = max(1, int(self._cfg.spectrum_max_bands))
+        if len(values) > max_bands:
+            values = values[:max_bands]
+
+        self.send_command("eq", bins=values)
 
     # ── Emission / BLE transport ────────────────────────────────────────
 

@@ -30,4 +30,8 @@ def _isolate_pipewire_eq(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(
         pipewire_eq, "_restart_filter_chain", lambda *a, **k: True, raising=False
     )
+    # ``_active`` is module-global and set by any successful apply, so without
+    # this reset one test's EQ apply leaks into the next and changes whether
+    # AVService bypasses its software EQ (an order-dependent failure).
+    monkeypatch.setattr(pipewire_eq, "_active", False, raising=False)
     yield

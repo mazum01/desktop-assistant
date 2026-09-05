@@ -19,7 +19,15 @@
  * Command message shape (host -> device), one JSON object per line:
  *   {"cmd": "mouth", "state": "listening"}
  *   {"cmd": "status", "state": "boot", "message": "Display status service online"}
+ *   {"cmd": "eq", "bins": [0.1, 0.8, 0.4, ...]}
  *   {"cmd": "ping"}
+ *
+ * The "eq" command drives the real-time graphic-EQ visualization: "bins" is
+ * an ordered array of normalized 0.0-1.0 band levels (low frequency first),
+ * produced by the host from the playback stream. An empty "bins" array means
+ * "playback stopped" and returns the display to the mouth renderer. A "mouth"
+ * or "status" command also takes the screen back, so speech and status text
+ * are never hidden behind the visualization.
  *
  * Status/ack message shape (device -> host):
  *   {"ok": true, "cmd": "mouth"}
