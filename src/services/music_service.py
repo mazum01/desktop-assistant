@@ -102,6 +102,33 @@ def _get_default_sink() -> str:
 
 _CACHED_SINK_ID: Optional[str] = None
 
+def _sink_id_is_live(sink_id: str) -> bool:
+    """True if *sink_id* still refers to an existing PipeWire node."""
+    if not sink_id or not sink_id.isdigit():
+        # Symbolic targets like @DEFAULT_AUDIO_SINK@ are always resolvable.
+        return bool(sink_id)
+    try:
+        r = subprocess.run(
+            ["wpctl", "get-volume", sink_id],
+            capture_output=True, text=True, timeout=3,
+        )
+        return r.returncode == 0
+    except Exception:
+        # Can't prove it's dead — assume live rather than thrashing discovery.
+        return True
+
+
+def invalidate_sink_cache() -> None:
+    """Drop the cached sink ID so the next call re-discovers it.
+
+    Must be called whenever the filter-chain is restarted: PipeWire assigns
+    a brand-new node ID to the recreated ``effect_input.da_eq`` sink, so any
+    previously cached ID is guaranteed to be stale.
+    """
+    global _CACHED_SINK_ID
+    _CACHED_SINK_ID = None
+
+
 def _get_sink_id() -> str:
     """Get cached sink ID or discover it.
 
@@ -109,10 +136,22 @@ def _get_sink_id() -> str:
     (used when the EQ filter-chain isn't up yet) is deliberately never
     cached, so a transient startup race doesn't pin this service to the
     wrong node for its entire lifetime.
+
+    The cached ID is re-validated before use. Saving an EQ profile restarts
+    filter-chain.service, which destroys and recreates the EQ sink under a
+    *new* node ID — the cache previously had no invalidation at all, so
+    every subsequent volume call targeted a node that no longer existed.
+    ``wpctl set-volume`` on a dead node fails silently from the caller's
+    perspective (the API still reported ok), which is exactly why the web
+    GUI volume slider stopped working after saving EQ settings.
     """
     global _CACHED_SINK_ID
     if _CACHED_SINK_ID is not None:
-        return _CACHED_SINK_ID
+        if _sink_id_is_live(_CACHED_SINK_ID):
+            return _CACHED_SINK_ID
+        log.info("Cached sink %s is gone (filter-chain restart?) — rediscovering",
+                 _CACHED_SINK_ID)
+        _CACHED_SINK_ID = None
     sink_id = _get_default_sink()
     try:
         from src.audio import pipewire_eq
@@ -239,11 +278,29 @@ class MusicService(Service):
         level = max(0, min(100, level))
         try:
             sink_id = _get_sink_id()
-            subprocess.run(
+            r = subprocess.run(
                 ["wpctl", "set-volume", sink_id, f"{level}%"],
-                check=True,
+                capture_output=True, text=True,
             )
-            # Persist volume to survive daemon restarts
+            if r.returncode != 0:
+                # The sink vanished between discovery and use (filter-chain
+                # restart races a volume change). Rediscover once and retry
+                # rather than silently reporting success to the caller.
+                log.info("set_volume: sink %s rejected write (%s) — retrying",
+                         sink_id, (r.stderr or "").strip())
+                invalidate_sink_cache()
+                sink_id = _get_sink_id()
+                r = subprocess.run(
+                    ["wpctl", "set-volume", sink_id, f"{level}%"],
+                    capture_output=True, text=True,
+                )
+                if r.returncode != 0:
+                    log.error("set_volume(%d) failed on sink %s: %s",
+                              level, sink_id, (r.stderr or "").strip())
+                    return
+            # Persist volume to survive daemon restarts. Only after a
+            # confirmed successful write, so a failed call can't poison the
+            # persisted level.
             volume_state.save_volume(level)
         except Exception:
             log.exception("set_volume(%d) failed", level)

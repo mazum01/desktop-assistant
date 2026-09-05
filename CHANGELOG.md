@@ -4,6 +4,44 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.60.0] - 2026-09-05
+### Added
+- Broadband makeup gain stage (`MAKEUP_GAIN_DB`, +3 dB) in the PipeWire
+  filter-chain graph, followed by a hard `clamp` ceiling. Music is played by
+  pianobar, which streams directly into PipeWire and never passes through
+  `AudioOutput`'s software `loudness_boost` waveshaper — so music received no
+  loudness processing at all and sounded noticeably quieter than speech.
+  Applying gain inside the shared filter-chain lifts *everything* reaching the
+  EQ sink. Kept modest deliberately: the shipped custom curve already adds up
+  to ~+11 dB at its peak, so a larger value would clip into the limiter.
+- `tests/conftest.py` autouse guard redirecting `pipewire_eq._CONF_FILE` to a
+  temp dir and stubbing `_restart_filter_chain()`. Two tests in
+  `test_services.py` exercised the real EQ path and were overwriting the
+  developer's live `~/.config/pipewire/filter-chain.conf.d/da-eq.conf` and
+  restarting `filter-chain.service` mid-run, mutating real system audio.
+
+### Changed
+- Lowered `audio.*.loudness_boost` from 5.0 to 3.5 to rebalance speech against
+  music now that music also gets makeup gain. Net effect: speech −1.65 dB,
+  music +3 dB, closing the ~4.6 dB gap while leaving both above the original
+  baseline.
+
+### Fixed
+- Volume control silently targeting a dead PipeWire node. PipeWire assigns a
+  new node ID every time `filter-chain.service` restarts (which happens on
+  every custom-EQ save), but `MusicService._CACHED_SINK_ID` had no
+  invalidation, so all later volume writes went to the old ID while the API
+  still returned `{"ok": true}`. `_get_sink_id()` now re-validates the cached
+  ID, `set_volume()` checks the `wpctl` return code and retries once after
+  rediscovery, and `_restart_filter_chain()` proactively invalidates the cache.
+- `set_volume()` persisting the level even when the write failed, which is how
+  `music_volume.txt` got stuck at 100. It now saves only after a confirmed
+  successful write.
+- Saved custom EQ appearing to do nothing until manually re-saved. Startup only
+  called `ensure_default()`, which re-elects the sink but never verified that
+  the running `da-eq.conf` matched `custom_eq.json`. `_restore_pipewire_eq()`
+  now reconciles the two via the new `pipewire_eq.config_matches()`.
+
 ## [1.59.0] - 2026-09-04
 ### Changed
 - Raised `audio.*.loudness_boost` from 2.5 to 5.0 for both backends. The

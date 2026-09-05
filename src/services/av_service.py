@@ -527,14 +527,40 @@ class AVService(Service):
             log.warning("AVService: PipeWire EQ apply failed: %s", exc)
 
     def _restore_pipewire_eq(self) -> None:
-        """Re-elect DA EQ sink as default at startup without restarting filter-chain."""
+        """Re-elect DA EQ sink as default at startup without restarting filter-chain.
+
+        If the persisted custom curve doesn't match what the filter-chain is
+        actually running, re-apply it (which does restart filter-chain).
+        Without this, a mismatch between ``custom_eq.json`` and the generated
+        ``da-eq.conf`` persisted silently and the saved EQ appeared to do
+        nothing until the user manually re-saved the profile in the web GUI.
+        """
         try:
             from src.audio import pipewire_eq
             pipewire_eq.ensure_default()
+
+            bands = self._persisted_custom_eq_bands()
+            if bands and not pipewire_eq.config_matches(bands):
+                log.info("AVService: filter-chain EQ config differs from saved "
+                         "custom curve — re-applying %d band(s)", len(bands))
+                pipewire_eq.apply_custom_bands(bands)
+
             if pipewire_eq.is_active() and self._audio is not None:
                 self._audio.set_eq_preset("flat")
         except Exception as exc:
             log.warning("AVService: PipeWire EQ restore failed: %s", exc)
+
+    def _persisted_custom_eq_bands(self) -> list:
+        """Return the saved custom EQ bands, or [] when 'custom' isn't active."""
+        try:
+            if not _EQ_STATE_FILE.exists() or not _CUSTOM_EQ_STATE_FILE.exists():
+                return []
+            if _EQ_STATE_FILE.read_text().strip() != "custom":
+                return []
+            bands = json.loads(_CUSTOM_EQ_STATE_FILE.read_text())
+            return bands if isinstance(bands, list) else []
+        except Exception:
+            return []
 
     # ── Worker bodies ──────────────────────────────────────────────────
 

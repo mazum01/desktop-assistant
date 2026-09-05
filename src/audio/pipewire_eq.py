@@ -39,6 +39,19 @@ log = logging.getLogger(__name__)
 _CONF_DIR  = Path.home() / ".config" / "pipewire" / "filter-chain.conf.d"
 _CONF_FILE = _CONF_DIR / "da-eq.conf"
 
+# Broadband makeup gain (dB) applied inside the filter-chain, after the EQ.
+#
+# Everything that reaches the EQ sink gets this — including pianobar, which
+# streams directly into PipeWire and therefore never passes through
+# AudioOutput's software loudness_boost waveshaper. Without it, music was
+# audibly quieter than TTS speech (which does get that waveshaper).
+#
+# Kept deliberately modest: the shipped custom EQ curve already contributes up
+# to ~+11 dB of boost at its peak, and the trailing clamp is a hard limiter, so
+# an aggressive value here would clip into audible distortion rather than
+# sounding louder.
+MAKEUP_GAIN_DB: float = 3.0
+
 # Matches the DA EQ sink's node row in `wpctl status`, e.g.
 #   " |  *   41. effect_input.da_eq    [Audio/Sink]"
 # Anchored to the "NN. effect_input.da_eq" pair so port rows and the
@@ -107,12 +120,23 @@ _LABEL_MAP = {
 
 # ── Config generation ─────────────────────────────────────────────────────────
 
-def _build_config(bands: list) -> str:
+def _build_config(bands: list, makeup_db: Optional[float] = None) -> str:
     """Return PipeWire filter-chain config text for the given EQ bands.
 
     bands: list of (hz, gain_db, q, filter_type) tuples
+    makeup_db: broadband makeup gain applied *after* the EQ, followed by a
+        hard clamp to +/-1.0.
+
+    The makeup stage exists because only TTS audio passes through
+    ``AudioOutput``'s software ``loudness_boost`` waveshaper — pianobar
+    streams straight into PipeWire, so music bypassed that stage entirely and
+    ended up noticeably quieter than speech. Applying makeup gain here (in the
+    shared filter-chain) lifts *everything* that reaches the EQ sink, keeping
+    music and speech at comparable levels.
     """
     nodes_lines = []
+    if makeup_db is None:
+        makeup_db = MAKEUP_GAIN_DB
     for i, (hz, gain_db, q, ftype) in enumerate(bands, 1):
         label = _LABEL_MAP.get(ftype, "bq_peaking")
         nodes_lines.append(
@@ -125,6 +149,25 @@ def _build_config(bands: list) -> str:
         f'                    {{ output = "eq_band_{i}:Out"  input = "eq_band_{i+1}:In" }}'
         for i in range(1, len(bands))
     ]
+
+    if makeup_db:
+        gain_lin = 10 ** (float(makeup_db) / 20.0)
+        nodes_lines.append(
+            f"                    {{ type = builtin  name = makeup  label = linear"
+            f'  control = {{ "Gain" = {gain_lin:.4f}  "Offset" = 0.0 }} }}'
+        )
+        # Hard-clamp after makeup so the boost can never wrap or blow up
+        # downstream; the EQ curve itself already leaves the signal near FS.
+        nodes_lines.append(
+            "                    { type = builtin  name = ceiling  label = clamp"
+            '  control = { "Min" = -1.0  "Max" = 1.0 } }'
+        )
+        links_lines.append(
+            f'                    {{ output = "eq_band_{len(bands)}:Out"  input = "makeup:In" }}'
+        )
+        links_lines.append(
+            '                    { output = "makeup:Out"  input = "ceiling:In" }'
+        )
 
     nodes_str = "\n".join(nodes_lines)
     links_str = "\n".join(links_lines)
@@ -167,10 +210,21 @@ def _restart_filter_chain() -> bool:
             ["systemctl", "--user", "restart", "filter-chain.service"],
             timeout=8, capture_output=True,
         )
-        return r.returncode == 0
+        ok = r.returncode == 0
     except Exception as exc:
         log.warning("pipewire_eq: filter-chain restart failed: %s", exc)
         return False
+    if ok:
+        # The restart destroys and recreates effect_input.da_eq under a new
+        # PipeWire node ID, so any sink ID cached elsewhere is now stale.
+        # MusicService re-validates lazily, but tell it explicitly so the
+        # very next volume call can't race against a dead node.
+        try:
+            from src.services import music_service
+            music_service.invalidate_sink_cache()
+        except Exception:
+            pass  # non-fatal: MusicService re-validates its cache anyway
+    return ok
 
 
 def _get_eq_sink_id() -> Optional[str]:
@@ -354,6 +408,33 @@ def is_active() -> bool:
 def is_configured() -> bool:
     """True if the DA EQ config file exists on disk."""
     return _CONF_FILE.exists()
+
+
+def config_matches(bands: list) -> bool:
+    """True if the on-disk filter-chain config already encodes exactly *bands*.
+
+    Used at startup to decide whether the persisted EQ curve is actually the
+    one the filter-chain is running. ``ensure_default()`` only re-elects the
+    existing sink as default — it never checks that the sink's *config*
+    matches the user's saved bands, so any drift between
+    ``custom_eq.json`` and ``da-eq.conf`` (e.g. the config being written by a
+    different preset path, or a partial/failed earlier apply) persisted
+    silently until the user manually re-saved the EQ profile.
+    """
+    if not _CONF_FILE.exists():
+        return False
+    try:
+        current = _CONF_FILE.read_text()
+    except Exception:
+        return False
+    band_tuples = [
+        (float(b["hz"]), float(b["gain_db"]), float(b.get("q", 1.0)), "peaking")
+        for b in bands
+    ]
+    try:
+        return current.strip() == _build_config(band_tuples).strip()
+    except Exception:
+        return False
 
 
 def get_active_sink_id() -> Optional[str]:

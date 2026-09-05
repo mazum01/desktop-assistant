@@ -26,10 +26,44 @@ def test_build_config_structure():
 
 def test_build_config_links():
     bands = PRESET_BANDS["flat"]
-    cfg = _build_config(bands)
+    cfg = _build_config(bands, makeup_db=0.0)
     # Should have N-1 links for N bands
     link_count = cfg.count("output =")
     assert link_count == len(bands) - 1
+
+
+def test_build_config_makeup_stage_chained_after_eq():
+    """Makeup gain + clamp must terminate the chain, not float unconnected.
+
+    Music (pianobar) streams straight into PipeWire and never passes through
+    AudioOutput's software loudness_boost, so this in-graph makeup stage is
+    the only thing that brings music up to speech level.
+    """
+    bands = PRESET_BANDS["flat"]
+    cfg = _build_config(bands, makeup_db=6.0)
+    last = len(bands)
+    assert "label = linear" in cfg
+    assert "label = clamp" in cfg
+    # 6 dB -> ~1.9953 linear
+    assert '"Gain" = 1.9953' in cfg
+    assert f'{{ output = "eq_band_{last}:Out"  input = "makeup:In" }}' in cfg
+    assert '{ output = "makeup:Out"  input = "ceiling:In" }' in cfg
+    # N-1 band links + 2 makeup links
+    assert cfg.count("output =") == len(bands) + 1
+
+
+def test_build_config_no_makeup_when_zero():
+    cfg = _build_config(PRESET_BANDS["flat"], makeup_db=0.0)
+    assert "label = linear" not in cfg
+    assert "label = clamp" not in cfg
+
+
+def test_build_config_defaults_to_module_makeup_gain():
+    import src.audio.pipewire_eq as pw
+
+    cfg = _build_config(PRESET_BANDS["flat"])
+    expected = 10 ** (pw.MAKEUP_GAIN_DB / 20.0)
+    assert f'"Gain" = {expected:.4f}' in cfg
 
 
 def test_build_config_gains():
