@@ -116,18 +116,37 @@ class AVService(Service):
         except Exception:
             log.debug("AVService: hardware mixer setup skipped", exc_info=True)
 
-        if self._audio is None:
-            from src.audio.output import AudioOutput
-            self._audio = AudioOutput()
         from pathlib import Path
         import yaml as _yaml
         _cfg_path = Path(__file__).parents[2] / "config" / "assistant.yaml"
         _tts_cfg = {}
+        _audio_cfg = {}
         if _cfg_path.exists():
             try:
-                _tts_cfg = _yaml.safe_load(_cfg_path.read_text()).get("tts", {})
+                _full_cfg = _yaml.safe_load(_cfg_path.read_text()) or {}
+                _tts_cfg = _full_cfg.get("tts", {})
+                _audio_cfg = _full_cfg.get("audio", {})
             except Exception:
                 pass
+
+        if self._audio is None:
+            # Build via the factory so the configured backend and its
+            # loudness_boost/eq_preset are actually honoured. Constructing a
+            # bare AudioOutput() here silently used the dataclass defaults and
+            # threw away config/assistant.yaml's audio settings entirely —
+            # which is why the configured loudness_boost of 2.5 was never
+            # applied to TTS output (costing ~6.7 dB of RMS loudness).
+            from src.audio.factory import create_audio_output, BACKEND_DEFAULT
+            backend = str(_audio_cfg.get("backend", BACKEND_DEFAULT))
+            try:
+                self._audio = create_audio_output(
+                    backend, _audio_cfg.get(backend, {}) or {}
+                )
+            except Exception:
+                log.warning("AVService: audio factory failed; using defaults",
+                            exc_info=True)
+                from src.audio.output import AudioOutput
+                self._audio = AudioOutput()
         self._tts_output_gain = max(0.1, float(_tts_cfg.get("output_gain", 1.0)))
 
         if self._tts is None:

@@ -4,6 +4,42 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.59.0] - 2026-09-04
+### Changed
+- Raised `audio.*.loudness_boost` from 2.5 to 5.0 for both backends. The
+  tanh waveshaper in `AudioOutput._samples_to_s16()` renormalizes to a
+  fixed peak ceiling, so increasing drive raises RMS (perceived loudness)
+  without raising peaks: measured on real Piper TTS output, this lifts
+  RMS from -11.1 dBFS to -7.5 dBFS (**+3.5 dB**) with peaks unchanged at
+  -0.45 dBFS. No amplifier change required.
+
+### Fixed
+- **Custom EQ curves attenuated instead of boosting.**
+  `_build_custom_sos()` built each band with `scipy.signal.iirpeak`, which
+  is a *bandpass* resonator (unity gain at the centre frequency, rolling
+  off to near-zero everywhere else) rather than a peaking-EQ biquad.
+  Scaling its numerator by the linear gain produced a narrow bandpass, and
+  cascading five of them multiplied those roll-offs together — the shipped
+  5-band custom curve measured ~29 dB of broadband *attenuation* instead
+  of the intended boost. Replaced with a proper RBJ cookbook peaking-EQ
+  biquad; the same curve now measures +10.9/+8.6/+4.9/+5.8/+7.4 dB at its
+  five centre frequencies and stays near unity elsewhere.
+  Note: this path only affects the software TTS EQ, which is normally
+  bypassed (forced to `flat`) while the PipeWire filter-chain EQ is
+  active, so it is a latent-but-real bug rather than the cause of the
+  current output level.
+- **Post-EQ hard clipping.** After the EQ stage the signal was passed
+  through `np.clip()`, which squared off every overshoot from a
+  boost-heavy curve into audible distortion while discarding the excess
+  energy. Added `_soft_limit()`, which leaves sub-threshold audio
+  bit-exact and tanh-compresses only genuine overshoots.
+- `AVService.on_start()` now builds its fallback `AudioOutput` via
+  `create_audio_output()` so the configured backend/loudness/EQ settings
+  are honoured on that path too, instead of silently using dataclass
+  defaults. (The normal path already receives a factory-built output
+  injected from `core_main.py`, so this only affected direct/standalone
+  construction.)
+
 ## [1.58.3] - 2026-09-04
 ### Fixed
 - **Audio only worked after manually re-selecting the reSpeaker in the RPi

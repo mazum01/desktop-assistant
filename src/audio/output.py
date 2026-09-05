@@ -192,7 +192,11 @@ class AudioOutput:
                             )
                         else:
                             samples = sosfilt(sos, samples)
-                        samples = np.clip(samples, -1.0, 1.0)
+                        # A boost-heavy EQ curve pushes peaks well past full
+                        # scale. Hard-clipping here (the previous behaviour)
+                        # both distorted badly and wasted loudness; soft-limit
+                        # instead so the extra energy is retained cleanly.
+                        samples = _soft_limit(samples)
                 except ImportError:
                     pass
         if self._cfg.channels == 2 and samples.ndim == 1:
@@ -381,6 +385,35 @@ def _resample_linear(samples: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarra
     return out
 
 
+def _soft_limit(samples: np.ndarray, ceiling: float = 0.97) -> np.ndarray:
+    """Soft-limit a signal to *ceiling* without hard clipping.
+
+    Applied after the EQ stage, where boost-heavy curves routinely push peaks
+    past full scale. Hard-clipping there (``np.clip``) squared off every
+    overshoot into audible distortion *and* threw away loudness, since the
+    excess energy was simply discarded. Instead, only the portion of the
+    signal above the linear region is tanh-compressed, so quiet and moderate
+    passages stay bit-exact while peaks are rounded off gracefully.
+    """
+    samples = np.asarray(samples, dtype=np.float32)
+    if samples.size == 0:
+        return samples
+    peak = float(np.max(np.abs(samples)))
+    if peak <= ceiling:
+        return samples
+    # Knee starts partway down so only true overshoots get compressed.
+    knee = ceiling * 0.7
+    over = np.abs(samples) > knee
+    if not np.any(over):
+        return np.clip(samples, -ceiling, ceiling)
+    out = samples.copy()
+    span = ceiling - knee
+    excess = (np.abs(samples[over]) - knee) / span
+    compressed = knee + span * np.tanh(excess)
+    out[over] = np.sign(samples[over]) * compressed
+    return np.clip(out, -ceiling, ceiling).astype(np.float32)
+
+
 def _soft_clip(samples: np.ndarray, drive: float) -> np.ndarray:
     """tanh waveshaper. Pushes RMS up while keeping peaks <= 1.0.
     drive=1 is linear; 2-4 is the useful range for unamplified speech.
@@ -495,12 +528,21 @@ def _build_custom_sos(bands: list, sample_rate: int):
 
     *bands* is a list of (center_hz, gain_db, Q) tuples.
     Returns stacked SOS array or None if scipy is unavailable or bands is empty.
+
+    Uses a proper RBJ peaking-EQ biquad (unity gain away from the centre
+    frequency, ``gain_db`` at the centre). The previous implementation used
+    ``scipy.signal.iirpeak``, which is a *bandpass* resonator — it has unity
+    gain at the centre and rolls off to ~zero everywhere else. Scaling its
+    numerator by the linear gain therefore produced a narrow bandpass rather
+    than a boost, and cascading several of them multiplied those roll-offs
+    together: the shipped 5-band custom curve measured ~29 dB of broadband
+    *attenuation* instead of the intended boost.
     """
     if not bands:
         return None
     try:
         import numpy as _np
-        from scipy.signal import iirpeak, tf2sos  # type: ignore
+        from scipy.signal import tf2sos  # type: ignore
     except ImportError:
         return None
 
@@ -510,16 +552,7 @@ def _build_custom_sos(bands: list, sample_rate: int):
         if gain_db == 0.0:
             continue  # flat band — skip
         try:
-            if gain_db > 0:
-                b, a = iirpeak(float(center_hz), float(q), fs=fs)
-                # Scale peak gain — iirpeak gives unity; apply gain manually
-                gain_lin = 10 ** (gain_db / 20.0)
-                b = b * gain_lin
-            else:
-                # Notch-like: apply negative gain via iirpeak then invert
-                b, a = iirpeak(float(center_hz), float(q), fs=fs)
-                gain_lin = 10 ** (gain_db / 20.0)
-                b = b * gain_lin
+            b, a = _peaking_coeffs(float(center_hz), float(gain_db), float(q), fs)
             sections.append(tf2sos(b, a))
         except Exception:
             continue
@@ -527,3 +560,15 @@ def _build_custom_sos(bands: list, sample_rate: int):
     if not sections:
         return None
     return _np.vstack(sections)
+
+
+def _peaking_coeffs(fc: float, gain_db: float, q: float, fs: float):
+    """RBJ cookbook peaking-EQ biquad — unity gain outside the band."""
+    A = 10 ** (gain_db / 40.0)
+    w0 = 2.0 * np.pi * (fc / fs)
+    alpha = np.sin(w0) / (2.0 * max(q, 1e-4))
+    cos_w0 = np.cos(w0)
+
+    b = np.array([1 + alpha * A, -2 * cos_w0, 1 - alpha * A], dtype=np.float64)
+    a = np.array([1 + alpha / A, -2 * cos_w0, 1 - alpha / A], dtype=np.float64)
+    return b / a[0], a / a[0]

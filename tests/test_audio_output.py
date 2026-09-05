@@ -150,3 +150,53 @@ class TestAudioOutput:
         # S16_LE stereo: 1000 frames × 2 ch × 2 bytes = 4000 bytes
         assert proc.total_written == 4000
 
+
+
+def test_custom_eq_boosts_rather_than_attenuates():
+    """A boost-only custom EQ curve must raise gain at its centre frequencies
+    and stay near unity elsewhere.
+
+    Regression test: the previous implementation built each band with
+    scipy.signal.iirpeak, which is a *bandpass* resonator (unity at centre,
+    rolling off to ~zero elsewhere) rather than a peaking-EQ biquad. Cascading
+    five of them multiplied those roll-offs together, so the shipped 5-band
+    "custom" curve applied roughly 29 dB of broadband attenuation instead of
+    the intended boost.
+    """
+    import numpy as np
+    from scipy.signal import sosfreqz
+    from src.audio.output import _build_custom_sos
+
+    bands = [(80.0, 10.0, 1.0), (250.0, 7.0, 1.0), (1000.0, 4.0, 1.0),
+             (4000.0, 5.0, 1.0), (12000.0, 7.0, 1.0)]
+    sos = _build_custom_sos(bands, 44100)
+    assert sos is not None
+
+    w, h = sosfreqz(sos, worN=8192, fs=44100)
+    mag_db = 20 * np.log10(np.abs(h) + 1e-12)
+
+    for centre, gain_db, _q in bands:
+        idx = int(np.argmin(np.abs(w - centre)))
+        assert mag_db[idx] > gain_db - 3.0, (
+            f"{centre} Hz should be boosted ~{gain_db} dB, got {mag_db[idx]:.2f} dB"
+        )
+
+    # And nowhere should this boost-only curve attenuate meaningfully.
+    assert mag_db.min() > -3.0, f"unexpected attenuation: {mag_db.min():.2f} dB"
+
+
+def test_soft_limit_preserves_quiet_signal_and_caps_peaks():
+    """_soft_limit must leave sub-threshold audio untouched and keep peaks
+    under the ceiling without hard-clipping."""
+    import numpy as np
+    from src.audio.output import _soft_limit
+
+    quiet = (np.sin(np.linspace(0, 50, 2000)) * 0.2).astype(np.float32)
+    assert np.allclose(_soft_limit(quiet), quiet)
+
+    hot = (np.sin(np.linspace(0, 50, 2000)) * 2.5).astype(np.float32)
+    out = _soft_limit(hot)
+    assert float(np.max(np.abs(out))) <= 0.97 + 1e-6
+    # Must retain more energy than naive hard clipping would discard.
+    assert float(np.sqrt(np.mean(out ** 2))) > 0.4
+    assert np.all(np.isfinite(out))
