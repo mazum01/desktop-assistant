@@ -2013,13 +2013,13 @@ class WebService:
                 raise HTTPException(500, f"playback failed: {exc}")
 
         @app.get("/api/audio/mute")
-        async def api_audio_mute_get():
+        def api_audio_mute_get():
             if not self._music_svc:
                 return {"muted": False}
             return {"muted": bool(self._music_svc.muted)}
 
         @app.put("/api/audio/mute")
-        async def api_audio_mute_set(body: _AudioMuteBody):
+        def api_audio_mute_set(body: _AudioMuteBody):
             if self._music_svc:
                 self._music_svc.set_muted(bool(body.muted))
             return {"ok": True, "muted": bool(body.muted)}
@@ -2747,7 +2747,7 @@ class WebService:
 
 
         @app.get("/api/music/status")
-        async def api_music_status():
+        def api_music_status():
             if not self._music_svc:
                 return {
                     "state": "stopped", "song": {}, "stations": [],
@@ -2768,13 +2768,13 @@ class WebService:
             }
 
         @app.get("/api/music/volume")
-        async def api_music_volume_get():
+        def api_music_volume_get():
             if not self._music_svc:
                 return {"level": -1}
             return {"level": self._music_svc.volume}
 
         @app.put("/api/music/volume")
-        async def api_music_volume_set(body: _MusicVolumeBody):
+        def api_music_volume_set(body: _MusicVolumeBody):
             if self._music_svc:
                 self._music_svc.set_volume(body.level)
             return {"ok": True, "level": body.level}
@@ -2824,13 +2824,13 @@ class WebService:
             return {"ok": True, "level": int(round(persisted * 100.0))}
 
         @app.get("/api/music/eq")
-        async def api_music_eq_get():
+        def api_music_eq_get():
             preset = self._music_svc.eq_preset if self._music_svc else "flat"
             from src.services.music_service import MusicService as _MS
             return {"preset": preset, "presets": _MS.EQ_PRESETS}
 
         @app.put("/api/music/eq")
-        async def api_music_eq_set(body: _MusicEqBody):
+        def api_music_eq_set(body: _MusicEqBody):
             if self._music_svc:
                 self._music_svc.set_eq_preset(body.preset)
             return {"ok": True, "preset": body.preset}
@@ -2849,7 +2849,7 @@ class WebService:
             return {"bands": bands}
 
         @app.put("/api/music/eq/custom")
-        async def api_custom_eq_set(body: _CustomEqBody):
+        def api_custom_eq_set(body: _CustomEqBody):
             bands = [{"hz": b.hz, "gain_db": b.gain_db, "q": b.q} for b in body.bands]
             try:
                 state_file = Path.home() / ".config" / "desktop-assistant" / "custom_eq.json"
@@ -2918,13 +2918,13 @@ class WebService:
         # ── Apple Podcasts ─────────────────────────────────────────────
 
         @app.get("/api/podcasts")
-        async def api_podcasts_list():
+        def api_podcasts_list():
             if not self._podcast_svc:
                 return {"ok": True, "subscriptions": []}
             return {"ok": True, "subscriptions": self._podcast_svc.subscriptions}
 
         @app.get("/api/podcasts/search")
-        async def api_podcasts_search(q: str, limit: int = 10):
+        def api_podcasts_search(q: str, limit: int = 10):
             if not self._podcast_svc:
                 raise HTTPException(503, "podcast service unavailable")
             try:
@@ -2934,7 +2934,7 @@ class WebService:
             return {"ok": True, "results": results}
 
         @app.post("/api/podcasts/subscribe")
-        async def api_podcasts_subscribe(body: _PodcastSubscribeBody):
+        def api_podcasts_subscribe(body: _PodcastSubscribeBody):
             if not self._podcast_svc:
                 raise HTTPException(503, "podcast service unavailable")
             try:
@@ -2943,7 +2943,7 @@ class WebService:
                 raise HTTPException(400, str(exc))
 
         @app.delete("/api/podcasts/{podcast_id}")
-        async def api_podcasts_unsubscribe(podcast_id: str):
+        def api_podcasts_unsubscribe(podcast_id: str):
             if not self._podcast_svc:
                 raise HTTPException(503, "podcast service unavailable")
             try:
@@ -2952,7 +2952,7 @@ class WebService:
                 raise HTTPException(400, str(exc))
 
         @app.get("/api/podcasts/{podcast_id}/episodes")
-        async def api_podcasts_episodes(podcast_id: str, limit: int = 20):
+        def api_podcasts_episodes(podcast_id: str, limit: int = 20):
             if not self._podcast_svc:
                 raise HTTPException(503, "podcast service unavailable")
             try:
@@ -2962,7 +2962,7 @@ class WebService:
             return {"ok": True, "episodes": episodes}
 
         @app.post("/api/podcasts/{podcast_id}/refresh")
-        async def api_podcasts_refresh(podcast_id: str):
+        def api_podcasts_refresh(podcast_id: str):
             if not self._podcast_svc:
                 raise HTTPException(503, "podcast service unavailable")
             try:
@@ -2971,7 +2971,7 @@ class WebService:
                 raise HTTPException(400, str(exc))
 
         @app.post("/api/podcasts/play")
-        async def api_podcasts_play(body: _PodcastPlayBody):
+        def api_podcasts_play(body: _PodcastPlayBody):
             if not self._podcast_svc:
                 raise HTTPException(503, "podcast service unavailable")
             try:
@@ -2980,13 +2980,13 @@ class WebService:
                 raise HTTPException(400, str(exc))
 
         @app.post("/api/podcasts/stop")
-        async def api_podcasts_stop():
+        def api_podcasts_stop():
             if not self._podcast_svc:
                 raise HTTPException(503, "podcast service unavailable")
             return self._podcast_svc.stop()
 
         @app.post("/api/podcasts/pause")
-        async def api_podcasts_pause():
+        def api_podcasts_pause():
             if not self._podcast_svc:
                 raise HTTPException(503, "podcast service unavailable")
             try:
@@ -2995,7 +2995,7 @@ class WebService:
                 raise HTTPException(400, str(exc))
 
         @app.post("/api/podcasts/resume")
-        async def api_podcasts_resume():
+        def api_podcasts_resume():
             if not self._podcast_svc:
                 raise HTTPException(503, "podcast service unavailable")
             try:
@@ -3004,7 +3004,7 @@ class WebService:
                 raise HTTPException(400, str(exc))
 
         @app.post("/api/podcasts/seek")
-        async def api_podcasts_seek(body: _PodcastSeekBody):
+        def api_podcasts_seek(body: _PodcastSeekBody):
             if not self._podcast_svc:
                 raise HTTPException(503, "podcast service unavailable")
             try:
@@ -3013,7 +3013,7 @@ class WebService:
                 raise HTTPException(400, str(exc))
 
         @app.post("/api/podcasts/skip")
-        async def api_podcasts_skip(body: _PodcastSkipBody):
+        def api_podcasts_skip(body: _PodcastSkipBody):
             if not self._podcast_svc:
                 raise HTTPException(503, "podcast service unavailable")
             try:
@@ -3022,7 +3022,7 @@ class WebService:
                 raise HTTPException(400, str(exc))
 
         @app.get("/api/podcasts/status")
-        async def api_podcasts_status():
+        def api_podcasts_status():
             if not self._podcast_svc:
                 return {"ok": True, "state": "stopped", "subscriptions": 0, "player": None}
             return self._podcast_svc.status()

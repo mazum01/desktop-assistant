@@ -168,19 +168,18 @@ VERA through the established BLE GATT path.
       (`PipeWireMicInput`): a non-blocking `pw-record` subprocess feeds the
       AudioCaptureService. Clean, bounded shutdown (restart ~4s). Config:
       `audio.default.input_device_name: pipewire`.
-- [ ] **Web GUI volume control still non-functional** — the stale PipeWire
-  sink-ID cache fixed in v1.60.0 (cached node IDs are now re-validated and
-  writes are return-code checked with one retry) was verified working from a
-  direct `MusicService.set_volume()` call on the live sink, but the user
-  reports the *web GUI* slider still has no effect. The remaining fault is
-  therefore somewhere in the web path rather than in `music_service`:
-  candidates are the `PUT /api/music/volume` route resolving a different
-  service instance than the one holding the corrected cache, the web service
-  running in a separate process with its own module-level `_CACHED_SINK_ID`,
-  or the front-end not actually issuing the request. Reproduce by moving the
-  slider while watching `wpctl get-volume <live-eq-sink-id>` and the web
-  service journal; confirm whether the request reaches the route at all
-  before touching `music_service` again.
+- [x] **Web GUI volume control still non-functional** — RESOLVED (v1.61.1).
+  Two independent faults, neither in the v1.60.0 sink-cache logic:
+  1. `desktop-assistant-media.service` was still running a pre-v1.60.0 process
+     (started before the fix landed and never restarted), so it kept executing
+     the old `check=True` `set_volume()` that raised `CalledProcessError` on a
+     stale sink ID instead of invalidating the cache and retrying.
+  2. 21 FastAPI routes were declared `async def` while performing blocking ZMQ
+     RPCs, so every music/podcast/audio call stalled the shared event loop —
+     making even trivial GETs take 13-23s and the UI appear dead.
+  Fixed by converting those routes to sync `def` (FastAPI then runs them in a
+  threadpool) and restarting the media service. Verified: slider writes land
+  exactly (75/35/65 -> 0.75/0.35/0.65) with zero errors.
 
 ---
 

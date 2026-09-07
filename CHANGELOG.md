@@ -4,6 +4,24 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.61.1] - 2026-09-07
+### Fixed
+- Web API event-loop stall. 21 FastAPI routes (music, podcast, audio-mute) were
+  declared `async def` but performed blocking ZMQ RPCs directly on the event
+  loop. Because the dashboard polls `/api/music/status` continuously, the loop
+  was almost always blocked: unrelated endpoints such as
+  `GET /api/settings/quiet-hours` took 13-23 s to answer. Converted them to
+  sync `def` so FastAPI dispatches them to its threadpool; latency dropped from
+  ~18 s to ~20 ms.
+- OpenClaw call/response TTS. The `say` skill posts to `/api/say` with a 5 s
+  timeout, which the stalled event loop always exceeded, so spoken replies and
+  announcement mode had gone silent. Fixed by the event-loop change above.
+- Web GUI volume control (was backlogged). In addition to the stall, the
+  `desktop-assistant-media` unit was still running a pre-v1.60.0 process that
+  predated the sink-cache fix, so it kept raising `CalledProcessError` on a
+  stale sink ID. Restarting the unit plus the route fix restores exact
+  slider tracking.
+
 ## [1.61.0] - 2026-09-05
 ### Added
 - Real-time graphic-EQ visualization on the ESP32-C6 mouth display. A new
