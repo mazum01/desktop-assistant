@@ -201,3 +201,91 @@ def test_spectrum_ignores_malformed_payloads():
         svc._last_spectrum_sent = 0.0
         svc._on_spectrum("display.spectrum", bad)
     svc.send_command.assert_not_called()
+
+
+# ── BLE connection announcements ────────────────────────────────────────────
+
+def _conn_svc(**overrides):
+    bus = MessageBus()
+    cfg = dict(ble_enabled=True, ble_address="AA:BB:CC:DD:EE:FF")
+    cfg.update(overrides)
+    svc = DisplayService(bus=bus, config=DisplayServiceConfig(**cfg))
+    said: list[str] = []
+    events: list[dict] = []
+    bus.subscribe("av.say", lambda _t, p: said.append(p.get("text")))
+    bus.subscribe("display.connection", lambda _t, p: events.append(p))
+    return svc, said, events
+
+
+def test_first_connect_announces():
+    svc, said, events = _conn_svc()
+    svc._set_ble_connected(True)
+    assert said == ["Display connected."]
+    assert events and events[0]["connected"] is True
+    assert events[0]["address"] == "AA:BB:CC:DD:EE:FF"
+
+
+def test_disconnect_announces_after_connect():
+    svc, said, _ = _conn_svc()
+    svc._set_ble_connected(True)
+    svc._set_ble_connected(False)
+    assert said == ["Display connected.", "Display disconnected."]
+
+
+def test_repeat_connect_does_not_reannounce():
+    svc, said, events = _conn_svc()
+    svc._set_ble_connected(True)
+    svc._set_ble_connected(True)
+    assert said == ["Display connected."]
+    assert len(events) == 1
+
+
+def test_failed_first_connect_is_not_a_disconnect():
+    """Retrying against an absent display must stay silent."""
+    svc, said, events = _conn_svc()
+    for _ in range(5):
+        svc._set_ble_connected(False)
+    assert said == []
+    assert events == []
+
+
+def test_shutdown_disconnect_is_not_announced():
+    svc, said, _ = _conn_svc()
+    svc._set_ble_connected(True)
+    said.clear()
+    svc._ble_stop.set()
+    svc._set_ble_connected(False)
+    assert said == []
+
+
+def test_announcement_can_be_disabled():
+    svc, said, events = _conn_svc(announce_connection=False)
+    svc._set_ble_connected(True)
+    assert said == []
+    # The bus event still fires so other consumers can react.
+    assert len(events) == 1
+
+
+def test_quiet_hours_suppresses_announcement():
+    bus = MessageBus()
+    quiet = MagicMock()
+    quiet.is_quiet.return_value = True
+    svc = DisplayService(
+        bus=bus,
+        config=DisplayServiceConfig(ble_enabled=True, ble_address="A"),
+        quiet_hours=quiet,
+    )
+    said: list[str] = []
+    events: list[dict] = []
+    bus.subscribe("av.say", lambda _t, p: said.append(p.get("text")))
+    bus.subscribe("display.connection", lambda _t, p: events.append(p))
+    svc._set_ble_connected(True)
+    assert said == []
+    assert len(events) == 1
+
+
+def test_custom_announcement_text():
+    svc, said, _ = _conn_svc(connect_text="Screen online.", disconnect_text="Screen gone.")
+    svc._set_ble_connected(True)
+    svc._set_ble_connected(False)
+    assert said == ["Screen online.", "Screen gone."]

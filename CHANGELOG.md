@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.62.0] - 2026-09-07
+### Added
+- Spoken announcements when the BLE mouth display connects or disconnects
+  ("Display connected." / "Display disconnected."), plus a new
+  `display.connection` bus event carrying `connected`, `address`, and `ts` for
+  other consumers.
+- Configurable under `display:` in `config/assistant.yaml` via
+  `announce_connection`, `connect_text`, and `disconnect_text`.
+
+### Changed
+- Announcements fire only on genuine link transitions. Reconnect attempts
+  against an absent display, repeat connects, and the teardown during service
+  shutdown stay silent, and announcements respect quiet hours.
+
 ## [1.61.1] - 2026-09-07
 ### Fixed
 - Web API event-loop stall. 21 FastAPI routes (music, podcast, audio-mute) were

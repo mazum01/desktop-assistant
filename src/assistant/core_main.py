@@ -383,7 +383,13 @@ def main() -> int:
                 spectrum_enabled=bool(_display_cfg_raw.get("spectrum_enabled", True)),
                 spectrum_max_fps=float(_display_cfg_raw.get("spectrum_max_fps", 12.0)),
                 spectrum_max_bands=int(_display_cfg_raw.get("spectrum_max_bands", 12)),
+                announce_connection=bool(_display_cfg_raw.get("announce_connection", True)),
+                connect_text=str(_display_cfg_raw.get("connect_text", "Display connected.")),
+                disconnect_text=str(
+                    _display_cfg_raw.get("disconnect_text", "Display disconnected.")
+                ),
             ),
+            quiet_hours=_qh,
         )
         if _display_enabled else None
     )

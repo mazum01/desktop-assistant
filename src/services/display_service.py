@@ -61,6 +61,10 @@ class DisplayServiceConfig:
     # frames are dropped rather than queued above this rate.
     spectrum_max_fps: float = 12.0
     spectrum_max_bands: int = 12
+    # Spoken announcements when the BLE display link comes up or drops.
+    announce_connection: bool = True
+    connect_text: str = "Display connected."
+    disconnect_text: str = "Display disconnected."
 
 
 class DisplayService(Service):
@@ -71,9 +75,11 @@ class DisplayService(Service):
         self,
         bus: Optional[MessageBus] = None,
         config: Optional[DisplayServiceConfig] = None,
+        quiet_hours=None,
     ) -> None:
         super().__init__(bus=bus)
         self._cfg = config or DisplayServiceConfig()
+        self._quiet_hours = quiet_hours
         self._unsubs: list = []
         self._seen_started: set[str] = set()
         self._ble_lock = threading.Lock()
@@ -83,6 +89,9 @@ class DisplayService(Service):
         self._ble_stop = threading.Event()
         self._speaking = False
         self._last_spectrum_sent = 0.0
+        # None = no link state observed yet, so the first successful connect
+        # after boot announces rather than being treated as a no-op transition.
+        self._ble_connected: Optional[bool] = None
 
     def set_expected_services(self, names: list[str]) -> None:
         self._cfg.expected_services = [n for n in names if n and n != self.name]
@@ -325,6 +334,42 @@ class DisplayService(Service):
         self.send_mouth_state(normalized)
         return True
 
+    def _set_ble_connected(self, connected: bool) -> None:
+        """Record a BLE link transition, announcing and publishing it once.
+
+        Called from the BLE worker thread on every connect/drop. Repeated
+        reconnect attempts against an absent display would otherwise announce
+        on every retry, so only genuine state changes are reported.
+        """
+        with self._ble_lock:
+            if self._ble_connected == connected:
+                return
+            first_observation = self._ble_connected is None
+            self._ble_connected = connected
+
+        # A failed first connect (display never present) isn't a "disconnect".
+        if first_observation and not connected:
+            return
+
+        self.bus.publish(
+            "display.connection",
+            {"connected": connected, "address": self._cfg.ble_address, "ts": time.time()},
+        )
+
+        if not self._cfg.announce_connection:
+            return
+        # Tearing down the link during shutdown is expected, not an event.
+        if not connected and self._ble_stop.is_set():
+            return
+        if self._quiet_hours is not None and self._quiet_hours.is_quiet():
+            log.info("Display %s announcement suppressed — quiet hours",
+                     "connected" if connected else "disconnected")
+            return
+
+        text = self._cfg.connect_text if connected else self._cfg.disconnect_text
+        if text:
+            self.bus.publish("av.say", {"text": text})
+
     def _send_ble(self, payload: dict) -> None:
         if not self._cfg.ble_enabled or self._ble_stop.is_set():
             return
@@ -373,27 +418,32 @@ class DisplayService(Service):
                     timeout=float(self._cfg.connect_timeout_s),
                 ) as client:
                     log.info("DisplayService: connected to BLE display (%s)", self._cfg.ble_address)
-                    while not self._ble_stop.is_set() and client.is_connected:
-                        try:
-                            encoded = self._ble_queue.get(timeout=0.05)
-                        except queue.Empty:
-                            await asyncio.sleep(0.01)
-                            continue
+                    self._set_ble_connected(True)
+                    try:
+                        while not self._ble_stop.is_set() and client.is_connected:
+                            try:
+                                encoded = self._ble_queue.get(timeout=0.05)
+                            except queue.Empty:
+                                await asyncio.sleep(0.01)
+                                continue
 
-                        if encoded is None or self._ble_stop.is_set():
-                            return
+                            if encoded is None or self._ble_stop.is_set():
+                                return
 
-                        try:
-                            await client.write_gatt_char(
-                                self._cfg.ble_characteristic_uuid,
-                                encoded,
-                                response=False,
-                            )
-                        except Exception:
-                            log.exception("DisplayService BLE write failed")
-                            self.bus.publish("display.error", {"error": "ble_write_failed", "ts": time.time()})
-                            break
+                            try:
+                                await client.write_gatt_char(
+                                    self._cfg.ble_characteristic_uuid,
+                                    encoded,
+                                    response=False,
+                                )
+                            except Exception:
+                                log.exception("DisplayService BLE write failed")
+                                self.bus.publish("display.error", {"error": "ble_write_failed", "ts": time.time()})
+                                break
+                    finally:
+                        self._set_ble_connected(False)
             except Exception as exc:
+                self._set_ble_connected(False)
                 if not self._ble_stop.is_set():
                     log.warning("DisplayService BLE connection error: %s (retrying in 2s)", exc)
                     if "was not found" in str(exc):
