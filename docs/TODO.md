@@ -162,6 +162,12 @@ VERA through the established BLE GATT path.
   visually validated on the physical Waveshare ESP32-C6-LCD-1.47, including a
   follow-up tuning pass on the speaking animation's bounce amplitude/period
   that was itself causing flicker at the renderer's 15fps cap.
+- [ ] **Prototype silent OpenClaw personality gestures** — observe one
+  explicitly configured owner conversation read-only and drive temporary
+  acknowledging, thinking, satisfied, skeptical, and error gestures on the
+  display/head without TTS or external forwarding. Keep disabled by default,
+  avoid private/non-owner prompts, isolate OpenClaw schema integration, and
+  validate the full prompt/completion/error sequence on real hardware.
 
 ## Audio
 - [x] reSpeaker mic capture — RESOLVED in v1.41.0 via `src/audio/pw_input.py`
