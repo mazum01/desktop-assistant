@@ -57,7 +57,7 @@ depth:
   known_face_width_m: 0.145
   max_depth_m: 6.0
   min_depth_m: 0.25
-  mono_enabled: false
+  mono_enabled: true
   mono_hef_path: /usr/local/hailo/resources/models/hailo8/scdepthv3.hef
   mono_rate_hz: 3.0
   num_disparities: 128

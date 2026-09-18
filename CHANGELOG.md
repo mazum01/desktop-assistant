@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.62.2] - 2026-09-17
+### Changed
+- Enabled Hailo monocular neural depth estimation (`depth.mono_enabled: true`)
+  by default; the model file is present and the feature is already exposed
+  via the `depth.set_mono_enabled` bus topic and web dashboard toggle.
+### Fixed
+- Removed a stray trailing backtick typo in `docs/TODO.md`.
+
 ## [1.62.1] - 2026-09-12
 ### Changed
 - Rolled back the experimental OpenClaw personality integration while
