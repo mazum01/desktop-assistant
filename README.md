@@ -22,6 +22,7 @@ head, and temperature-controlled cooling.
 - [Feature Parity Matrix](docs/FEATURES.md)
 - [Architecture Review](docs/ARCHITECTURE_REVIEW.md) ([printable PDF](docs/ARCHITECTURE_REVIEW.pdf))
 - [Process Isolation Proposal](docs/architecture/PROCESS_ISOLATION_PROPOSAL.md)
+- [Clean Raspberry Pi OS Installation (VERA3)](docs/VERA3_SETUP.md)
 - [TODO](docs/TODO.md)
 
 ## Repo Layout

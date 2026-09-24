@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.62.3] - 2026-09-24
+### Added
+- A portable `bootstrap_vera3.sh` first-boot installer for a clean 64-bit
+  Raspberry Pi OS Bookworm image. It validates the platform, provisions the
+  complete VERA dependency baseline, optionally installs Hailo, prepares
+  service/udev files, and deliberately leaves services disabled until physical
+  safety checks complete.
+- `docs/VERA3_SETUP.md`, an end-to-end VERA3 runbook covering imaging,
+  post-bootstrap hardware bring-up, per-unit configuration, service
+  activation, OpenClaw isolation, and final acceptance.
+
+### Changed
+- Expanded `scripts/setup_pi.sh` to install the complete VERA Python/runtime
+  dependency set rather than only the servo and I2C subset.
+
 ## [1.62.2] - 2026-09-17
 ### Changed
 - Enabled Hailo monocular neural depth estimation (`depth.mono_enabled: true`)

@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# setup_pi.sh — Install all Desktop Assistant dependencies on Raspberry Pi OS Bookworm
+# setup_pi.sh — Install VERA runtime dependencies on Raspberry Pi OS Bookworm
 #
 # Uses SYSTEM Python (no venv). All hardware libs (picamera2, libcamera,
 # lgpio) are apt-only on Pi 5; trying to push them through a venv adds
 # friction with no benefit on a dedicated appliance.
 #
 # Run once after cloning:  bash scripts/setup_pi.sh
+#
+# This script installs software only. It never enables VERA services or moves
+# hardware because those actions must follow physical verification on each Pi.
 
 set -euo pipefail
 
@@ -14,11 +17,27 @@ echo "║   Desktop Assistant — Pi dependency installer   ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ ! -f "$REPO_ROOT/requirements.txt" ]]; then
+    echo "ERROR: requirements.txt not found at $REPO_ROOT" >&2
+    exit 1
+fi
+
 # ── 1. System packages (apt) ─────────────────────────────────────────
 echo "[1/4] Installing system packages (apt)..."
 sudo apt-get update -qq
 sudo apt-get install -y \
+    alsa-utils \
+    build-essential \
+    ca-certificates \
+    cmake \
+    curl \
+    ffmpeg \
+    git \
     python3-pip \
+    python3-dev \
+    python3-opencv \
+    python3-venv \
     python3-smbus \
     python3-numpy \
     python3-lgpio \
@@ -30,18 +49,24 @@ sudo apt-get install -y \
     python3-pytest \
     i2c-tools \
     libasound2-dev \
+    libffi-dev \
     portaudio19-dev \
-    espeak-ng
+    libsndfile1 \
+    libssl-dev \
+    pkg-config \
+    pipewire \
+    pipewire-audio \
+    pipewire-pulse \
+    wireplumber \
+    espeak-ng \
+    pianobar
 
 # ── 2. Pip packages (system, --break-system-packages on PEP 668) ─────
 echo ""
-echo "[2/4] Installing extra pip packages (system Python)..."
+echo "[2/4] Installing VERA Python packages (system Python)..."
 # These have no apt equivalent on Bookworm. Use --break-system-packages
 # because Bookworm enforces PEP 668 by default.
-sudo pip3 install --quiet --break-system-packages \
-    smbus2 \
-    Adafruit-Blinka \
-    adafruit-circuitpython-servokit
+sudo pip3 install --quiet --break-system-packages -r "$REPO_ROOT/requirements.txt"
 
 # ── 3. Enable I²C if needed ──────────────────────────────────────────
 echo ""
@@ -67,7 +92,6 @@ else
 fi
 
 # ── 3c. Symlink CLI onto PATH ────────────────────────────────────────
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_SRC="$REPO_ROOT/scripts/desktop-assistant"
 CLI_DEST="/usr/local/bin/desktop-assistant"
 CLI_ALIAS="/usr/local/bin/da"
@@ -98,6 +122,8 @@ python3 -c "import lgpio; print('  ✓ lgpio OK')" || echo "  ✗ lgpio missing"
 python3 -c "from adafruit_servokit import ServoKit; print('  ✓ adafruit-servokit OK')" || echo "  ✗ adafruit-servokit missing"
 python3 -c "import numpy; print('  ✓ numpy', numpy.__version__)" || echo "  ✗ numpy missing"
 python3 -c "import sounddevice; print('  ✓ sounddevice OK')" || echo "  ✗ sounddevice missing"
+python3 -c "import fastapi, uvicorn, zmq; print('  ✓ web and IPC dependencies OK')" || echo "  ✗ web or IPC dependency missing"
+python3 -c "import bleak; print('  ✓ bleak OK')" || echo "  ✗ bleak missing"
 command -v espeak-ng >/dev/null && echo "  ✓ espeak-ng OK" || echo "  ✗ espeak-ng missing"
 command -v hailortcli >/dev/null && echo "  ✓ hailortcli OK" || echo "  (hailortcli not installed — Hailo accelerator optional)"
 
