@@ -65,6 +65,11 @@ echo "[2/4] Installing VERA Python packages (system Python)..."
 # This includes sounddevice and soundfile: Raspberry Pi OS Bookworm does not
 # provide a python3-sounddevice APT package. Use --break-system-packages
 # because Bookworm enforces PEP 668 by default.
+# Debian's typing_extensions package lacks pip's RECORD metadata. Install the
+# newer transitive dependency without attempting to uninstall the Debian copy,
+# otherwise pip exits with "uninstall-no-record-file".
+sudo pip3 install --quiet --break-system-packages --ignore-installed \
+    "typing-extensions>=4.15"
 sudo pip3 install --quiet --break-system-packages -r "$REPO_ROOT/requirements.txt"
 
 # ── 3. Enable I²C if needed ──────────────────────────────────────────

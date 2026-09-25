@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.62.5] - 2026-09-25
+### Fixed
+- Made the Raspberry Pi OS bootstrap resilient to Debian's missing pip
+  `typing_extensions` RECORD metadata by safely overlaying the required
+  transitive dependency before installing VERA's Python requirements.
+
 ## [1.62.4] - 2026-09-24
 ### Fixed
 - Removed the unavailable `python3-sounddevice` package from the Raspberry Pi
