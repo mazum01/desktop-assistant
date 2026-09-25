@@ -71,7 +71,7 @@
 
 ## 4. Software Stack
 
-- OS: Raspberry Pi OS (64-bit, Bookworm)
+- OS: Raspberry Pi OS (64-bit, Bookworm or Trixie)
 - Language: Python 3.11+ (with C extensions where needed)
 - AI runtime: HailoRT
 - Audio: ALSA / PipeWire

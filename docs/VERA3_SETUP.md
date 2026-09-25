@@ -8,8 +8,8 @@ not clone operational state from another VERA.
 
 ### Required baseline
 
-- Raspberry Pi 5, **64-bit Raspberry Pi OS Bookworm**, and a 27 W USB-C power
-  supply.
+- Raspberry Pi 5, **64-bit Raspberry Pi OS Bookworm or Trixie**, and a 27 W
+  USB-C power supply.
 - Active cooling and reliable storage; an NVMe SSD is strongly recommended for
   a production unit.
 - Network access during installation.
@@ -30,7 +30,9 @@ servo documentation.
 
 ## 1. Image and boot Raspberry Pi OS
 
-Use Raspberry Pi Imager to write **Raspberry Pi OS Lite (64-bit), Bookworm**.
+Use Raspberry Pi Imager to write **Raspberry Pi OS Lite (64-bit)** on either
+Bookworm or Trixie. Trixie is the recommended current release for a new image;
+Bookworm remains supported for parity with existing VERA units.
 In the Imager customization screen:
 
 1. Set a unique hostname, such as `vera3`.
@@ -76,13 +78,19 @@ git checkout --detach 32ebb79
 
 The bootstrap:
 
-- validates 64-bit Bookworm;
+- validates 64-bit Bookworm or Trixie;
 - fully updates the operating system;
 - clones the requested VERA revision;
 - installs Pi, audio, camera, IPC, web, BLE, and Python dependencies;
 - enables I2C and the GPIO13 hardware-PWM overlay;
 - installs VERA's systemd and ReSpeaker udev files without enabling VERA;
 - creates an empty root-owned `/etc/desktop-assistant/secrets.env`.
+
+VERA runs directly on the system Python. Pi-owned hardware bindings are
+installed through APT; VERA packages absent or too old in the Raspberry Pi OS
+repositories are
+installed globally under `/usr/local` through pip without removing
+Debian-owned Python files. No virtual environment is created or required.
 
 It does **not** copy secrets, OpenClaw state, face data, Telegram settings,
 camera calibration, display identity, or configuration from another machine.

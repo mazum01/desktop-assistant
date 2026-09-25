@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bootstrap a clean Raspberry Pi OS Bookworm host for a new VERA instance.
+# Bootstrap a clean Raspberry Pi OS Bookworm or Trixie host for a new VERA instance.
 #
 # Copy this file to the target Pi and run it after first boot:
 #   bash bootstrap_vera3.sh --user starter --ref <commit-or-branch>
@@ -21,7 +21,8 @@ usage() {
     cat <<'EOF'
 Usage: bash bootstrap_vera3.sh [options]
 
-Install a fresh VERA software baseline on Raspberry Pi OS Bookworm (64-bit).
+Install a fresh VERA software baseline on Raspberry Pi OS Bookworm or Trixie
+(64-bit).
 
 Options:
   --user USER       Account that will run VERA (default: current non-root user)
@@ -68,8 +69,8 @@ TARGET_DIR="${TARGET_DIR:-$TARGET_HOME/Code/Desktop Assistant}"
 if [[ "$(uname -m)" != "aarch64" ]]; then
     die "VERA requires 64-bit Raspberry Pi OS (expected aarch64; got $(uname -m))."
 fi
-if ! grep -qi 'bookworm' /etc/os-release; then
-    die "VERA's supported baseline is Raspberry Pi OS Bookworm."
+if ! grep -Eqi 'VERSION_CODENAME=(bookworm|trixie)' /etc/os-release; then
+    die "VERA requires 64-bit Raspberry Pi OS Bookworm or Trixie."
 fi
 
 sudo -v

@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.62.7] - 2026-09-25
+### Changed
+- Added Raspberry Pi OS Trixie (64-bit) to the VERA bootstrap's supported
+  platform baseline while retaining Bookworm compatibility.
+
+## [1.62.6] - 2026-09-25
+### Fixed
+- Reworked the Raspberry Pi OS Python install policy to preserve system Python
+  operation while avoiding all Debian pip-uninstall conflicts. Hardware
+  bindings remain APT-managed and the complete VERA requirements set overlays
+  globally under `/usr/local` without uninstalling Debian-owned packages.
+
 ## [1.62.5] - 2026-09-25
 ### Fixed
 - Made the Raspberry Pi OS bootstrap resilient to Debian's missing pip

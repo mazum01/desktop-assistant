@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup_pi.sh — Install VERA runtime dependencies on Raspberry Pi OS Bookworm
+# setup_pi.sh — Install VERA runtime dependencies on Raspberry Pi OS Bookworm or Trixie
 #
 # Uses SYSTEM Python (no venv). All hardware libs (picamera2, libcamera,
 # lgpio) are apt-only on Pi 5; trying to push them through a venv adds
@@ -59,18 +59,20 @@ sudo apt-get install -y \
     espeak-ng \
     pianobar
 
-# ── 2. Pip packages (system, --break-system-packages on PEP 668) ─────
+# ── 2. Project Python packages (system Python) ───────────────────────
 echo ""
 echo "[2/4] Installing VERA Python packages (system Python)..."
-# This includes sounddevice and soundfile: Raspberry Pi OS Bookworm does not
-# provide a python3-sounddevice APT package. Use --break-system-packages
-# because Bookworm enforces PEP 668 by default.
-# Debian's typing_extensions package lacks pip's RECORD metadata. Install the
-# newer transitive dependency without attempting to uninstall the Debian copy,
-# otherwise pip exits with "uninstall-no-record-file".
-sudo pip3 install --quiet --break-system-packages --ignore-installed \
-    "typing-extensions>=4.15"
-sudo pip3 install --quiet --break-system-packages -r "$REPO_ROOT/requirements.txt"
+# Keep Pi-owned hardware bindings (picamera2, lgpio, GPIO) under APT. Packages
+# unavailable or too old in the Raspberry Pi OS repositories (for example
+# sounddevice, FastAPI and
+# vendor SDKs) install globally under /usr/local. --ignore-installed prevents
+# pip from attempting to uninstall Debian packages, whose dist-info metadata
+# intentionally lacks pip's RECORD file (for example idna and
+# typing_extensions). /usr/local takes precedence over /usr/lib on Python's
+# normal system path; no virtual environment is used.
+sudo pip3 install --quiet --root-user-action=ignore \
+    --break-system-packages --ignore-installed \
+    -r "$REPO_ROOT/requirements.txt"
 
 # ── 3. Enable I²C if needed ──────────────────────────────────────────
 echo ""
