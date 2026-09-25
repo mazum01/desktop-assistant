@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.62.8] - 2026-09-25
+### Fixed
+- Narrowed the `--ignore-installed` pip pass in `setup_pi.sh` to a curated list
+  of pure-Python packages known to lack Debian RECORD metadata (idna,
+  typing_extensions, certifi, charset-normalizer, six, urllib3, packaging,
+  requests) instead of applying it to the entire `requirements.txt`. Applying
+  it blanket-wide forced pip to rebuild apt-satisfied hardware bindings from
+  source — `lgpio` in particular failed with `swig: No such file or directory`
+  since its sdist requires the `swig` code generator. The main
+  `requirements.txt` install now runs without `--ignore-installed`, so
+  APT-provided native bindings (lgpio, RPi.GPIO, rpi_ws281x, numpy, etc.) are
+  left untouched. Added `swig` to the APT package list as a safety net for any
+  future genuine source rebuild.
+
 ## [1.62.7] - 2026-09-25
 ### Changed
 - Added Raspberry Pi OS Trixie (64-bit) to the VERA bootstrap's supported

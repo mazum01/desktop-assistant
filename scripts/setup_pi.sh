@@ -57,21 +57,30 @@ sudo apt-get install -y \
     pipewire-pulse \
     wireplumber \
     espeak-ng \
-    pianobar
+    pianobar \
+    swig
 
 # ── 2. Project Python packages (system Python) ───────────────────────
 echo ""
 echo "[2/4] Installing VERA Python packages (system Python)..."
-# Keep Pi-owned hardware bindings (picamera2, lgpio, GPIO) under APT. Packages
-# unavailable or too old in the Raspberry Pi OS repositories (for example
-# sounddevice, FastAPI and
-# vendor SDKs) install globally under /usr/local. --ignore-installed prevents
-# pip from attempting to uninstall Debian packages, whose dist-info metadata
-# intentionally lacks pip's RECORD file (for example idna and
-# typing_extensions). /usr/local takes precedence over /usr/lib on Python's
-# normal system path; no virtual environment is used.
+# Keep Pi-owned hardware bindings (picamera2, lgpio, GPIO, numpy) satisfied by
+# APT — do not force pip to rebuild them. A handful of pure-Python libraries
+# (idna, typing_extensions, etc.) ship as Debian packages whose dist-info
+# metadata intentionally lacks pip's RECORD file, so pip cannot uninstall the
+# Debian copy when a newer version is required elsewhere in requirements.txt
+# ("uninstall-no-record-file"). Pre-install just that known-conflicting set
+# with --ignore-installed so pip overlays them under /usr/local (which takes
+# precedence over /usr/lib on Python's normal system path) instead of trying
+# to remove the Debian copy. Everything else — including apt-satisfied
+# hardware bindings such as lgpio, whose sdist requires `swig` to build from
+# source — installs via a normal pass below, so packages already provided by
+# APT are left untouched rather than gratuitously rebuilt. No virtual
+# environment is used.
 sudo pip3 install --quiet --root-user-action=ignore \
     --break-system-packages --ignore-installed \
+    idna typing_extensions certifi charset-normalizer six urllib3 packaging requests
+sudo pip3 install --quiet --root-user-action=ignore \
+    --break-system-packages \
     -r "$REPO_ROOT/requirements.txt"
 
 # ── 3. Enable I²C if needed ──────────────────────────────────────────
