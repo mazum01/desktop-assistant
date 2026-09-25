@@ -64,6 +64,16 @@ that commit, branch, or release tag. Fit the Hailo-8 HAT+ first and add
 bash bootstrap_vera3.sh --user starter --ref 36ae2b0 --with-hailo
 ```
 
+The bootstrap checks out the selected revision in detached-HEAD mode to keep
+the installed build reproducible. To update an already-bootstrapped Pi, fetch
+then explicitly check out the desired revision; do not use bare `git pull`:
+
+```bash
+cd ~/Code/"Desktop Assistant"
+git fetch --tags origin
+git checkout --detach 32ebb79
+```
+
 The bootstrap:
 
 - validates 64-bit Bookworm;
