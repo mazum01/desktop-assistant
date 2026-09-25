@@ -43,8 +43,6 @@ sudo apt-get install -y \
     python3-lgpio \
     python3-gpiozero \
     python3-picamera2 \
-    python3-sounddevice \
-    python3-soundfile \
     python3-zmq \
     python3-pytest \
     i2c-tools \
@@ -64,7 +62,8 @@ sudo apt-get install -y \
 # ── 2. Pip packages (system, --break-system-packages on PEP 668) ─────
 echo ""
 echo "[2/4] Installing VERA Python packages (system Python)..."
-# These have no apt equivalent on Bookworm. Use --break-system-packages
+# This includes sounddevice and soundfile: Raspberry Pi OS Bookworm does not
+# provide a python3-sounddevice APT package. Use --break-system-packages
 # because Bookworm enforces PEP 668 by default.
 sudo pip3 install --quiet --break-system-packages -r "$REPO_ROOT/requirements.txt"
 

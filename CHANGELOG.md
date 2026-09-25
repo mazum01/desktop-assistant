@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.62.4] - 2026-09-24
+### Fixed
+- Removed the unavailable `python3-sounddevice` package from the Raspberry Pi
+  OS bootstrap APT dependencies. `sounddevice` and `soundfile` are now
+  explicitly documented as pip-installed VERA requirements, while their native
+  PortAudio and libsndfile dependencies remain installed through APT.
+
 ## [1.62.3] - 2026-09-24
 ### Added
 - A portable `bootstrap_vera3.sh` first-boot installer for a clean 64-bit
