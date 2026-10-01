@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.62.9] - 2026-10-01
+### Changed
+- Removed the OpenClaw gateway from watchdog health checks and restart
+  management, and removed the gateway dependency from the watchdog systemd
+  unit. OpenClaw remains available as the watchdog notification transport.
+
 ## [1.62.8] - 2026-09-25
 ### Fixed
 - Narrowed the `--ignore-installed` pip pass in `setup_pi.sh` to a curated list

@@ -293,20 +293,11 @@ class TestWatchdogTelegramNotify:
 
 
 # ---------------------------------------------------------------------------
-# main() service wiring — regression test for the openclaw user_unit bug
+# main() service wiring
 # ---------------------------------------------------------------------------
 
 class TestMainServiceWiring:
-    def test_openclaw_gateway_is_wired_as_user_unit(self):
-        """The real openclaw-gateway process runs under the *user* systemd
-        instance (auto-installed by the `openclaw` CLI), not the legacy
-        system-wide unit of the same name. If this ManagedService entry isn't
-        marked user_unit=True, is_systemd_active()/_systemd_main_pid() query
-        the wrong (system) manager, which has no knowledge of the real
-        process — making _kill_orphan_port_holder() treat the healthy
-        gateway as an orphan and SIGKILL it (observed in production: forced
-        kills + restart races every ~90 min, tied to max_uptime_min).
-        """
+    def test_openclaw_gateway_is_not_managed(self):
         import src.watchdog.watchdog as wd_module
 
         captured = {}
@@ -322,6 +313,17 @@ class TestMainServiceWiring:
              patch.object(wd_module, "Watchdog", _CapturingWatchdog):
             wd_module.main()
 
-        services_by_unit = {s.unit: s for s in captured["services"]}
-        openclaw_svc = services_by_unit["openclaw-gateway.service"]
-        assert openclaw_svc.user_unit is True
+        units = {service.unit for service in captured["services"]}
+        assert "openclaw-gateway.service" not in units
+
+    def test_watchdog_unit_does_not_depend_on_openclaw_gateway(self):
+        from pathlib import Path
+
+        unit_file = (
+            Path(__file__).resolve().parents[1]
+            / "services"
+            / "systemd"
+            / "desktop-assistant-watchdog.service"
+        )
+        unit_text = unit_file.read_text()
+        assert "openclaw-gateway.service" not in unit_text

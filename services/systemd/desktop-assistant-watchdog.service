@@ -1,8 +1,8 @@
 [Unit]
 Description=VERA — system health watchdog
 Documentation=https://github.com/mazum01/desktop-assistant
-After=network.target desktop-assistant-core.service openclaw-gateway.service
-Wants=desktop-assistant-core.service openclaw-gateway.service
+After=network.target desktop-assistant-core.service
+Wants=desktop-assistant-core.service
 
 [Service]
 Type=simple

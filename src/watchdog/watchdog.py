@@ -26,10 +26,6 @@ Services monitored
                               dashboard/API/cameras, split out of core per
                               docs/architecture/PROCESS_ISOLATION_PROPOSAL.md
                               Phase 3. Same --user-unit constraint as media.
-* openclaw-gateway          — systemctl + HTTP ping (localhost:18789)
-                              + journal scan for stuck "Bot not initialized" loop
-                              + max-uptime restart (Telegram polling-stall guard)
-                              + max-uptime restart (Telegram polling-stall guard)
 
 Network reachability (outbound Wi-Fi / DNS)
 --------------------------------------------
@@ -79,9 +75,6 @@ watchdog:
   check_interval_s: 30
   restart_cooldown_min: 5
   telegram_notify: true
-  # Per-service overrides (optional):
-  openclaw_stuck_threshold: 10   # "Bot not initialized" lines in 60s → restart
-  openclaw_max_uptime_min: 90    # max gateway uptime before forced restart (polling-stall guard)
   # Outbound network reachability (see "Network reachability" section above):
   network_check_enabled: true
   network_probe_hosts: "1.1.1.1:53,8.8.8.8:53,9.9.9.9:53"
@@ -118,9 +111,7 @@ log = logging.getLogger("watchdog")
 
 _DEFAULT_INTERVAL_S       = 30.0
 _DEFAULT_COOLDOWN_MIN     = 5.0
-_DEFAULT_STUCK_THRESHOLD  = 10   # "Bot not initialized" occurrences / 60 s
-_DEFAULT_MAX_UPTIME_MIN   = 90   # openclaw-gateway forced restart interval (polling-stall guard)
-_DEFAULT_OPENCLAW_MAX_PROCESSES = 2
+_DEFAULT_STUCK_THRESHOLD  = 10   # occurrences of a configured pattern / 60 s
 _DEFAULT_STATUS_NOTIFY_MIN = 15.0
 _DEFAULT_ALERT_COOLDOWN_MIN = 10.0
 _DEFAULT_CORE_RSS_WARN_MB = 2200.0
@@ -879,9 +870,6 @@ def main() -> int:
     interval_s        = float(wd_cfg.get("check_interval_s", _DEFAULT_INTERVAL_S))
     cooldown_min      = float(wd_cfg.get("restart_cooldown_min", _DEFAULT_COOLDOWN_MIN))
     tg_notify         = bool(wd_cfg.get("telegram_notify", True))
-    stuck_threshold   = int(wd_cfg.get("openclaw_stuck_threshold", _DEFAULT_STUCK_THRESHOLD))
-    max_uptime_min    = int(wd_cfg.get("openclaw_max_uptime_min", _DEFAULT_MAX_UPTIME_MIN))
-    openclaw_max_processes = int(wd_cfg.get("openclaw_max_processes", _DEFAULT_OPENCLAW_MAX_PROCESSES))
     status_notify_min = float(wd_cfg.get("status_notify_interval_min", _DEFAULT_STATUS_NOTIFY_MIN))
     alert_cooldown_min = float(wd_cfg.get("alert_cooldown_min", _DEFAULT_ALERT_COOLDOWN_MIN))
     core_rss_warn_mb = float(wd_cfg.get("core_rss_warn_mb", _DEFAULT_CORE_RSS_WARN_MB))
@@ -944,28 +932,6 @@ def main() -> int:
             # Owns port 8080 / GET /health now — see the NOTE on the core
             # entry above for why this check must live here, not on core.
             http_check="http://localhost:8080/health",
-            user_unit=True,
-        ),
-        ManagedService(
-            unit="openclaw-gateway.service",
-            http_check="http://localhost:18789/health",
-            process_match="openclaw/dist/index.js gateway",
-            max_processes=max(1, openclaw_max_processes),
-            journal_stuck_pattern="Bot not initialized",
-            stuck_threshold=stuck_threshold,
-            require_systemd_active=bool(wd_cfg.get("openclaw_require_systemd_active", True)),
-            max_uptime_min=max_uptime_min,
-            # The gateway actually runs as a --user unit (auto-installed by the
-            # `openclaw` CLI itself, ~/.config/systemd/user/). A legacy *system*
-            # unit of the same name also exists and is enabled, but it always
-            # loses the port race and exits 78. Before this fix, user_unit
-            # defaulted to False here, so _systemd_main_pid()/is_systemd_active()
-            # queried the SYSTEM manager, which has no knowledge of the real
-            # (user-managed) process. That made _kill_orphan_port_holder()
-            # always see main_pid=None != port_pid, treat the perfectly healthy
-            # gateway as an "orphan", and SIGKILL it — every time max_uptime_min
-            # tripped (~90 min), causing a forced kill + restart race between
-            # the two duplicate units fighting over port 18789.
             user_unit=True,
         ),
     ]
