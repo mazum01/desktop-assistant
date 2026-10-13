@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.62.10] - 2026-10-13
+### Fixed
+- Updated the display BLE address to `AC:EB:E6:3E:B6:E2` for the connected
+  ESP32-C6 display and aligned the firmware upload documentation.
+
 ## [1.62.9] - 2026-10-01
 ### Changed
 - Removed the OpenClaw gateway from watchdog health checks and restart

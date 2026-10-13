@@ -25,6 +25,9 @@ Validated end-to-end against the physical board (firmware v1.53.1):
 - **BLE discovery/pairing**: device advertises as `VERA-Display`
   (`AC:EB:E6:23:EC:76`); `DisplayService` on the host connects directly by
   address (no interactive pairing required) using `bleak`.
+- **Current host display (2026-10-13)**: the display connected to this host
+  uses `AC:EB:E6:3E:B6:E2`, as configured in `config/assistant.yaml`.
+  The address above belongs to the earlier hardware validation board.
 - **Persistent connection**: `DisplayService` holds one long-lived
   `BleakClient` session instead of reconnecting per message — connect takes
   ~1-1.5s once, then writes complete in <10ms each.
@@ -137,7 +140,7 @@ Every build after that can be pushed over BLE.
 To push a new build over BLE once the device has OTA-capable firmware:
 
 ```bash
-VERA_ESP32_BLE_ADDRESS=AC:EB:E6:23:EC:76 ./firmware/upload_esp32_display_ble.sh
+VERA_ESP32_BLE_ADDRESS=AC:EB:E6:3E:B6:E2 ./firmware/upload_esp32_display_ble.sh
 ```
 
 This compiles the sketch, locates the resulting `.bin`, and streams it to the

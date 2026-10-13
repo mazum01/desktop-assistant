@@ -63,7 +63,7 @@ depth:
   num_disparities: 128
 display:
   announce_connection: true
-  ble_address: AC:EB:E6:23:EC:76
+  ble_address: AC:EB:E6:3E:B6:E2
   ble_characteristic_uuid: d741e8c9-f156-4c47-808f-f28ccd2760f2
   ble_enabled: true
   ble_status_characteristic_uuid: 6a1e2c0a-6b8e-4a8a-9a7a-6c9c3e6b6a5e
