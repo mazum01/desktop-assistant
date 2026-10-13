@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.63.1] - 2026-10-13
+### Changed
+- Made watchdog systemd scope selectable with `VERA_SYSTEMD_USER_UNITS` so
+  user-scoped deployments can monitor and restart every VERA service.
+
 ## [1.63.0] - 2026-10-13
 ### Added
 - Hailo-10H AI accelerator support: added auto-probing for Hailo-10H hardware

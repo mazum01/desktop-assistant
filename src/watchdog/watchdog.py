@@ -846,6 +846,12 @@ class Watchdog:
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _use_user_unit_scope() -> bool:
+    return os.environ.get("VERA_SYSTEMD_USER_UNITS", "").lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
 def _load_config() -> dict:
     if _CONFIG_PATH.exists():
         with open(_CONFIG_PATH) as f:
@@ -888,6 +894,7 @@ def main() -> int:
     network_recovery_cooldown_min = float(wd_cfg.get("network_recovery_cooldown_min", _DEFAULT_NETWORK_RECOVERY_COOLDOWN_MIN))
     wifi_device = str(wd_cfg.get("wifi_device", _DEFAULT_WIFI_DEVICE))
     wifi_connection_id = str(wd_cfg.get("wifi_connection_id", _DEFAULT_WIFI_CONNECTION_ID))
+    user_unit_scope = _use_user_unit_scope()
 
     tg_cfg     = cfg.get("telegram", {})
     tg_token   = str(tg_cfg.get("bot_token", ""))
@@ -898,9 +905,11 @@ def main() -> int:
     services = [
         ManagedService(
             unit="desktop-assistant-thermal.service",
+            user_unit=user_unit_scope,
         ),
         ManagedService(
             unit="desktop-assistant-core.service",
+            user_unit=user_unit_scope,
             # NOTE: no http_check here anymore — port 8080 (and /health) moved
             # to desktop-assistant-web.service per
             # docs/architecture/PROCESS_ISOLATION_PROPOSAL.md Phase 3. Leaving

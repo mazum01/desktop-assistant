@@ -42,6 +42,12 @@ target (see each unit file's `[Unit]` section for the exact list), so
 enabling any one of them also pulls its dependencies up, in the right boot
 order.
 
+When all units are installed in the per-user systemd manager instead of the
+system manager, set `VERA_SYSTEMD_USER_UNITS=1` in the watchdog unit's
+environment. This makes watchdog health checks and restarts use
+`systemctl --user` for the thermal and core units as well as the split
+media/integrations/web units. The default remains system-level monitoring.
+
 > **Production note (this box):** the files above are the canonical
 > system-level units, but this box's passwordless sudo policy is scoped to
 > a fixed command list (`systemctl restart` on core/thermal/openclaw-gateway

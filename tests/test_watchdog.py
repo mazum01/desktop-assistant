@@ -7,10 +7,22 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.watchdog.watchdog import ManagedService, Watchdog
+from src.watchdog.watchdog import ManagedService, Watchdog, _use_user_unit_scope
 
 
 # ---------------------------------------------------------------------------
+def test_user_unit_scope_environment_flag(monkeypatch):
+    monkeypatch.delenv("VERA_SYSTEMD_USER_UNITS", raising=False)
+    assert not _use_user_unit_scope()
+
+    for value in ("1", "true", "YES", "on"):
+        monkeypatch.setenv("VERA_SYSTEMD_USER_UNITS", value)
+        assert _use_user_unit_scope()
+
+    monkeypatch.setenv("VERA_SYSTEMD_USER_UNITS", "false")
+    assert not _use_user_unit_scope()
+
+
 # ManagedService — unit health checks
 # ---------------------------------------------------------------------------
 
