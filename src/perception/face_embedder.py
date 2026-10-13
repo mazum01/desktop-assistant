@@ -79,6 +79,16 @@ class FaceEmbedder:
         self.last_lap_var: float = 0.0
 
         try:
+            from src.perception.hailo_probe import probe_hailo
+            dev = probe_hailo()
+            if dev.is_hailo10:
+                log.info("FaceEmbedder: ArcFace not yet supported on Hailo-10H, using sim mode")
+                self._sim = True
+                return
+        except Exception:
+            pass
+
+        try:
             from src.perception.hailo_inference import HailoInference
             engine = HailoInference(hef)
             if not engine.hardware_ready:

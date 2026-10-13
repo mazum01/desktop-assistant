@@ -109,7 +109,14 @@ _ONNX_SIDECAR_CANDIDATES = [
     _REPO_ROOT / "config" / "hailo" / "yolo26n_postprocessing.onnx",
     Path("/usr/local/hailo/resources/models/hailo8/yolo26n_postprocessing.onnx"),
 ]
-_TARGET_SIZE = 640  # YOLO26 expects 640×640
+
+# Hailo-10H / Hailo-15H models with on-chip NMS
+_H10_HEF_CANDIDATES = [
+    (Path("/usr/share/hailo-models/yolov8m_h10.hef"), "yolov8m_h10"),
+    (Path("/usr/share/hailo-models/yolov11m_h10.hef"), "yolov11m_h10"),
+    (_REPO_ROOT / "config" / "hailo" / "yolov8m_h10.hef", "yolov8m_h10"),
+]
+_TARGET_SIZE = 640  # YOLO26/v8 expects 640×640
 _DEFAULT_CLASS_THRESHOLDS: Dict[str, float] = {
     "person": 0.35,
     "bicycle": 0.3,
@@ -234,6 +241,7 @@ class ObjectDetector:
         self._onnx_input_names: Dict[str, str] = {}
         self._sim = False
         self._backend = "sim"
+        self._is_h10_nms = False
         # Reusable model-input buffer; always 640×640×3 (model input size, not video resolution).
         self._letterbox_buf = np.zeros((_TARGET_SIZE, _TARGET_SIZE, 3), dtype=np.uint8)
         # Cached letterbox geometry — recomputed only when source frame dimensions change.
@@ -286,9 +294,31 @@ class ObjectDetector:
     def _init_engine(self) -> None:
         try:
             from src.perception.hailo_inference import HailoInference
+            from src.perception.hailo_probe import probe_hailo
+            dev = probe_hailo()
+
+            # Prefer Hailo-10H models if running on Hailo-10H device
+            if dev.is_present and dev.is_hailo10:
+                h10_match = next(((p, variant) for p, variant in _H10_HEF_CANDIDATES if p.exists()), None)
+                if h10_match is not None:
+                    hef_path, variant = h10_match
+                    engine = HailoInference(hef_path)
+                    if engine.hardware_ready:
+                        self._engine = engine
+                        self._is_h10_nms = True
+                        self._backend = "hailo"
+                        log.info(
+                            "ObjectDetector: Hailo-10H backend ready (%s [%s] with on-chip NMS)",
+                            hef_path.name, variant,
+                        )
+                        return
+                    else:
+                        engine.close()
+
+            # Fallback to Hailo-8 YOLO26 (HEF + ONNX postprocessing)
             match = next(((p, variant) for p, variant in _HEF_CANDIDATES if p.exists()), None)
             if match is None:
-                raise FileNotFoundError("No YOLO26 HEF found (yolo26m or yolo26n)")
+                raise FileNotFoundError("No object detection HEF found for available hardware")
             hef_path, variant = match
             onnx_path = next((p for p in _ONNX_SIDECAR_CANDIDATES if p.exists()), None)
             if onnx_path is None:
@@ -305,6 +335,7 @@ class ObjectDetector:
                 self._engine = engine
                 self._onnx_session = onnx_session
                 self._onnx_input_names = _ONNX_INPUT_NAMES_BY_VARIANT[variant]
+                self._is_h10_nms = False
                 self._backend = "hailo"
                 log.info(
                     "ObjectDetector: Hailo-8 backend ready (%s [%s] + %s)",
@@ -328,19 +359,94 @@ class ObjectDetector:
         Returns a list of :class:`Detection` objects sorted by confidence
         descending. Returns an empty list in sim mode or on error.
         """
-        if self._sim or self._engine is None or self._onnx_session is None:
+        if getattr(self, "_sim", False) or getattr(self, "_engine", None) is None:
+            return []
+        if not getattr(self, "_is_h10_nms", False) and getattr(self, "_onnx_session", None) is None:
             return []
 
         src_h, src_w = frame.shape[:2]
         try:
             inp = self._letterbox(frame)
             hef_outputs = self._engine.infer({"input_layer1": inp})
+            if self._is_h10_nms:
+                return self._decode_h10_nms(hef_outputs, src_w, src_h)
             onnx_out = self._run_onnx_postprocess(hef_outputs)
         except Exception as exc:
             log.error("ObjectDetector.detect: inference failed — %s", exc)
             return []
 
         return self._decode(onnx_out, src_w, src_h)
+
+    def _decode_h10_nms(
+        self,
+        hef_outputs: Dict[str, np.ndarray],
+        src_w: int,
+        src_h: int,
+    ) -> List[Detection]:
+        """Decode HAILO_NMS_BY_CLASS tensor from Hailo-10H YOLOv8/v11 models.
+
+        Output tensor shape is ``(40080,)`` float32: 80 classes × 501 floats.
+        Each class chunk starts with a float count K, followed by K boxes of
+        5 floats ``[y1, x1, y2, x2, score]`` normalized to [0.0, 1.0] of the 640×640 input.
+        """
+        # Find the NMS output tensor
+        raw = None
+        for k, v in hef_outputs.items():
+            if "nms" in k.lower() or (isinstance(v, np.ndarray) and v.size == 40080):
+                raw = v.ravel()
+                break
+        if raw is None and hef_outputs:
+            raw = next(iter(hef_outputs.values())).ravel()
+
+        if raw is None or raw.size < 40080:
+            log.warning("ObjectDetector: invalid H10 NMS output shape — skipping")
+            return []
+
+        # Reuse cached letterbox params when possible
+        if (src_h, src_w) == self._lb_src_shape:
+            scale    = self._lb_scale
+            pad_top  = self._lb_pad_top
+            pad_left = self._lb_pad_left
+        else:
+            scale    = min(_TARGET_SIZE / src_h, _TARGET_SIZE / src_w)
+            new_w    = int(src_w * scale)
+            new_h    = int(src_h * scale)
+            pad_top  = (_TARGET_SIZE - new_h) // 2
+            pad_left = (_TARGET_SIZE - new_w) // 2
+
+        detections: List[Detection] = []
+        for cls_id in range(min(len(COCO_CLASSES), 80)):
+            offset = cls_id * 501
+            count = int(raw[offset])
+            if count <= 0:
+                continue
+            for i in range(min(count, 100)):
+                box_offset = offset + 1 + i * 5
+                y1n, x1n, y2n, x2n, score = raw[box_offset : box_offset + 5]
+                score = float(score)
+                if score < self._conf_threshold:
+                    continue
+                # Unnormalize from 640x640 space
+                x1p = float(x1n) * _TARGET_SIZE
+                y1p = float(y1n) * _TARGET_SIZE
+                x2p = float(x2n) * _TARGET_SIZE
+                y2p = float(y2n) * _TARGET_SIZE
+
+                x1 = max(0.0, (x1p - pad_left) / scale)
+                y1 = max(0.0, (y1p - pad_top) / scale)
+                x2 = min(float(src_w), (x2p - pad_left) / scale)
+                y2 = min(float(src_h), (y2p - pad_top) / scale)
+                if x2 <= x1 or y2 <= y1:
+                    continue
+                detections.append(Detection(
+                    label=COCO_CLASSES[cls_id],
+                    class_id=cls_id,
+                    confidence=round(score, 3),
+                    bbox=[round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
+                ))
+
+        detections.sort(key=lambda d: d.confidence, reverse=True)
+        return self.filter_detections(detections)
 
     def _run_onnx_postprocess(self, hef_outputs: Dict[str, np.ndarray]) -> np.ndarray:
         """

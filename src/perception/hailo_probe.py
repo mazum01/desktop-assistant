@@ -33,7 +33,7 @@ _HAILO_PCI_KEYWORD = "Hailo"
 
 @dataclass
 class HailoStatus:
-    """Structured result of probing the Hailo-8 stack."""
+    """Structured result of probing the Hailo stack (Hailo-8 or Hailo-10H)."""
 
     pcie_present: bool = False
     pcie_devices: List[str] = field(default_factory=list)
@@ -48,6 +48,34 @@ class HailoStatus:
     board_name: Optional[str] = None
 
     error: Optional[str] = None
+
+    @property
+    def is_present(self) -> bool:
+        """True if Hailo hardware is detected via PCIe or identify."""
+        return self.pcie_present or self.identify_ok
+
+    @property
+    def family(self) -> str:
+        """Device family name: 'Hailo-10H', 'Hailo-8', or 'unknown'."""
+        board = (self.board_name or "").lower()
+        arch = (self.device_id or "").upper()
+        raw_devices = " ".join(self.pcie_devices).lower()
+
+        if "hailo-10" in board or "h10" in board or "15h" in arch or "hailo-10" in raw_devices:
+            return "Hailo-10H"
+        if "hailo-8" in board or "h8" in board or "hailo8" in arch or "hailo-8" in raw_devices:
+            return "Hailo-8"
+        return "unknown"
+
+    @property
+    def is_hailo10(self) -> bool:
+        """True if the detected device is in the Hailo-10 family."""
+        return self.family == "Hailo-10H"
+
+    @property
+    def is_hailo8(self) -> bool:
+        """True if the detected device is in the Hailo-8 family."""
+        return self.family == "Hailo-8"
 
     @property
     def fully_ready(self) -> bool:
@@ -170,3 +198,14 @@ def probe(runner=_run) -> HailoStatus:
     status.firmware_version = fields.get("firmware_version")
 
     return status
+
+
+_cached_probe: Optional[HailoStatus] = None
+
+
+def probe_hailo(force_refresh: bool = False, runner=_run) -> HailoStatus:
+    """Cached singleton probe of the Hailo hardware status."""
+    global _cached_probe
+    if _cached_probe is None or force_refresh:
+        _cached_probe = probe(runner=runner)
+    return _cached_probe

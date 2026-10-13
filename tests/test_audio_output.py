@@ -163,6 +163,7 @@ def test_custom_eq_boosts_rather_than_attenuates():
     "custom" curve applied roughly 29 dB of broadband attenuation instead of
     the intended boost.
     """
+    pytest.importorskip("scipy")
     import numpy as np
     from scipy.signal import sosfreqz
     from src.audio.output import _build_custom_sos

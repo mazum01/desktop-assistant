@@ -89,7 +89,10 @@ class TestFaceDetector:
         mock_engine = MagicMock()
         mock_engine.hardware_ready = True
         mock_engine.infer.return_value = {}  # empty outputs → no detections
+        mock_dev = MagicMock(is_present=True, is_hailo10=False, family="Hailo-8")
         with patch("src.perception.face_detector.HailoInference", return_value=mock_engine), \
+             patch("src.perception.face_detector.probe_hailo", return_value=mock_dev, create=True), \
+             patch("src.perception.hailo_probe.probe_hailo", return_value=mock_dev), \
              patch("src.perception.face_detector.FaceDetector._find_hef", return_value="/fake.hef"):
             det = FaceDetector()
         assert det.backend == "hailo"

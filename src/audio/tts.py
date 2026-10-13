@@ -26,7 +26,13 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import sounddevice
+
+try:
+    import sounddevice
+    _SOUNDDEVICE_AVAILABLE = True
+except (ImportError, OSError) as exc:
+    sounddevice = None  # type: ignore
+    _SOUNDDEVICE_AVAILABLE = False
 
 log = logging.getLogger(__name__)
 
@@ -133,8 +139,11 @@ class TextToSpeech:
             return
         samples, sr = self._render_to_array(text)
         if output is None:
-            sounddevice.play(samples, samplerate=sr)
-            sounddevice.wait()
+            if sounddevice is not None:
+                sounddevice.play(samples, samplerate=sr)
+                sounddevice.wait()
+            else:
+                log.warning("sounddevice unavailable; skipping ALSA default playback")
         else:
             output.play(samples, sample_rate=sr)
 
@@ -177,7 +186,14 @@ class TextToSpeech:
     def _render_to_array(self, text: str) -> tuple[np.ndarray, int]:
         if self._backend == "piper":
             return self._render_piper(text)
-        return self._render_espeak(text)
+        if self._backend == "espeak" and self._espeak_binary:
+            return self._render_espeak(text)
+        # sim backend or no binary available
+        log.info("[sim TTS] render: %s", text)
+        sr = 22050
+        duration_s = max(0.5, 0.16 * max(1, len(text.split())) + 0.015 * len(text))
+        samples = np.zeros(int(duration_s * sr), dtype=np.float32)
+        return samples, sr
 
     def _render_piper(self, text: str) -> tuple[np.ndarray, int]:
         from piper.config import SynthesisConfig

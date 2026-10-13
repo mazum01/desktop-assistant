@@ -177,3 +177,33 @@ def test_detection_dataclass():
     assert d.class_id == 15
     assert d.confidence == pytest.approx(0.85)
     assert len(d.bbox) == 4
+
+
+def test_decode_h10_nms_output(sim_detector):
+    sim_detector._is_h10_nms = True
+    raw = np.zeros(40080, dtype=np.float32)
+
+    # Class 0: person, 1 detection [y1, x1, y2, x2, score]
+    raw[0] = 1.0
+    raw[1] = 0.2  # y1 normalized
+    raw[2] = 0.1  # x1 normalized
+    raw[3] = 0.8  # y2 normalized
+    raw[4] = 0.9  # x2 normalized
+    raw[5] = 0.92 # score
+
+    # Class 2: car, 1 detection
+    raw[2 * 501] = 1.0
+    raw[2 * 501 + 1] = 0.3
+    raw[2 * 501 + 2] = 0.4
+    raw[2 * 501 + 3] = 0.7
+    raw[2 * 501 + 4] = 0.8
+    raw[2 * 501 + 5] = 0.88
+
+    outputs = {"yolov8m/yolov8_nms_postprocess": raw}
+    detections = sim_detector._decode_h10_nms(outputs, 640, 640)
+    assert len(detections) == 2
+    assert detections[0].label == "person"
+    assert detections[0].confidence == pytest.approx(0.92)
+    assert detections[1].label == "car"
+    assert detections[1].confidence == pytest.approx(0.88)
+

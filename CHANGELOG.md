@@ -4,6 +4,25 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.63.0] - 2026-10-13
+### Added
+- Hailo-10H AI accelerator support: added auto-probing for Hailo-10H hardware
+  via `hailo_probe.py`, detecting device architecture and device family.
+- Added `InferModel` API support in `hailo_inference.py` for Hailo-10H / HailoRT
+  5.x alongside existing `VStreams` support for Hailo-8.
+- Added Hailo-10H object detection model support (`yolov8m_h10.hef`) with
+  `HAILO_NMS_BY_CLASS` tensor decoding in `object_detector.py`.
+- Added graceful fallbacks across perception pipelines when Hailo-8-only models
+  are missing or incompatible: FaceDetector falls back to OpenCV Haar cascade,
+  FaceEmbedder gracefully runs in simulation mode, and MonoDepthService idles
+  cleanly.
+
+### Fixed
+- Fixed sounddevice and PortAudio dependency handling in `tts.py` to prevent
+  import crashes when PortAudio is not installed.
+- Fixed `_render_to_array` in `tts.py` to fall back gracefully to a silent array
+  when running in simulation mode without espeak binary.
+
 ## [1.62.10] - 2026-10-13
 ### Fixed
 - Updated the display BLE address to `AC:EB:E6:3E:B6:E2` for the connected

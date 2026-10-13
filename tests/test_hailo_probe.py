@@ -189,3 +189,14 @@ class TestHailoStatusDataclass:
             identify_ok=True,
         )
         assert s.degrade_reason() is None
+
+    def test_family_detection(self):
+        h8 = HailoStatus(board_name="Hailo-8", device_id="HAILO8")
+        assert h8.family == "Hailo-8"
+        assert h8.is_hailo8 is True
+        assert h8.is_hailo10 is False
+
+        h10 = HailoStatus(device_id="HAILO15H", pcie_devices=["Hailo-10H AI Processor"])
+        assert h10.family == "Hailo-10H"
+        assert h10.is_hailo10 is True
+        assert h10.is_hailo8 is False

@@ -110,12 +110,21 @@ class FaceDetector:
     # ── Backend selection ──────────────────────────────────────────────
 
     def _init_backend(self, hef_override) -> str:
-        hef = self._find_hef(hef_override)
+        # Check if hardware is compatible with Hailo-8 models (SCRFD is Hailo-8 only)
+        # If an explicit hef_override is provided, allow it unconditionally.
+        try:
+            from src.perception.hailo_probe import probe_hailo
+            dev = probe_hailo()
+            can_run_scrfd = bool(hef_override) or (dev.is_present and (dev.family == "Hailo-8" or not dev.is_hailo10))
+        except Exception:
+            can_run_scrfd = True
+
+        hef = self._find_hef(hef_override) if can_run_scrfd else None
         if hef is not None:
             engine = HailoInference(hef)
             if engine.hardware_ready:
                 self._engine = engine
-                log.info("FaceDetector: Hailo-8 backend (%s)", Path(hef).name)
+                log.info("FaceDetector: Hailo backend (%s)", Path(hef).name)
                 return "hailo"
             engine.close()
 

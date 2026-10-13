@@ -102,6 +102,10 @@ class MonoDepthService(Service):
         from src.perception.hailo_inference import HailoInference
         self._engine = HailoInference(self._cfg.hef_path)
         self._stop_event.clear()
+        if not self._engine.hardware_ready:
+            log.warning("MonoDepthService: Hailo hardware unavailable or HEF incompatible (%s) — mono depth will remain idle", self._cfg.hef_path)
+            return
+
         if self.bus:
             self._unsubs.append(
                 self.bus.subscribe("depth.set_mono_enabled", self._on_set_enabled)
