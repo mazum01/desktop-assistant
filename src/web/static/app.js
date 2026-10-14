@@ -20,6 +20,128 @@ function initTabs() {
   switchTab(saved);
 }
 
+// ── Software updates ──────────────────────────────────────────────────────
+
+let _updateSettingsDirty = false;
+let _updateRequestPending = false;
+let _updateConnected = false;
+
+function setUpdateControls(connected) {
+  _updateConnected = connected;
+  ['check', 'install', 'retry', 'enabled', 'start', 'end', 'save'].forEach(name => {
+    document.getElementById('update-' + name).disabled = !connected || _updateRequestPending;
+  });
+}
+
+async function updateApi(operation, method = 'GET', payload) {
+  const options = { method, headers: { 'Content-Type': 'application/json' } };
+  if (payload !== undefined) options.body = JSON.stringify(payload);
+  // A restarting web service must not leave the polling loop stuck forever.
+  const controller = new AbortController();
+  options.signal = controller.signal;
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch('/api/update/' + operation, options);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || data.error || `HTTP ${response.status}`);
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function pollUpdates() {
+  try {
+    const status = await updateApi('status');
+    document.getElementById('update-installed').textContent = status.installed_version || '—';
+    document.getElementById('update-available').textContent = status.available_version || '—';
+    document.getElementById('update-status').textContent =
+      `${status.phase || 'unknown'}: ${status.message || ''}${status.error ? ' — ' + status.error : ''}`;
+    document.getElementById('update-reboot').hidden = !status.pending_reboot;
+    const release = document.getElementById('update-release');
+    release.hidden = true;
+    release.removeAttribute('href');
+    if (status.release_url) {
+      try {
+        const url = new URL(status.release_url);
+        if (url.protocol === 'https:') {
+          release.href = url.href;
+          release.hidden = false;
+        }
+      } catch (_) { /* Ignore invalid release links. */ }
+    }
+    if (!_updateSettingsDirty && status.settings) {
+      document.getElementById('update-enabled').checked = status.settings.enabled === true;
+      document.getElementById('update-start').value = status.settings.start || '';
+      document.getElementById('update-end').value = status.settings.end || '';
+    }
+    const history = document.getElementById('update-history');
+    history.replaceChildren();
+    (status.history || []).slice(-20).reverse().forEach(entry => {
+      const item = document.createElement('li');
+      item.textContent = [entry.ts, entry.version, entry.phase, entry.message].filter(Boolean).join(' · ');
+      history.appendChild(item);
+    });
+    setUpdateControls(true);
+  } catch (error) {
+    setUpdateControls(false);
+    document.getElementById('update-status').textContent =
+      `Updater disconnected/unavailable: ${error.message}. Reconnecting…`;
+  } finally {
+    // Status is persisted by the updater, so refresh/restart needs no local job state.
+    setTimeout(pollUpdates, 4000);
+  }
+}
+
+async function requestUpdate(operation, retry = false) {
+  if (_updateRequestPending) return;
+  if (operation === 'install' && !confirm(
+    retry ? 'Retry the failed software update? VERA may restart.' :
+      'Install the available software update? VERA may restart.'
+  )) return;
+  _updateRequestPending = true;
+  setUpdateControls(_updateConnected);
+  const notice = document.getElementById('update-action-status');
+  notice.textContent = 'Submitting request…';
+  try {
+    const result = await updateApi(operation, 'POST', operation === 'install' ? { retry } : {});
+    notice.textContent = result.accepted ?
+      'Request accepted, not completed. Watch updater status for progress.' :
+      'Request returned. Watch updater status for the outcome.';
+  } catch (error) {
+    notice.textContent = `Request not confirmed: ${error.message}. Check status before retrying.`;
+  } finally {
+    _updateRequestPending = false;
+    setUpdateControls(_updateConnected);
+  }
+}
+
+async function saveUpdateSettings(event) {
+  event.preventDefault();
+  if (_updateRequestPending) return;
+  const start = document.getElementById('update-start').value;
+  const end = document.getElementById('update-end').value;
+  const notice = document.getElementById('update-action-status');
+  if (start === end) {
+    notice.textContent = 'Window start and end must differ.';
+    return;
+  }
+  _updateRequestPending = true;
+  setUpdateControls(_updateConnected);
+  try {
+    await updateApi('settings', 'PUT', {
+      enabled: document.getElementById('update-enabled').checked, start, end,
+    });
+    _updateSettingsDirty = false;
+    notice.textContent = 'Update settings saved.';
+  } catch (error) {
+    notice.textContent = `Settings not saved: ${error.message}`;
+  } finally {
+    _updateRequestPending = false;
+    setUpdateControls(_updateConnected);
+  }
+}
+
 // ── API key management ────────────────────────────────────────────────────
 // If VERA_API_KEY is set in secrets.env the server enforces authentication.
 // The overlay is shown reactively (by the fetch patcher below) only when the
@@ -2873,6 +2995,10 @@ function closeLightbox() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initTabs();
+  document.getElementById('update-settings').addEventListener('input', () => {
+    _updateSettingsDirty = true;
+  });
+  pollUpdates();
 
   // Set camera stream src with API key so MJPEG streams authenticate.
   // Attach onerror AFTER setting src so the initial HTML src="" doesn't

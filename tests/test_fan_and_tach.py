@@ -62,6 +62,10 @@ def test_fan_uses_sysfs_when_chip_present(monkeypatch, tmp_path):
     fan.set_duty(150.0)   # clamped
     assert fan.duty == 100.0
     assert (chip / "pwm1" / "duty_cycle").read_text().strip() == "40000"
+    fan.set_duty(25.0)
+    fan.close()
+    assert (chip / "pwm1" / "duty_cycle").read_text().strip() == "40000"
+    assert (chip / "pwm1" / "enable").read_text().strip() == "1"
 
 
 def test_fan_falls_back_to_lgpio_when_sysfs_missing(monkeypatch, tmp_path):

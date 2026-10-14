@@ -111,12 +111,35 @@ class IPCBridge(Service):
         self._unsub_started = None
         self._unsub_stopped = None
         self._start_time = 0.0
+        self._loaded_version = ""
+        self._loaded_revision = ""
+        self._received_at: dict[str, float] = {}
+        self._unsub_freshness = None
         self._rpc_handlers: dict[str, callable] = {}
         self._all_services: list = []  # seeded by core_main after list is built
 
     def on_start(self) -> None:
         import time as _time
+        import subprocess
+        from pathlib import Path
+        from src.core.version import get_version
+
         self._start_time = _time.time()
+        self._loaded_version = get_version()
+        root = Path(__file__).resolve().parents[2]
+        revision = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if revision.returncode == 0:
+            self._loaded_revision = revision.stdout.strip()
+        else:
+            log.warning("Cannot identify loaded Git revision: %s", revision.stderr.strip())
+
+        def _record_freshness(topic, _payload):
+            self._received_at[topic] = _time.time()
+
+        self._unsub_freshness = self.bus.subscribe("*", _record_freshness)
 
         # Seed status from services that already started before us.
         for svc in self._all_services:
@@ -231,6 +254,9 @@ class IPCBridge(Service):
         )
 
     def on_stop(self) -> None:
+        if self._unsub_freshness is not None:
+            self._unsub_freshness()
+            self._unsub_freshness = None
         if self._unsub is not None:
             try:
                 self._unsub()
@@ -384,12 +410,43 @@ class IPCBridge(Service):
             return {"ok": True, "pong": True}
         if cmd == "status":
             return {"ok": True, "status": self._build_status()}
+        if cmd == "deployment.readiness":
+            return self._deployment_readiness()
         if cmd in self._rpc_handlers:
             try:
                 return self._rpc_handlers[cmd](msg)
             except Exception as exc:
                 return {"ok": False, "error": str(exc)}
         return {"ok": False, "error": f"unknown_cmd:{cmd}"}
+
+    def _deployment_readiness(self) -> dict:
+        import os
+        import time
+
+        services = {}
+        for svc in self._all_services:
+            details = {"running": svc.is_running()}
+            hardware = getattr(svc, "hardware_ready", None)
+            if hardware is not None:
+                details["hardware_ready"] = bool(hardware)
+            if svc.name == "av":
+                audio = getattr(svc, "_audio", None)
+                if audio is not None:
+                    details["hardware_ready"] = bool(getattr(audio, "hardware_ready", False))
+            manager = getattr(svc, "_manager", None)
+            if svc.name == "thermal" and manager is not None:
+                details.update(
+                    sensor_ok=manager.sensor_ok,
+                    fan_backend=manager.fan_backend,
+                    fan_duty=manager.fan_duty,
+                )
+            services[svc.name] = details
+        return {
+            "ok": True, "version": self._loaded_version,
+            "revision": self._loaded_revision, "pid": os.getpid(),
+            "started_at": self._start_time, "ts": time.time(),
+            "services": services, "received_at": dict(self._received_at),
+        }
 
     def _build_status(self) -> dict:
         import time as _time

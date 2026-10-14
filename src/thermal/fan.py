@@ -112,11 +112,9 @@ class FanController:
             pass
 
         if self._backend == "sysfs" and self._sysfs_path is not None:
-            try:
-                (self._sysfs_path / "enable").write_text("0\n")
-                # Leave the channel exported so we don't trip a glitch.
-            except Exception:
-                pass
+            # Keep kernel PWM enabled at full duty while the process restarts.
+            # Disabling it here cancels the full-speed safety setting above.
+            return
 
         if self._backend == "lgpio" and self._lgpio_handle is not None:
             try:

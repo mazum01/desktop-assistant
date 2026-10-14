@@ -1,0 +1,20 @@
+[Unit]
+Description=VERA stable-release updater and recovery controller
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vera-updater
+Environment=PYTHONPATH=/opt/vera-updater
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m src.updater.daemon
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=vera-updater
+RuntimeDirectoryMode=0750
+UMask=0077
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

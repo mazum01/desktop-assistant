@@ -1,0 +1,12 @@
+#!/usr/bin/python3
+"""Supply a provisioned read-only token without putting it in command arguments."""
+
+import os
+import sys
+
+if "username" in sys.argv[1].lower():
+    print("x-access-token")
+elif "password" in sys.argv[1].lower():
+    print(os.environ["VERA_GITHUB_TOKEN"])
+else:
+    raise SystemExit("Unsupported Git credential prompt")

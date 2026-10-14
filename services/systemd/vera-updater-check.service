@@ -1,0 +1,11 @@
+[Unit]
+Description=Check VERA stable releases and scheduled installation window
+Requires=vera-updater.service
+After=vera-updater.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/vera-updater
+Environment=PYTHONPATH=/opt/vera-updater
+ExecStart=/usr/bin/python3 -m src.updater.daemon --scheduled
+UMask=0077

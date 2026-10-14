@@ -26,39 +26,9 @@ fi
 # ── 1. System packages (apt) ─────────────────────────────────────────
 echo "[1/4] Installing system packages (apt)..."
 sudo apt-get update -qq
-sudo apt-get install -y \
-    alsa-utils \
-    build-essential \
-    ca-certificates \
-    cmake \
-    curl \
-    ffmpeg \
-    git \
-    python3-pip \
-    python3-dev \
-    python3-opencv \
-    python3-venv \
-    python3-smbus \
-    python3-numpy \
-    python3-lgpio \
-    python3-gpiozero \
-    python3-picamera2 \
-    python3-zmq \
-    python3-pytest \
-    i2c-tools \
-    libasound2-dev \
-    libffi-dev \
-    portaudio19-dev \
-    libsndfile1 \
-    libssl-dev \
-    pkg-config \
-    pipewire \
-    pipewire-audio \
-    pipewire-pulse \
-    wireplumber \
-    espeak-ng \
-    pianobar \
-    swig
+APT_PACKAGES="$(python3 -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1]))["apt"]))' "$REPO_ROOT/config/deployment.json")"
+read -r -a APT_PACKAGE_LIST <<< "$APT_PACKAGES"
+sudo apt-get install -y "${APT_PACKAGE_LIST[@]}"
 
 # ── 2. Project Python packages (system Python) ───────────────────────
 echo ""

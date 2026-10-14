@@ -851,6 +851,14 @@ def _use_user_unit_scope() -> bool:
         "1", "true", "yes", "on",
     }
 
+def _unit_user_scope(name: str, default: bool) -> bool:
+    value = os.environ.get("VERA_SYSTEMD_SCOPE_" + name.upper())
+    if value is None:
+        return default
+    if value not in ("user", "system"):
+        raise ValueError(f"Invalid systemd scope for {name}: {value}")
+    return value == "user"
+
 
 def _load_config() -> dict:
     if _CONFIG_PATH.exists():
@@ -905,11 +913,11 @@ def main() -> int:
     services = [
         ManagedService(
             unit="desktop-assistant-thermal.service",
-            user_unit=user_unit_scope,
+            user_unit=_unit_user_scope("thermal", user_unit_scope),
         ),
         ManagedService(
             unit="desktop-assistant-core.service",
-            user_unit=user_unit_scope,
+            user_unit=_unit_user_scope("core", user_unit_scope),
             # NOTE: no http_check here anymore — port 8080 (and /health) moved
             # to desktop-assistant-web.service per
             # docs/architecture/PROCESS_ISOLATION_PROPOSAL.md Phase 3. Leaving
@@ -925,14 +933,14 @@ def main() -> int:
             # This box's passwordless sudo doesn't cover daemon-reload/enable
             # for new units, so media runs as a --user unit; see the
             # user_unit field docstring above.
-            user_unit=True,
+            user_unit=_unit_user_scope("media", True),
         ),
         ManagedService(
             unit="desktop-assistant-integrations.service",
             # Telegram + Notification + Clock, split out of core per
             # docs/architecture/PROCESS_ISOLATION_PROPOSAL.md Phase 2a.
             # Same --user-unit constraint as media (see above).
-            user_unit=True,
+            user_unit=_unit_user_scope("integrations", True),
         ),
         ManagedService(
             unit="desktop-assistant-web.service",
@@ -941,7 +949,7 @@ def main() -> int:
             # Owns port 8080 / GET /health now — see the NOTE on the core
             # entry above for why this check must live here, not on core.
             http_check="http://localhost:8080/health",
-            user_unit=True,
+            user_unit=_unit_user_scope("web", True),
         ),
     ]
 

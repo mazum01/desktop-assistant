@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.64.0] - 2026-10-13
+### Added
+- Stable-release updater with protected staging, in-place dependency and native
+  build deployment, service-aware installation, reboot continuation, readiness
+  verification, and explicit best-effort recovery.
+- Authenticated dashboard update controls, configurable overnight scheduling,
+  manual CLI installation, and a one-time privileged device installer.
+### Fixed
+- Kept kernel PWM enabled at full fan duty during thermal process shutdown
+  and made deployed watchdog service scopes match system/user/mixed layouts.
+
 ## [1.63.1] - 2026-10-13
 ### Changed
 - Made watchdog systemd scope selectable with `VERA_SYSTEMD_USER_UNITS` so

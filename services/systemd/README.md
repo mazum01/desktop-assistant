@@ -19,6 +19,14 @@ phase-by-phase rollout history).
 
 ## Install
 
+The optional automatic deployment controller is a **system-level** service,
+even when VERA runs under the user manager. Install its root-owned runner,
+policy, timer, and fixed local control socket with
+`sudo python3 scripts/install_updater.py --user starter`.
+Do not copy these updater units alone: they require the installed runner.
+See [the release/update guide](../../docs/UPDATES.md). The controller discovers
+VERA's system/user/mixed service scopes and does not manage OpenClaw.
+
 ```bash
 sudo cp services/systemd/desktop-assistant-thermal.service      /etc/systemd/system/
 sudo cp services/systemd/desktop-assistant-core.service         /etc/systemd/system/

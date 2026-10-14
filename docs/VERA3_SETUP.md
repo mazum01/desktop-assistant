@@ -66,6 +66,12 @@ that commit, branch, or release tag. Fit the Hailo-8 HAT+ first and add
 bash bootstrap_vera3.sh --user starter --ref 36ae2b0 --with-hailo
 ```
 
+For updater-aware releases (v1.64.0 onward), install the automatic release
+updater after completing hardware bring-up using [the update guide](UPDATES.md).
+It supports detached checkouts, preserves device-local settings, and performs
+dependency/build/service deployment and health verification. A source-only
+checkout is not a complete deployment.
+
 The bootstrap checks out the selected revision in detached-HEAD mode to keep
 the installed build reproducible. To update an already-bootstrapped Pi, fetch
 then explicitly check out the desired revision; do not use bare `git pull`:

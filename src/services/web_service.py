@@ -91,6 +91,7 @@ import collections
 import io
 import json
 import logging
+import re
 import threading
 import time
 from pathlib import Path
@@ -104,6 +105,7 @@ from src.core.quiet_hours import QuietHours
 from src.services.object_service import _build_scene_description
 
 from pydantic import BaseModel
+from starlette.requests import Request
 
 log = logging.getLogger(__name__)
 
@@ -1352,6 +1354,72 @@ class WebService:
         @app.get("/api/processes")
         async def api_processes():
             return JSONResponse({"processes": _get_vera_processes()})
+
+        # Updates are privileged even on otherwise unauthenticated dashboards.
+        def require_update_auth():
+            if not self._api_key:
+                raise HTTPException(403, "Updates require a configured API key")
+
+        async def updater_request(operation, payload=None):
+            require_update_auth()
+            try:
+                from src.updater.client import request
+                return await asyncio.to_thread(request, operation, payload)
+            except (ImportError, OSError, ValueError, RuntimeError) as exc:
+                log.warning("Updater %s unavailable: %s", operation, exc)
+                raise HTTPException(503, "Updater unavailable") from exc
+
+        async def update_body(request: Request, allowed):
+            require_update_auth()
+            try:
+                raw = await request.body()
+                body = json.loads(raw) if raw else {}
+            except (ValueError, UnicodeDecodeError) as exc:
+                raise HTTPException(400, "Invalid JSON payload") from exc
+            if not isinstance(body, dict) or set(body) - allowed:
+                raise HTTPException(400, "Unsupported update payload")
+            return body
+
+        @app.get("/api/update/status")
+        async def api_update_status():
+            return await updater_request("status")
+
+        @app.post("/api/update/check")
+        async def api_update_check(request: Request):
+            await update_body(request, set())
+            return await updater_request("check")
+
+        @app.post("/api/update/install")
+        async def api_update_install(request: Request):
+            body = await update_body(request, {"retry"})
+            if "retry" in body and type(body["retry"]) is not bool:
+                raise HTTPException(400, "retry must be a boolean")
+            return await updater_request("install", {"retry": body.get("retry", False)})
+
+        @app.put("/api/update/settings")
+        async def api_update_settings(request: Request):
+            body = await update_body(request, {"enabled", "start", "end"})
+            if not body:
+                raise HTTPException(400, "At least one setting is required")
+            if "enabled" in body and type(body["enabled"]) is not bool:
+                raise HTTPException(400, "enabled must be a boolean")
+            for key in ("start", "end"):
+                if key in body and (
+                    not isinstance(body[key], str)
+                    or not re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", body[key])
+                ):
+                    raise HTTPException(400, "Window times must be HH:MM")
+            if "start" in body and "end" in body and body["start"] == body["end"]:
+                raise HTTPException(400, "Update window start and end must differ")
+            settings = body
+            if not {"enabled", "start", "end"} <= body.keys():
+                current = await updater_request("settings")
+                if not isinstance(current, dict) or not {"enabled", "start", "end"} <= current.keys():
+                    raise HTTPException(503, "Updater returned invalid settings")
+                settings = {key: body.get(key, current[key]) for key in ("enabled", "start", "end")}
+            if settings["start"] == settings["end"]:
+                raise HTTPException(400, "Update window start and end must differ")
+            return await updater_request("settings", settings)
 
         # ── REST: faces ───────────────────────────────────────────────
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check VERA update schedule periodically
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=vera-updater-check.service
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

@@ -23,6 +23,7 @@ head, and temperature-controlled cooling.
 - [Architecture Review](docs/ARCHITECTURE_REVIEW.md) ([printable PDF](docs/ARCHITECTURE_REVIEW.pdf))
 - [Process Isolation Proposal](docs/architecture/PROCESS_ISOLATION_PROPOSAL.md)
 - [Clean Raspberry Pi OS Installation (VERA3)](docs/VERA3_SETUP.md)
+- [Automatic releases and device updates](docs/UPDATES.md)
 - [TODO](docs/TODO.md)
 
 ## Repo Layout
@@ -47,6 +48,7 @@ src/             application code
   vision/          camera pipeline
   iot/             smart-home integrations (Nest, Yale, etc.)
   watchdog/        health monitor / restart supervisor
+  updater/         staged stable-release deployment and recovery controller
   web/             web GUI (static assets) served by the web service
 tests/           unit and integration tests
 ```

@@ -755,6 +755,32 @@
 </div>
 <!-- ══ TAB: SYSTEM ══════════════════════════════════════════ -->
 <div class="tab-pane" id="tab-system">
+<section class="card" id="card-updates">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Updates</h2>
+<div class="update-versions">
+<span>Installed: <strong id="update-installed">—</strong></span>
+<span>Available: <strong id="update-available">—</strong></span>
+<a id="update-release" target="_blank" rel="noopener noreferrer" hidden>Release notes</a>
+</div>
+<p id="update-status" role="status" aria-live="polite">Connecting to updater…</p>
+<p id="update-reboot" hidden>Reboot pending. Installation is not complete until the updater confirms it.</p>
+<div class="row-input update-actions">
+<button class="btn btn-secondary" id="update-check" onclick="requestUpdate('check')" disabled>Check now</button>
+<button class="btn btn-primary" id="update-install" onclick="requestUpdate('install')" disabled>Install update…</button>
+<button class="btn btn-secondary" id="update-retry" onclick="requestUpdate('install', true)" disabled>Retry failed update…</button>
+</div>
+<form id="update-settings" onsubmit="saveUpdateSettings(event)">
+<label class="qh-toggle"><input id="update-enabled" type="checkbox" disabled/>Enable automatic updates</label>
+<div class="row-input update-actions">
+<label>Window start <input id="update-start" type="time" required disabled/></label>
+<label>Window end <input id="update-end" type="time" required disabled/></label>
+<button class="btn btn-primary" id="update-save" type="submit" disabled>Save window</button>
+</div>
+<p class="update-hint">Local time; windows may cross midnight. Manual installation may restart VERA.</p>
+</form>
+<p id="update-action-status" role="status" aria-live="polite"></p>
+<details><summary>Update history</summary><ul id="update-history"></ul></details>
+</section>
       <section class="card" id="card-controls">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Controls</h2>
 <div class="controls-grid">

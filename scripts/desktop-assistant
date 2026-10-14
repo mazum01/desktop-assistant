@@ -1802,9 +1802,31 @@ def cmd_audio(args) -> int:
     return 1
 
 
+def cmd_update(args) -> int:
+    """Use only the updater's fixed local-socket operations."""
+    root = str(Path(__file__).resolve().parent.parent)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    try:
+        from src.updater.client import request
+        payload = {"retry": args.retry} if args.update_cmd == "install" else None
+        result = request(args.update_cmd, payload)
+        print(json.dumps(result, indent=2))
+        if result.get("accepted"):
+            print("Request accepted; use 'vera update status' to follow progress.")
+        return 0
+    except (ImportError, OSError, ValueError, RuntimeError) as exc:
+        print(f"Updater unavailable: {exc}", file=sys.stderr)
+        return 1
+
+
 def cmd_help(args) -> int:
     """Print a formatted command reference, or detailed help for one command."""
     commands = {
+        "update":           "Software updates (status/check/install). Sub-commands:\n"
+                            "                  update status             Show versions, progress and history.\n"
+                            "                  update check              Request a release check.\n"
+                            "                  update install [--retry]  Request installation; retry a failed update.",
         "status":           "Health and telemetry dashboard (temp, fan, servo, vision, audio).\n"
                             "                  --json  Emit raw JSON instead of the human-readable table.",
         "topics":           "List every bus topic that has at least one active subscriber.",
@@ -3102,6 +3124,14 @@ def main() -> int:
     sp = sub.add_parser("help", help="Show command reference or help for a specific command")
     sp.add_argument("command", nargs="?", default=None, help="Command name to get help for")
     sp.set_defaults(func=cmd_help)
+
+    update_sp = sub.add_parser("update", help="Software updates (status/check/install)")
+    update_sub = update_sp.add_subparsers(dest="update_cmd", required=True)
+    update_sub.add_parser("status", help="Show updater status and history").set_defaults(func=cmd_update)
+    update_sub.add_parser("check", help="Request a release check").set_defaults(func=cmd_update)
+    install_sp = update_sub.add_parser("install", help="Request installation of the available update")
+    install_sp.add_argument("--retry", action="store_true", help="Retry a failed update")
+    install_sp.set_defaults(func=cmd_update)
 
     # ── system subcommand group ──────────────────────────────────────
     sys_sp = sub.add_parser("system", help="System management (ping/restart/reboot/shutdown/version)")

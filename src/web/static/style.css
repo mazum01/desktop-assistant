@@ -1,6 +1,15 @@
 /* ── Reset & Base ─────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+.update-versions, .update-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.update-actions { margin: 12px 0; }
+.update-hint { color: var(--text-dim); font-size: 12px; margin-bottom: 12px; }
+#update-status, #update-action-status { margin: 12px 0; overflow-wrap: anywhere; }
+#update-reboot { color: var(--yellow); margin: 12px 0; }
+#update-history { padding-left: 20px; max-height: 240px; overflow-y: auto; }
+#update-history li { margin-top: 8px; overflow-wrap: anywhere; }
+#card-updates button:disabled { opacity: .5; cursor: not-allowed; }
+
 :root {
   --bg:       #0d1117;
   --bg2:      #161b22;
