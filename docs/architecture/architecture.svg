@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-1197 7141,-1197 7141,4 -4,4"/>
 <text text-anchor="start" x="3281" y="-1177.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="3389.5" y="-1166" font-family="Helvetica,sans-Serif" font-size="10.00">v1.64.0 — Transactional stable&#45;release deployment and device readiness</text>
+<text text-anchor="start" x="3389.5" y="-1166" font-family="Helvetica,sans-Serif" font-size="10.00">v1.64.1 — Transactional stable&#45;release deployment and device readiness</text>
 <g id="clust1" class="cluster">
 <title>cluster_updater</title>
 <path fill="#e4f4e4" stroke="black" d="M1171,-769C1171,-769 2077,-769 2077,-769 2083,-769 2089,-775 2089,-781 2089,-781 2089,-1139 2089,-1139 2089,-1145 2083,-1151 2077,-1151 2077,-1151 1171,-1151 1171,-1151 1165,-1151 1159,-1145 1159,-1139 1159,-1139 1159,-781 1159,-781 1159,-775 1165,-769 1171,-769"/>

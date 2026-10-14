@@ -135,7 +135,7 @@ def device(tmp_path):
     policy = {
         "checkout": str(checkout), "user": "tester", "uid": os.getuid(), "gid": os.getgid(),
         "group": "tester", "home": str(tmp_path / "home"), "web_url": "http://localhost:8080",
-        "default_scope": "user",
+        "default_scope": "user", "token_file": str(tmp_path / "nonexistent-test-token"),
     }
     host = FakeHost(policy, upstream, manifest)
     engine = Engine(policy, tmp_path / "state", host)
@@ -326,3 +326,25 @@ def test_failed_release_quarantine_applies_to_schedule(device):
     with patch("src.updater.engine.in_window", return_value=True), patch.object(engine, "install") as install:
         engine.scheduled()
     install.assert_not_called()
+
+
+def test_repository_probe_has_no_trailing_slash(device):
+    import io
+    engine, host, release, old = device
+    response = io.BytesIO(b'{"visibility":"public"}')
+    response.headers = {}
+    with patch("src.updater.engine.urllib.request.urlopen", return_value=response) as open_url:
+        assert engine.github("") == {"visibility": "public"}
+    assert open_url.call_args.args[0].full_url == "https://api.github.com/repos/mazum01/desktop-assistant"
+
+
+def test_no_published_releases_is_not_a_failure(device):
+    import urllib.error
+    engine, host, release, old = device
+    with patch.object(engine, "github", side_effect=[
+        urllib.error.HTTPError("https://api.github.com/releases/latest", 404, "Not Found", {}, None),
+        {"visibility": "public"},
+    ]):
+        assert engine.check() is None
+    assert engine.state["phase"] == "up_to_date"
+    assert engine.state["error"] is None

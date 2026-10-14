@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.64.1] - 2026-10-13
+### Fixed
+- Corrected the GitHub repository probe URL so devices with no published
+  releases report that state instead of a misleading HTTP 404 failure.
+
 ## [1.64.0] - 2026-10-13
 ### Added
 - Stable-release updater with protected staging, in-place dependency and native

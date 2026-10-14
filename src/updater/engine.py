@@ -99,7 +99,8 @@ class Engine:
         if token_path.is_file():
             headers["Authorization"] = "Bearer " + token_path.read_text().strip()
         request = urllib.request.Request(
-            f"https://api.github.com/repos/{REPOSITORY}/{suffix}", headers=headers,
+            f"https://api.github.com/repos/{REPOSITORY}" + ("/" + suffix if suffix else ""),
+            headers=headers,
         )
         with urllib.request.urlopen(request, timeout=30) as response:
             if int(response.headers.get("Content-Length", "0")) > 2_000_000:
