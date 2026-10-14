@@ -1250,7 +1250,7 @@ class WebService:
         else:
             import logging as _log
             _log.getLogger(__name__).warning(
-                "VERA_API_KEY is not set — web dashboard is UNAUTHENTICATED"
+                "api_key is not set in config/assistant.yaml — web dashboard is UNAUTHENTICATED"
             )
 
         # Serve static files (CSS, JS)

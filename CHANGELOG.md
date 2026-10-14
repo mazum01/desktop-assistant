@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.64.2] - 2026-10-14
+### Fixed
+- Corrected `docs/UPDATES.md`, the web dashboard's "unauthenticated" log
+  message, and an `app.js` comment, which incorrectly described dashboard API
+  key authentication as an environment variable (`VERA_API_KEY`); it is
+  actually configured via the `api_key` field in `config/assistant.yaml`.
+### Changed
+- Configured a local dashboard API key on this device so the authenticated
+  `vera-updater` web controls (`/api/update/*`) are usable instead of
+  returning 403.
+
 ## [1.64.1] - 2026-10-13
 ### Fixed
 - Corrected the GitHub repository probe URL so devices with no published

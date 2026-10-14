@@ -143,8 +143,9 @@ async function saveUpdateSettings(event) {
 }
 
 // ── API key management ────────────────────────────────────────────────────
-// If VERA_API_KEY is set in secrets.env the server enforces authentication.
-// The overlay is shown reactively (by the fetch patcher below) only when the
+// If `api_key` is set in config/assistant.yaml the server enforces
+// authentication. The overlay is shown reactively (by the fetch patcher
+// below) only when the
 // server actually returns 401 — not preemptively. This way the dashboard
 // works out-of-the-box when no key is configured.
 

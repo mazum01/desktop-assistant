@@ -54,10 +54,11 @@ Polling occurs periodically, with release discovery throttled to hourly.
 The window gates starting an installation; it does not interrupt an ongoing
 package installation when the window ends.
 
-For web controls, configure `VERA_API_KEY` in the web service environment and
-use the dashboard's existing authentication mechanism. Updater endpoints
-refuse operation when no API key is configured, even if the rest of the
-dashboard is otherwise unauthenticated.
+For web controls, set `api_key` in `config/assistant.yaml` and restart
+`desktop-assistant-web.service`; the dashboard's existing authentication
+mechanism (`X-API-Key` header or `?key=` query parameter) then covers the
+updater endpoints too. Updater endpoints refuse operation when no API key is
+configured, even if the rest of the dashboard is otherwise unauthenticated.
 
 ```bash
 vera update status
