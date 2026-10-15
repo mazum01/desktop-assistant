@@ -620,11 +620,24 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
         cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), obj_color, box_thick, cv2.LINE_AA)
         conf  = obj.get("confidence", 0)
         label_text = f"{label} {int(conf * 100)}%"
-        ly    = max(10, y1 - 4)
         font_scale = max(0.8, 1.1 * scale)
         font_thick = max(1, round(scale))   # 1 at 640×480
-        _put_text_outlined(frame_bgr, label_text, (x1, ly),
-                           cv2.FONT_HERSHEY_SIMPLEX, font_scale, obj_color, font_thick)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        (tw, th), baseline = cv2.getTextSize(label_text, font, font_scale, font_thick)
+        pad = max(2, round(2 * font_scale))
+        if tw + 2 * pad > w or th + baseline + 2 * pad > h:
+            font_scale *= min(
+                max(1, w - 2 * pad) / max(1, tw),
+                max(1, h - 2 * pad) / max(1, th + baseline),
+            )
+            (tw, th), baseline = cv2.getTextSize(label_text, font, font_scale, font_thick)
+        lx = max(pad, min(x1, w - tw - pad))
+        ly = y1 - 4
+        if ly - th < pad:
+            ly = y1 + th + pad
+        ly = max(th + pad, min(ly, h - baseline - pad))
+        _put_text_outlined(frame_bgr, label_text, (lx, ly),
+                           font, font_scale, obj_color, font_thick)
 
 
 # Privacy overlay colours
@@ -1328,4 +1341,3 @@ class VisionService(Service):
             self._privacy_enabled = enabled
             if not enabled:
                 self._privacy_state = {}
-

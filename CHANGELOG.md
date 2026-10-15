@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.67.1] - 2026-10-15
+### Fixed
+- Keep object descriptions and confidence labels inside stream images, including
+  detections at frame edges. Labels wider than the stream scale down to fit.
+
 ## [1.67.0] - 2026-10-15
 ### Added
 - Hailo-8 can run YOLOv11l with on-chip NMS (Model Zoo v2.17.0, 52.3 vs 50.6
