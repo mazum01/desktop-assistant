@@ -1,5 +1,11 @@
 """
-Object detector — YOLO26m on Hailo-8 (split HEF + ONNX postprocessing).
+Object detector — Hailo-8 / Hailo-10H COCO-80 detection.
+
+Preferred model on both accelerators is YOLOv11l with on-chip NMS, resolved
+from the ``object_detection`` entry of ``config/hailo/models.yaml`` and
+installed with ``python3 -m src.perception.hailo_models --install``. On
+Hailo-8, if that HEF is not installed, the detector falls back to YOLO26m
+(split HEF + ONNX postprocessing), described below.
 
 YOLO26 (Ultralytics, 2026) is NMS-free by design: the HEF only runs the
 backbone/detection-head "neural processing" and outputs raw per-scale
@@ -242,7 +248,7 @@ class ObjectDetector:
         self._onnx_input_names: Dict[str, str] = {}
         self._sim = False
         self._backend = "sim"
-        self._is_h10_nms = False
+        self._onchip_nms = False
         # Reusable model-input buffer; always 640×640×3 (model input size, not video resolution).
         self._letterbox_buf = np.zeros((_TARGET_SIZE, _TARGET_SIZE, 3), dtype=np.uint8)
         # Cached letterbox geometry — recomputed only when source frame dimensions change.
@@ -298,31 +304,31 @@ class ObjectDetector:
             from src.perception.hailo_probe import probe_hailo
             dev = probe_hailo()
 
-            # Prefer Hailo-10H models if running on Hailo-10H device
-            if dev.is_present and dev.is_hailo10:
-                from src.perception.hailo_models import resolve_model
-                resolved = resolve_model("object_detection")
-                h10_match = (
-                    (resolved, resolved.stem) if resolved is not None
-                    else next(((p, variant) for p, variant in _H10_HEF_CANDIDATES if p.exists()), None)
-                )
-                if h10_match is not None:
-                    hef_path, variant = h10_match
-                    engine = HailoInference(hef_path)
-                    if engine.hardware_ready:
-                        self._engine = engine
-                        self._is_h10_nms = True
-                        self._backend = "hailo"
-                        log.info(
-                            "ObjectDetector: Hailo-10H backend ready (%s [%s] with on-chip NMS)",
-                            hef_path.name, variant,
-                        )
-                        return
-                    else:
-                        engine.close()
+            if not dev.is_present:
+                raise RuntimeError("No Hailo accelerator detected")
+
+            # Preferred: profile model with on-chip NMS (YOLOv11l) on either accelerator.
+            from src.perception.hailo_models import resolve_model
+            resolved = resolve_model("object_detection")
+            candidates = [resolved] if resolved is not None else []
+            if dev.is_hailo10:
+                candidates += [p for p, _ in _H10_HEF_CANDIDATES if p.exists() and p != resolved]
+            for hef_path in candidates:
+                engine = HailoInference(hef_path)
+                if engine.hardware_ready:
+                    self._engine = engine
+                    self._onchip_nms = True
+                    self._backend = "hailo"
+                    log.info(
+                        "ObjectDetector: %s backend ready (%s with on-chip NMS)",
+                        dev.family, hef_path.name,
+                    )
+                    return
+                engine.close()
+            if dev.is_hailo10:
                 raise RuntimeError("No usable Hailo-10H object model; not loading a Hailo-8 HEF")
 
-            # Fallback to Hailo-8 YOLO26 (HEF + ONNX postprocessing)
+            # Hailo-8 fallback: YOLO26 (HEF + ONNX postprocessing)
             match = next(((p, variant) for p, variant in _HEF_CANDIDATES if p.exists()), None)
             if match is None:
                 raise FileNotFoundError("No object detection HEF found for available hardware")
@@ -342,7 +348,7 @@ class ObjectDetector:
                 self._engine = engine
                 self._onnx_session = onnx_session
                 self._onnx_input_names = _ONNX_INPUT_NAMES_BY_VARIANT[variant]
-                self._is_h10_nms = False
+                self._onchip_nms = False
                 self._backend = "hailo"
                 log.info(
                     "ObjectDetector: Hailo-8 backend ready (%s [%s] + %s)",
@@ -368,15 +374,15 @@ class ObjectDetector:
         """
         if getattr(self, "_sim", False) or getattr(self, "_engine", None) is None:
             return []
-        if not getattr(self, "_is_h10_nms", False) and getattr(self, "_onnx_session", None) is None:
+        if not getattr(self, "_onchip_nms", False) and getattr(self, "_onnx_session", None) is None:
             return []
 
         src_h, src_w = frame.shape[:2]
         try:
             inp = self._letterbox(frame)
             hef_outputs = self._engine.infer({"input_layer1": inp})
-            if self._is_h10_nms:
-                return self._decode_h10_nms(hef_outputs, src_w, src_h)
+            if self._onchip_nms:
+                return self._decode_nms(hef_outputs, src_w, src_h)
             onnx_out = self._run_onnx_postprocess(hef_outputs)
         except Exception as exc:
             log.error("ObjectDetector.detect: inference failed — %s", exc)
@@ -384,31 +390,52 @@ class ObjectDetector:
 
         return self._decode(onnx_out, src_w, src_h)
 
-    def _decode_h10_nms(
+    @staticmethod
+    def _nms_per_class(raw) -> Optional[List[np.ndarray]]:
+        """Normalize either NMS layout to a list of per-class ``(K, 5)`` arrays."""
+        if isinstance(raw, (list, tuple)):
+            return [np.asarray(a, dtype=np.float32).reshape(-1, 5) for a in raw]
+        if not isinstance(raw, np.ndarray):
+            return None
+        flat = raw.ravel()
+        if flat.size < 40080:
+            return None
+        per_class: List[np.ndarray] = []
+        offset = 0
+        for _ in range(80):
+            if offset >= flat.size:
+                break
+            count = int(flat[offset])
+            offset += 1
+            count = max(0, min(count, 100, (flat.size - offset) // 5))
+            per_class.append(flat[offset : offset + count * 5].reshape(count, 5))
+            offset += count * 5
+        return per_class
+
+    def _decode_nms(
         self,
         hef_outputs: Dict[str, np.ndarray],
         src_w: int,
         src_h: int,
     ) -> List[Detection]:
-        """Decode HAILO_NMS_BY_CLASS tensor from Hailo-10H YOLOv8/v11 models.
+        """Decode a HAILO_NMS_BY_CLASS output from YOLOv8/v11 HEFs.
 
-        Output tensor is a ``(40080,)`` float32 buffer (80 classes × max 100
-        boxes). It is *packed*: for each class in order, a float count K is
-        followed immediately by K boxes of 5 floats ``[y1, x1, y2, x2, score]``
-        (normalized to the 640×640 input), then the next class's count. There
-        is no fixed per-class stride.
+        Boxes are ``[y1, x1, y2, x2, score]`` normalized to the 640×640 input.
+        Two layouts are accepted:
+
+        * HailoRT 4.x VStreams (Hailo-8): a list of 80 per-class ``(K, 5)``
+          arrays.
+        * HailoRT 5.x InferModel (Hailo-10H): a ``(40080,)`` float32 buffer
+          that is *packed*: for each class in order, a float count K followed
+          immediately by K boxes, then the next class's count (no fixed
+          per-class stride).
         """
-        # Find the NMS output tensor
-        raw = None
-        for k, v in hef_outputs.items():
-            if "nms" in k.lower() or (isinstance(v, np.ndarray) and v.size == 40080):
-                raw = v.ravel()
-                break
+        raw = next((v for k, v in hef_outputs.items() if "nms" in k.lower()), None)
         if raw is None and hef_outputs:
-            raw = next(iter(hef_outputs.values())).ravel()
-
-        if raw is None or raw.size < 40080:
-            log.warning("ObjectDetector: invalid H10 NMS output shape — skipping")
+            raw = next(iter(hef_outputs.values()))
+        per_class = self._nms_per_class(raw)
+        if per_class is None:
+            log.warning("ObjectDetector: unrecognised NMS output — skipping")
             return []
 
         # Reuse cached letterbox params when possible
@@ -424,17 +451,7 @@ class ObjectDetector:
             pad_left = (_TARGET_SIZE - new_w) // 2
 
         detections: List[Detection] = []
-        offset = 0
-        for cls_id in range(min(len(COCO_CLASSES), 80)):
-            if offset >= raw.size:
-                break
-            count = int(raw[offset])
-            offset += 1
-            if count <= 0:
-                continue
-            count = min(count, 100, (raw.size - offset) // 5)
-            boxes = raw[offset : offset + count * 5].reshape(count, 5)
-            offset += count * 5
+        for cls_id, boxes in enumerate(per_class[: len(COCO_CLASSES)]):
             for y1n, x1n, y2n, x2n, score in boxes:
                 score = float(score)
                 if score < self._conf_threshold:

@@ -13,13 +13,14 @@ attached accelerator and prints a JSON report (exit code 1 on any failure):
 The core service holds the accelerator, so stop it first:
 
 ```bash
-# Hailo-10H (vera3, user units) — wait for the HailoRT server to release models
-systemctl --user stop desktop-assistant-watchdog desktop-assistant-core; sleep 8
+# Hailo-10H (vera3, user units) — give the HailoRT server ~15 s to release
+# models; testing sooner can hit HAILO_TIMEOUT or abort the process.
+systemctl --user stop desktop-assistant-watchdog desktop-assistant-core; sleep 15
 python3 scripts/hailo_smoke_test.py
 systemctl --user start desktop-assistant-core desktop-assistant-watchdog
 ```
 
-## Results — v1.66.0 (2026-10-15)
+## Results — v1.67.0 (2026-10-15)
 
 ### Hailo-10H (vera3, HailoRT 5.1.1)
 
@@ -36,7 +37,7 @@ NMS (Model Zoo v5.1.0 Hailo-10H HEFs).
       "faces_on_sample": 1,
       "faces_on_blank": 0,
       "faces_on_noise": 0,
-      "ms_per_frame": 28.2,
+      "ms_per_frame": 28.1,
       "ok": true
     },
     "face_embedding": {
@@ -52,7 +53,7 @@ NMS (Model Zoo v5.1.0 Hailo-10H HEFs).
         "bus",
         "person"
       ],
-      "ms_per_frame": 47.7,
+      "ms_per_frame": 51.1,
       "ok": true
     },
     "mono_depth": {
@@ -65,7 +66,7 @@ NMS (Model Zoo v5.1.0 Hailo-10H HEFs).
       ],
       "finite": true,
       "std": 0.2245,
-      "ms_per_frame": 10.4
+      "ms_per_frame": 12.7
     }
   },
   "ok": true
@@ -100,9 +101,15 @@ equal or higher confidence than YOLOv11m, for ~8–10 ms more per frame.
 
 ### Hailo-8 (vera.local, HailoRT 4.23)
 
-Models: SCRFD-10G, ArcFace MobileFaceNet, scdepthv3 and YOLO26m (+ONNX
-post-processing). Mono depth runs on hardware but is left disabled in this
-host's local config.
+On Hailo-8, stop core and wait for the process to exit (shutdown can take
+~10 s) before testing, otherwise the device is still busy
+(`HAILO_OUT_OF_PHYSICAL_DEVICES`).
+
+Models: SCRFD-10G, ArcFace MobileFaceNet, scdepthv3 and YOLOv11l with on-chip
+NMS (installed via `python3 -m src.perception.hailo_models --install`). With
+YOLOv11l removed, the YOLO26m + ONNX fallback also passed every check
+(objects: bus + person, 82.4 ms/frame vs 96.8 ms for YOLOv11l). Mono depth runs
+on hardware but is left disabled in this host's local config.
 
 ```json
 {
@@ -114,7 +121,7 @@ host's local config.
       "faces_on_sample": 1,
       "faces_on_blank": 0,
       "faces_on_noise": 0,
-      "ms_per_frame": 8.1,
+      "ms_per_frame": 13.7,
       "ok": true
     },
     "face_embedding": {
@@ -125,12 +132,12 @@ host's local config.
     },
     "object_detection": {
       "backend": "hailo",
-      "model": "/home/starter/Code/Desktop Assistant/config/hailo/yolo26m.hef",
+      "model": "/tmp/vera_h8test/config/hailo/hailo8/yolov11l.hef",
       "labels_on_sample": [
         "bus",
         "person"
       ],
-      "ms_per_frame": 76.6,
+      "ms_per_frame": 96.8,
       "ok": true
     },
     "mono_depth": {
@@ -143,7 +150,7 @@ host's local config.
       ],
       "finite": true,
       "std": 0.2214,
-      "ms_per_frame": 9.0
+      "ms_per_frame": 11.1
     }
   },
   "ok": true

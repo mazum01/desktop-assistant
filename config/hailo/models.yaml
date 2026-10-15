@@ -19,6 +19,12 @@ profiles:
       url: https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v2.17.0/hailo8/scdepthv3.hef
       candidates:
         - /usr/local/hailo/resources/models/hailo8/scdepthv3.hef
+    # YOLOv11l (52.3 hw mAP, ~38 fps) with on-chip NMS. If not installed, the
+    # detector falls back to YOLO26m + ONNX postprocessing.
+    object_detection:
+      file: yolov11l.hef
+      url: https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v2.17.0/hailo8/yolov11l.hef
+      candidates: []
   Hailo-10H:
     face_detection:
       file: scrfd_10g.hef

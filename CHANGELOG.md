@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.67.0] - 2026-10-15
+### Added
+- Hailo-8 can run YOLOv11l with on-chip NMS (Model Zoo v2.17.0, 52.3 vs 50.6
+  COCO mAP for YOLO26m). Opt-in: run
+  `python3 -m src.perception.hailo_models --install` to download it to
+  `config/hailo/hailo8/yolov11l.hef`; without it (or after deleting it) the
+  Hailo-8 keeps using YOLO26m + ONNX postprocessing. Same 80 COCO classes.
+
+### Changed
+- `ObjectDetector` uses one on-chip-NMS path for both accelerators; the
+  decoder accepts the HailoRT 4.x per-class list and the HailoRT 5.x packed
+  buffer layouts (`_decode_h10_nms` → `_decode_nms`).
+- Smoke-test docs: allow ~15 s after stopping core on Hailo-10H before
+  testing, and wait for core to exit on Hailo-8.
+- TODO: roadmap for detecting more than 80 object types.
+
 ## [1.66.0] - 2026-10-15
 ### Changed
 - Hailo-10H object detection upgraded from YOLOv8m to YOLOv11l (Model Zoo

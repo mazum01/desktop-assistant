@@ -97,6 +97,18 @@ Smoke-test scripts for each component (`scripts/test_<device>.py` exits 0).
   **Alternative phrases also available without training:** `hey_marvin_v0.1`,
   `hey_mycroft_v0.1` (already bundled). Switch by changing `oww_model` in config.
 
+- [ ] **Object detection beyond COCO-80** — every YOLO HEF in Hailo's Model Zoo
+  (v8/v11/YOLO26, both chips) recognises the same 80 COCO classes.
+  1. **Hailo-10H, no compile:** add YOLO-World v2s (Model Zoo v5.1.0 HEF) as an
+     optional open-vocabulary mode. Second input is 80×512 CLIP text embeddings;
+     raw outputs need host-side decode + NMS.
+  2. **Compile project, both chips:** YOLOv8 trained on Open Images V7 (601
+     classes) via the Hailo Dataflow Compiler (x86 + NVIDIA GPU host). First
+     prove the toolchain with a stock YOLOv8s, then swap in OIV7 weights; verify
+     with `scripts/hailo_smoke_test.py`.
+  3. **Stretch:** YOLOE prompt-free (~4.5k classes) or YOLO-World with a baked-in
+     LVIS vocabulary; watch the large class head on Hailo-8.
+
 - [ ] **Silent servo replacement** — swap DS3218 for Feetech STS3032 or Dynamixel
   XL430-W250 (half-duplex TTL UART, near-silent, position feedback built in).
   Requires `src/hardware/servo.py` rewrite + Pi hardware UART freed up.

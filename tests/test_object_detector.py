@@ -179,8 +179,8 @@ def test_detection_dataclass():
     assert len(d.bbox) == 4
 
 
-def test_decode_h10_nms_output(sim_detector):
-    sim_detector._is_h10_nms = True
+def test_decode_nms_output(sim_detector):
+    sim_detector._onchip_nms = True
     raw = np.zeros(40080, dtype=np.float32)
 
     # Packed HAILO_NMS_BY_CLASS layout (as emitted by HailoRT 5 on Hailo-10H):
@@ -195,10 +195,27 @@ def test_decode_h10_nms_output(sim_detector):
     raw[: len(packed)] = packed
 
     outputs = {"yolov8m/yolov8_nms_postprocess": raw}
-    detections = sim_detector._decode_h10_nms(outputs, 640, 640)
+    detections = sim_detector._decode_nms(outputs, 640, 640)
     labels = {d.label: d.confidence for d in detections}
     assert labels.keys() == {"person", "car", "bus"}
     assert labels["person"] == pytest.approx(0.92)
     assert labels["car"] == pytest.approx(0.88)
     assert labels["bus"] == pytest.approx(0.94)
 
+
+
+def test_decode_hailo8_vstreams_nms_list(sim_detector):
+    """HailoRT 4.x VStreams returns 80 per-class (K, 5) arrays (verified on Hailo-8)."""
+    sim_detector._onchip_nms = True
+    per_class = [np.zeros((0, 5), np.float32) for _ in range(80)]
+    per_class[0] = np.array([[0.369, 0.17, 0.837, 0.353, 0.93]], np.float32)
+    per_class[5] = np.array([[0.21, 0.02, 0.68, 0.99, 0.95]], np.float32)
+    detections = sim_detector._decode_nms({"yolov11l/yolov8_nms_postprocess": per_class}, 640, 640)
+    labels = {d.label: d.confidence for d in detections}
+    assert labels == {"bus": pytest.approx(0.95), "person": pytest.approx(0.93)}
+    bus = next(d for d in detections if d.label == "bus")
+    assert bus.bbox == pytest.approx([12.8, 134.4, 633.6, 435.2], abs=0.2)
+
+
+def test_decode_nms_rejects_unknown_layout(sim_detector):
+    assert sim_detector._decode_nms({"x/nms": np.zeros(10, np.float32)}, 640, 640) == []

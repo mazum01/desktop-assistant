@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-1208 7459.5,-1208 7459.5,4 -4,4"/>
 <text text-anchor="start" x="3440.25" y="-1188.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="3604.25" y="-1177" font-family="Helvetica,sans-Serif" font-size="10.00">v1.66.0 — YOLOv11l object detection on Hailo&#45;10H</text>
+<text text-anchor="start" x="3574.25" y="-1177" font-family="Helvetica,sans-Serif" font-size="10.00">v1.67.0 — YOLOv11l object detection on Hailo&#45;8 and Hailo&#45;10H</text>
 <g id="clust1" class="cluster">
 <title>cluster_updater</title>
 <path fill="#e4f4e4" stroke="black" d="M1171,-780C1171,-780 2077,-780 2077,-780 2083,-780 2089,-786 2089,-792 2089,-792 2089,-1150 2089,-1150 2089,-1156 2083,-1162 2077,-1162 2077,-1162 1171,-1162 1171,-1162 1165,-1162 1159,-1156 1159,-1150 1159,-1150 1159,-792 1159,-792 1159,-786 1165,-780 1171,-780"/>
@@ -270,8 +270,8 @@
 <!-- hw_spk&#45;&gt;drv_aout -->
 <g id="edge13" class="edge">
 <title>hw_spk&#45;&gt;drv_aout</title>
-<path fill="none" stroke="#555555" d="M326.74,-793.45C297.85,-730.82 223.69,-543.72 315,-442 324.77,-431.12 1223.02,-341.04 1465.35,-316.92"/>
-<polygon fill="#555555" stroke="#555555" points="1465.77,-320.4 1475.38,-315.92 1465.08,-313.43 1465.77,-320.4"/>
+<path fill="none" stroke="#555555" d="M326.65,-793.45C297.52,-730.82 222.67,-543.74 314,-442 323.78,-431.11 1222.77,-341.04 1465.3,-316.92"/>
+<polygon fill="#555555" stroke="#555555" points="1465.73,-320.4 1475.34,-315.92 1465.04,-313.43 1465.73,-320.4"/>
 <text text-anchor="middle" x="281.5" y="-606.6" font-family="Helvetica,sans-Serif" font-size="8.00">USB</text>
 </g>
 <!-- hw_hailo -->
@@ -322,26 +322,26 @@
 <!-- drv_thmgr -->
 <g id="node18" class="node">
 <title>drv_thmgr</title>
-<path fill="#a5c8ff" stroke="black" d="M1001.5,-533C1001.5,-533 860.5,-533 860.5,-533 854.5,-533 848.5,-527 848.5,-521 848.5,-521 848.5,-509 848.5,-509 848.5,-503 854.5,-497 860.5,-497 860.5,-497 1001.5,-497 1001.5,-497 1007.5,-497 1013.5,-503 1013.5,-509 1013.5,-509 1013.5,-521 1013.5,-521 1013.5,-527 1007.5,-533 1001.5,-533"/>
-<text text-anchor="middle" x="931" y="-512.5" font-family="Helvetica,sans-Serif" font-size="10.00">thermal/thermal_manager.py</text>
+<path fill="#a5c8ff" stroke="black" d="M990.5,-533C990.5,-533 849.5,-533 849.5,-533 843.5,-533 837.5,-527 837.5,-521 837.5,-521 837.5,-509 837.5,-509 837.5,-503 843.5,-497 849.5,-497 849.5,-497 990.5,-497 990.5,-497 996.5,-497 1002.5,-503 1002.5,-509 1002.5,-509 1002.5,-521 1002.5,-521 1002.5,-527 996.5,-533 990.5,-533"/>
+<text text-anchor="middle" x="920" y="-512.5" font-family="Helvetica,sans-Serif" font-size="10.00">thermal/thermal_manager.py</text>
 </g>
 <!-- drv_tmp117&#45;&gt;drv_thmgr -->
 <g id="edge26" class="edge">
 <title>drv_tmp117&#45;&gt;drv_thmgr</title>
-<path fill="none" stroke="#555555" d="M684.35,-649.97C734.93,-622.5 834.5,-568.42 890.42,-538.04"/>
-<polygon fill="#555555" stroke="#555555" points="892.22,-541.05 899.34,-533.2 888.88,-534.9 892.22,-541.05"/>
+<path fill="none" stroke="#555555" d="M683.11,-649.97C731.58,-622.56 826.92,-568.64 880.69,-538.23"/>
+<polygon fill="#555555" stroke="#555555" points="882.61,-541.17 889.59,-533.2 879.16,-535.07 882.61,-541.17"/>
 </g>
 <!-- drv_fan&#45;&gt;drv_thmgr -->
 <g id="edge27" class="edge">
 <title>drv_fan&#45;&gt;drv_thmgr</title>
-<path fill="none" stroke="#555555" d="M816.53,-640.35C842.49,-612.15 883.13,-568.01 908.35,-540.6"/>
-<polygon fill="#555555" stroke="#555555" points="911.15,-542.74 915.34,-533.01 906,-538 911.15,-542.74"/>
+<path fill="none" stroke="#555555" d="M814.59,-640.35C838.39,-612.27 875.6,-568.38 898.84,-540.96"/>
+<polygon fill="#555555" stroke="#555555" points="901.79,-542.9 905.58,-533.01 896.45,-538.37 901.79,-542.9"/>
 </g>
 <!-- drv_tach&#45;&gt;drv_thmgr -->
 <g id="edge28" class="edge">
 <title>drv_tach&#45;&gt;drv_thmgr</title>
-<path fill="none" stroke="#555555" d="M1101.91,-645.69C1064.86,-617.57 999.88,-568.27 961.61,-539.23"/>
-<polygon fill="#555555" stroke="#555555" points="963.49,-536.26 953.41,-533 959.26,-541.84 963.49,-536.26"/>
+<path fill="none" stroke="#555555" d="M1100.36,-645.69C1061.09,-617.45 992.11,-567.85 951.79,-538.86"/>
+<polygon fill="#555555" stroke="#555555" points="953.81,-536 943.65,-533 949.72,-541.68 953.81,-536"/>
 </g>
 <!-- svc_thermal -->
 <g id="node35" class="node">
@@ -357,7 +357,7 @@
 <!-- drv_thmgr&#45;&gt;svc_thermal -->
 <g id="edge32" class="edge">
 <title>drv_thmgr&#45;&gt;svc_thermal</title>
-<path fill="none" stroke="#555555" d="M971.43,-496.93C993.85,-488.32 1022.49,-478.73 1049,-474 1164.11,-453.44 1458.27,-466.77 1575,-460 1587.45,-459.28 2011.2,-426.22 2022,-420 2044.68,-406.94 2062.33,-384.19 2074.98,-362.84"/>
+<path fill="none" stroke="#555555" d="M959.36,-496.92C981.2,-488.31 1009.11,-478.72 1035,-474 1153.09,-452.47 1455.16,-466.91 1575,-460 1587.45,-459.28 2011.2,-426.22 2022,-420 2044.68,-406.94 2062.33,-384.19 2074.98,-362.84"/>
 <polygon fill="#555555" stroke="#555555" points="2078.03,-364.55 2079.92,-354.12 2071.95,-361.1 2078.03,-364.55"/>
 </g>
 <!-- svc_motion -->
@@ -484,15 +484,15 @@
 <!-- drv_objdet -->
 <g id="node28" class="node">
 <title>drv_objdet</title>
-<path fill="#a5c8ff" stroke="black" d="M1320,-537C1320,-537 1076,-537 1076,-537 1070,-537 1064,-531 1064,-525 1064,-525 1064,-505 1064,-505 1064,-499 1070,-493 1076,-493 1076,-493 1320,-493 1320,-493 1326,-493 1332,-499 1332,-505 1332,-505 1332,-525 1332,-525 1332,-531 1326,-537 1320,-537"/>
-<text text-anchor="middle" x="1198" y="-518" font-family="Helvetica,sans-Serif" font-size="10.00">perception/object_detector.py</text>
-<text text-anchor="middle" x="1198" y="-507" font-family="Helvetica,sans-Serif" font-size="10.00">(YOLO26m on H8 / YOLOv11l on H10H + letterbox)</text>
+<path fill="#a5c8ff" stroke="black" d="M1328,-537C1328,-537 1062,-537 1062,-537 1056,-537 1050,-531 1050,-525 1050,-525 1050,-505 1050,-505 1050,-499 1056,-493 1062,-493 1062,-493 1328,-493 1328,-493 1334,-493 1340,-499 1340,-505 1340,-505 1340,-525 1340,-525 1340,-531 1334,-537 1328,-537"/>
+<text text-anchor="middle" x="1195" y="-518" font-family="Helvetica,sans-Serif" font-size="10.00">perception/object_detector.py</text>
+<text text-anchor="middle" x="1195" y="-507" font-family="Helvetica,sans-Serif" font-size="10.00">(YOLOv11l on&#45;chip NMS; YOLO26m+ONNX H8 fallback)</text>
 </g>
 <!-- drv_hailo&#45;&gt;drv_objdet -->
 <g id="edge19" class="edge">
 <title>drv_hailo&#45;&gt;drv_objdet</title>
-<path fill="none" stroke="#555555" d="M990.76,-645.85C1033.97,-618.78 1108.82,-571.88 1155.75,-542.47"/>
-<polygon fill="#555555" stroke="#555555" points="1157.85,-545.29 1164.46,-537.01 1154.13,-539.36 1157.85,-545.29"/>
+<path fill="none" stroke="#555555" d="M990.34,-645.85C1033.01,-618.78 1106.93,-571.88 1153.28,-542.47"/>
+<polygon fill="#555555" stroke="#555555" points="1155.31,-545.32 1161.88,-537.01 1151.56,-539.41 1155.31,-545.32"/>
 </g>
 <!-- svc_mono -->
 <g id="node56" class="node">
@@ -506,7 +506,7 @@
 <!-- drv_hailo&#45;&gt;svc_mono -->
 <g id="edge23" class="edge">
 <title>drv_hailo&#45;&gt;svc_mono</title>
-<path fill="none" stroke="#555555" d="M899.75,-645.99C886.22,-641.73 871.73,-637.72 858,-635 750.2,-613.62 459.63,-651.89 365,-596 207.09,-502.73 151.82,-355.53 249,-200 270.49,-165.61 292.04,-171.24 331,-160 616.74,-77.55 970.81,-62.69 1141.93,-60.7"/>
+<path fill="none" stroke="#555555" d="M899.75,-645.99C886.22,-641.73 871.73,-637.72 858,-635 749.98,-613.59 458.71,-652.18 364,-596 206.38,-502.5 151.89,-355.43 249,-200 270.49,-165.61 292.04,-171.24 331,-160 616.74,-77.55 970.81,-62.69 1141.93,-60.7"/>
 <polygon fill="#555555" stroke="#555555" points="1141.97,-64.2 1151.93,-60.59 1141.9,-57.2 1141.97,-64.2"/>
 </g>
 <!-- drv_models -->
@@ -544,9 +544,9 @@
 <!-- drv_models&#45;&gt;svc_mono -->
 <g id="edge22" class="edge">
 <title>drv_models&#45;&gt;svc_mono</title>
-<path fill="none" stroke="#555555" d="M1219.32,-638C1214.5,-636.92 1209.7,-635.91 1205,-635 1042.2,-603.63 996.1,-630.81 834,-596 711.84,-569.76 373.23,-521.24 300,-420 242.69,-340.78 238.6,-276.1 300,-200 352.44,-135.01 907.86,-86.17 1141.43,-68.35"/>
+<path fill="none" stroke="#555555" d="M1219.33,-637.99C1214.5,-636.9 1209.71,-635.9 1205,-635 1037.37,-602.96 989.8,-632.11 823,-596 703.15,-570.06 371.56,-519.58 300,-420 242.94,-340.6 238.6,-276.1 300,-200 352.44,-135.01 907.86,-86.17 1141.43,-68.35"/>
 <polygon fill="#555555" stroke="#555555" points="1141.93,-71.83 1151.63,-67.58 1141.4,-64.85 1141.93,-71.83"/>
-<text text-anchor="middle" x="385.5" y="-449.1" font-family="Helvetica,sans-Serif" font-size="8.00">matched depth HEF</text>
+<text text-anchor="middle" x="384.5" y="-449.1" font-family="Helvetica,sans-Serif" font-size="8.00">matched depth HEF</text>
 </g>
 <!-- drv_facedet&#45;&gt;svc_perception -->
 <g id="edge34" class="edge">
@@ -566,7 +566,7 @@
 <!-- drv_objdet&#45;&gt;svc_object -->
 <g id="edge35" class="edge">
 <title>drv_objdet&#45;&gt;svc_object</title>
-<path fill="none" stroke="#555555" d="M1325.02,-492.96C1370.63,-486.03 1422.52,-478.87 1470,-474 1576.29,-463.11 1603.43,-467.74 1710,-460 1802.1,-453.31 1824.79,-447.08 1917,-442 1969.1,-439.13 2807.17,-438.41 2856,-420 2893.71,-405.78 2928.25,-375.62 2952.24,-350.62"/>
+<path fill="none" stroke="#555555" d="M1323.43,-492.98C1369.54,-486.05 1422,-478.88 1470,-474 1576.3,-463.19 1603.43,-467.74 1710,-460 1802.1,-453.31 1824.79,-447.08 1917,-442 1969.1,-439.13 2807.17,-438.41 2856,-420 2893.71,-405.78 2928.25,-375.62 2952.24,-350.62"/>
 <polygon fill="#555555" stroke="#555555" points="2955.05,-352.74 2959.33,-343.05 2949.94,-347.95 2955.05,-352.74"/>
 </g>
 <!-- core_bus -->
