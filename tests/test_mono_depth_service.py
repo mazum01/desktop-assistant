@@ -40,6 +40,33 @@ def _make_service(bus=None, scale_factor=None, sim_engine=True):
 
 
 class TestMonoDepthService:
+    def test_preprocessing_uses_rgb(self):
+        svc = _make_service()
+        frame = np.zeros((480, 640, 3), np.uint8)
+        frame[:, :, 0] = 255
+        svc._process_frame(frame)
+        inp = svc._engine.infer.call_args.args[0]["input_layer1"]
+        assert inp[0, 0].tolist() == [0, 0, 255]
+
+    def test_failed_inference_is_explicit(self):
+        svc = _make_service()
+        svc._engine.infer.return_value = {}
+        svc._engine.infer.side_effect = None
+        with pytest.raises(RuntimeError, match="no outputs"):
+            svc._process_frame(np.zeros((480, 640, 3), np.uint8))
+
+    def test_hardware_specific_model_is_loaded(self):
+        from src.services.mono_depth_service import MonoDepthService
+        svc = MonoDepthService(config={"depth": {"mono_enabled": True}})
+        with patch("src.services.mono_depth_service.resolve_model", return_value="/h10/depth.hef"), \
+             patch("src.perception.hailo_inference.HailoInference") as engine, \
+             patch("threading.Thread"):
+            engine.return_value.hardware_ready = True
+            svc.on_start()
+            engine.assert_called_once_with("/h10/depth.hef")
+            assert svc._enabled
+            svc.on_stop()
+
 
     def test_latest_payload_initially_none(self):
         from src.services.mono_depth_service import MonoDepthService

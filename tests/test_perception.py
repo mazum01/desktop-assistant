@@ -17,6 +17,55 @@ from src.services.perception_service import PerceptionConfig, PerceptionService
 # ── HailoInference ───────────────────────────────────────────────────────────
 
 class TestHailoInference:
+    def test_infer_model_run_uses_configuration_lock(self):
+        import src.perception.hailo_inference as module
+        engine = HailoInference("/nonexistent/model.hef")
+        engine._sim = False
+        engine._is_infer_model_api = True
+        with patch.object(module, "_runtime_lock") as lock, \
+             patch.object(engine, "_infer_model_run", return_value={}) as run:
+            engine.infer({})
+        lock.__enter__.assert_called_once()
+        run.assert_called_once_with({})
+
+    def test_close_shuts_model_down_before_releasing_buffers(self):
+        engine = HailoInference("/nonexistent/model.hef")
+        engine._io_buffers["output"] = np.zeros((2,), np.float32)
+        configured = MagicMock()
+        def check_buffers_are_alive():
+            assert engine._io_buffers["output"].shape == (2,)
+        configured.shutdown.side_effect = check_buffers_are_alive
+        engine._configured_infer_model = configured
+        engine.close()
+        configured.shutdown.assert_called_once()
+        assert not engine._io_buffers
+        engine.close()
+        configured.shutdown.assert_called_once()
+
+    def test_infer_model_outputs_are_dequantized_before_configure(self):
+        import src.perception.hailo_inference as module
+
+        engine = HailoInference("/nonexistent/model.hef")
+        output = MagicMock(name="output")
+        output.name = "model/output"
+        output.shape = (2, 3)
+        output.format.type = "float32"
+        model = MagicMock()
+        model.inputs = []
+        model.outputs = [output]
+        engine._vdevice = MagicMock()
+        engine._vdevice.create_infer_model.return_value = model
+        model.configure.side_effect = lambda: (
+            output.set_format_type.assert_called_once_with("float32")
+            or MagicMock()
+        )
+        runtime = MagicMock()
+        runtime.FormatType.FLOAT32 = "float32"
+        with patch.object(module, "hp", runtime):
+            engine._init_infer_model()
+        assert engine._io_buffers[output.name].dtype == np.float32
+        engine.close()
+
     def test_sim_mode_when_hef_missing(self):
         eng = HailoInference("/nonexistent/model.hef")
         assert eng.hardware_ready is False
@@ -48,6 +97,26 @@ def _make_sim_detector() -> FaceDetector:
 
 
 class TestFaceDetector:
+    @pytest.mark.parametrize("native", [False, True])
+    def test_scrfd_scores_are_probabilities_not_logits(self, native):
+        import src.perception.face_detector as module
+
+        if native and not module._HAS_CPP_DECODE:
+            pytest.skip("C++ decoder not built")
+        detector = _make_sim_detector()
+        scores = np.zeros((80, 80, 2), np.float32)
+        scores[3, 4, 0] = 0.8
+        scores[5, 6, 0] = 0.3
+        outputs = {
+            "score": scores,
+            "bbox": np.ones((80, 80, 8), np.float32),
+            "kps": np.zeros((80, 80, 20), np.float32),
+        }
+        with patch.object(module, "_HAS_CPP_DECODE", native):
+            boxes, confidence, landmarks = detector._decode_scrfd(outputs, 640)
+        assert len(boxes) == 1
+        assert confidence[0] == pytest.approx(0.8)
+
     def test_sim_mode_returns_empty(self):
         det = _make_sim_detector()
         frame = np.zeros((480, 640, 3), dtype=np.uint8)

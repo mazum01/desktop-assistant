@@ -23,12 +23,9 @@ from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
+from src.perception.hailo_models import resolve_model
 
 log = logging.getLogger(__name__)
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_HEF = Path("/usr/local/hailo/resources/models/hailo8/arcface_mobilefacenet.hef")
-_FALLBACK_HEF = _REPO_ROOT / "config" / "hailo" / "arcface_mobilefacenet.hef"
 
 # Reference 5-point landmarks in the 112×112 ArcFace canonical space.
 # Order matches SCRFD output: left_eye, right_eye, nose, left_mouth, right_mouth.
@@ -58,16 +55,14 @@ _BLUR_MIN_STORE = 180.0
 
 
 class FaceEmbedder:
-    """Extract ArcFace embeddings via the Hailo-8 MobileFaceNet HEF.
+    """Extract ArcFace embeddings via a device-matched MobileFaceNet HEF.
 
     Sim mode is entered automatically when the Hailo device is unavailable;
     ``embed()`` returns a zero vector in that case.
     """
 
     def __init__(self, hef_path: Optional[str | Path] = None) -> None:
-        hef = Path(hef_path) if hef_path else (
-            _DEFAULT_HEF if _DEFAULT_HEF.exists() else _FALLBACK_HEF
-        )
+        hef = resolve_model("face_embedding", hef_path)
         self._sim = False
         self._engine = None
         self._input_name: str = "input_layer1"
@@ -78,15 +73,10 @@ class FaceEmbedder:
         # versus merely good enough for live matching (>= _BLUR_MIN_EMBED).
         self.last_lap_var: float = 0.0
 
-        try:
-            from src.perception.hailo_probe import probe_hailo
-            dev = probe_hailo()
-            if dev.is_hailo10:
-                log.info("FaceEmbedder: ArcFace not yet supported on Hailo-10H, using sim mode")
-                self._sim = True
-                return
-        except Exception:
-            pass
+        if hef is None:
+            log.warning("FaceEmbedder: no compatible model; recognition unavailable")
+            self._sim = True
+            return
 
         try:
             from src.perception.hailo_inference import HailoInference

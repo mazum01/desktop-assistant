@@ -111,6 +111,9 @@ python3 -c "import fastapi, uvicorn, zmq; print('  ✓ web and IPC dependencies 
 python3 -c "import bleak; print('  ✓ bleak OK')" || echo "  ✗ bleak missing"
 command -v espeak-ng >/dev/null && echo "  ✓ espeak-ng OK" || echo "  ✗ espeak-ng missing"
 command -v hailortcli >/dev/null && echo "  ✓ hailortcli OK" || echo "  (hailortcli not installed — Hailo accelerator optional)"
+if command -v hailortcli >/dev/null; then
+    (cd "$REPO_ROOT" && python3 -m src.perception.hailo_models --install)
+fi
 
 echo ""
 echo "I²C device scan (bus 1):"

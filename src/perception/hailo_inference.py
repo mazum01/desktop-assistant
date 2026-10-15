@@ -20,9 +20,12 @@ device is unreachable — callers check ``engine.hardware_ready``.
 from __future__ import annotations
 
 from collections import namedtuple
+import atexit
 import logging
 from pathlib import Path
+import threading
 from typing import Dict, List, Optional
+import weakref
 
 import numpy as np
 
@@ -45,6 +48,20 @@ except (ImportError, OSError) as _exc:
 # ROUND_ROBIN scheduling lets the Hailo runtime multiplex multiple models without
 # hand-rolling network group activation.
 _shared_vdevice = None
+_engines = weakref.WeakSet()
+_runtime_lock = threading.RLock()
+
+
+def _shutdown() -> None:
+    global _shared_vdevice
+    for engine in list(_engines):
+        engine.close()
+    if _shared_vdevice is not None:
+        _shared_vdevice.release()
+        _shared_vdevice = None
+
+
+atexit.register(_shutdown)
 
 
 def _get_shared_vdevice():
@@ -82,6 +99,7 @@ class HailoInference:
         self._input_info: list = []
         self._output_info: list = []
         self._sim = not _HAILO_AVAILABLE
+        _engines.add(self)
 
         if self._sim:
             log.warning("[sim] HailoInference — hailo_platform unavailable")
@@ -93,8 +111,9 @@ class HailoInference:
             return
 
         try:
-            self._vdevice = _get_shared_vdevice()
-            self._init_runtime()
+            with _runtime_lock:
+                self._vdevice = _get_shared_vdevice()
+                self._init_runtime()
         except Exception as exc:
             log.warning("[sim] HailoInference init failed (%s) — sim mode", exc)
             self._cleanup()
@@ -123,6 +142,8 @@ class HailoInference:
     def _init_infer_model(self) -> None:
         """Initialize via InferModel API (Hailo-10H / HailoRT 5.x)."""
         self._infer_model = self._vdevice.create_infer_model(str(self._hef_path))
+        for output in self._infer_model.outputs:
+            output.set_format_type(hp.FormatType.FLOAT32)
         self._configured_infer_model = self._infer_model.configure()
         self._bindings = self._configured_infer_model.create_bindings()
 
@@ -228,7 +249,9 @@ class HailoInference:
             return {}
 
         if self._is_infer_model_api:
-            return self._infer_model_run(inputs)
+            # HailoRT 5.x must not configure a new model during a synchronous run.
+            with _runtime_lock:
+                return self._infer_model_run(inputs)
         return self._infer_vstreams_run(inputs)
 
     def _infer_model_run(self, inputs: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
@@ -323,10 +346,15 @@ class HailoInference:
 
     def _cleanup(self) -> None:
         # Clean up InferModel API objects in correct reverse order
-        self._io_buffers.clear()
+        if self._configured_infer_model is not None:
+            try:
+                self._configured_infer_model.shutdown()
+            except Exception:
+                log.exception("Failed to shut down Hailo model %s", self._hef_path)
         self._bindings = None
         self._configured_infer_model = None
         self._infer_model = None
+        self._io_buffers.clear()
 
         # Clean up VStreams pipeline
         obj = getattr(self, "_infer_pipeline", None)

@@ -1902,7 +1902,7 @@ def cmd_help(args) -> int:
         "playback":         "Play a recorded WAV clip.\n"
                     "                  Usage: playback [--input FILE]\n"
                     "                  If --input is omitted, plays the most recent recording.",
-        "object-detection": "Enable or disable object classification (Hailo-8 COCO). Sub-commands:\n"
+        "object-detection": "Enable or disable object classification (Hailo-8/10H COCO). Sub-commands:\n"
                             "                  object-detection enable     Turn on object detection.\n"
                             "                  object-detection disable    Turn off object detection.\n"
                             "                  object-detection status     Show current state.",
@@ -1951,7 +1951,7 @@ def cmd_help(args) -> int:
                             "                  depth status                  Show dense/mono enabled state and hardware readiness.\n"
                             "                  depth dense-enable            Enable dense stereo depth.\n"
                             "                  depth dense-disable           Disable dense stereo depth.\n"
-                            "                  depth mono-enable             Enable monocular Hailo-8 depth.\n"
+                            "                  depth mono-enable             Enable monocular Hailo-8/10H depth.\n"
                             "                  depth mono-disable            Disable monocular depth.\n"
                             "                  depth query                   Show nearest/farthest/mean depth stats.",
         "snapshot":         "Save a full-resolution JPEG from a camera.\n"
@@ -3215,7 +3215,7 @@ def main() -> int:
     cam2_sub.add_parser("rotation-status", help="Show current camera 2 rotation angle").set_defaults(func=cmd_camera2)
 
     # ── object detection subcommand group ────────────────────────────
-    od_sp = sub.add_parser("object-detection", help="Enable/disable COCO object classification (Hailo-8)")
+    od_sp = sub.add_parser("object-detection", help="Enable/disable COCO object classification (Hailo-8/10H)")
     od_sub = od_sp.add_subparsers(dest="action", metavar="<subcommand>")
     od_sub.required = True
     od_sub.add_parser("enable",  help="Turn on object detection").set_defaults(func=cmd_object_detection)
@@ -3528,7 +3528,7 @@ def main() -> int:
     dep_sub.add_parser("query",        help="Show nearest/farthest/mean depth stats").set_defaults(func=cmd_depth)
     dep_sub.add_parser("dense-enable", help="Enable dense stereo depth").set_defaults(func=cmd_depth)
     dep_sub.add_parser("dense-disable",help="Disable dense stereo depth").set_defaults(func=cmd_depth)
-    dep_sub.add_parser("mono-enable",  help="Enable monocular Hailo-8 depth").set_defaults(func=cmd_depth)
+    dep_sub.add_parser("mono-enable",  help="Enable monocular Hailo-8/10H depth").set_defaults(func=cmd_depth)
     dep_sub.add_parser("mono-disable", help="Disable monocular depth").set_defaults(func=cmd_depth)
 
     # ── Snapshot ──────────────────────────────────────────────────────

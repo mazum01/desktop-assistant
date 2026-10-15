@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.65.0] - 2026-10-15
+### Added
+- Configurable, automatically probed Hailo-8/Hailo-10H face detection,
+  ArcFace recognition and monocular depth profiles, with validated model
+  downloads integrated into Pi setup.
+- Hardware-accelerated SCRFD-10G, MobileFaceNet and scdepthv3 on Hailo-10H,
+  preserving Hailo-8 models and explicit path overrides.
+### Fixed
+- Dequantize Hailo-10H outputs to float32 before postprocessing and serialize
+  inference with model configuration to avoid a multi-model startup stall.
+- Decode SCRFD's probability scores directly in Python and C++, eliminating
+  false faces caused by applying sigmoid twice.
+- Select mono depth models by hardware, preprocess in RGB, and surface failed
+  or invalid inference instead of silently dropping frames.
+- Shut down configured models before releasing buffers and the shared device.
+
 ## [1.64.4] - 2026-10-15
 ### Changed
 - Log every failed outbound network reachability check in the watchdog journal

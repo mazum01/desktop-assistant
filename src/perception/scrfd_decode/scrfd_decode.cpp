@@ -9,11 +9,11 @@
  * Function signature (matches the Python version exactly):
  *
  *   decode_scrfd(
- *       score_maps : list[ndarray(H,W,2)],   # one per stride, pre-sigmoid logits
+ *       score_maps : list[ndarray(H,W,2)],   # one per stride, sigmoid probabilities
  *       bbox_maps  : list[ndarray(H,W,8)],   # one per stride, LTBR × 2 anchors
  *       kps_maps   : list[ndarray|None],      # one per stride, 10 vals × 2 anchors
  *       strides    : list[int],               # [8, 16, 32]
- *       conf_thr_logit : float,               # logit(conf_threshold)
+ *       conf_threshold : float,
  *   ) -> tuple[ndarray(N,4), ndarray(N,), ndarray(N,10)|None]
  *       boxes  : float32 (N, 4)  x1y1x2y2
  *       scores : float32 (N,)
@@ -43,11 +43,11 @@ struct DecodeResult {
 /*
  * Process one stride level. Appends into result vectors.
  *
- * score_map : float32 (H, W, 2)   pre-sigmoid logits
+ * score_map : float32 (H, W, 2)   sigmoid probabilities
  * bbox_map  : float32 (H, W, 8)
  * kps_map   : float32 (H, W, 20) or nullptr
  * stride    : int
- * conf_thr_logit : logit-space threshold (avoids per-cell sigmoid)
+ * conf_threshold : minimum face probability
  */
 static void decode_stride(
     const float* score_map,
@@ -55,7 +55,7 @@ static void decode_stride(
     const float* kps_map,
     int H, int W,
     int stride,
-    float conf_thr_logit,
+    float conf_threshold,
     DecodeResult& out
 ) {
     for (int a = 0; a < 2; ++a) {                      // 2 anchors per cell
@@ -63,11 +63,8 @@ static void decode_stride(
             for (int c = 0; c < W; ++c) {
                 int cell = r * W + c;
                 // score_map layout: (H, W, 2) → cell*2 + anchor
-                float logit = score_map[cell * 2 + a];
-                if (logit <= conf_thr_logit) continue;
-
-                // Sigmoid only for survivors
-                float score = 1.0f / (1.0f + std::exp(-logit));
+                float score = score_map[cell * 2 + a];
+                if (score <= conf_threshold) continue;
 
                 // Grid centre (pixel coords)
                 float cx = (c + 0.5f) * stride;
@@ -107,7 +104,7 @@ py::tuple decode_scrfd(
     py::list bbox_maps_list,
     py::list kps_maps_list,
     std::vector<int> strides,
-    float conf_thr_logit
+    float conf_threshold
 ) {
     using arr_f = py::array_t<float, py::array::c_style | py::array::forcecast>;
 
@@ -157,7 +154,7 @@ py::tuple decode_scrfd(
             static_cast<const float*>(score_info.ptr),
             static_cast<const float*>(bbox_info.ptr),
             kps_ptr,
-            H, W, strides[i], conf_thr_logit,
+            H, W, strides[i], conf_threshold,
             result
         );
     }
@@ -201,13 +198,13 @@ py::tuple decode_scrfd(
 PYBIND11_MODULE(scrfd_decode_cpp, m) {
     m.doc() = "C++ SCRFD output decoder — replaces FaceDetector._decode_scrfd()";
     m.def(
-        "decode_scrfd",
+        "decode_scrfd_probabilities",
         &decode_scrfd,
         py::arg("score_maps"),
         py::arg("bbox_maps"),
         py::arg("kps_maps"),
         py::arg("strides"),
-        py::arg("conf_thr_logit"),
+        py::arg("conf_threshold"),
         R"doc(
 Decode raw SCRFD Hailo outputs into boxes, scores, and optional landmarks.
 
@@ -217,7 +214,7 @@ score_maps     : list of float32 ndarray (H,W,2)   — one per stride
 bbox_maps      : list of float32 ndarray (H,W,8)   — one per stride
 kps_maps       : list of float32 ndarray (H,W,20) or None per stride
 strides        : list[int]   e.g. [8, 16, 32]
-conf_thr_logit : float       logit(conf_threshold)
+conf_threshold : float       minimum face probability
 
 Returns
 -------

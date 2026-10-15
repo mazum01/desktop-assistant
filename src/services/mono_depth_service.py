@@ -1,4 +1,4 @@
-"""Monocular depth estimation using Hailo-8 scdepthv3.
+"""Monocular depth estimation using Hailo-8 / Hailo-10H scdepthv3.
 
 Runs the scdepthv3 HEF on a single camera frame at up to ``mono_rate_hz`` Hz.
 Output is a *relative* depth map — values are not in metres but are inversely
@@ -32,7 +32,6 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
 
 import cv2
@@ -40,10 +39,11 @@ import numpy as np
 
 from src.core.service import Service
 from src.core.bus import MessageBus
+from src.perception.hailo_models import resolve_model
 
 log = logging.getLogger(__name__)
 
-_DEFAULT_HEF = Path("/usr/local/hailo/resources/models/hailo8/scdepthv3.hef")
+_DEFAULT_HEF = "auto"
 _MODEL_H, _MODEL_W = 256, 320   # fixed input/output resolution for scdepthv3
 _MIN_INTERVAL_S = 0.05          # hard floor — never run faster than 20 Hz
 
@@ -61,7 +61,7 @@ class MonoDepthConfig:
 
 
 class MonoDepthService(Service):
-    """Per-pixel monocular depth map using Hailo-8 scdepthv3."""
+    """Per-pixel monocular depth map using device-matched scdepthv3."""
 
     name = "mono_depth"
     tick_seconds = 999.0  # event-driven via background thread
@@ -100,7 +100,11 @@ class MonoDepthService(Service):
 
     def on_start(self) -> None:
         from src.perception.hailo_inference import HailoInference
-        self._engine = HailoInference(self._cfg.hef_path)
+        hef = resolve_model("mono_depth", self._cfg.hef_path)
+        if hef is None:
+            log.warning("MonoDepthService: compatible model missing; mono depth is idle")
+            return
+        self._engine = HailoInference(hef)
         self._stop_event.clear()
         if not self._engine.hardware_ready:
             log.warning("MonoDepthService: Hailo hardware unavailable or HEF incompatible (%s) — mono depth will remain idle", self._cfg.hef_path)
@@ -160,7 +164,7 @@ class MonoDepthService(Service):
             try:
                 self._process_one()
             except Exception:
-                log.debug("MonoDepthService: frame processing failed", exc_info=True)
+                log.exception("MonoDepthService: frame processing failed")
             elapsed = time.monotonic() - t0
             remaining = interval - elapsed
             if remaining > 0:
@@ -183,15 +187,18 @@ class MonoDepthService(Service):
 
         # Resize to model input size
         resized = cv2.resize(frame, (_MODEL_W, _MODEL_H), interpolation=cv2.INTER_LINEAR)
-        inp = resized.astype(np.uint8)
+        inp = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
 
         outputs = self._engine.infer({"input_layer1": inp})
-
+        if not outputs:
+            raise RuntimeError("Mono depth inference returned no outputs")
         raw_key = next(iter(outputs))
         raw = outputs[raw_key]  # shape (H, W, 1) or (1, H, W, 1) — float32
         raw = raw.squeeze()     # → (H, W)
 
         raw_f = raw.astype(np.float32)
+        if raw_f.ndim != 2 or not np.isfinite(raw_f).all():
+            raise ValueError("Mono depth output must be a finite 2D map")
 
         # Normalize output to [0, 1] using actual range.
         # scdepthv3 outputs float32 log-inverse depth (larger = closer).

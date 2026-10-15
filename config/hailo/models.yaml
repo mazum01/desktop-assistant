@@ -1,0 +1,39 @@
+# auto probes the accelerator; override with Hailo-8 or Hailo-10H if needed.
+device: auto
+profiles:
+  Hailo-8:
+    face_detection:
+      file: scrfd_10g.hef
+      url: https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v2.17.0/hailo8/scrfd_10g.hef
+      candidates:
+        - config/hailo/scrfd_10g.hef
+        - /usr/local/hailo/resources/models/hailo8/scrfd_10g.hef
+    face_embedding:
+      file: arcface_mobilefacenet.hef
+      url: https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v2.17.0/hailo8/arcface_mobilefacenet.hef
+      candidates:
+        - /usr/local/hailo/resources/models/hailo8/arcface_mobilefacenet.hef
+        - config/hailo/arcface_mobilefacenet.hef
+    mono_depth:
+      file: scdepthv3.hef
+      url: https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v2.17.0/hailo8/scdepthv3.hef
+      candidates:
+        - /usr/local/hailo/resources/models/hailo8/scdepthv3.hef
+  Hailo-10H:
+    face_detection:
+      file: scrfd_10g.hef
+      url: https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v5.1.0/hailo10h/scrfd_10g.hef
+      candidates:
+        - /usr/share/hailo-models/scrfd_10g_h10.hef
+        - config/hailo/hailo10h/scrfd_2.5g.hef
+        - /usr/share/hailo-models/scrfd_2.5g_h10.hef
+    face_embedding:
+      file: arcface_mobilefacenet.hef
+      url: https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v5.1.0/hailo10h/arcface_mobilefacenet.hef
+      candidates:
+        - /usr/share/hailo-models/arcface_mobilefacenet_h10.hef
+    mono_depth:
+      file: scdepthv3.hef
+      url: https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v5.1.0/hailo10h/scdepthv3.hef
+      candidates:
+        - /usr/share/hailo-models/scdepthv3_h10.hef

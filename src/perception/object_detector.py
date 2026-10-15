@@ -314,6 +314,7 @@ class ObjectDetector:
                         return
                     else:
                         engine.close()
+                raise RuntimeError("No usable Hailo-10H object model; not loading a Hailo-8 HEF")
 
             # Fallback to Hailo-8 YOLO26 (HEF + ONNX postprocessing)
             match = next(((p, variant) for p, variant in _HEF_CANDIDATES if p.exists()), None)

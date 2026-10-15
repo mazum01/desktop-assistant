@@ -1,5 +1,5 @@
 """
-SCRFD face detector — Hailo-8 primary, OpenCV Haar cascade fallback.
+SCRFD face detector — Hailo-8 / Hailo-10H, OpenCV Haar cascade fallback.
 
 Architecture
 ------------
@@ -39,12 +39,9 @@ import cv2
 import numpy as np
 
 from src.perception.hailo_inference import HailoInference
+from src.perception.hailo_models import resolve_model
 
 log = logging.getLogger(__name__)
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_HEF = _REPO_ROOT / "config" / "hailo" / "scrfd_10g.hef"
-_HAILO_SYSTEM_HEF = Path("/usr/local/hailo/resources/models/hailo8/scrfd_10g.hef")
 
 # SCRFD-10G constants
 _INPUT_SIZE = 640          # model expects 640×640 RGB uint8
@@ -55,7 +52,7 @@ _NUM_ANCHORS = 2           # anchors per spatial cell at each scale
 try:
     import sys as _sys
     _sys.path.insert(0, str(Path(__file__).parent / "scrfd_decode"))
-    from scrfd_decode_cpp import decode_scrfd as _decode_scrfd_cpp  # type: ignore
+    from scrfd_decode_cpp import decode_scrfd_probabilities as _decode_scrfd_cpp  # type: ignore
     _HAS_CPP_DECODE = True
     log.debug("scrfd_decode_cpp loaded — using C++ decoder")
 except Exception:
@@ -84,8 +81,8 @@ class FaceDetector:
     nms_threshold : float
         IoU threshold for non-maximum suppression. Default 0.4.
     hef_path : str | Path | None
-        Explicit path to scrfd_10g.hef. When None the detector tries
-        ``config/hailo/scrfd_10g.hef`` then the system install path.
+        Explicit SCRFD HEF path. None selects the hardware-specific profile
+        in ``config/hailo/models.yaml``.
     """
 
     def __init__(
@@ -96,11 +93,6 @@ class FaceDetector:
     ) -> None:
         self._conf_thr = conf_threshold
         self._nms_thr = nms_threshold
-        # Pre-sigmoid threshold: SCRFD score outputs come back post-sigmoid (in [0,1]),
-        # so we can threshold in raw space using logit(conf_thr) and avoid running
-        # sigmoid across ~8400 grid cells per frame. Final survivor scores still get
-        # sigmoid applied for downstream confidence reporting.
-        self._conf_thr_logit = float(np.log(conf_threshold / max(1e-6, 1.0 - conf_threshold)))
         self._engine: Optional[HailoInference] = None
         self._haar: Optional[cv2.CascadeClassifier] = None
         # Reusable letterbox buffer; allocated once to avoid 1.2 MB np.zeros per frame.
@@ -110,16 +102,7 @@ class FaceDetector:
     # ── Backend selection ──────────────────────────────────────────────
 
     def _init_backend(self, hef_override) -> str:
-        # Check if hardware is compatible with Hailo-8 models (SCRFD is Hailo-8 only)
-        # If an explicit hef_override is provided, allow it unconditionally.
-        try:
-            from src.perception.hailo_probe import probe_hailo
-            dev = probe_hailo()
-            can_run_scrfd = bool(hef_override) or (dev.is_present and (dev.family == "Hailo-8" or not dev.is_hailo10))
-        except Exception:
-            can_run_scrfd = True
-
-        hef = self._find_hef(hef_override) if can_run_scrfd else None
+        hef = self._find_hef(hef_override)
         if hef is not None:
             engine = HailoInference(hef)
             if engine.hardware_ready:
@@ -152,13 +135,7 @@ class FaceDetector:
 
     @staticmethod
     def _find_hef(override) -> Optional[Path]:
-        if override is not None:
-            p = Path(override)
-            return p if p.exists() else None
-        for candidate in (_DEFAULT_HEF, _HAILO_SYSTEM_HEF):
-            if candidate.exists():
-                return candidate
-        return None
+        return resolve_model("face_detection", override)
 
     # ── Properties ─────────────────────────────────────────────────────
 
@@ -353,7 +330,7 @@ class FaceDetector:
             if used_strides:
                 boxes, scores, kps = _decode_scrfd_cpp(
                     score_maps, bbox_maps, kps_maps,
-                    used_strides, self._conf_thr_logit,
+                    used_strides, self._conf_thr,
                 )
                 return boxes, scores, kps if kps is not None else None
 
@@ -386,11 +363,7 @@ class FaceDetector:
             cx = (grid_x + 0.5) * stride  # (H, W)
             cy = (grid_y + 0.5) * stride
 
-            # score_map: (H, W, 2) — raw pre-sigmoid logits. Threshold in
-            # logit space using logit(conf_thr) to skip sigmoid across ~8400
-            # cells per frame; sigmoid is then applied only to the small set
-            # of survivors below. Bit-exact equivalent of the previous
-            # "sigmoid everywhere, then threshold" behavior.
+            # Model Zoo SCRFD outputs are already sigmoid probabilities.
             score_map_f = score_map.astype(np.float32, copy=False)
 
             # bbox_map: (H, W, 8) → (H, W, 2, 4)
@@ -404,16 +377,12 @@ class FaceDetector:
 
             for a in range(_NUM_ANCHORS):
                 score_a = score_map_f[:, :, a]
-                mask = score_a > self._conf_thr_logit
+                mask = score_a > self._conf_thr
                 if not np.any(mask):
                     continue
 
                 ys, xs = np.where(mask)
-                # Sigmoid only on survivor cells (correctness preserved so
-                # downstream confidence reporting stays in [0,1] probability
-                # space).
-                logits = score_a[ys, xs]
-                s = 1.0 / (1.0 + np.exp(-logits))         # (N_a,)
+                s = score_a[ys, xs]
                 cx_a = cx[ys, xs]                         # (N_a,)
                 cy_a = cy[ys, xs]                         # (N_a,)
 
