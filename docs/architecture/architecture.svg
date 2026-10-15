@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-1208 7459.5,-1208 7459.5,4 -4,4"/>
 <text text-anchor="start" x="3440.25" y="-1188.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="3556.25" y="-1177" font-family="Helvetica,sans-Serif" font-size="10.00">v1.65.1 — Dual&#45;platform Hailo&#45;8/10H perception, verified on hardware</text>
+<text text-anchor="start" x="3604.25" y="-1177" font-family="Helvetica,sans-Serif" font-size="10.00">v1.66.0 — YOLOv11l object detection on Hailo&#45;10H</text>
 <g id="clust1" class="cluster">
 <title>cluster_updater</title>
 <path fill="#e4f4e4" stroke="black" d="M1171,-780C1171,-780 2077,-780 2077,-780 2083,-780 2089,-786 2089,-792 2089,-792 2089,-1150 2089,-1150 2089,-1156 2083,-1162 2077,-1162 2077,-1162 1171,-1162 1171,-1162 1165,-1162 1159,-1156 1159,-1150 1159,-1150 1159,-792 1159,-792 1159,-786 1165,-780 1171,-780"/>
@@ -57,10 +57,10 @@
 <!-- update_timer -->
 <g id="node2" class="node">
 <title>update_timer</title>
-<path fill="#b4ddb4" stroke="black" d="M1831,-1102C1831,-1102 1685,-1102 1685,-1102 1679,-1102 1673,-1096 1673,-1090 1673,-1090 1673,-1059 1673,-1059 1673,-1053 1679,-1047 1685,-1047 1685,-1047 1831,-1047 1831,-1047 1837,-1047 1843,-1053 1843,-1059 1843,-1059 1843,-1090 1843,-1090 1843,-1096 1837,-1102 1831,-1102"/>
-<text text-anchor="middle" x="1758" y="-1083" font-family="Helvetica,sans-Serif" font-size="10.00">vera&#45;updater.timer</text>
-<text text-anchor="middle" x="1758" y="-1072" font-family="Helvetica,sans-Serif" font-size="10.00">vera&#45;updater&#45;check.service</text>
-<text text-anchor="middle" x="1758" y="-1061" font-family="Helvetica,sans-Serif" font-size="10.00">local&#45;time installation window</text>
+<path fill="#b4ddb4" stroke="black" d="M1810,-1102C1810,-1102 1664,-1102 1664,-1102 1658,-1102 1652,-1096 1652,-1090 1652,-1090 1652,-1059 1652,-1059 1652,-1053 1658,-1047 1664,-1047 1664,-1047 1810,-1047 1810,-1047 1816,-1047 1822,-1053 1822,-1059 1822,-1059 1822,-1090 1822,-1090 1822,-1096 1816,-1102 1810,-1102"/>
+<text text-anchor="middle" x="1737" y="-1083" font-family="Helvetica,sans-Serif" font-size="10.00">vera&#45;updater.timer</text>
+<text text-anchor="middle" x="1737" y="-1072" font-family="Helvetica,sans-Serif" font-size="10.00">vera&#45;updater&#45;check.service</text>
+<text text-anchor="middle" x="1737" y="-1061" font-family="Helvetica,sans-Serif" font-size="10.00">local&#45;time installation window</text>
 </g>
 <!-- update_runner -->
 <g id="node3" class="node">
@@ -73,8 +73,8 @@
 <!-- update_timer&#45;&gt;update_runner -->
 <g id="edge1" class="edge">
 <title>update_timer&#45;&gt;update_runner</title>
-<path fill="none" stroke="#555555" d="M1714.6,-1046.75C1691.29,-1032.39 1662.39,-1014.58 1637.9,-999.48"/>
-<polygon fill="#555555" stroke="#555555" points="1639.44,-996.32 1629.09,-994.06 1635.77,-1002.28 1639.44,-996.32"/>
+<path fill="none" stroke="#555555" d="M1698.9,-1046.75C1678.61,-1032.51 1653.51,-1014.89 1632.13,-999.88"/>
+<polygon fill="#555555" stroke="#555555" points="1634.03,-996.94 1623.83,-994.06 1630,-1002.67 1634.03,-996.94"/>
 </g>
 <!-- update_runner&#45;&gt;update_github -->
 <g id="edge3" class="edge">
@@ -132,17 +132,17 @@
 <!-- update_controls -->
 <g id="node5" class="node">
 <title>update_controls</title>
-<path fill="#b4ddb4" stroke="black" d="M1632,-1102C1632,-1102 1432,-1102 1432,-1102 1426,-1102 1420,-1096 1420,-1090 1420,-1090 1420,-1059 1420,-1059 1420,-1053 1426,-1047 1432,-1047 1432,-1047 1632,-1047 1632,-1047 1638,-1047 1644,-1053 1644,-1059 1644,-1059 1644,-1090 1644,-1090 1644,-1096 1638,-1102 1632,-1102"/>
-<text text-anchor="middle" x="1532" y="-1083" font-family="Helvetica,sans-Serif" font-size="10.00">vera update + authenticated System GUI</text>
-<text text-anchor="middle" x="1532" y="-1072" font-family="Helvetica,sans-Serif" font-size="10.00">/run/vera&#45;updater/control.sock</text>
-<text text-anchor="middle" x="1532" y="-1061" font-family="Helvetica,sans-Serif" font-size="10.00">peer&#45;checked fixed operations</text>
+<path fill="#b4ddb4" stroke="black" d="M1611,-1102C1611,-1102 1411,-1102 1411,-1102 1405,-1102 1399,-1096 1399,-1090 1399,-1090 1399,-1059 1399,-1059 1399,-1053 1405,-1047 1411,-1047 1411,-1047 1611,-1047 1611,-1047 1617,-1047 1623,-1053 1623,-1059 1623,-1059 1623,-1090 1623,-1090 1623,-1096 1617,-1102 1611,-1102"/>
+<text text-anchor="middle" x="1511" y="-1083" font-family="Helvetica,sans-Serif" font-size="10.00">vera update + authenticated System GUI</text>
+<text text-anchor="middle" x="1511" y="-1072" font-family="Helvetica,sans-Serif" font-size="10.00">/run/vera&#45;updater/control.sock</text>
+<text text-anchor="middle" x="1511" y="-1061" font-family="Helvetica,sans-Serif" font-size="10.00">peer&#45;checked fixed operations</text>
 </g>
 <!-- update_controls&#45;&gt;update_runner -->
 <g id="edge2" class="edge">
 <title>update_controls&#45;&gt;update_runner</title>
-<path fill="none" stroke="#555555" d="M1545.63,-1046.75C1552.34,-1033.57 1560.53,-1017.49 1567.78,-1003.27"/>
-<polygon fill="#555555" stroke="#555555" points="1570.96,-1004.74 1572.38,-994.24 1564.72,-1001.56 1570.96,-1004.74"/>
-<text text-anchor="middle" x="1596" y="-1018.6" font-family="Helvetica,sans-Serif" font-size="8.00">local Unix socket</text>
+<path fill="none" stroke="#555555" d="M1529.93,-1046.75C1539.43,-1033.32 1551.06,-1016.88 1561.27,-1002.46"/>
+<polygon fill="#555555" stroke="#555555" points="1564.16,-1004.42 1567.08,-994.24 1558.45,-1000.38 1564.16,-1004.42"/>
+<text text-anchor="middle" x="1586" y="-1018.6" font-family="Helvetica,sans-Serif" font-size="8.00">local Unix socket</text>
 </g>
 <!-- drv_fan -->
 <g id="node16" class="node">
@@ -155,9 +155,9 @@
 <!-- hw_fan&#45;&gt;drv_fan -->
 <g id="edge8" class="edge">
 <title>hw_fan&#45;&gt;drv_fan</title>
-<path fill="none" stroke="#555555" d="M1880.79,-788C1867.25,-784.75 1853.33,-781.91 1840,-780 1700.07,-759.9 1345.19,-773.17 1204,-766 1153.68,-763.44 1141.3,-759.87 1091,-757 1065.25,-755.53 882.18,-760.31 859,-749 839.31,-739.39 823.28,-721.01 811.83,-704.29"/>
-<polygon fill="#555555" stroke="#555555" points="814.66,-702.22 806.27,-695.75 808.8,-706.04 814.66,-702.22"/>
-<text text-anchor="middle" x="1214" y="-759.6" font-family="Helvetica,sans-Serif" font-size="8.00">PWM</text>
+<path fill="none" stroke="#555555" d="M1880.44,-787.94C1867.01,-784.73 1853.21,-781.91 1840,-780 1711.08,-761.36 1383.89,-775.76 1254,-766 1222.28,-763.62 1214.72,-759.4 1183,-757 1165.05,-755.64 875.22,-756.82 859,-749 839.27,-739.49 823.23,-721.11 811.79,-704.37"/>
+<polygon fill="#555555" stroke="#555555" points="814.62,-702.3 806.24,-695.82 808.75,-706.11 814.62,-702.3"/>
+<text text-anchor="middle" x="1264" y="-759.6" font-family="Helvetica,sans-Serif" font-size="8.00">PWM</text>
 </g>
 <!-- drv_tach -->
 <g id="node17" class="node">
@@ -169,9 +169,9 @@
 <!-- hw_fan&#45;&gt;drv_tach -->
 <g id="edge9" class="edge">
 <title>hw_fan&#45;&gt;drv_tach</title>
-<path fill="none" stroke="#555555" d="M1879.36,-787.98C1866.26,-784.83 1852.85,-782.02 1840,-780 1700.44,-758.05 1333.23,-808.31 1205,-749 1181.69,-738.22 1162.11,-716.58 1148.82,-698.52"/>
+<path fill="none" stroke="#555555" d="M1879.36,-787.98C1866.26,-784.83 1852.85,-782.02 1840,-780 1805.11,-774.51 1237.06,-763.83 1205,-749 1181.69,-738.22 1162.11,-716.58 1148.82,-698.52"/>
 <polygon fill="#555555" stroke="#555555" points="1151.43,-696.16 1142.8,-690.01 1145.71,-700.2 1151.43,-696.16"/>
-<text text-anchor="middle" x="1270.5" y="-759.6" font-family="Helvetica,sans-Serif" font-size="8.00">tach</text>
+<text text-anchor="middle" x="1459.5" y="-759.6" font-family="Helvetica,sans-Serif" font-size="8.00">tach</text>
 </g>
 <!-- hw_tmp117 -->
 <g id="node8" class="node">
@@ -209,9 +209,9 @@
 <!-- hw_servo&#45;&gt;drv_servo -->
 <g id="edge10" class="edge">
 <title>hw_servo&#45;&gt;drv_servo</title>
-<path fill="none" stroke="#555555" d="M972.03,-793.46C993.88,-780 1024.4,-763.82 1054,-757 1084.59,-749.95 1589.71,-760.28 1619,-749 1648.03,-737.82 1673.88,-712.86 1690.55,-693.77"/>
-<polygon fill="#555555" stroke="#555555" points="1693.33,-695.91 1697.11,-686.01 1687.98,-691.39 1693.33,-695.91"/>
-<text text-anchor="middle" x="1071" y="-759.6" font-family="Helvetica,sans-Serif" font-size="8.00">I²C/PWM</text>
+<path fill="none" stroke="#555555" d="M975.26,-793.33C984.62,-788.31 994.96,-783.42 1005,-780 1065.11,-759.54 1082.76,-762.66 1146,-757 1172.18,-754.66 1594.49,-758.48 1619,-749 1647.84,-737.85 1673.56,-713.12 1690.24,-694.09"/>
+<polygon fill="#555555" stroke="#555555" points="1693.02,-696.23 1696.82,-686.34 1687.68,-691.7 1693.02,-696.23"/>
+<text text-anchor="middle" x="1163" y="-759.6" font-family="Helvetica,sans-Serif" font-size="8.00">I²C/PWM</text>
 </g>
 <!-- hw_cam -->
 <g id="node10" class="node">
@@ -270,9 +270,9 @@
 <!-- hw_spk&#45;&gt;drv_aout -->
 <g id="edge13" class="edge">
 <title>hw_spk&#45;&gt;drv_aout</title>
-<path fill="none" stroke="#555555" d="M326.9,-793.44C298.5,-730.81 225.73,-543.7 317,-442 326.75,-431.14 1223.52,-341.05 1465.44,-316.92"/>
-<polygon fill="#555555" stroke="#555555" points="1465.86,-320.4 1475.46,-315.92 1465.16,-313.43 1465.86,-320.4"/>
-<text text-anchor="middle" x="283.5" y="-606.6" font-family="Helvetica,sans-Serif" font-size="8.00">USB</text>
+<path fill="none" stroke="#555555" d="M326.74,-793.45C297.85,-730.82 223.69,-543.72 315,-442 324.77,-431.12 1223.02,-341.04 1465.35,-316.92"/>
+<polygon fill="#555555" stroke="#555555" points="1465.77,-320.4 1475.38,-315.92 1465.08,-313.43 1465.77,-320.4"/>
+<text text-anchor="middle" x="281.5" y="-606.6" font-family="Helvetica,sans-Serif" font-size="8.00">USB</text>
 </g>
 <!-- hw_hailo -->
 <g id="node13" class="node">
@@ -322,26 +322,26 @@
 <!-- drv_thmgr -->
 <g id="node18" class="node">
 <title>drv_thmgr</title>
-<path fill="#a5c8ff" stroke="black" d="M1050.5,-533C1050.5,-533 909.5,-533 909.5,-533 903.5,-533 897.5,-527 897.5,-521 897.5,-521 897.5,-509 897.5,-509 897.5,-503 903.5,-497 909.5,-497 909.5,-497 1050.5,-497 1050.5,-497 1056.5,-497 1062.5,-503 1062.5,-509 1062.5,-509 1062.5,-521 1062.5,-521 1062.5,-527 1056.5,-533 1050.5,-533"/>
-<text text-anchor="middle" x="980" y="-512.5" font-family="Helvetica,sans-Serif" font-size="10.00">thermal/thermal_manager.py</text>
+<path fill="#a5c8ff" stroke="black" d="M1001.5,-533C1001.5,-533 860.5,-533 860.5,-533 854.5,-533 848.5,-527 848.5,-521 848.5,-521 848.5,-509 848.5,-509 848.5,-503 854.5,-497 860.5,-497 860.5,-497 1001.5,-497 1001.5,-497 1007.5,-497 1013.5,-503 1013.5,-509 1013.5,-509 1013.5,-521 1013.5,-521 1013.5,-527 1007.5,-533 1001.5,-533"/>
+<text text-anchor="middle" x="931" y="-512.5" font-family="Helvetica,sans-Serif" font-size="10.00">thermal/thermal_manager.py</text>
 </g>
 <!-- drv_tmp117&#45;&gt;drv_thmgr -->
 <g id="edge26" class="edge">
 <title>drv_tmp117&#45;&gt;drv_thmgr</title>
-<path fill="none" stroke="#555555" d="M689.88,-649.97C749.73,-622.33 867.94,-567.75 933.48,-537.48"/>
-<polygon fill="#555555" stroke="#555555" points="935.15,-540.57 942.76,-533.2 932.21,-534.21 935.15,-540.57"/>
+<path fill="none" stroke="#555555" d="M684.35,-649.97C734.93,-622.5 834.5,-568.42 890.42,-538.04"/>
+<polygon fill="#555555" stroke="#555555" points="892.22,-541.05 899.34,-533.2 888.88,-534.9 892.22,-541.05"/>
 </g>
 <!-- drv_fan&#45;&gt;drv_thmgr -->
 <g id="edge27" class="edge">
 <title>drv_fan&#45;&gt;drv_thmgr</title>
-<path fill="none" stroke="#555555" d="M825.18,-640.35C860.74,-611.78 916.67,-566.87 950.68,-539.55"/>
-<polygon fill="#555555" stroke="#555555" points="953.22,-542 958.82,-533.01 948.84,-536.54 953.22,-542"/>
+<path fill="none" stroke="#555555" d="M816.53,-640.35C842.49,-612.15 883.13,-568.01 908.35,-540.6"/>
+<polygon fill="#555555" stroke="#555555" points="911.15,-542.74 915.34,-533.01 906,-538 911.15,-542.74"/>
 </g>
 <!-- drv_tach&#45;&gt;drv_thmgr -->
 <g id="edge28" class="edge">
 <title>drv_tach&#45;&gt;drv_thmgr</title>
-<path fill="none" stroke="#555555" d="M1108.83,-645.69C1081.25,-617.92 1033.15,-569.51 1004.17,-540.33"/>
-<polygon fill="#555555" stroke="#555555" points="1006.42,-537.63 996.89,-533 1001.45,-542.56 1006.42,-537.63"/>
+<path fill="none" stroke="#555555" d="M1101.91,-645.69C1064.86,-617.57 999.88,-568.27 961.61,-539.23"/>
+<polygon fill="#555555" stroke="#555555" points="963.49,-536.26 953.41,-533 959.26,-541.84 963.49,-536.26"/>
 </g>
 <!-- svc_thermal -->
 <g id="node35" class="node">
@@ -357,7 +357,7 @@
 <!-- drv_thmgr&#45;&gt;svc_thermal -->
 <g id="edge32" class="edge">
 <title>drv_thmgr&#45;&gt;svc_thermal</title>
-<path fill="none" stroke="#555555" d="M1057.9,-496.96C1099.55,-488.57 1151.84,-479.16 1199,-474 1365.24,-455.82 1408.11,-470.57 1575,-460 1587.44,-459.21 2011.2,-426.22 2022,-420 2044.68,-406.94 2062.33,-384.19 2074.98,-362.84"/>
+<path fill="none" stroke="#555555" d="M971.43,-496.93C993.85,-488.32 1022.49,-478.73 1049,-474 1164.11,-453.44 1458.27,-466.77 1575,-460 1587.45,-459.28 2011.2,-426.22 2022,-420 2044.68,-406.94 2062.33,-384.19 2074.98,-362.84"/>
 <polygon fill="#555555" stroke="#555555" points="2078.03,-364.55 2079.92,-354.12 2071.95,-361.1 2078.03,-364.55"/>
 </g>
 <!-- svc_motion -->
@@ -459,7 +459,7 @@
 <!-- drv_van&#45;&gt;core_ver -->
 <g id="edge31" class="edge">
 <title>drv_van&#45;&gt;core_ver</title>
-<path fill="none" stroke="#555555" stroke-dasharray="5,2" d="M1572.04,-649.92C1586.95,-644.79 1603.58,-639.37 1619,-635 1843.9,-571.26 1985.48,-654.6 2115,-460 2119.43,-453.34 2120.34,-447.96 2115,-442 2084.85,-408.39 1943.15,-453.61 1913,-420 1847.71,-347.21 1847.71,-272.79 1913,-200 1995.63,-107.88 3935.57,-68.84 4314.25,-62.09"/>
+<path fill="none" stroke="#555555" stroke-dasharray="5,2" d="M1572.04,-649.92C1586.95,-644.79 1603.58,-639.37 1619,-635 1843.9,-571.26 1985.48,-654.6 2115,-460 2119.43,-453.34 2120.34,-447.96 2115,-442 2084.85,-408.39 1943.15,-453.61 1913,-420 1847.71,-347.21 1847.72,-272.8 1913,-200 1995.61,-107.87 3935.57,-68.84 4314.25,-62.08"/>
 <polygon fill="#555555" stroke="#555555" points="4314.53,-65.58 4324.47,-61.9 4314.41,-58.58 4314.53,-65.58"/>
 </g>
 <!-- drv_van&#45;&gt;svc_av -->
@@ -484,15 +484,15 @@
 <!-- drv_objdet -->
 <g id="node28" class="node">
 <title>drv_objdet</title>
-<path fill="#a5c8ff" stroke="black" d="M1388,-537C1388,-537 1226,-537 1226,-537 1220,-537 1214,-531 1214,-525 1214,-525 1214,-505 1214,-505 1214,-499 1220,-493 1226,-493 1226,-493 1388,-493 1388,-493 1394,-493 1400,-499 1400,-505 1400,-505 1400,-525 1400,-525 1400,-531 1394,-537 1388,-537"/>
-<text text-anchor="middle" x="1307" y="-518" font-family="Helvetica,sans-Serif" font-size="10.00">perception/object_detector.py</text>
-<text text-anchor="middle" x="1307" y="-507" font-family="Helvetica,sans-Serif" font-size="10.00">(YOLO26m/YOLOv8m + letterbox)</text>
+<path fill="#a5c8ff" stroke="black" d="M1320,-537C1320,-537 1076,-537 1076,-537 1070,-537 1064,-531 1064,-525 1064,-525 1064,-505 1064,-505 1064,-499 1070,-493 1076,-493 1076,-493 1320,-493 1320,-493 1326,-493 1332,-499 1332,-505 1332,-505 1332,-525 1332,-525 1332,-531 1326,-537 1320,-537"/>
+<text text-anchor="middle" x="1198" y="-518" font-family="Helvetica,sans-Serif" font-size="10.00">perception/object_detector.py</text>
+<text text-anchor="middle" x="1198" y="-507" font-family="Helvetica,sans-Serif" font-size="10.00">(YOLO26m on H8 / YOLOv11l on H10H + letterbox)</text>
 </g>
 <!-- drv_hailo&#45;&gt;drv_objdet -->
 <g id="edge19" class="edge">
 <title>drv_hailo&#45;&gt;drv_objdet</title>
-<path fill="none" stroke="#555555" d="M1006.03,-645.85C1069.82,-618.33 1181.11,-570.31 1249.01,-541.02"/>
-<polygon fill="#555555" stroke="#555555" points="1250.5,-544.19 1258.3,-537.01 1247.73,-537.76 1250.5,-544.19"/>
+<path fill="none" stroke="#555555" d="M990.76,-645.85C1033.97,-618.78 1108.82,-571.88 1155.75,-542.47"/>
+<polygon fill="#555555" stroke="#555555" points="1157.85,-545.29 1164.46,-537.01 1154.13,-539.36 1157.85,-545.29"/>
 </g>
 <!-- svc_mono -->
 <g id="node56" class="node">
@@ -506,7 +506,7 @@
 <!-- drv_hailo&#45;&gt;svc_mono -->
 <g id="edge23" class="edge">
 <title>drv_hailo&#45;&gt;svc_mono</title>
-<path fill="none" stroke="#555555" d="M899.75,-646C886.22,-641.74 871.73,-637.73 858,-635 750.86,-613.72 462.37,-651.02 368,-596 209.24,-503.44 151.62,-355.85 249,-200 270.49,-165.61 292.04,-171.24 331,-160 616.74,-77.55 970.81,-62.69 1141.93,-60.7"/>
+<path fill="none" stroke="#555555" d="M899.75,-645.99C886.22,-641.73 871.73,-637.72 858,-635 750.2,-613.62 459.63,-651.89 365,-596 207.09,-502.73 151.82,-355.53 249,-200 270.49,-165.61 292.04,-171.24 331,-160 616.74,-77.55 970.81,-62.69 1141.93,-60.7"/>
 <polygon fill="#555555" stroke="#555555" points="1141.97,-64.2 1151.93,-60.59 1141.9,-57.2 1141.97,-64.2"/>
 </g>
 <!-- drv_models -->
@@ -544,9 +544,9 @@
 <!-- drv_models&#45;&gt;svc_mono -->
 <g id="edge22" class="edge">
 <title>drv_models&#45;&gt;svc_mono</title>
-<path fill="none" stroke="#555555" d="M1219.31,-638.09C1214.49,-636.98 1209.7,-635.94 1205,-635 1063.67,-606.61 1024.08,-625.61 883,-596 750.55,-568.2 380.69,-528.64 300,-420 241.7,-341.5 238.6,-276.1 300,-200 352.44,-135.01 907.86,-86.17 1141.43,-68.35"/>
+<path fill="none" stroke="#555555" d="M1219.32,-638C1214.5,-636.92 1209.7,-635.91 1205,-635 1042.2,-603.63 996.1,-630.81 834,-596 711.84,-569.76 373.23,-521.24 300,-420 242.69,-340.78 238.6,-276.1 300,-200 352.44,-135.01 907.86,-86.17 1141.43,-68.35"/>
 <polygon fill="#555555" stroke="#555555" points="1141.93,-71.83 1151.63,-67.58 1141.4,-64.85 1141.93,-71.83"/>
-<text text-anchor="middle" x="386.5" y="-449.1" font-family="Helvetica,sans-Serif" font-size="8.00">matched depth HEF</text>
+<text text-anchor="middle" x="385.5" y="-449.1" font-family="Helvetica,sans-Serif" font-size="8.00">matched depth HEF</text>
 </g>
 <!-- drv_facedet&#45;&gt;svc_perception -->
 <g id="edge34" class="edge">
@@ -566,7 +566,7 @@
 <!-- drv_objdet&#45;&gt;svc_object -->
 <g id="edge35" class="edge">
 <title>drv_objdet&#45;&gt;svc_object</title>
-<path fill="none" stroke="#555555" d="M1380.68,-492.9C1408.45,-485.75 1440.47,-478.45 1470,-474 1575.66,-458.09 1603.43,-467.74 1710,-460 1802.1,-453.31 1824.79,-447.08 1917,-442 1969.1,-439.13 2807.17,-438.41 2856,-420 2893.71,-405.78 2928.25,-375.62 2952.24,-350.62"/>
+<path fill="none" stroke="#555555" d="M1325.02,-492.96C1370.63,-486.03 1422.52,-478.87 1470,-474 1576.29,-463.11 1603.43,-467.74 1710,-460 1802.1,-453.31 1824.79,-447.08 1917,-442 1969.1,-439.13 2807.17,-438.41 2856,-420 2893.71,-405.78 2928.25,-375.62 2952.24,-350.62"/>
 <polygon fill="#555555" stroke="#555555" points="2955.05,-352.74 2959.33,-343.05 2949.94,-347.95 2955.05,-352.74"/>
 </g>
 <!-- core_bus -->
@@ -894,8 +894,8 @@
 <!-- media_bus&#45;&gt;svc_media_ipc -->
 <g id="edge49" class="edge">
 <title>media_bus&#45;&gt;svc_media_ipc</title>
-<path fill="none" stroke="#3355aa" d="M4665.42,-82.19C4653.1,-104.23 4630.48,-137.5 4600,-152 4584.85,-159.21 4012.77,-159.58 3996,-160 3777.25,-165.45 3722.68,-170.28 3504,-178 3432.11,-180.54 2924.36,-174.77 2857,-200 2823.93,-212.39 2792.93,-236.44 2769.1,-258.81"/>
-<polygon fill="#3355aa" stroke="#3355aa" points="2766.4,-256.54 2761.61,-265.99 2771.25,-261.59 2766.4,-256.54"/>
+<path fill="none" stroke="#3355aa" d="M4665.42,-82.19C4653.1,-104.23 4630.48,-137.5 4600,-152 4584.85,-159.21 4012.77,-159.59 3996,-160 3771.48,-165.49 3715.45,-170.11 3491,-178 3420.56,-180.48 2923,-175.25 2857,-200 2824.06,-212.35 2793.17,-236.27 2769.37,-258.56"/>
+<polygon fill="#3355aa" stroke="#3355aa" points="2766.7,-256.28 2761.9,-265.73 2771.54,-261.33 2766.7,-256.28"/>
 </g>
 <!-- core_svc -->
 <g id="node32" class="node">
@@ -946,7 +946,7 @@
 <!-- svc_thermal&#45;&gt;thermal_bus -->
 <g id="edge41" class="edge">
 <title>svc_thermal&#45;&gt;thermal_bus</title>
-<path fill="none" stroke="#cc3333" d="M2115.06,-265.88C2126.32,-242.11 2143.9,-214.55 2169,-200 2244.75,-156.09 2868.48,-162.46 2956,-160 2976.69,-159.42 4427.25,-160.76 4446,-152 4472.91,-139.43 4493.84,-112.36 4507.05,-90.99"/>
+<path fill="none" stroke="#cc3333" d="M2115.06,-265.88C2126.32,-242.12 2143.9,-214.55 2169,-200 2244.46,-156.25 2865.81,-162.46 2953,-160 2973.73,-159.42 4427.21,-160.78 4446,-152 4472.91,-139.43 4493.84,-112.36 4507.05,-90.99"/>
 <polygon fill="#cc3333" stroke="#cc3333" points="4510.15,-92.63 4512.23,-82.25 4504.12,-89.07 4510.15,-92.63"/>
 </g>
 <!-- svc_thermal&#45;&gt;core_svc -->
@@ -997,7 +997,7 @@
 <!-- svc_media_ipc&#45;&gt;media_bus -->
 <g id="edge50" class="edge">
 <title>svc_media_ipc&#45;&gt;media_bus</title>
-<path fill="none" stroke="#3355aa" d="M2762.4,-265.99C2787.06,-242.11 2820.93,-214.38 2857,-200 2965.89,-156.58 3265.87,-164.83 3383,-160 3399.89,-159.3 4584.71,-159.21 4600,-152 4626.71,-139.4 4647.36,-112.33 4660.35,-90.97"/>
+<path fill="none" stroke="#3355aa" d="M2762.69,-265.74C2787.33,-241.93 2821.08,-214.36 2857,-200 2963.17,-157.55 3255.76,-164.82 3370,-160 3387.07,-159.28 4584.55,-159.29 4600,-152 4626.71,-139.4 4647.36,-112.33 4660.35,-90.98"/>
 <polygon fill="#3355aa" stroke="#3355aa" points="4663.43,-92.63 4665.44,-82.23 4657.38,-89.11 4663.43,-92.63"/>
 </g>
 <!-- svc_media_ipc&#45;&gt;core_svc -->
@@ -1160,9 +1160,9 @@
 <!-- svc_perception&#45;&gt;ext_db -->
 <g id="edge124" class="edge">
 <title>svc_perception&#45;&gt;ext_db</title>
-<path fill="none" stroke="#aa6600" stroke-dasharray="5,2" d="M4872.4,-343.08C4896.14,-369.25 4933.58,-404.37 4975,-420 5088.65,-462.89 5948.33,-421.15 6068,-442 6108.9,-449.13 6152.48,-463.8 6188.57,-478.05"/>
-<polygon fill="#aa6600" stroke="#aa6600" points="6187.47,-481.38 6198.06,-481.85 6190.08,-474.88 6187.47,-481.38"/>
-<text text-anchor="middle" x="6167.5" y="-449.1" font-family="Helvetica,sans-Serif" font-size="8.00">writes faces.db</text>
+<path fill="none" stroke="#aa6600" stroke-dasharray="5,2" d="M4872.4,-343.06C4896.15,-369.23 4933.59,-404.33 4975,-420 5079.57,-459.57 5869.73,-431.07 5981,-442 6062.74,-450.03 6083.79,-452.3 6163,-474 6168.28,-475.45 6173.66,-477.05 6179.06,-478.76"/>
+<polygon fill="#aa6600" stroke="#aa6600" points="6178.19,-482.16 6188.78,-481.94 6180.37,-475.51 6178.19,-482.16"/>
+<text text-anchor="middle" x="6138.5" y="-449.1" font-family="Helvetica,sans-Serif" font-size="8.00">writes faces.db</text>
 </g>
 <!-- svc_spectrum&#45;&gt;core_bus -->
 <g id="edge65" class="edge">
@@ -1191,9 +1191,9 @@
 <!-- svc_telemetry&#45;&gt;ext_db -->
 <g id="edge123" class="edge">
 <title>svc_telemetry&#45;&gt;ext_db</title>
-<path fill="none" stroke="#aa6600" d="M4309.38,-343.12C4333.11,-369.32 4370.55,-404.45 4412,-420 4483.22,-446.71 5705.04,-437.99 5781,-442 5870.57,-446.72 5892.62,-452.54 5982,-460 6062.41,-466.71 6084.24,-456.47 6163,-474 6169.17,-475.37 6175.47,-477.03 6181.76,-478.89"/>
-<polygon fill="#aa6600" stroke="#aa6600" points="6181.03,-482.33 6191.62,-481.94 6183.1,-475.64 6181.03,-482.33"/>
-<text text-anchor="middle" x="6021.5" y="-449.1" font-family="Helvetica,sans-Serif" font-size="8.00">writes telemetry.db</text>
+<path fill="none" stroke="#aa6600" d="M4309.38,-343.12C4333.11,-369.32 4370.55,-404.45 4412,-420 4483.22,-446.71 5705.22,-435.44 5781,-442 5832.1,-446.42 5843.98,-454.65 5895,-460 6013.62,-472.43 6046.26,-449.54 6163,-474 6169.53,-475.37 6176.19,-477.08 6182.84,-479.01"/>
+<polygon fill="#aa6600" stroke="#aa6600" points="6181.95,-482.4 6192.54,-481.99 6184.01,-475.71 6181.95,-482.4"/>
+<text text-anchor="middle" x="5934.5" y="-449.1" font-family="Helvetica,sans-Serif" font-size="8.00">writes telemetry.db</text>
 </g>
 <!-- svc_ipc&#45;&gt;core_bus -->
 <g id="edge44" class="edge">

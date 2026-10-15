@@ -110,6 +110,7 @@ def main() -> int:
     labels = sorted({d.label for d in detections})
     checks["object_detection"] = {
         "backend": objects.backend,
+        "model": str(getattr(getattr(objects, "_engine", None), "_hef_path", None)),
         "labels_on_sample": labels,
         "ms_per_frame": _timed(objects.detect, object_image),
         "ok": objects.backend == "hailo" and {"person", "bus"} <= set(labels),

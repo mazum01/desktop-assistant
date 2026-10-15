@@ -86,3 +86,29 @@ def test_install_validation_failure_leaves_no_model(profiles, monkeypatch):
     with pytest.raises(RuntimeError, match="Invalid face_detection"):
         models.install_models()
     assert not list(profiles.rglob("*.hef"))
+
+
+def test_install_fetches_preferred_model_despite_fallback(profiles, monkeypatch):
+    import io
+
+    monkeypatch.setattr(models, "probe_hailo", lambda: SimpleNamespace(family="Hailo-10H"))
+    data = yaml.safe_load(models._CONFIG.read_text())
+    profile = data["profiles"]["Hailo-10H"]
+    fallback = profiles / "fallback_small.hef"
+    fallback.touch()
+    profile["object_detection"] = {
+        "file": "big.hef", "url": "https://example.com/big.hef",
+        "candidates": [str(fallback)],
+    }
+    for kind in ("face_detection", "face_embedding", "mono_depth"):
+        path = profiles / "config/hailo/hailo10h" / f"{kind}.hef"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    models._CONFIG.write_text(yaml.safe_dump(data))
+    assert models.resolve_model("object_detection") == fallback
+    monkeypatch.setattr(models.urllib.request, "urlopen", lambda *a, **k: io.BytesIO(b"hef"))
+    monkeypatch.setattr(models.subprocess, "run", MagicMock())
+    models.install_models()
+    preferred = profiles / "config/hailo/hailo10h/big.hef"
+    assert preferred.read_bytes() == b"hef"
+    assert models.resolve_model("object_detection") == preferred

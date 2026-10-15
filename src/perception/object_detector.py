@@ -110,7 +110,8 @@ _ONNX_SIDECAR_CANDIDATES = [
     Path("/usr/local/hailo/resources/models/hailo8/yolo26n_postprocessing.onnx"),
 ]
 
-# Hailo-10H / Hailo-15H models with on-chip NMS
+# Hailo-10H / Hailo-15H models with on-chip NMS. The preferred model (YOLOv11l)
+# comes from config/hailo/models.yaml; these are fallbacks if it's unavailable.
 _H10_HEF_CANDIDATES = [
     (Path("/usr/share/hailo-models/yolov8m_h10.hef"), "yolov8m_h10"),
     (Path("/usr/share/hailo-models/yolov11m_h10.hef"), "yolov11m_h10"),
@@ -299,7 +300,12 @@ class ObjectDetector:
 
             # Prefer Hailo-10H models if running on Hailo-10H device
             if dev.is_present and dev.is_hailo10:
-                h10_match = next(((p, variant) for p, variant in _H10_HEF_CANDIDATES if p.exists()), None)
+                from src.perception.hailo_models import resolve_model
+                resolved = resolve_model("object_detection")
+                h10_match = (
+                    (resolved, resolved.stem) if resolved is not None
+                    else next(((p, variant) for p, variant in _H10_HEF_CANDIDATES if p.exists()), None)
+                )
                 if h10_match is not None:
                     hef_path, variant = h10_match
                     engine = HailoInference(hef_path)

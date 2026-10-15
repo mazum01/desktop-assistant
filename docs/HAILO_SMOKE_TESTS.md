@@ -19,12 +19,12 @@ python3 scripts/hailo_smoke_test.py
 systemctl --user start desktop-assistant-core desktop-assistant-watchdog
 ```
 
-## Results — v1.65.1 (2026-10-15)
+## Results — v1.66.0 (2026-10-15)
 
 ### Hailo-10H (vera3, HailoRT 5.1.1)
 
-Models: SCRFD-10G, ArcFace MobileFaceNet, scdepthv3 (Model Zoo v5.1.0
-Hailo-10H HEFs) and YOLOv8m with on-chip NMS.
+Models: SCRFD-10G, ArcFace MobileFaceNet, scdepthv3 and YOLOv11l with on-chip
+NMS (Model Zoo v5.1.0 Hailo-10H HEFs).
 
 ```json
 {
@@ -36,7 +36,7 @@ Hailo-10H HEFs) and YOLOv8m with on-chip NMS.
       "faces_on_sample": 1,
       "faces_on_blank": 0,
       "faces_on_noise": 0,
-      "ms_per_frame": 27.9,
+      "ms_per_frame": 28.2,
       "ok": true
     },
     "face_embedding": {
@@ -47,11 +47,12 @@ Hailo-10H HEFs) and YOLOv8m with on-chip NMS.
     },
     "object_detection": {
       "backend": "hailo",
+      "model": "/home/starter/Code/desktop-assistant/config/hailo/hailo10h/yolov11l.hef",
       "labels_on_sample": [
         "bus",
         "person"
       ],
-      "ms_per_frame": 33.5,
+      "ms_per_frame": 47.7,
       "ok": true
     },
     "mono_depth": {
@@ -64,14 +65,40 @@ Hailo-10H HEFs) and YOLOv8m with on-chip NMS.
       ],
       "finite": true,
       "std": 0.2245,
-      "ms_per_frame": 10.5
+      "ms_per_frame": 10.4
     }
   },
   "ok": true
 }
 ```
 
-### Hailo-8 (vera.local, HailoRT 4.23)
+#### Hailo-10H object model comparison
+
+All candidates detect the same 80 COCO classes. Per-frame time includes
+letterboxing and decoding (mean of 10 runs).
+
+| Image | Model | ms/frame | Objects | Top confidences |
+|---|---|---|---|---|
+| dog | yolov8m | 33.0 | bicycle, dog, truck | bicycle 0.97, dog 0.96, truck 0.76 |
+| dog | yolov11m | 33.8 | dog, bicycle, truck | dog 0.95, bicycle 0.95, truck 0.74 |
+| dog | yolov11l | 44.4 | bicycle, dog, truck | bicycle 0.97, dog 0.94, truck 0.84 |
+| giraffe | yolov8m | 40.9 | giraffe, zebra | giraffe 0.94, zebra 0.94 |
+| giraffe | yolov11m | 43.1 | giraffe, zebra | giraffe 0.92, zebra 0.89 |
+| giraffe | yolov11l | 47.4 | giraffe, zebra | giraffe 0.96, zebra 0.90 |
+| horse | yolov8m | 34.3 | horse, dog, person | horse 0.96, dog 0.94, person 0.92 |
+| horse | yolov11m | 35.9 | horse, dog, person | horse 0.94, dog 0.93, person 0.92 |
+| horse | yolov11l | 43.2 | horse, person, dog | horse 0.94, person 0.93, dog 0.93 |
+| kitchen | yolov8m | 37.6 | orange×5 | orange 0.95, orange 0.94, orange 0.90 |
+| kitchen | yolov11m | 39.8 | orange×4 | orange 0.84, orange 0.84, orange 0.76 |
+| kitchen | yolov11l | 45.1 | orange×5 | orange 0.95, orange 0.92, orange 0.87 |
+| bus | yolov8m | 36.2 | person×4, bus | bus 0.94, person 0.94, person 0.91 |
+| bus | yolov11m | 38.8 | person×4, bus | bus 0.91, person 0.91, person 0.91 |
+| bus | yolov11l | 45.0 | person×4, bus | bus 0.94, person 0.93, person 0.90 |
+
+YOLOv11l found the same objects as YOLOv8m/YOLOv11m on every image, with
+equal or higher confidence than YOLOv11m, for ~8–10 ms more per frame.
+
+### Hailo-8 (vera.local, HailoRT 4.23) — v1.65.1, unchanged in v1.66.0
 
 Models: SCRFD-10G, ArcFace MobileFaceNet, scdepthv3 and YOLO26m (+ONNX
 post-processing). Mono depth runs on hardware but is left disabled in this

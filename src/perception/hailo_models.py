@@ -39,6 +39,18 @@ def _installed_path(family: str, spec: dict) -> Path:
     return _ROOT / "config" / "hailo" / family.lower().replace("-", "") / spec["file"]
 
 
+def _preferred_installed(family: str, spec: dict) -> bool:
+    """True if the preferred model file (not just a fallback candidate) exists."""
+    if _installed_path(family, spec).is_file():
+        return True
+    for candidate in spec["candidates"]:
+        path = Path(candidate)
+        path = path if path.is_absolute() else _ROOT / path
+        if path.name == spec["file"] and path.is_file():
+            return True
+    return False
+
+
 def resolve_model(kind: str, override: str | Path | None = None) -> Path | None:
     """Select only models for this device; explicit paths are never substituted."""
     if override and str(override) != "auto":
@@ -72,7 +84,7 @@ def install_models() -> None:
     if not profile:
         raise RuntimeError("Cannot install models: no supported accelerator detected")
     for kind, spec in profile.items():
-        if resolve_model(kind) is not None:
+        if _preferred_installed(family, spec):
             continue
         destination = _installed_path(family, spec)
         destination.parent.mkdir(parents=True, exist_ok=True)

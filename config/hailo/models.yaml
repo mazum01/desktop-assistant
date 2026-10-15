@@ -37,3 +37,10 @@ profiles:
       url: https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v5.1.0/hailo10h/scdepthv3.hef
       candidates:
         - /usr/share/hailo-models/scdepthv3_h10.hef
+    # YOLOv11l (52.2 hw mAP, ~41 fps) with on-chip NMS; all YOLO options are COCO-80.
+    object_detection:
+      file: yolov11l.hef
+      url: https://hailo-model-zoo.s3.eu-west-2.amazonaws.com/ModelZoo/Compiled/v5.1.0/hailo10h/yolov11l.hef
+      candidates:
+        - /usr/share/hailo-models/yolov11m_h10.hef
+        - /usr/share/hailo-models/yolov8m_h10.hef

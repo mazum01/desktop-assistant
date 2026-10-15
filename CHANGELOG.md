@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.66.0] - 2026-10-15
+### Changed
+- Hailo-10H object detection upgraded from YOLOv8m to YOLOv11l (Model Zoo
+  v5.1.0, 52.2 vs 49.2 COCO mAP on hardware). It is the `object_detection`
+  entry of the Hailo-10H profile in `config/hailo/models.yaml`, installed by
+  `python3 -m src.perception.hailo_models --install`; YOLOv11m/YOLOv8m remain
+  fallbacks. Same 80 COCO classes; ~45 ms/frame vs ~36 ms. Hailo-8 keeps YOLO26m.
+
+### Fixed
+- The model installer skipped downloading a profile's preferred HEF when any
+  fallback candidate existed; it now installs the preferred file unless that
+  exact model is already present.
+
 ## [1.65.1] - 2026-10-15
 ### Fixed
 - Hailo-10H object detection decoded the on-chip NMS buffer with a fixed
