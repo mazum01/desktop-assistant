@@ -681,7 +681,10 @@ class Watchdog:
         healthy, reason = net.is_reachable()
         if healthy:
             if net.consecutive_failures > 0:
-                log.info("network reachability is healthy again")
+                log.info(
+                    "network reachability is healthy again after %d failed check(s)",
+                    net.consecutive_failures,
+                )
                 self._notify("✅ Watchdog recovery: outbound network reachability restored.")
                 net.consecutive_failures = 0
                 net.last_failure_reason = ""
@@ -689,9 +692,11 @@ class Watchdog:
             return
 
         net.consecutive_failures += 1
-        if net.consecutive_failures == net.failure_threshold or reason != net.last_failure_reason:
-            log.warning("network is UNHEALTHY (failure #%d): %s",
-                        net.consecutive_failures, reason)
+        log.warning(
+            "network is UNHEALTHY (failure #%d): %s",
+            net.consecutive_failures,
+            reason,
+        )
         net.last_failure_reason = reason
 
         if net.consecutive_failures < net.failure_threshold:

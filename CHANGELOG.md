@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.64.4] - 2026-10-15
+### Changed
+- Log every failed outbound network reachability check in the watchdog journal
+  and include the failed-check count when connectivity recovers.
+
 ## [1.64.3] - 2026-10-14
 ### Changed
 - Widened all ESP32 display mouth expressions by 12% and increased their

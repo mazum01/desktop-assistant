@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.watchdog.watchdog import ManagedService, Watchdog, _use_user_unit_scope
+from src.watchdog.watchdog import (
+    ManagedService,
+    NetworkMonitor,
+    Watchdog,
+    _use_user_unit_scope,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +237,47 @@ class TestWatchdogCooldown:
                       telegram_notify=False)
         wd._check_one(svc)
         svc.restart.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Watchdog network logging
+# ---------------------------------------------------------------------------
+
+class TestWatchdogNetworkLogging:
+    def test_every_failed_check_is_logged(self, caplog):
+        network = NetworkMonitor(failure_threshold=3, recovery_enabled=False)
+        network.is_reachable = MagicMock(
+            return_value=(False, "no outbound connectivity")
+        )
+        watchdog = Watchdog([], telegram_notify=False, network=network)
+
+        with caplog.at_level(logging.WARNING, logger="watchdog"):
+            for _ in range(4):
+                watchdog._check_network(network)
+
+        failures = [
+            record.getMessage()
+            for record in caplog.records
+            if "network is UNHEALTHY" in record.getMessage()
+        ]
+        assert len(failures) == 4
+        assert "failure #1" in failures[0]
+        assert "failure #4" in failures[-1]
+
+    def test_recovery_logs_failed_check_count(self, caplog):
+        network = NetworkMonitor()
+        network.consecutive_failures = 3
+        network.last_failure_reason = "no outbound connectivity"
+        network.recovery_attempts = 1
+        network.is_reachable = MagicMock(return_value=(True, ""))
+        watchdog = Watchdog([], telegram_notify=False, network=network)
+
+        with caplog.at_level(logging.INFO, logger="watchdog"):
+            watchdog._check_network(network)
+
+        assert "healthy again after 3 failed check(s)" in caplog.text
+        assert network.consecutive_failures == 0
+        assert network.recovery_attempts == 0
 
 
 # ---------------------------------------------------------------------------
