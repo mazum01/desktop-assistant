@@ -22,6 +22,14 @@ BUILD_OUT="$FIRMWARE_DIR/.arduino-build-ble-ota"
 ADDRESS="${VERA_ESP32_BLE_ADDRESS:-AC:EB:E6:23:EC:76}"
 PYTHON="${VERA_PYTHON:-python3}"
 CORE_UNIT="desktop-assistant-core.service"
+SYSTEMCTL=(systemctl)
+KILL=(sudo -n kill)
+
+if systemctl --user is-active --quiet "$CORE_UNIT" &&
+   ! systemctl is-active --quiet "$CORE_UNIT"; then
+    SYSTEMCTL=(systemctl --user)
+    KILL=(kill)
+fi
 
 source "$FIRMWARE_DIR/lib_log.sh"
 
@@ -62,19 +70,20 @@ step_done
 CORE_PID=""
 
 release_ble_link() {
-    CORE_PID="$(systemctl show -p MainPID --value "$CORE_UNIT" 2>/dev/null || true)"
+    CORE_PID="$("${SYSTEMCTL[@]}" show -p MainPID --value "$CORE_UNIT" 2>/dev/null || true)"
     if [[ -z "$CORE_PID" || "$CORE_PID" == "0" ]]; then
         CORE_PID=""
         info "$CORE_UNIT not running — nothing to pause"
         return
     fi
     info "pausing $CORE_UNIT (pid $CORE_PID) with SIGSTOP"
-    vrun sudo -n kill -STOP "$CORE_PID"
+    vrun "${KILL[@]}" -STOP "$CORE_PID"
     info "dropping existing BLE link to $ADDRESS"
     vrun bluetoothctl disconnect "$ADDRESS" >/dev/null 2>&1 || true
     sleep 2
     local state
-    state="$(bluetoothctl info "$ADDRESS" 2>/dev/null | awk -F': ' '/Connected/{print $2}')"
+    state="$(bluetoothctl info "$ADDRESS" 2>/dev/null |
+        awk -F': ' '/Connected/{print $2}' || true)"
     info "device connected state is now: ${state:-unknown}"
 }
 
@@ -82,7 +91,7 @@ restore_ble_link() {
     if [[ -n "$CORE_PID" ]]; then
         printf '\n'
         info "resuming $CORE_UNIT (pid $CORE_PID) with SIGCONT"
-        sudo -n kill -CONT "$CORE_PID" || warn "failed to resume pid $CORE_PID — run: sudo kill -CONT $CORE_PID"
+        "${KILL[@]}" -CONT "$CORE_PID" || warn "failed to resume pid $CORE_PID"
         CORE_PID=""
     fi
 }

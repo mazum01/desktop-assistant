@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.64.3] - 2026-10-14
+### Changed
+- Widened all ESP32 display mouth expressions by 12% and increased their
+  thickness by 15% while preserving each expression's shape and animation.
+### Fixed
+- Kept Arduino CLI's user-library directory under `firmware/` so clean display
+  builds can find the patched NimBLEOta dependency.
+- Made BLE OTA handoff automatically pause and resume either a system-level
+  or user-level core service.
+- Prevented a transient missing BlueZ device record after disconnect from
+  aborting BLE OTA before the uploader starts.
+
 ## [1.64.2] - 2026-10-14
 ### Fixed
 - Corrected `docs/UPDATES.md`, the web dashboard's "unauthenticated" log

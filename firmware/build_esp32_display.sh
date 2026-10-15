@@ -35,6 +35,7 @@ fi
 
 export ARDUINO_DATA_DIR="$FIRMWARE_DIR/.arduino-data"
 export ARDUINO_DOWNLOADS_DIR="$FIRMWARE_DIR/.arduino-downloads"
+export ARDUINO_DIRECTORIES_USER="$FIRMWARE_DIR"
 
 step "Refreshing package index"
 vrun "$CLI" --config-file "$CLI_CONFIG" config dump >/dev/null

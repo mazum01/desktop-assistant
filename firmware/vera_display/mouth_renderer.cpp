@@ -29,6 +29,9 @@ constexpr uint16_t COLOR_BG = RGB565_BLACK;
 constexpr uint16_t COLOR_MOUTH = RGB565_CYAN;  // calm/friendly "face" accent
 constexpr uint16_t COLOR_ERROR = RGB565_RED;
 
+constexpr float MOUTH_WIDTH_SCALE = 1.12f;
+constexpr float MOUTH_HEIGHT_SCALE = 1.15f;
+
 // One redraw per period keeps animation smooth without saturating the
 // SPI bus / burning CPU on a microcontroller shared with BLE handling.
 constexpr unsigned long FRAME_PERIOD_MS = 66;  // ~15 fps
@@ -125,8 +128,8 @@ void compute_frame_rect(const Geometry &geo, unsigned long elapsed_ms, int16_t *
   }
 
   float height_frac = geo.height_frac + geo.bounce_frac * phase;
-  float width = geo.width_frac * static_cast<float>(screen_w);
-  float height = height_frac * static_cast<float>(screen_h);
+  float width = geo.width_frac * MOUTH_WIDTH_SCALE * static_cast<float>(screen_w);
+  float height = height_frac * MOUTH_HEIGHT_SCALE * static_cast<float>(screen_h);
 
   *w = static_cast<int16_t>(width);
   *h = static_cast<int16_t>(height);
