@@ -98,7 +98,7 @@ letterboxing and decoding (mean of 10 runs).
 YOLOv11l found the same objects as YOLOv8m/YOLOv11m on every image, with
 equal or higher confidence than YOLOv11m, for ~8–10 ms more per frame.
 
-### Hailo-8 (vera.local, HailoRT 4.23) — v1.65.1, unchanged in v1.66.0
+### Hailo-8 (vera.local, HailoRT 4.23)
 
 Models: SCRFD-10G, ArcFace MobileFaceNet, scdepthv3 and YOLO26m (+ONNX
 post-processing). Mono depth runs on hardware but is left disabled in this
@@ -125,11 +125,12 @@ host's local config.
     },
     "object_detection": {
       "backend": "hailo",
+      "model": "/home/starter/Code/Desktop Assistant/config/hailo/yolo26m.hef",
       "labels_on_sample": [
         "bus",
         "person"
       ],
-      "ms_per_frame": 75.7,
+      "ms_per_frame": 76.6,
       "ok": true
     },
     "mono_depth": {
@@ -142,7 +143,7 @@ host's local config.
       ],
       "finite": true,
       "std": 0.2214,
-      "ms_per_frame": 9.1
+      "ms_per_frame": 9.0
     }
   },
   "ok": true
