@@ -24,6 +24,7 @@ import atexit
 import logging
 from pathlib import Path
 import threading
+import time
 from typing import Dict, List, Optional
 import weakref
 
@@ -51,6 +52,11 @@ _shared_vdevice = None
 _engines = weakref.WeakSet()
 _runtime_lock = threading.RLock()
 
+# Hailo-10H runs models through the HailoRT server; right after another process
+# releases the device, configure() can transiently fail with HAILO_TIMEOUT.
+_INIT_ATTEMPTS = 3
+_INIT_RETRY_DELAY_S = 3.0
+
 
 def _shutdown() -> None:
     global _shared_vdevice
@@ -71,6 +77,11 @@ def _get_shared_vdevice():
         params.scheduling_algorithm = hp.HailoSchedulingAlgorithm.ROUND_ROBIN
         _shared_vdevice = hp.VDevice(params)
     return _shared_vdevice
+
+
+def _is_timeout(exc: BaseException) -> bool:
+    text = f"{type(exc).__name__} {exc}".upper()
+    return "TIMEOUT" in text
 
 
 class HailoInference:
@@ -110,14 +121,27 @@ class HailoInference:
             self._sim = True
             return
 
-        try:
-            with _runtime_lock:
-                self._vdevice = _get_shared_vdevice()
-                self._init_runtime()
-        except Exception as exc:
-            log.warning("[sim] HailoInference init failed (%s) — sim mode", exc)
-            self._cleanup()
-            self._sim = True
+        for attempt in range(1, _INIT_ATTEMPTS + 1):
+            try:
+                with _runtime_lock:
+                    self._vdevice = _get_shared_vdevice()
+                    self._init_runtime()
+                return
+            except Exception as exc:
+                self._cleanup()
+                self._input_info = []
+                self._output_info = []
+                if _is_timeout(exc) and attempt < _INIT_ATTEMPTS:
+                    delay = _INIT_RETRY_DELAY_S * attempt
+                    log.warning(
+                        "HailoInference init timed out for %s (attempt %d/%d) — retrying in %.0fs",
+                        self._hef_path.name, attempt, _INIT_ATTEMPTS, delay,
+                    )
+                    time.sleep(delay)
+                    continue
+                log.warning("[sim] HailoInference init failed (%s) — sim mode", exc)
+                self._sim = True
+                return
 
     def _init_runtime(self) -> None:
         # Determine if we should use InferModel API (Hailo-10H) or VStreams (Hailo-8).

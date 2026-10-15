@@ -66,6 +66,42 @@ class TestHailoInference:
         assert engine._io_buffers[output.name].dtype == np.float32
         engine.close()
 
+    def test_init_retries_transient_timeout(self, tmp_path):
+        import src.perception.hailo_inference as module
+
+        hef = tmp_path / "model.hef"
+        hef.write_bytes(b"")
+        calls = []
+
+        def flaky_init(self):
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("Failed to configure: HAILO_TIMEOUT(4)")
+
+        with patch.object(module, "_HAILO_AVAILABLE", True), \
+             patch.object(module, "_get_shared_vdevice", return_value=MagicMock()), \
+             patch.object(module.HailoInference, "_init_runtime", flaky_init), \
+             patch.object(module.time, "sleep") as sleep:
+            eng = HailoInference(hef)
+        assert len(calls) == 2
+        sleep.assert_called_once()
+        assert eng.hardware_ready is True
+
+    def test_init_does_not_retry_non_timeout_errors(self, tmp_path):
+        import src.perception.hailo_inference as module
+
+        hef = tmp_path / "model.hef"
+        hef.write_bytes(b"")
+        init = MagicMock(side_effect=RuntimeError("HAILO_INVALID_HEF"))
+        with patch.object(module, "_HAILO_AVAILABLE", True), \
+             patch.object(module, "_get_shared_vdevice", return_value=MagicMock()), \
+             patch.object(module.HailoInference, "_init_runtime", init), \
+             patch.object(module.time, "sleep") as sleep:
+            eng = HailoInference(hef)
+        init.assert_called_once()
+        sleep.assert_not_called()
+        assert eng.hardware_ready is False
+
     def test_sim_mode_when_hef_missing(self):
         eng = HailoInference("/nonexistent/model.hef")
         assert eng.hardware_ready is False

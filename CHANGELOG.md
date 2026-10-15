@@ -4,6 +4,24 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.65.1] - 2026-10-15
+### Fixed
+- Hailo-10H object detection decoded the on-chip NMS buffer with a fixed
+  501-float per-class stride, so only `person` (class 0) was ever reported.
+  HailoRT 5 emits a packed layout (count followed immediately by that class's
+  boxes), and the decoder now walks it sequentially — buses, ties, etc. are
+  detected again.
+- `config/deployment.json` version was stale (1.64.2); synced to VERSION.
+- `HailoInference` retries transient `HAILO_TIMEOUT` errors during model
+  configuration (up to 3 attempts with backoff), which occur on Hailo-10H when
+  another process has just released the HailoRT server.
+
+### Added
+- `scripts/hailo_smoke_test.py`: reproducible on-device check of face
+  detection, ArcFace embedding, object detection and mono depth, emitting a
+  JSON report. Results for both platforms recorded in
+  `docs/HAILO_SMOKE_TESTS.md`.
+
 ## [1.65.0] - 2026-10-15
 ### Added
 - Configurable, automatically probed Hailo-8/Hailo-10H face detection,

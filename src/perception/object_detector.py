@@ -386,9 +386,11 @@ class ObjectDetector:
     ) -> List[Detection]:
         """Decode HAILO_NMS_BY_CLASS tensor from Hailo-10H YOLOv8/v11 models.
 
-        Output tensor shape is ``(40080,)`` float32: 80 classes × 501 floats.
-        Each class chunk starts with a float count K, followed by K boxes of
-        5 floats ``[y1, x1, y2, x2, score]`` normalized to [0.0, 1.0] of the 640×640 input.
+        Output tensor is a ``(40080,)`` float32 buffer (80 classes × max 100
+        boxes). It is *packed*: for each class in order, a float count K is
+        followed immediately by K boxes of 5 floats ``[y1, x1, y2, x2, score]``
+        (normalized to the 640×640 input), then the next class's count. There
+        is no fixed per-class stride.
         """
         # Find the NMS output tensor
         raw = None
@@ -416,14 +418,18 @@ class ObjectDetector:
             pad_left = (_TARGET_SIZE - new_w) // 2
 
         detections: List[Detection] = []
+        offset = 0
         for cls_id in range(min(len(COCO_CLASSES), 80)):
-            offset = cls_id * 501
+            if offset >= raw.size:
+                break
             count = int(raw[offset])
+            offset += 1
             if count <= 0:
                 continue
-            for i in range(min(count, 100)):
-                box_offset = offset + 1 + i * 5
-                y1n, x1n, y2n, x2n, score = raw[box_offset : box_offset + 5]
+            count = min(count, 100, (raw.size - offset) // 5)
+            boxes = raw[offset : offset + count * 5].reshape(count, 5)
+            offset += count * 5
+            for y1n, x1n, y2n, x2n, score in boxes:
                 score = float(score)
                 if score < self._conf_threshold:
                     continue
