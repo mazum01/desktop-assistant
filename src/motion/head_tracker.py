@@ -106,6 +106,7 @@ class _MinJerkPlanner:
 class HeadTrackerConfig:
     # Frame geometry
     frame_width: int = 1280
+    frame_height: int = 720
     fov_degrees: float = 100.0
 
     # Dead zone — fraction of frame width ignored before tracking activates
@@ -117,6 +118,7 @@ class HeadTrackerConfig:
 
     # Direction flip if servo mount reverses left/right
     invert_pan: bool = False
+    invert_tilt: bool = False
 
     # Kalman filter for face centroid
     kalman_r: float = 400.0      # measurement noise variance (px²)
@@ -367,7 +369,9 @@ class HeadTracker:
 
         # Step 1: Kalman filter — smooth detection noise and estimate velocity
         smooth_cx, face_vel = self._kalman.update(face_cx, dt)
-        pred_cx = self._kalman.predict(cfg.lookahead_s) or smooth_cx
+        pred_cx = self._kalman.predict(cfg.lookahead_s)
+        if pred_cx is None:
+            pred_cx = smooth_cx
         self._dbg_face_smoothed = float(smooth_cx)
         self._dbg_face_vel = float(face_vel)
 
@@ -385,7 +389,9 @@ class HeadTracker:
 
         # Step 3: Replan only when the target has shifted enough to matter.
         # This prevents constant replanning from residual Kalman noise.
-        if abs(desired_target - self._planner.target) > cfg.replan_threshold_deg:
+        target_shift = abs(desired_target - self._planner.target)
+        if (target_shift > cfg.replan_threshold_deg
+                or (self._planner.done and abs(desired_target - self._pos) > 0.05)):
             dist = abs(desired_target - self._pos)
             T = min(cfg.move_base_s + cfg.move_scale_s_per_deg * dist, cfg.move_max_s)
             self._planner.plan(self._pos, self._vel, desired_target, T)

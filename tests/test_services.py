@@ -209,6 +209,114 @@ def test_motion_service_pan_to_ignores_bad_payload():
 
 # ── AV ───────────────────────────────────────────────────────────────────
 
+@pytest.mark.parametrize("pan_channel", [0, 1])
+def test_motion_pan_only_does_not_initialize_tilt(pan_channel):
+    from src.services.motion_service import MotionService
+    from src.core.bus import MessageBus
+    from unittest.mock import patch
+
+    pan = _FakeServo(90)
+    pan._kit = MagicMock()
+    svc = MotionService(
+        bus=MessageBus(), controller=pan,
+        soft_min_deg=70, soft_max_deg=110, range_deg=180,
+        pan_channel=pan_channel,
+    )
+    with patch("src.motion.servo_controller.ServoController") as controller:
+        try:
+            svc.start()
+            controller.assert_not_called()
+            assert svc.get_status()["tilt_available"] is False
+            svc._on_center("", {"override_quiet": True})
+            assert svc.bus.last("motion.error") is None
+        finally:
+            svc.stop()
+
+
+def test_motion_tilt_and_pan_use_independent_targets():
+    bus = MessageBus()
+    pan, tilt = _FakeServo(90), _FakeServo(90)
+    svc = MotionService(bus=bus, controller=pan, tilt_controller=tilt,
+                        range_deg=180, soft_min_deg=70, soft_max_deg=110)
+    svc.on_start()
+    try:
+        bus.publish("motion.pan_to", {"angle": 70})
+        bus.publish("motion.tilt_to", {"angle": 110, "move_time_ms": 100})
+        time.sleep(0.4)
+        assert pan.position == pytest.approx(70)
+        assert tilt.position == pytest.approx(110)
+        assert bus.last("motion.position")["tilt_angle"] == pytest.approx(110)
+        bus.publish("motion.relax", None)
+        assert pan.relaxed and tilt.relaxed
+        assert svc._target_angle is None and svc._tilt_target is None
+    finally:
+        svc.on_stop()
+
+
+def test_motion_channel_changes_validate_release_and_persist_event():
+    bus = MessageBus()
+    pan, tilt = MagicMock(position=90), MagicMock(position=90)
+    svc = MotionService(bus=bus, controller=pan, tilt_controller=tilt)
+    svc._target_angle = svc._tilt_target = 110
+    for channels in [(0, 0), (-1, 1), (0, 16), (True, 1)]:
+        with pytest.raises(ValueError):
+            svc.set_channels(*channels)
+    pan.relax.assert_not_called()
+    svc.set_channels(2, 3)
+    pan.relax.assert_called_once()
+    tilt.relax.assert_called_once()
+    pan.set_channel.assert_called_once_with(2)
+    tilt.set_channel.assert_called_once_with(3)
+    assert svc._target_angle is None and svc._tilt_target is None
+    assert bus.last("motion.channels_changed") == {"pan_channel": 2, "tilt_channel": 3}
+
+
+def test_motion_new_limits_clamp_pending_targets_and_reject_invalid():
+    bus = MessageBus()
+    pan, tilt = _FakeServo(90), _FakeServo(90)
+    svc = MotionService(bus=bus, controller=pan, tilt_controller=tilt,
+                        range_deg=180, soft_min_deg=70, soft_max_deg=110)
+    svc._target_angle = svc._tilt_target = 110
+    svc._on_set_limits("", {"min_deg": 80, "max_deg": 100})
+    svc._on_tilt_limits("", {"min_deg": 80, "max_deg": 100})
+    assert svc._target_angle == svc._tilt_target == 100
+    svc._on_set_limits("", {"min_deg": 0, "max_deg": 360})
+    svc._on_tilt_limits("", {"min_deg": 100, "max_deg": 90})
+    assert svc.get_status()["soft_max_deg"] == 100
+    assert svc.get_status()["tilt_max_deg"] == 100
+
+
+def test_motion_channel_hardware_failure_disables_both_axes():
+    bus = MessageBus()
+    pan, tilt = MagicMock(position=90), MagicMock(position=90)
+    tilt.set_channel.side_effect = [OSError("I2C failed"), None]
+    svc = MotionService(bus=bus, controller=pan, tilt_controller=tilt)
+    with pytest.raises(OSError):
+        svc.set_channels(1, 0)
+    assert not svc.servo_enabled
+    assert svc.get_status()["pan_channel"] == 0
+    assert svc.get_status()["tilt_channel"] == 1
+    assert bus.last("motion.enabled_changed") == {"enabled": False}
+
+
+def test_tilt_quiet_hours_disabled_and_bad_commands_do_not_move():
+    bus = MessageBus()
+    qh = MagicMock()
+    qh.is_quiet.return_value = True
+    svc = MotionService(bus=bus, controller=_FakeServo(90),
+                        tilt_controller=_FakeServo(90), quiet_hours=qh)
+    svc._on_tilt_to("", {"angle": 110})
+    assert svc._tilt_target is None
+    svc._on_tilt_to("", {"angle": 110, "override_quiet": True})
+    assert svc._tilt_target == 110
+    svc._tilt_target = None
+    for angle in [None, "bad", float("nan"), float("inf")]:
+        svc._on_tilt_to("", {"angle": angle, "override_quiet": True})
+        assert svc._tilt_target is None
+    svc._servo_enabled = False
+    svc._on_tilt_to("", {"angle": 110, "override_quiet": True})
+    assert svc._tilt_target is None
+
 def _make_av(bus, announce_on_start=False):
     audio = MagicMock(hardware_ready=True)
     tts = MagicMock(hardware_ready=True)

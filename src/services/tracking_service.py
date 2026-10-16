@@ -37,6 +37,7 @@ av.spoke            ``{"text": str, "ts": float}``
 Topics published
 ----------------
 motion.pan_to       ``{angle: float, move_time_ms: float}``
+motion.tilt_to      Same payload, only when tilt hardware is configured/ready
 tracking.face_tracking_changed   ``{"enabled": bool}``
 tracking.random_motion_changed   ``{"enabled": bool}``
 tracking.person_seek_changed     ``{"enabled": bool}``
@@ -48,6 +49,7 @@ import logging
 import math
 import threading
 import time
+from dataclasses import replace
 from typing import Optional
 
 from src.core.bus import MessageBus
@@ -62,6 +64,8 @@ _UPDATE_INTERVAL = 1.0 / _UPDATE_HZ
 # Maximum age (seconds) of a person detection hint before it is discarded.
 # At 2 fps object detection this equals ~4 missed frames.
 _PERSON_SEEK_STALE_S = 2.0
+_FACE_STALE_S = 2.0
+_TILT_MAX_OFFSET_DEG = 20.0
 
 
 class TrackingService(Service):
@@ -94,13 +98,15 @@ class TrackingService(Service):
         self._speaking_until: float = 0.0  # monotonic timestamp; >now means DA is speaking
         self._tracker: Optional[HeadTracker] = None
         self._current_face_cx: Optional[float] = None
+        self._current_face_cy: Optional[float] = None
+        self._face_ts: float = 0.0
         self._current_servo_angle: Optional[float] = None
+        self._current_tilt_angle: Optional[float] = None
+        self._tilt_tracker: Optional[HeadTracker] = None
         # Person-seek state: pixel x-centre from latest "person" detection
         self._person_cx: Optional[float] = None
         self._person_cx_ts: float = 0.0
         self._lock = threading.Lock()
-        self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
         self._unsubs: list = []
 
     @property
@@ -115,7 +121,7 @@ class TrackingService(Service):
     def person_seek_enabled(self) -> bool:
         return self._person_seek_enabled
 
-    def update_frame_width(self, frame_width: int) -> None:
+    def update_frame_width(self, frame_width: int, frame_height: Optional[int] = None) -> None:
         """Update the horizontal pixel width used for tracking math.
 
         Called when camera rotation changes so the tracker re-centres
@@ -123,9 +129,22 @@ class TrackingService(Service):
         """
         with self._lock:
             self._tracker_cfg.frame_width = frame_width
+            if frame_height is not None:
+                self._tracker_cfg.frame_height = frame_height
             if self._tracker is not None:
                 self._tracker._cfg.frame_width = frame_width
+            self._update_tilt_geometry()
         log.info("TrackingService: frame_width updated to %d", frame_width)
+
+    def _update_tilt_geometry(self) -> None:
+        if self._tilt_tracker is not None:
+            cfg = self._tracker_cfg
+            vertical_fov = math.degrees(2 * math.atan(
+                math.tan(math.radians(cfg.fov_degrees) / 2)
+                * cfg.frame_height / cfg.frame_width
+            ))
+            self._tilt_tracker._cfg.frame_width = cfg.frame_height
+            self._tilt_tracker._cfg.fov_degrees = vertical_fov
 
     # ── Tunable params API (called by web_service.py) ────────────────────
 
@@ -146,7 +165,10 @@ class TrackingService(Service):
         """Update a single tracker parameter at runtime. Returns True on success."""
         with self._lock:
             if self._tracker is not None:
-                return self._tracker.update_config(name, value)
+                applied = self._tracker.update_config(name, value)
+                if applied and self._tilt_tracker is not None:
+                    self._tilt_tracker.update_config(name, value)
+                return applied
             # Tracker not yet started — mutate the config directly.
             if name not in TUNABLE_FIELDS:
                 return False
@@ -163,13 +185,15 @@ class TrackingService(Service):
             return
 
         self._tracker = HeadTracker(
-            initial_servo_angle=180.0,
+            initial_servo_angle=self._tracker_cfg.servo_center,
             config=self._tracker_cfg,
         )
 
         self._unsubs.append(self.bus.subscribe("perception.faces", self._on_faces))
         self._unsubs.append(self.bus.subscribe("perception.objects", self._on_objects))
         self._unsubs.append(self.bus.subscribe("motion.position", self._on_position))
+        self._unsubs.append(self.bus.subscribe("motion.limits_changed", self._on_motion_limits))
+        self._unsubs.append(self.bus.subscribe("motion.settings", self._on_motion_settings))
         self._unsubs.append(self.bus.subscribe("tracking.set_face_tracking", self._on_set_face_tracking))
         self._unsubs.append(self.bus.subscribe("tracking.set_random_motion", self._on_set_random_motion))
         self._unsubs.append(self.bus.subscribe("tracking.set_person_seek", self._on_set_person_seek))
@@ -179,13 +203,9 @@ class TrackingService(Service):
         self._unsubs.append(self.bus.subscribe("tracking.apply_preset", self._on_apply_preset))
         self._unsubs.append(self.bus.subscribe("tracking.reset_params", self._on_reset_params))
 
-        self._stop_event.clear()
-        self._thread = threading.Thread(
-            target=self._loop,
-            name="head-tracker",
-            daemon=True,
-        )
-        self._thread.start()
+        settings = self.bus.last("motion.settings")
+        if isinstance(settings, dict):
+            self._on_motion_settings("motion.settings", settings)
         log.info(
             "TrackingService started (%d Hz, enabled=%s, face_tracking=%s, random_motion=%s, person_seek=%s)",
             _UPDATE_HZ, self._enabled, self._face_tracking_enabled,
@@ -193,10 +213,6 @@ class TrackingService(Service):
         )
 
     def on_stop(self) -> None:
-        self._stop_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=2.0)
-            self._thread = None
         for unsub in self._unsubs:
             try:
                 unsub()
@@ -218,7 +234,45 @@ class TrackingService(Service):
         if not new_state:
             with self._lock:
                 self._current_face_cx = None
+                self._current_face_cy = None
         self.bus.publish("tracking.face_tracking_changed", {"enabled": new_state})
+
+    def _on_motion_limits(self, _topic, payload) -> None:
+        with self._lock:
+            self._tracker_cfg.servo_min = payload["min_deg"]
+            self._tracker_cfg.servo_max = payload["max_deg"]
+            self._tracker_cfg.servo_center = (payload["min_deg"] + payload["max_deg"]) / 2
+
+    def _on_motion_settings(self, _topic, payload) -> None:
+        if not isinstance(payload, dict):
+            return
+        with self._lock:
+            if not payload.get("tilt_available", False):
+                self._tilt_tracker = None
+                return
+            try:
+                mn, mx = float(payload["tilt_min_deg"]), float(payload["tilt_max_deg"])
+                if not (math.isfinite(mn) and math.isfinite(mx) and 0 <= mn < mx <= 180):
+                    raise ValueError("Tilt limits must fit 0-180 degrees")
+            except (KeyError, TypeError, ValueError):
+                log.error("Invalid tilt capability settings: %r", payload)
+                self._tilt_tracker = None
+                return
+            center = (mn + mx) / 2
+            cfg = replace(
+                self._tracker_cfg,
+                servo_min=max(mn, center - _TILT_MAX_OFFSET_DEG),
+                servo_max=min(mx, center + _TILT_MAX_OFFSET_DEG),
+                servo_center=center,
+                invert_pan=self._tracker_cfg.invert_tilt,
+                saccade_amplitude_deg=0,
+            )
+            initial = self._current_tilt_angle
+            self._tilt_tracker = HeadTracker(
+                initial_servo_angle=center if initial is None else initial,
+                config=cfg,
+            )
+            self._update_tilt_geometry()
 
     def _on_set_random_motion(self, _topic, payload) -> None:
         if not isinstance(payload, dict) or "enabled" not in payload:
@@ -248,18 +302,29 @@ class TrackingService(Service):
         if not self._face_tracking_enabled:
             with self._lock:
                 self._current_face_cx = None
+                self._current_face_cy = None
             return
         if not isinstance(payload, dict):
             return
         faces = payload.get("faces") or []
+        width, height = payload.get("frame_w"), payload.get("frame_h")
+        if (isinstance(width, int) and isinstance(height, int)
+                and width > 0 and height > 0
+                and (width, height) != (
+                    self._tracker_cfg.frame_width, self._tracker_cfg.frame_height,
+                )):
+            self.update_frame_width(width, height)
         if faces:
             primary = max(faces, key=lambda f: f.get("confidence", 0.0))
-            cx = primary.get("centroid", [None, None])[0]
+            cx, cy = primary.get("centroid", [None, None])
             with self._lock:
                 self._current_face_cx = float(cx) if cx is not None else None
+                self._current_face_cy = float(cy) if cy is not None else None
+                self._face_ts = time.monotonic()
         else:
             with self._lock:
                 self._current_face_cx = None
+                self._current_face_cy = None
 
     def _on_objects(self, _topic, payload) -> None:
         """Update person-seek hint from object detection."""
@@ -284,13 +349,15 @@ class TrackingService(Service):
             return
         cx = (bbox[0] + bbox[2]) / 2.0
         with self._lock:
-            self._person_cx = cx
+            self._person_cx = cx * self._tracker_cfg.frame_width / frame_w
             self._person_cx_ts = time.monotonic()
 
     def _on_position(self, _topic, payload) -> None:
         if isinstance(payload, dict) and "angle" in payload:
             with self._lock:
                 self._current_servo_angle = float(payload["angle"])
+                tilt = payload.get("tilt_angle")
+                self._current_tilt_angle = float(tilt) if tilt is not None else None
 
     def _on_speaking_started(self, _topic, _payload) -> None:
         """Mark the head as 'speaking' until av.spoke arrives (max 60 s safety cap)."""
@@ -331,6 +398,8 @@ class TrackingService(Service):
             for k, v in PRESETS[name].items():
                 if self._tracker is not None:
                     self._tracker.update_config(k, v)
+                    if self._tilt_tracker is not None:
+                        self._tilt_tracker.update_config(k, v)
                 else:
                     setattr(self._tracker_cfg, k, v)
         log.info("TrackingService: applied preset %r", name)
@@ -342,7 +411,10 @@ class TrackingService(Service):
 
     # ── Tracking loop ────────────────────────────────────────────────────
 
-    def _loop(self) -> None:
+    def _run_loop(self) -> None:
+        if not self._enabled:
+            self._stop_event.wait()
+            return
         last_t = time.monotonic()
         while not self._stop_event.is_set():
             now = time.monotonic()
@@ -353,13 +425,17 @@ class TrackingService(Service):
                 # When face tracking is disabled, pass None so the tracker
                 # goes to idle mode. When random motion is also disabled,
                 # skip publishing pan_to entirely so the head stays put.
-                face_cx = self._current_face_cx if self._face_tracking_enabled else None
+                fresh_face = self._face_tracking_enabled and now - self._face_ts < _FACE_STALE_S
+                face_cx = self._current_face_cx if fresh_face else None
+                face_cy = self._current_face_cy if fresh_face else None
                 servo_angle = self._current_servo_angle
+                tilt_angle = self._current_tilt_angle
                 # Person-seek: use person centroid as a soft target only
                 # when no face is currently locked and the hint is fresh.
                 person_cx = None
                 if (
                     face_cx is None
+                    and self._face_tracking_enabled
                     and self._person_seek_enabled
                     and self._person_cx is not None
                     and (now - self._person_cx_ts) < _PERSON_SEEK_STALE_S
@@ -403,6 +479,20 @@ class TrackingService(Service):
             if effective_cx is not None:
                 pan_payload["override_quiet"] = True
             self.bus.publish("motion.pan_to", pan_payload)
+            with self._lock:
+                if (self._tilt_tracker is not None and face_cy is not None
+                        and tilt_angle is not None):
+                    tilt_target = self._tilt_tracker.update(
+                        face_cx=face_cy, dt=dt, current_servo_angle=tilt_angle,
+                    )
+                else:
+                    tilt_target = None
+            if tilt_target is not None:
+                self.bus.publish("motion.tilt_to", {
+                    "angle": round(tilt_target, 2),
+                    "move_time_ms": round(move_ms, 1),
+                    "override_quiet": True,
+                })
 
             elapsed = time.monotonic() - now
             sleep_t = max(0.001, _UPDATE_INTERVAL - elapsed)

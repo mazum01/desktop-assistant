@@ -95,11 +95,12 @@ face_recognition:
   min_absence_s: 30
   min_face_px: 80
 head_tracking:
-  dead_zone_frac: 0.06
+  dead_zone_frac: 0.02
   enabled: true
   face_tracking_enabled: true
   fov_degrees: 100.0
-  invert_pan: false
+  invert_pan: true
+  invert_tilt: false
   kalman_q_pos: 1.0
   kalman_q_vel: 50.0
   kalman_r: 400.0
@@ -175,10 +176,16 @@ room_detection:
   skip_when_faces: true
 servo:
   enabled: true
-  pulse_max_us: 2950
-  pulse_min_us: 10
-  soft_max_deg: 215
-  soft_min_deg: 135
+  pan_channel: 1
+  pulse_max_us: 2500
+  pulse_min_us: 500
+  range_deg: 180
+  soft_max_deg: 110
+  soft_min_deg: 70
+  tilt_channel: 0
+  tilt_enabled: true
+  tilt_max_deg: 110
+  tilt_min_deg: 70
 telegram:
   bot_token: ''
   chat_id: ''

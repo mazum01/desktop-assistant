@@ -122,6 +122,18 @@ def main() -> int:
     _soft_max_deg = float(_rt.get("servo", {}).get(
         "soft_max_deg", _servo_cfg.get("soft_max_deg", 215.0)
     ))
+    _servo_range = float(_servo_cfg.get("range_deg", 360))
+    if not 0 <= _soft_min_deg < _soft_max_deg <= _servo_range:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Stored pan limits do not fit configured servo range; using base limits"
+        )
+        _soft_min_deg = float(_servo_cfg["soft_min_deg"])
+        _soft_max_deg = float(_servo_cfg["soft_max_deg"])
+    _pan_channel = _rt.get("servo", {}).get("pan_channel", _servo_cfg.get("pan_channel", 0))
+    _tilt_channel = _rt.get("servo", {}).get("tilt_channel", _servo_cfg.get("tilt_channel", 1))
+    _tilt_min = float(_rt.get("servo", {}).get("tilt_min_deg", _servo_cfg.get("tilt_min_deg", 70)))
+    _tilt_max = float(_rt.get("servo", {}).get("tilt_max_deg", _servo_cfg.get("tilt_max_deg", 110)))
 
     from src.motion.head_tracker import HeadTrackerConfig
     from src.services.perception_service import PerceptionConfig
@@ -167,12 +179,16 @@ def main() -> int:
     _ht_cfg_raw = _cfg.get("head_tracking", {})
     _speaking_motion_cfg = _ht_cfg_raw.get("speaking_motion", {})
     _tracker_cfg = HeadTrackerConfig(
+        servo_min=_soft_min_deg, servo_max=_soft_max_deg,
+        servo_center=(_soft_min_deg + _soft_max_deg) / 2,
         frame_width=_tracking_frame_width(_cam_width, _cam_height, _camera_rotation_deg),
+        frame_height=_tracking_frame_width(_cam_height, _cam_width, _camera_rotation_deg),
         fov_degrees=float(_ht_cfg_raw.get("fov_degrees", 100.0)),
         dead_zone_frac=float(_ht_cfg_raw.get("dead_zone_frac", 0.06)),
         tracking_gain=float(_ht_cfg_raw.get("tracking_gain", 0.92)),
         max_speed_deg_s=float(_ht_cfg_raw.get("max_speed_deg_s", 250.0)),
         invert_pan=bool(_ht_cfg_raw.get("invert_pan", False)),
+        invert_tilt=bool(_ht_cfg_raw.get("invert_tilt", False)),
         kalman_r=float(_ht_cfg_raw.get("kalman_r", 400.0)),
         kalman_q_pos=float(_ht_cfg_raw.get("kalman_q_pos", 1.0)),
         kalman_q_vel=float(_ht_cfg_raw.get("kalman_q_vel", 50.0)),
@@ -231,6 +247,8 @@ def main() -> int:
             "enabled": _servo_enabled,
             "soft_min_deg": _soft_min_deg,
             "soft_max_deg": _soft_max_deg,
+            "pan_channel": _pan_channel, "tilt_channel": _tilt_channel,
+            "tilt_min_deg": _tilt_min, "tilt_max_deg": _tilt_max,
         },
         "head_tracking": {
             "face_tracking_enabled": _face_tracking_enabled,
@@ -273,6 +291,15 @@ def main() -> int:
             _rt_state["head_tracking"]["face_tracking_enabled"] = bool(payload["enabled"])
             _save_runtime(_rt_state)
 
+    def _on_channels_changed(_t, payload):
+        _rt_state["servo"].update(payload)
+        _save_runtime(_rt_state)
+
+    def _on_tilt_limits_changed(_t, payload):
+        _rt_state["servo"].update(
+            tilt_min_deg=payload["min_deg"], tilt_max_deg=payload["max_deg"])
+        _save_runtime(_rt_state)
+
     def _on_random_motion_changed(_t, payload):
         if isinstance(payload, dict) and "enabled" in payload:
             _rt_state["head_tracking"]["random_motion_enabled"] = bool(payload["enabled"])
@@ -304,9 +331,13 @@ def main() -> int:
             _save_runtime(_rt_state)
             # Keep tracker frame_width in sync so tracking stays accurate
             # when the user changes camera rotation at runtime.
-            new_fw = _tracking_frame_width(_cam_width, _cam_height, new_rot)
+            cam_w = _rt_state["camera"].get("width", _cam_width)
+            cam_h = _rt_state["camera"].get("height", _cam_height)
+            new_fw = _tracking_frame_width(cam_w, cam_h, new_rot)
             if tracking_svc is not None:
-                tracking_svc.update_frame_width(new_fw)
+                tracking_svc.update_frame_width(
+                    new_fw, _tracking_frame_width(cam_h, cam_w, new_rot),
+                )
 
     def _on_camera2_rotation_changed(_t, payload):
         if isinstance(payload, dict) and "rotation_deg" in payload:
@@ -323,7 +354,9 @@ def main() -> int:
             current_rot = _rt_state["camera"].get("rotation_deg", 0)
             new_fw = _tracking_frame_width(new_w, new_h, current_rot)
             if tracking_svc is not None:
-                tracking_svc.update_frame_width(new_fw)
+                tracking_svc.update_frame_width(
+                    new_fw, _tracking_frame_width(new_h, new_w, current_rot),
+                )
 
     def _on_camera_stream_resolution_changed(_t, payload):
         if isinstance(payload, dict) and "width" in payload and "height" in payload:
@@ -333,6 +366,8 @@ def main() -> int:
 
     bus.subscribe("motion.enabled_changed",         _on_servo_changed)
     bus.subscribe("motion.limits_changed",          _on_limits_changed)
+    bus.subscribe("motion.channels_changed",        _on_channels_changed)
+    bus.subscribe("motion.tilt_limits_changed",     _on_tilt_limits_changed)
     bus.subscribe("tracking.face_tracking_changed", _on_face_tracking_changed)
     bus.subscribe("tracking.random_motion_changed", _on_random_motion_changed)
     bus.subscribe("tracking.person_seek_changed",   _on_person_seek_changed)
@@ -448,6 +483,9 @@ def main() -> int:
         soft_max_deg=_soft_max_deg,
         pulse_min_us=int(_servo_cfg.get("pulse_min_us", 500)),
         pulse_max_us=int(_servo_cfg.get("pulse_max_us", 2500)),
+        pan_channel=_pan_channel, tilt_channel=_tilt_channel,
+        range_deg=_servo_range, tilt_min_deg=_tilt_min, tilt_max_deg=_tilt_max,
+        tilt_enabled=bool(_servo_cfg.get("tilt_enabled", False)),
     )
 
     # Second camera (optional — gracefully absent if not configured or detected)
@@ -699,12 +737,21 @@ def main() -> int:
     def _rpc_motion_get_status(_msg):
         return {
             "ok": True,
-            "status": {
-                "servo_enabled": motion_svc.servo_enabled,
-                "soft_min_deg":  motion_svc.soft_min_deg,
-                "soft_max_deg":  motion_svc.soft_max_deg,
-            },
+            "status": motion_svc.get_status(),
         }
+
+    def _rpc_motion_set_channels(msg):
+        try:
+            motion_svc.set_channels(msg["pan_channel"], msg["tilt_channel"])
+        except (KeyError, ValueError, TypeError) as exc:
+            return {"ok": False, "error": str(exc)}
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Servo channel configuration failed")
+            return {"ok": False, "error": "Servo hardware configuration failed"}
+        return {"ok": True, "status": motion_svc.get_status()}
+
+    ipc.register_rpc("motion.set_channels", _rpc_motion_set_channels)
 
     def _rpc_tracking_get_status(_msg):
         return {

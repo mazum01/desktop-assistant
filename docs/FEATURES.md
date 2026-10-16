@@ -10,6 +10,16 @@ This document tracks which features are accessible via each interface:
 
 ## Vision & Tracking
 
+Face centering uses the detection frame's actual width and height. Pan and
+optional tilt share the same smooth tracking controller. Tilt commands stay
+within both the configured tilt travel limits and 20 degrees either side of
+their midpoint; tilt holds position when the face is lost or tracking is off.
+Set `servo.tilt_enabled: true` only on hardware with a connected tilt servo
+(the default when omitted is false). PWM hardware cannot detect whether a
+servo is physically plugged in. `head_tracking.invert_pan` and `invert_tilt`
+allow for reversed mounts. The centering dead zone is configured by
+`head_tracking.dead_zone_frac` (0.02 means 2% of the frame dimension).
+
 | Feature | CLI | Web | OpenClaw |
 |---------|-----|-----|----------|
 | Face detection | ✅ (auto) | ✅ (camera feed overlay) | ✅ describe-scene |

@@ -498,6 +498,8 @@ class PerceptionService(Service):
                     "count": len(face_list),
                     "faces": face_list,
                     "backend": self._detector.backend,
+                    "frame_w": frame.shape[1],
+                    "frame_h": frame.shape[0],
                     "ts": time.time(),
                 },
             )

@@ -160,3 +160,23 @@ def test_debug_state_updates_on_tracking(tracker):
     assert dbg["mode"] == "tracking"
     assert dbg["face_raw"] == 900
     assert dbg["face_smoothed"] is not None
+
+
+@pytest.mark.parametrize("offset", [-10.0, -5.0, 5.0, 10.0])
+@pytest.mark.parametrize("invert", [False, True])
+def test_low_gain_centers_face_inside_dead_zone(offset, invert):
+    cfg = HeadTrackerConfig(
+        frame_width=1920, servo_min=70, servo_max=110, servo_center=90,
+        tracking_gain=0.28, dead_zone_frac=0.02,
+        replan_threshold_deg=2, saccade_amplitude_deg=0,
+        invert_pan=invert,
+    )
+    tracker = HeadTracker(90, cfg)
+    position = 90.0
+    direction = -1 if invert else 1
+    for _ in range(300):
+        error = offset - direction * (position - 90)
+        cx = 960 + error / cfg.fov_degrees * cfg.frame_width
+        target = tracker.update(cx, 0.05, position)
+        position += (target - position) * 0.5
+    assert abs(offset - direction * (position - 90)) <= 2.1

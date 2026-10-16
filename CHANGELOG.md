@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.69.0] - 2026-10-16
+### Added
+- Center faces vertically on explicitly configured tilt hardware, bounded by
+  hardware travel limits and 20 degrees from center; retain pan-only operation.
+### Fixed
+- Finish small low-gain face-centering corrections instead of stalling at the
+  trajectory replan threshold, and tighten the configured centering dead zone.
+- Correct the reversed pan tracking direction for the installed servo mount.
+- Track against actual detection-frame dimensions, discard stale face targets,
+  and keep the tracking worker under the service lifecycle.
+
 ## [1.68.5] - 2026-10-16
 ### Fixed
 - Use one service-owned worker for privacy, dense stereo, and monocular depth

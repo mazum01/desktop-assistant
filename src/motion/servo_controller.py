@@ -1,5 +1,5 @@
 """
-Pan servo controller for the DS3218 servo on a SparkFun Pi Servo pHAT
+Servo controller for a SparkFun Pi Servo pHAT
 (PCA9685 I²C PWM driver).
 
 Uses Adafruit ServoKit with busio.I2C(board.SCL, board.SDA) — the
@@ -23,11 +23,16 @@ which in turn produces the full 0°–360° logical head rotation.
 Logical pan range: 1°–360° mapped linearly onto kit angles 0°–180°.
 Dead-zone wrap rule enforced: movement from higher→lower logical angle
 always traverses backward; never crosses the 360°/1° boundary.
+
+Direct-drive 180-degree servos use ``range_deg=180``: commanded angles map
+directly to kit angles, with independent channels and soft limits. The legacy
+360-degree gear mapping remains available for existing DS3218 installations.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -56,7 +61,7 @@ _STEP_INTERVAL_SEC         = 0.02   # 50 Hz update rate
 @dataclass
 class ServoConfig:
     """Runtime-overridable servo parameters."""
-    channel: int = 15                    # PCA9685 channel (pan servo on ch 15)
+    channel: int = 0
     i2c_address: int = 0x40             # Servo pHAT I²C address
     pulse_min_us: int = _PULSE_MIN_US
     pulse_max_us: int = _PULSE_MAX_US
@@ -65,6 +70,17 @@ class ServoConfig:
     speed_deg_per_sec: float = _DEFAULT_SPEED_DEG_PER_SEC
     soft_min_deg: float = _LOGICAL_MIN
     soft_max_deg: float = _LOGICAL_MAX
+    range_deg: float = _LOGICAL_MAX
+
+    def __post_init__(self) -> None:
+        if type(self.channel) is not int or not 0 <= self.channel <= 15:
+            raise ValueError("Servo channel must be an integer from 0 to 15")
+        if not math.isfinite(self.range_deg) or not 0 < self.range_deg <= 360:
+            raise ValueError("Servo range must be in (0, 360]")
+        if not 0 <= self.soft_min_deg < self.soft_max_deg <= self.range_deg:
+            raise ValueError("Servo limits must fit the configured range")
+        if not 0 < self.pulse_min_us < self.pulse_max_us <= 2500:
+            raise ValueError("Servo pulse range must be within 1-2500 microseconds")
 
 
 class ServoController:
@@ -73,10 +89,20 @@ class ServoController:
     Falls back to simulation mode when hardware is unavailable.
     """
 
-    def __init__(self, config: Optional[ServoConfig] = None) -> None:
+    def __init__(self, config: Optional[ServoConfig] = None, kit=None,
+                 initialize_hardware: bool = True) -> None:
         self._cfg = config or ServoConfig()
-        self._current_logical: float = 180.0   # start centred
-        self._kit = None
+        self._current_logical: float = self._clamp_logical(self._cfg.range_deg / 2)
+        self._position_initialized = False
+        self._kit = kit
+        if kit is not None:
+            kit.servo[self._cfg.channel].set_pulse_width_range(
+                self._cfg.pulse_min_us, self._cfg.pulse_max_us
+            )
+            return
+        if not initialize_hardware:
+            log.warning("Servo channel %d in simulation mode", self._cfg.channel)
+            return
 
         try:
             import board
@@ -90,10 +116,9 @@ class ServoController:
                 address=self._cfg.i2c_address,
                 frequency=50,
             )
-            for i in range(16):
-                kit.servo[i].set_pulse_width_range(
-                    self._cfg.pulse_min_us, self._cfg.pulse_max_us
-                )
+            kit.servo[self._cfg.channel].set_pulse_width_range(
+                self._cfg.pulse_min_us, self._cfg.pulse_max_us
+            )
             self._kit = kit
             log.info(
                 "ServoController ready — PCA9685 addr=0x%02X channel=%d "
@@ -148,18 +173,35 @@ class ServoController:
         self._write(logical_deg)
         self._current_logical = logical_deg
 
+    def set_channel(self, channel: int) -> None:
+        if type(channel) is not int or not 0 <= channel <= 15:
+            raise ValueError("Servo channel must be an integer from 0 to 15")
+        if self._kit is not None:
+            self._kit.servo[channel].set_pulse_width_range(
+                self._cfg.pulse_min_us, self._cfg.pulse_max_us
+            )
+        self._cfg.channel = channel
+        self._position_initialized = False
+
     def relax(self) -> None:
         """Release servo hold (de-energise)."""
         if self._kit is not None:
             self._kit.servo[self._cfg.channel].angle = None
+        self._position_initialized = False
+
+    @property
+    def position_initialized(self) -> bool:
+        """Whether a target has been written since initialization or release."""
+        return self._position_initialized
 
     def stop(self) -> None:
         log.info("Servo stop at %.1f°", self._current_logical)
 
     def set_limits(self, min_deg: float, max_deg: float) -> None:
         """Update soft travel limits at runtime. Values are clamped to 1–360."""
-        min_deg = max(1.0, min(359.0, float(min_deg)))
-        max_deg = max(min_deg + 1.0, min(360.0, float(max_deg)))
+        if not (math.isfinite(min_deg) and math.isfinite(max_deg)
+                and 0 <= min_deg < max_deg <= self._cfg.range_deg):
+            raise ValueError("Invalid servo travel limits")
         self._cfg.soft_min_deg = min_deg
         self._cfg.soft_max_deg = max_deg
         log.info("Servo travel limits updated: %.1f°–%.1f°", min_deg, max_deg)
@@ -207,13 +249,18 @@ class ServoController:
     # ------------------------------------------------------------------
 
     def _write(self, logical_deg: float) -> None:
-        kit_angle = self.logical_to_kit_angle(logical_deg)
+        logical_deg = self._clamp_logical(logical_deg)
+        kit_angle = (self.logical_to_kit_angle(logical_deg)
+                     if self._cfg.range_deg == 360
+                     else logical_deg * 180.0 / self._cfg.range_deg)
         if self._kit is not None:
             self._kit.servo[self._cfg.channel].angle = kit_angle
         else:
             log.debug("[sim] logical=%.2f° kit_angle=%.2f°", logical_deg, kit_angle)
         self._current_logical = logical_deg
+        self._position_initialized = True
 
     def _clamp_logical(self, deg: float) -> float:
+        if not math.isfinite(deg):
+            raise ValueError("Servo angle must be finite")
         return max(self._cfg.soft_min_deg, min(self._cfg.soft_max_deg, deg))
-

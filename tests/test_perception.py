@@ -235,6 +235,8 @@ class TestPerceptionService:
             time.sleep(0.05)
             assert len(received) >= 1
             assert received[0]["count"] == 0
+            assert received[0]["frame_w"] == 640
+            assert received[0]["frame_h"] == 480
         finally:
             svc.stop()
 
@@ -251,6 +253,8 @@ class TestPerceptionService:
             assert received[0]["count"] == 1
             assert received[0]["faces"][0]["confidence"] == 0.9
             assert received[0]["faces"][0]["centroid"] == [60, 70]
+            assert received[0]["frame_w"] == 640
+            assert received[0]["frame_h"] == 480
         finally:
             svc.stop()
 
