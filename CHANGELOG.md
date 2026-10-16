@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.68.3] - 2026-10-16
+### Added
+- Allow the standalone TMP117 probe to select its I²C bus and device address
+  without starting VERA services.
+
+### Fixed
+- Report the selected I²C bus number rather than its file descriptor when a
+  TMP117 read fails, and close the bus if device verification fails.
+
 ## [1.67.1] - 2026-10-15
 ### Fixed
 - Keep object descriptions and confidence labels inside stream images, including

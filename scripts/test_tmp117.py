@@ -11,18 +11,36 @@ Usage:
 
 import sys
 import time
+import argparse
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
 
 from src.thermal.tmp117 import TMP117, TMP117Error
 
 
+def _parse_address(value: str) -> int:
+    try:
+        return int(value, 0)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("address must be an integer (for example 0x48)") from exc
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Probe a TMP117 directly over I²C without starting VERA services."
+    )
+    parser.add_argument("--bus", type=int, default=1, help="I²C bus number (default: 1)")
+    parser.add_argument(
+        "--address", type=_parse_address, default=0x48,
+        help="I²C address (decimal or hex; default: 0x48)",
+    )
+    args = parser.parse_args()
+
     print("TMP117 bring-up test")
-    print("Connecting to TMP117 on I²C bus 1, address 0x48 ...")
+    print(f"Connecting to TMP117 on I²C bus {args.bus}, address 0x{args.address:02X} ...")
 
     try:
-        sensor = TMP117()
+        sensor = TMP117(bus=args.bus, address=args.address)
     except TMP117Error as e:
         print(f"ERROR: {e}")
         return 1

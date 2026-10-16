@@ -31,9 +31,14 @@ class TMP117:
     """Minimal driver for the SparkFun Qwiic TMP117 Breakout."""
 
     def __init__(self, bus: int = 1, address: int = 0x48) -> None:
+        self._bus_number = bus
         self._bus = smbus2.SMBus(bus)
         self._addr = address
-        self._verify_device()
+        try:
+            self._verify_device()
+        except TMP117Error:
+            self._bus.close()
+            raise
 
     # ------------------------------------------------------------------
     # Public API
@@ -59,13 +64,7 @@ class TMP117:
     # ------------------------------------------------------------------
 
     def _verify_device(self) -> None:
-        try:
-            device_id = self._read_register(_REG_DEVICE_ID)
-        except OSError as exc:
-            raise TMP117Error(
-                f"TMP117 not found at I²C address 0x{self._addr:02X} "
-                f"on bus {self._bus.fd}"
-            ) from exc
+        device_id = self._read_register(_REG_DEVICE_ID)
         if device_id != _DEVICE_ID_VALUE:
             raise TMP117Error(
                 f"Unexpected device ID 0x{device_id:04X} "
@@ -73,5 +72,11 @@ class TMP117:
             )
 
     def _read_register(self, register: int) -> int:
-        data = self._bus.read_i2c_block_data(self._addr, register, 2)
+        try:
+            data = self._bus.read_i2c_block_data(self._addr, register, 2)
+        except OSError as exc:
+            raise TMP117Error(
+                f"Could not read I²C address 0x{self._addr:02X} "
+                f"on bus {self._bus_number}: {exc}"
+            ) from exc
         return (data[0] << 8) | data[1]
