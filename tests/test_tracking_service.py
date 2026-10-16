@@ -10,6 +10,9 @@ import pytest
 
 from src.services.tracking_service import TrackingService, _PERSON_SEEK_STALE_S
 from src.motion.head_tracker import HeadTrackerConfig
+from src.motion.visual_servo import PlantModel
+from src.core.bus import MessageBus
+import numpy as np
 
 
 def make_tracking_svc(**kwargs) -> tuple[TrackingService, MagicMock]:
@@ -208,19 +211,29 @@ def enable_tilt(svc, mn=70, mx=110):
 def run_one_tick(svc):
     svc._stop_event.clear()
     with patch(
-        "src.services.tracking_service.time.sleep",
+        "src.services.tracking_service.time.monotonic", return_value=time.monotonic(),
+    ), patch.object(
+        svc._stop_event, "wait",
         side_effect=lambda _: svc._stop_event.set(),
     ):
         svc._run_loop()
 
 
+def feed_face(svc, x=400, y=100, **metadata):
+    svc._motion_settings.update(servo_enabled=True)
+    svc._motion_settings.update(hardware_ready=True)
+    for _ in range(3):
+        svc._on_faces(None, {
+            "faces": [{"centroid": [x, y], "bbox": [x-30, y-30, x+30, y+30],
+                       "confidence": 0.9}],
+            "captured_mono": time.monotonic(), **metadata,
+        })
+
+
 def test_face_geometry_uses_detection_dimensions():
     svc, _ = make_tracking_svc()
     enable_tilt(svc)
-    svc._on_faces(None, {
-        "frame_w": 1080, "frame_h": 1920,
-        "faces": [{"centroid": [540, 200], "confidence": 0.9}],
-    })
+    feed_face(svc, 540, 200, frame_w=1080, frame_h=1920)
     assert svc._tracker_cfg.frame_width == 1080
     assert svc._tracker_cfg.frame_height == 1920
     assert svc._tilt_tracker._cfg.frame_width == 1920
@@ -277,7 +290,7 @@ def test_loop_only_publishes_tilt_when_available_and_face_visible(has_tilt):
     if has_tilt:
         enable_tilt(svc)
     svc._on_position(None, {"angle": 90, "tilt_angle": 90 if has_tilt else None})
-    svc._on_faces(None, {"faces": [{"centroid": [320, 100]}]})
+    feed_face(svc)
     run_one_tick(svc)
     topics = [c.args[0] for c in bus.publish.call_args_list]
     assert "motion.pan_to" in topics
@@ -291,13 +304,15 @@ def test_tilt_holds_without_current_face_or_hardware(reason):
     svc._tracker.update.return_value = 90
     enable_tilt(svc)
     svc._on_position(None, {"angle": 90, "tilt_angle": 90})
-    svc._on_faces(None, {"faces": [{"centroid": [320, 100]}]})
+    feed_face(svc)
     if reason == "disabled":
         svc._on_set_face_tracking(None, {"enabled": False})
     elif reason == "lost":
-        svc._on_faces(None, {"faces": []})
+        svc._on_faces(None, {"faces": [], "captured_mono": time.monotonic()})
     elif reason == "stale":
         svc._face_ts -= 3
+        point, stamp, arrived, count = svc._observation
+        svc._observation = (point, stamp - 3, arrived, count)
     elif reason == "missing_feedback":
         svc._on_position(None, {"angle": 90})
     else:
@@ -316,3 +331,84 @@ def test_tracking_lifecycle_has_one_owned_worker():
             svc.stop()
             assert not worker.is_alive()
             assert threads.call_count == cycle + 1
+
+
+@pytest.mark.parametrize("tilt", [False, True])
+def test_calibration_requires_announcements_and_saves_only_validated_model(tmp_path, tilt):
+    bus = MessageBus()
+    path = tmp_path / "plant.json"
+    svc = TrackingService(bus=bus, visual_config={"calibration_path": str(path)})
+    settings = {
+        "servo_enabled": True, "hardware_ready": True, "tilt_available": tilt,
+        "tilt_min_deg": 70, "tilt_max_deg": 110,
+        "pan_channel": 1, "tilt_channel": 0,
+    }
+    svc._motion_settings = settings
+    svc._current_servo_angle = 90
+    svc._current_tilt_angle = 90 if tilt else None
+    origin = np.full(2 if tilt else 1, 90.0)
+    positions = origin.copy()
+    matrix = np.array([[0.01, 0.001], [0.001, -0.015]]) if tilt else np.array([[0.01], [0]])
+    limits = np.array([[70, 110]] * len(origin))
+    now = 10.0
+    observation = (np.array([0.005, 0.005]), now, now, 1)
+    svc._begin_calibration(now, observation, positions, limits)
+    assert not path.exists()
+    assert bus.last("motion.calibration_lock") == {"enabled": True}
+
+    def move(axis, payload):
+        assert bus.last("av.spoke") is not None
+        assert payload["source"] == "calibration"
+        assert payload["profile"] == "smoothstep"
+        positions[axis] = payload["angle"]
+        assert 70 <= positions[axis] <= 110
+
+    bus.subscribe("motion.pan_to", lambda _, p: move(0, p))
+    if tilt:
+        bus.subscribe("motion.tilt_to", lambda _, p: move(1, p))
+    phases = set()
+    for _ in range(1000):
+        state = svc._calibration
+        if state is None:
+            break
+        phases.add(state["phase"])
+        if state["phase"] in ("speech", "validation_speech"):
+            bus.publish("av.spoke", {"request_id": state["token"]})
+        now += 0.25
+        point = np.array([0.005, 0.005]) + matrix @ (positions - origin)
+        observation = (point, now, now, 1)
+        svc._calibration_tick(now, observation, positions.copy(), limits)
+    assert "validate" in phases
+    assert svc._calibration is None
+    assert bus.last("tracking.autotune_done")["ok"] is True
+    fitted = PlantModel.load(path, svc._signature())
+    np.testing.assert_allclose(fitted.matrix(), matrix, atol=1e-10)
+    assert bus.last("motion.calibration_lock") == {"enabled": False}
+
+
+@pytest.mark.parametrize("failure", ["lost", "stale", "cancel", "limits", "timeout"])
+def test_calibration_failure_preserves_previous_model_and_releases_motion(tmp_path, failure):
+    svc, bus = make_tracking_svc(visual_config={"calibration_path": str(tmp_path / "model.json")})
+    path = tmp_path / "model.json"
+    path.write_text("previous model")
+    svc._motion_settings = {"servo_enabled": True, "hardware_ready": True}
+    positions = np.array([90.0])
+    limits = np.array([[70.0, 110.0]])
+    obs = (np.array([0.1, 0.1]), 10.0, 10.0, 1)
+    svc._begin_calibration(10, obs, positions, limits)
+    assert svc._calibration is not None
+    now = 10.1
+    if failure == "lost":
+        obs = None
+    elif failure == "stale":
+        now = 12
+    elif failure == "cancel":
+        svc._on_cancel_calibration(None, {})
+    elif failure == "limits":
+        svc._motion_settings["soft_min_deg"] = 80
+    elif failure == "timeout":
+        now = 100
+    svc._calibration_tick(now, obs, positions, limits)
+    assert svc._calibration is None
+    assert path.read_text() == "previous model"
+    assert call("motion.calibration_lock", {"enabled": False}) in bus.publish.call_args_list

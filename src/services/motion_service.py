@@ -98,6 +98,8 @@ class MotionService(Service):
         self._target_angle: Optional[float] = None
         self._target_speed: float = _LOGICAL_HARD_MAX   # deg/s
         self._target_lock = threading.RLock()
+        self._profiles: dict = {}
+        self._calibration_until = 0.0
         self._servo_stop = threading.Event()
         self._servo_thread: Optional[threading.Thread] = None
 
@@ -120,6 +122,7 @@ class MotionService(Service):
             "pan_channel": self._pan_channel, "tilt_channel": self._tilt_channel,
             "tilt_min_deg": self._tilt_min, "tilt_max_deg": self._tilt_max,
             "range_deg": self._range_deg,
+            "pulse_min_us": self._pulse_min_us, "pulse_max_us": self._pulse_max_us,
             "hardware_ready": self.hardware_ready,
             "tilt_available": bool(
                 self._tilt_enabled and self._tilt_controller is not None
@@ -140,6 +143,7 @@ class MotionService(Service):
             if self._controller is None or self._tilt_controller is None:
                 raise ValueError("Servo controllers are not initialized")
             self._target_angle = self._tilt_target = None
+            self._profiles.clear()
             try:
                 for controller in (self._controller, self._tilt_controller):
                     controller.relax()
@@ -195,6 +199,7 @@ class MotionService(Service):
         self._unsubs.append(self.bus.subscribe("motion.stop",        self._on_stop_cmd))
         self._unsubs.append(self.bus.subscribe("motion.set_enabled", self._on_set_enabled))
         self._unsubs.append(self.bus.subscribe("motion.set_limits",  self._on_set_limits))
+        self._unsubs.append(self.bus.subscribe("motion.calibration_lock", self._on_calibration_lock))
 
         self._servo_stop.clear()
         self._servo_thread = threading.Thread(
@@ -220,6 +225,15 @@ class MotionService(Service):
         if controller is None or target is None:
             return
         current = float(controller.position)
+        profile = self._profiles.get(id(controller))
+        if profile is not None:
+            started, duration, initial, final = profile
+            fraction = min(1.0, max(0.0, (time.monotonic() - started) / duration))
+            eased = fraction ** 3 * (10 - 15 * fraction + 6 * fraction ** 2)
+            controller._write(initial + (final - initial) * eased)
+            if fraction >= 1:
+                self._profiles.pop(id(controller), None)
+            return
         delta = target - current
         if abs(delta) > _POSITION_DEAD_ZONE:
             step = math.copysign(min(abs(delta), speed * _SERVO_STEP_INTERVAL), delta)
@@ -241,6 +255,7 @@ class MotionService(Service):
                     except Exception:
                         log.exception("servo _write failed")
                         self._target_angle = self._tilt_target = None
+                        self._profiles.clear()
                         self.bus.publish("motion.error", {"error": "Servo write failed"})
 
                 # Publish position ~10 Hz (every _POS_PUBLISH_EVERY_N steps)
@@ -322,6 +337,7 @@ class MotionService(Service):
             return
         with self._target_lock:
             self._soft_min, self._soft_max = mn, mx
+            self._profiles.clear()
             self._apply_limits_to_controller()
             if self._target_angle is not None:
                 self._target_angle = max(mn, min(mx, self._target_angle))
@@ -339,6 +355,9 @@ class MotionService(Service):
 
     def _on_pan_to(self, _topic: str, payload) -> None:
         """Non-blocking: validate and store target; servo loop does the stepping."""
+        if (time.monotonic() < self._calibration_until
+                and not (isinstance(payload, dict) and payload.get("source") == "calibration")):
+            return
         if not self._servo_enabled:
             log.debug("MotionService: pan_to suppressed -- servo disabled")
             return
@@ -386,10 +405,14 @@ class MotionService(Service):
         with self._target_lock:
             self._target_angle = angle
             self._target_speed = speed
+            self._set_profile(self._controller, angle, payload)
 
         self.bus.publish("motion.moved", {"from": before, "to": angle, "direction": direction})
 
     def _on_tilt_to(self, _topic: str, payload) -> None:
+        if (time.monotonic() < self._calibration_until
+                and not (isinstance(payload, dict) and payload.get("source") == "calibration")):
+            return
         if self._tilt_controller is None:
             log.error("motion.tilt_to rejected: tilt hardware unavailable")
             self.bus.publish("motion.error", {"error": "Tilt hardware unavailable"})
@@ -413,6 +436,26 @@ class MotionService(Service):
         with self._target_lock:
             self._tilt_target = angle
             self._tilt_speed = max(abs(angle - self._tilt_controller.position) * 1000 / duration, 0.001)
+            self._set_profile(self._tilt_controller, angle, payload)
+
+    def _set_profile(self, controller, target, payload):
+        self._profiles.pop(id(controller), None)
+        if payload.get("profile") == "smoothstep":
+            duration = float(payload["move_time_ms"]) / 1000
+            self._profiles[id(controller)] = (
+                time.monotonic(), duration, float(controller.position), target,
+            )
+
+    def _on_calibration_lock(self, _topic, payload):
+        if not isinstance(payload, dict) or type(payload.get("enabled")) is not bool:
+            log.error("Invalid calibration lock request: %r", payload)
+            return
+        with self._target_lock:
+            was_locked = time.monotonic() < self._calibration_until
+            self._calibration_until = time.monotonic() + 60 if payload["enabled"] else 0
+            if not was_locked or not payload["enabled"]:
+                self._target_angle = self._tilt_target = None
+                self._profiles.clear()
 
     def _on_center(self, _topic: str, payload) -> None:
         override = isinstance(payload, dict) and payload.get("override_quiet", False)
@@ -438,6 +481,7 @@ class MotionService(Service):
                 raise ValueError("Tilt limits must be within 0-180")
             with self._target_lock:
                 self._tilt_min, self._tilt_max = mn, mx
+                self._profiles.clear()
                 if self._tilt_controller:
                     self._tilt_controller._cfg.soft_min_deg = mn
                     self._tilt_controller._cfg.soft_max_deg = mx
@@ -452,6 +496,7 @@ class MotionService(Service):
         try:
             with self._target_lock:
                 self._target_angle = self._tilt_target = None
+                self._profiles.clear()
                 self._controller.relax()
                 if self._tilt_controller:
                     self._tilt_controller.relax()
@@ -461,6 +506,7 @@ class MotionService(Service):
     def _on_stop_cmd(self, _topic: str, _payload) -> None:
         with self._target_lock:
             self._target_angle = self._tilt_target = None
+            self._profiles.clear()
         try:
             self._controller.stop()
             if self._tilt_controller:

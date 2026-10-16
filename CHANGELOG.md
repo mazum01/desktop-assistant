@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.70.0] - 2026-10-16
+### Added
+- Fresh-observation visual face servoing with stable target association,
+  noise-aware centering hysteresis, bounded quintic motion, and optional tilt.
+- Plant calibration through the existing Auto-tune controls: announced repeated
+  probes, expiring motion ownership, held-out model checks, and live centering
+  validation before atomically saving hardware-specific calibration.
+### Fixed
+- Stop repeatedly correcting against old detections, chasing ambiguous saturated
+  multi-face results, and adding decorative motion during face centering.
+- Carry atomic camera-frame availability timestamps through perception so stale
+  and pre-settling images cannot drive additional corrections.
+
 ## [1.69.0] - 2026-10-16
 ### Added
 - Center faces vertically on explicitly configured tilt hardware, bounded by

@@ -10,15 +10,55 @@ This document tracks which features are accessible via each interface:
 
 ## Vision & Tracking
 
-Face centering uses the detection frame's actual width and height. Pan and
-optional tilt share the same smooth tracking controller. Tilt commands stay
+Face centering uses timestamped, actual-size detection frames. A visual controller
+locks onto one spatially/identity-consistent face over several fresh frames.
+It makes at most one bounded correction per new post-settling observation,
+using a damped inverse camera/servo model. Old images are never repeatedly
+treated as new feedback. Ambiguous saturated-confidence multi-face results,
+implausible jumps, and stale results hold position rather than select another
+face. This does not repair an unreliable face detector.
+
+Pan and optional tilt execute quintic motion profiles with configured
+speed/acceleration bounds. Tilt commands stay
 within both the configured tilt travel limits and 20 degrees either side of
 their midpoint; tilt holds position when the face is lost or tracking is off.
 Set `servo.tilt_enabled: true` only on hardware with a connected tilt servo
 (the default when omitted is false). PWM hardware cannot detect whether a
 servo is physically plugged in. `head_tracking.invert_pan` and `invert_tilt`
-allow for reversed mounts. The centering dead zone is configured by
-`head_tracking.dead_zone_frac` (0.02 means 2% of the frame dimension).
+allow for reversed mounts in the uncalibrated model. Active centering settings
+live under `head_tracking.visual_servo`; legacy tuning sliders/presets affect
+idle/person-seek motion, not the face controller. Decorative saccades and speech
+offsets do not perturb active centering.
+
+### Automatic tracking calibration
+
+Use **Calibrate visual tracking** in the existing tracking-tuning panel.
+Enable tracking, keep exactly one face still and visible, and manually position
+the head so both available axes have at least the configured probe-step margin.
+The procedure takes several minutes, announces and waits for speech completion
+before each move, and tests repeated small positive/negative steps per axis.
+It fits normalized image displacement per commanded servo degree, including
+cross-axis coupling on tilt-capable hardware. An expiring motion lease prevents
+other movement publishers from interfering; disable, stop, and relax remain
+available. Cancel stops motion and discards the candidate model.
+
+Calibration rejects excessive noise, inconsistent repeated/held-out responses,
+unobservable axes, changed geometry/limits, stale or lost targets, and timeouts.
+It then checks live centering within 2% of each controllable image dimension for
+multiple observations before saving. Unreachable targets fail validation rather
+than widen limits. A failed attempt leaves the previous file untouched.
+Successful calibration is stored atomically in ignored
+`config/tracking_calibration.json`; camera size/rotation, PWM calibration,
+channels, range, tilt capability, or limit changes invalidate it. Back up or
+remove that file to revert to the conservative geometry-based model.
+
+`motion.position` is commanded position, not shaft feedback. Camera timestamps
+record frame availability from the capture thread, not hardware exposure time.
+The fitted response budget includes command execution, observed settling, and
+detection cadence; it is deliberately conservative, not a precision motor-delay
+measurement. Independent target motion cannot always be distinguished from
+camera motion, so calibration requires a stationary person. No online learning
+or automatic unannounced calibration movements run at startup.
 
 | Feature | CLI | Web | OpenClaw |
 |---------|-----|-----|----------|
@@ -29,7 +69,7 @@ allow for reversed mounts. The centering dead zone is configured by
 | Object detection (Hailo COCO) | ✅ `vera object-detection` | ✅ Settings panel | ✅ object-detection |
 | Scene description (LLM) | ✅ `vera vision describe` | ❌ | ✅ describe-scene |
 | Privacy / nudity detection | ✅ `vera privacy` | ✅ Settings panel | ✅ privacy |
-| Camera pan (servo) | ✅ `vera servo pan` | ✅ Servo slider | ✅ pan-camera |
+| Pan/tilt servos and channel settings | ✅ `vera servo pan/tilt/channels` | ✅ Servo controls | ✅ pan-camera |
 | Camera snapshot | ✅ `vera snapshot` | ✅ Camera feed | ✅ grab-frame |
 | Camera resolution (cam1) | ✅ `vera camera resolution` | ❌ | ❌ |
 | Camera rotation | ✅ `vera camera rotation` | ❌ | ❌ |

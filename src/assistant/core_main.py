@@ -639,6 +639,7 @@ def main() -> int:
         speaking_motion_enabled=bool(_speaking_motion_cfg.get("enabled", True)),
         speaking_motion_amplitude_deg=float(_speaking_motion_cfg.get("amplitude_deg", 1.5)),
         speaking_motion_freq_hz=float(_speaking_motion_cfg.get("freq_hz", 2.5)),
+        visual_config=_ht_cfg_raw.get("visual_servo", {}),
     )
     services.append(tracking_svc)
 

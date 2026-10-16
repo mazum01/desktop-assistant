@@ -30,6 +30,7 @@ src/perception/scrfd_decode/*.egg-info/
 config/room_state.json
 config/quiet_hours.json
 config/runtime_state.yaml
+config/tracking_calibration.json
 config/iot_devices.json
 config/secrets.yaml
 config/face_gallery/

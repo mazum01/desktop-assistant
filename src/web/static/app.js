@@ -3886,12 +3886,12 @@ function _onTrackingEvent(topic, payload) {
     while (_trackingSamples.length && _trackingSamples[0].t < cutoff) _trackingSamples.shift();
   } else if (topic === "tracking.autotune_progress") {
     const s = el("autotune-status");
-    if (s) s.textContent = `[${payload.stage}] ${payload.msg || ""} (${(payload.t_remaining || 0).toFixed(1)}s left)`;
+    if (s) s.textContent = `[${payload.stage || payload.phase}] ${payload.msg || payload.message || ""}`;
   } else if (topic === "tracking.autotune_done") {
     const s = el("autotune-status");
     if (s) {
       if (payload.ok) {
-        s.textContent = `✓ done — gain=${(payload.tracking_gain||0).toFixed(2)} R=${Math.round(payload.kalman_r||0)} lag=${(payload.lag_s||0).toFixed(2)}s overshoot=${(payload.overshoot_deg||0).toFixed(1)}°`;
+        s.textContent = payload.message || "Calibration saved";
       } else {
         s.textContent = `✗ ${payload.reason || "failed"}`;
       }

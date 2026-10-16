@@ -73,6 +73,20 @@ from src.vision.camera import Camera, CameraConfig  # noqa: E402
 # ---------------------------------------------------------------------------
 
 class TestCameraConfig:
+    def test_observation_preserves_availability_timestamp_with_frame_copy(self):
+        import threading
+        cam = Camera.__new__(Camera)
+        cam._sim = False
+        cam._running = True
+        cam._frame_lock = threading.Lock()
+        cam._latest_array = np.zeros((10, 20, 3), dtype=np.uint8)
+        cam._latest_frame_monotonic = 123.0
+        frame, stamp = cam.capture_observation()
+        assert stamp == 123.0
+        assert frame.shape == (10, 20, 3)
+        frame[:] = 1
+        assert not cam._latest_array.any()
+
     def test_defaults(self):
         cfg = CameraConfig()
         assert cfg.index == 0

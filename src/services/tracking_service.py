@@ -1,12 +1,10 @@
 """
 Head tracking service.
 
-Subscribes to ``perception.faces``, selects the primary face (highest
-confidence), feeds it to ``HeadTracker``, and publishes ``motion.pan_to``
-at 20 Hz so the servo follows with natural spring-damper motion.
-
-When no face is visible for more than *idle_timeout_s* the tracker enters
-idle mode and produces slow, human-like gaze drifts.
+Associates a stable face across timestamped observations and uses bounded
+visual feedback after each completed move. Never feeds a cached detection
+back into the controller as a new measurement. Optional plant calibration
+fits repeated small probes and must pass live centering before persistence.
 
 **Person seek** — when object detection is enabled and a ``person`` bounding
 box appears on ``perception.objects`` but no face has been acquired yet, the
@@ -15,16 +13,15 @@ the head pan toward the person so SCRFD can pick up their face.  Once a face
 locks on, face tracking takes over immediately; person seek is inactive while
 a face is tracked.
 
-**Speaking motion** — while DA is talking (``av.speaking_started`` …
-``av.spoke``) the head nods with a gentle sinusoidal offset so the robot
-looks more alive.  Amplitude and frequency are config-tunable under
-``head_tracking.speaking_motion_*``.
+Legacy ``HeadTracker`` parameters control idle/person-seek motion only.
+Decorative speaking motion is restricted to idle mode, never face centering.
 
 Topics subscribed
 -----------------
 perception.faces    ``{faces: [{centroid, confidence, …}], …}``
 perception.objects  ``{objects: [{label, bbox:[x1,y1,x2,y2], …}], frame_w, …}``
-motion.position     ``{angle: float}``  — servo position feedback
+motion.position     Last commanded angles, not measured shaft feedback
+tracking.start_autotune / cancel_autotune   Explicit calibration controls
 tracking.set_face_tracking   ``{"enabled": bool}``
 tracking.set_random_motion   ``{"enabled": bool}``
 tracking.set_person_seek     ``{"enabled": bool}``
@@ -38,6 +35,8 @@ Topics published
 ----------------
 motion.pan_to       ``{angle: float, move_time_ms: float}``
 motion.tilt_to      Same payload, only when tilt hardware is configured/ready
+motion.calibration_lock     Expiring ownership lease during announced probes
+tracking.debug / autotune_progress / autotune_done
 tracking.face_tracking_changed   ``{"enabled": bool}``
 tracking.random_motion_changed   ``{"enabled": bool}``
 tracking.person_seek_changed     ``{"enabled": bool}``
@@ -50,11 +49,16 @@ import math
 import threading
 import time
 from dataclasses import replace
+from pathlib import Path
 from typing import Optional
 
 from src.core.bus import MessageBus
 from src.core.service import Service
 from src.motion.head_tracker import PRESETS, TUNABLE_FIELDS, HeadTracker, HeadTrackerConfig
+from src.motion.visual_servo import (
+    FaceLock, PlantModel, VisualController, VisualServoConfig, identify_plant,
+)
+import numpy as np
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +88,7 @@ class TrackingService(Service):
         speaking_motion_enabled: bool = True,
         speaking_motion_amplitude_deg: float = 1.5,
         speaking_motion_freq_hz: float = 2.5,
+        visual_config: Optional[dict] = None,
     ) -> None:
         super().__init__(bus=bus)
         self._tracker_cfg = config or HeadTrackerConfig()
@@ -108,6 +113,18 @@ class TrackingService(Service):
         self._person_cx_ts: float = 0.0
         self._lock = threading.Lock()
         self._unsubs: list = []
+        self._visual_cfg = VisualServoConfig(**(visual_config or {}))
+        self._face_lock = FaceLock(self._visual_cfg)
+        self._visual = VisualController(self._visual_cfg)
+        self._observation = None
+        self._motion_settings: dict = {}
+        self._rotation = 0
+        self._plant: Optional[PlantModel] = None
+        self._calibration_signature = None
+        self._calibration = None
+        self._calibration_requested = False
+        self._cancel_calibration = False
+        self._faces_present = False
 
     @property
     def face_tracking_enabled(self) -> bool:
@@ -131,6 +148,8 @@ class TrackingService(Service):
             self._tracker_cfg.frame_width = frame_width
             if frame_height is not None:
                 self._tracker_cfg.frame_height = frame_height
+            self._face_lock.reset()
+            self._observation = None
             if self._tracker is not None:
                 self._tracker._cfg.frame_width = frame_width
             self._update_tilt_geometry()
@@ -159,6 +178,8 @@ class TrackingService(Service):
             "params": params,
             "ranges": TUNABLE_FIELDS,
             "presets": list(PRESETS.keys()),
+            "controller": "fresh-frame visual servo; legacy parameters apply to idle motion",
+            "calibrated": self._plant is not None,
         }
 
     def set_tunable_param(self, name: str, value: float) -> bool:
@@ -202,6 +223,8 @@ class TrackingService(Service):
         self._unsubs.append(self.bus.subscribe("tracking.save_params", self._on_save_params))
         self._unsubs.append(self.bus.subscribe("tracking.apply_preset", self._on_apply_preset))
         self._unsubs.append(self.bus.subscribe("tracking.reset_params", self._on_reset_params))
+        self._unsubs.append(self.bus.subscribe("tracking.start_autotune", self._on_start_calibration))
+        self._unsubs.append(self.bus.subscribe("tracking.cancel_autotune", self._on_cancel_calibration))
 
         settings = self.bus.last("motion.settings")
         if isinstance(settings, dict):
@@ -213,6 +236,8 @@ class TrackingService(Service):
         )
 
     def on_stop(self) -> None:
+        if self._calibration is not None:
+            self._finish_calibration("Service stopping; calibration discarded")
         for unsub in self._unsubs:
             try:
                 unsub()
@@ -235,6 +260,9 @@ class TrackingService(Service):
             with self._lock:
                 self._current_face_cx = None
                 self._current_face_cy = None
+                self._face_lock.reset()
+                self._observation = None
+            self.bus.publish("motion.stop", {})
         self.bus.publish("tracking.face_tracking_changed", {"enabled": new_state})
 
     def _on_motion_limits(self, _topic, payload) -> None:
@@ -247,6 +275,7 @@ class TrackingService(Service):
         if not isinstance(payload, dict):
             return
         with self._lock:
+            self._motion_settings = dict(payload)
             if not payload.get("tilt_available", False):
                 self._tilt_tracker = None
                 return
@@ -307,6 +336,7 @@ class TrackingService(Service):
         if not isinstance(payload, dict):
             return
         faces = payload.get("faces") or []
+        self._faces_present = bool(faces)
         width, height = payload.get("frame_w"), payload.get("frame_h")
         if (isinstance(width, int) and isinstance(height, int)
                 and width > 0 and height > 0
@@ -314,17 +344,27 @@ class TrackingService(Service):
                     self._tracker_cfg.frame_width, self._tracker_cfg.frame_height,
                 )):
             self.update_frame_width(width, height)
-        if faces:
-            primary = max(faces, key=lambda f: f.get("confidence", 0.0))
-            cx, cy = primary.get("centroid", [None, None])
-            with self._lock:
-                self._current_face_cx = float(cx) if cx is not None else None
-                self._current_face_cy = float(cy) if cy is not None else None
-                self._face_ts = time.monotonic()
-        else:
-            with self._lock:
-                self._current_face_cx = None
-                self._current_face_cy = None
+        now = time.monotonic()
+        stamp = payload.get("captured_mono")
+        if not isinstance(stamp, (int, float)) or not math.isfinite(stamp):
+            log.warning("Tracking holds: face result has no valid acquisition timestamp")
+            return
+        with self._lock:
+            selected = self._face_lock.select(
+                faces, self._tracker_cfg.frame_width, self._tracker_cfg.frame_height,
+                stamp, now,
+            )
+            self._rotation = payload.get("rotation_deg", 0)
+            if selected is not None:
+                face, point = selected
+                cx, cy = face["centroid"]
+                self._current_face_cx = float(cx)
+                self._current_face_cy = float(cy)
+                self._face_ts = now
+                self._observation = (point.copy(), float(stamp), now, len(faces))
+            elif stamp > (self._observation[1] if self._observation else -math.inf):
+                self._current_face_cx = self._current_face_cy = None
+                self._observation = None
 
     def _on_objects(self, _topic, payload) -> None:
         """Update person-seek hint from object detection."""
@@ -415,88 +455,349 @@ class TrackingService(Service):
         if not self._enabled:
             self._stop_event.wait()
             return
-        last_t = time.monotonic()
         while not self._stop_event.is_set():
-            now = time.monotonic()
-            dt = now - last_t
-            last_t = now
+            try:
+                self._visual_tick(time.monotonic())
+            except (ValueError, OSError, KeyError, TypeError):
+                log.exception("Visual tracking failed; holding position")
+                self.bus.publish("motion.stop", {})
+                if self._calibration is not None:
+                    self._finish_calibration("Calibration failed; previous model retained")
+            self._stop_event.wait(_UPDATE_INTERVAL)
 
-            with self._lock:
-                # When face tracking is disabled, pass None so the tracker
-                # goes to idle mode. When random motion is also disabled,
-                # skip publishing pan_to entirely so the head stays put.
-                fresh_face = self._face_tracking_enabled and now - self._face_ts < _FACE_STALE_S
-                face_cx = self._current_face_cx if fresh_face else None
-                face_cy = self._current_face_cy if fresh_face else None
-                servo_angle = self._current_servo_angle
-                tilt_angle = self._current_tilt_angle
-                # Person-seek: use person centroid as a soft target only
-                # when no face is currently locked and the hint is fresh.
-                person_cx = None
-                if (
-                    face_cx is None
-                    and self._face_tracking_enabled
-                    and self._person_seek_enabled
-                    and self._person_cx is not None
-                    and (now - self._person_cx_ts) < _PERSON_SEEK_STALE_S
-                ):
-                    person_cx = self._person_cx
+    def _signature(self):
+        keys = ("pan_channel", "tilt_channel", "range_deg", "soft_min_deg",
+                "soft_max_deg", "tilt_min_deg", "tilt_max_deg", "tilt_available",
+                "pulse_min_us", "pulse_max_us")
+        return {
+            "frame": [self._tracker_cfg.frame_width, self._tracker_cfg.frame_height],
+            "rotation": self._rotation,
+            "servo": {k: self._motion_settings.get(k) for k in keys},
+        }
 
-            if self._tracker is None:
-                time.sleep(_UPDATE_INTERVAL)
-                continue
+    def _calibration_path(self):
+        path = Path(self._visual_cfg.calibration_path)
+        return path if path.is_absolute() else Path(__file__).parents[2] / path
 
-            # If random motion is disabled and there's no face or person to track, hold position.
-            if not self._random_motion_enabled and face_cx is None and person_cx is None:
-                time.sleep(_UPDATE_INTERVAL)
-                continue
+    def _model(self):
+        signature = self._signature()
+        if self._calibration_signature != signature:
+            self._plant = None
+            self._calibration_signature = signature
+            path = self._calibration_path()
+            if path.exists():
+                try:
+                    self._plant = PlantModel.load(path, signature)
+                except (ValueError, TypeError, OSError):
+                    log.warning("Ignoring incompatible calibration; using conservative model", exc_info=True)
+            self._visual = VisualController(self._visual_cfg)
+        if self._plant is not None:
+            return self._plant
+        cfg = self._tracker_cfg
+        # Normalized image displacement per commanded degree; empirical
+        # calibration replaces this approximation, including the mount sign.
+        pan = (1 if cfg.invert_pan else -1) / cfg.fov_degrees
+        matrix = [[pan], [0.0]]
+        if self._motion_settings.get("tilt_available"):
+            vfov = math.degrees(2 * math.atan(
+                math.tan(math.radians(cfg.fov_degrees) / 2) * cfg.frame_height / cfg.frame_width
+            ))
+            matrix = [[pan, 0.0], [0.0, (1 if cfg.invert_tilt else -1) / vfov]]
+        return PlantModel(matrix, self._visual_cfg.settle_s, 0, signature)
 
-            # Person-seek supplies the centroid when no face is locked.
-            effective_cx = face_cx if face_cx is not None else person_cx
+    def _positions_and_limits(self):
+        positions = [self._current_servo_angle]
+        limits = [[self._tracker_cfg.servo_min, self._tracker_cfg.servo_max]]
+        if self._motion_settings.get("tilt_available"):
+            positions.append(self._current_tilt_angle)
+            mn = self._motion_settings["tilt_min_deg"]
+            mx = self._motion_settings["tilt_max_deg"]
+            center = (mn + mx) / 2
+            limits.append([max(mn, center - 20), min(mx, center + 20)])
+        if any(p is None for p in positions):
+            return None, None
+        return np.asarray(positions, dtype=float), np.asarray(limits, dtype=float)
 
-            target = self._tracker.update(
-                face_cx=effective_cx,
-                dt=dt,
-                current_servo_angle=servo_angle,
+    def _send_targets(self, targets, duration):
+        for axis, angle in zip(("pan", "tilt"), targets):
+            self.bus.publish(f"motion.{axis}_to", {
+                "angle": float(angle), "move_time_ms": duration * 1000,
+                "profile": "smoothstep", "override_quiet": True,
+                "source": "calibration" if self._calibration is not None else "visual_tracking",
+            })
+
+    def _visual_tick(self, now):
+        with self._lock:
+            observation = self._observation
+            positions, limits = self._positions_and_limits()
+            active = (self._face_tracking_enabled
+                      and self._motion_settings.get("servo_enabled", False)
+                      and self._motion_settings.get("hardware_ready", False))
+        if self._calibration is not None:
+            self._calibration_tick(now, observation, positions, limits)
+            return
+        if self._calibration_requested:
+            self._calibration_requested = False
+            self._begin_calibration(now, observation, positions, limits)
+            return
+        if not active or positions is None or observation is None:
+            self._idle_tick(now, observation)
+            return
+        error, stamp, _, _ = observation
+        model = self._model()
+        result = self._visual.correction(error, positions, limits, stamp, now, model)
+        if result is not None:
+            self._send_targets(*result)
+        self.bus.publish("tracking.debug", {
+            "mode": self._visual.state, "face_raw": self._current_face_cx,
+            "face_smoothed": self._current_face_cx, "face_vel": 0,
+            "servo_angle": float(positions[0]), "target": float(positions[0]),
+            "calibrated": self._plant is not None,
+            "frame_age_s": now - stamp, "error": error.tolist(),
+        })
+
+    def _idle_tick(self, now, observation):
+        # Never substitute a body/idle target while a suspect face is visible.
+        if ((self._faces_present and self._face_tracking_enabled)
+                or observation is not None or self._tracker is None
+                or self._calibration_requested or now - self._face_ts < _FACE_STALE_S):
+            return
+        person = None
+        if (self._face_tracking_enabled and self._person_seek_enabled
+                and now - self._person_cx_ts < _PERSON_SEEK_STALE_S):
+            person = self._person_cx
+        if person is None and not self._random_motion_enabled:
+            return
+        # Legacy person seek is rate-limited to one correction per detection.
+        if person is not None and self._person_cx_ts <= self._visual.last_stamp:
+            return
+        if person is not None:
+            self._visual.last_stamp = self._person_cx_ts
+        target = self._tracker.update(
+            person, _UPDATE_INTERVAL, self._current_servo_angle,
+        )
+        if person is None and self._speaking_motion_enabled and now < self._speaking_until:
+            target += self._speaking_motion_amplitude * math.sin(
+                2 * math.pi * self._speaking_motion_freq * now
             )
+        target = max(self._tracker_cfg.servo_min, min(self._tracker_cfg.servo_max, target))
+        self.bus.publish("motion.pan_to", {
+            "angle": target, "move_time_ms": 500, "override_quiet": person is not None,
+        })
 
-            # Speaking motion: add a sinusoidal nod while DA is talking.
-            if self._speaking_motion_enabled and now < self._speaking_until:
-                nod = self._speaking_motion_amplitude * math.sin(
-                    2.0 * math.pi * self._speaking_motion_freq * now
-                )
-                target = target + nod
+    def _on_start_calibration(self, _topic, _payload):
+        self._calibration_requested = True
 
-            move_ms = _UPDATE_INTERVAL * 1000.0 * 2.0
-            pan_payload: dict = {
-                "angle": round(target, 2),
-                "move_time_ms": round(move_ms, 1),
-            }
-            # Face tracking and person-seek respond to human presence — they
-            # should work even during quiet hours.  Random idle motion should
-            # stay suppressed (it's the noise-making autonomous behaviour the
-            # user is silencing).
-            if effective_cx is not None:
-                pan_payload["override_quiet"] = True
-            self.bus.publish("motion.pan_to", pan_payload)
-            with self._lock:
-                if (self._tilt_tracker is not None and face_cy is not None
-                        and tilt_angle is not None):
-                    tilt_target = self._tilt_tracker.update(
-                        face_cx=face_cy, dt=dt, current_servo_angle=tilt_angle,
-                    )
-                else:
-                    tilt_target = None
-            if tilt_target is not None:
-                self.bus.publish("motion.tilt_to", {
-                    "angle": round(tilt_target, 2),
-                    "move_time_ms": round(move_ms, 1),
-                    "override_quiet": True,
-                })
+    def _on_cancel_calibration(self, _topic, _payload):
+        self._calibration_requested = False
+        self._cancel_calibration = True
 
-            elapsed = time.monotonic() - now
-            sleep_t = max(0.001, _UPDATE_INTERVAL - elapsed)
-            time.sleep(sleep_t)
+    def _begin_calibration(self, now, observation, positions, limits):
+        if self._calibration is not None:
+            return
+        if (not self._face_tracking_enabled
+                or not self._motion_settings.get("servo_enabled")
+                or not self._motion_settings.get("hardware_ready")
+                or positions is None or observation is None
+                or observation[3] != 1
+                or now - observation[1] > self._visual_cfg.max_age_s):
+            self._finish_calibration("Calibration requires one locked face and enabled, ready servos")
+            return
+        step = self._visual_cfg.calibration_step_deg
+        if np.any(positions - step < limits[:, 0]) or np.any(positions + step > limits[:, 1]):
+            self._finish_calibration("Insufficient travel margin; manually center the head and retry")
+            return
+        plan = [positions.copy()]
+        for axis in range(len(positions)):
+            for direction in (1, -1, 1, -1):
+                target = positions.copy()
+                target[axis] += direction * step
+                plan.extend([target, positions.copy()])
+        self.bus.publish("motion.stop", {})
+        self._cancel_calibration = False
+        self._calibration = {
+            "plan": plan, "index": 0, "phase": "announce", "deadline": now + 45,
+            "commands": [], "points": [], "durations": [], "noise": [],
+            "samples": [], "origin": positions.copy(), "signature": self._signature(),
+            "last_stamp": observation[1], "last_position": positions.copy(),
+            "lease_renewed": now,
+        }
+        self.bus.publish("motion.calibration_lock", {"enabled": True})
+        self.bus.publish("tracking.autotune_progress", {
+            "phase": "calibration", "message": "Keep one face still; small announced servo probes",
+        })
+
+    def _finish_calibration(self, error=None):
+        self._calibration = None
+        self._calibration_requested = False
+        self._cancel_calibration = False
+        self._visual = VisualController(self._visual_cfg)
+        self._visual.ready_at = time.monotonic() + 2 * self._visual_cfg.settle_s
+        self.bus.publish("motion.calibration_lock", {"enabled": False})
+        self.bus.publish("motion.stop", {})
+        if error:
+            log.warning("Visual calibration: %s", error)
+        self.bus.publish("tracking.autotune_done", {
+            "ok": error is None, "error": error, "reason": error,
+            "message": error or "Plant calibration saved and live centering validated",
+            "controller": "visual_servo",
+            "completed_mono": time.monotonic(),
+        })
+
+    def _calibration_tick(self, now, observation, positions, limits):
+        state = self._calibration
+        if state is None:
+            return
+        if now - state["lease_renewed"] > 5:
+            self.bus.publish("motion.calibration_lock", {"enabled": True})
+            state["lease_renewed"] = now
+        if (self._cancel_calibration or not self._face_tracking_enabled
+                or not self._motion_settings.get("servo_enabled")
+                or not self._motion_settings.get("hardware_ready")
+                or positions is None or state["signature"] != self._signature()):
+            self._finish_calibration("Calibration cancelled or hardware configuration changed")
+            return
+        if now > state["deadline"]:
+            self._finish_calibration("Calibration timed out; model not saved")
+            return
+        if (observation is None or observation[3] != 1
+                or not 0 <= now - observation[1] <= self._visual_cfg.max_age_s):
+            self._finish_calibration("Face lost, ambiguous, or stale; model not saved")
+            return
+        if state["phase"] == "validate":
+            self._validate_calibration(now, observation, positions, limits)
+            return
+        if state["phase"] == "validation_speech":
+            spoke = self.bus.last("av.spoke")
+            if isinstance(spoke, dict) and spoke.get("request_id") == state["token"]:
+                targets = state["validation_targets"]
+                if np.any(targets < limits[:, 0]) or np.any(targets > limits[:, 1]):
+                    self._finish_calibration("Validation target outside safe limits")
+                    return
+                duration = state["validation_duration"]
+                self._send_targets(targets, duration)
+                state["controller"].ready_at = now + duration + state["candidate"].settle_s
+                state["phase"] = "validate"
+            return
+        target = state["plan"][state["index"]]
+        if np.any(target < limits[:, 0]) or np.any(target > limits[:, 1]):
+            self._finish_calibration("Calibration target outside current safe limits")
+            return
+        if state["phase"] == "announce":
+            token = f"calibration-{time.monotonic_ns()}"
+            state.update(phase="speech", token=token, deadline=now + 45)
+            angles = " and ".join(f"{axis} {angle:.1f} degrees"
+                                  for axis, angle in zip(("pan", "tilt"), target))
+            self.bus.publish("av.say", {
+                "text": f"Calibration. Keep still and clear of the head. Moving {angles}.",
+                "request_id": token,
+            })
+            return
+        if state["phase"] == "speech":
+            spoke = self.bus.last("av.spoke")
+            if not isinstance(spoke, dict) or spoke.get("request_id") != state["token"]:
+                return
+            distance = float(np.max(np.abs(target - positions)))
+            cfg = self._visual_cfg
+            duration = max(
+                1.0, 1.875 * distance / cfg.max_speed_deg_s,
+                math.sqrt(5.78 * distance / cfg.max_accel_deg_s2),
+            )
+            self._send_targets(target, duration)
+            state.update(
+                phase="observe", moved=now, ready=now + duration + cfg.settle_s,
+                deadline=now + cfg.calibration_timeout_s, samples=[],
+            )
+            return
+        error, stamp, _, _ = observation
+        if stamp <= state["last_stamp"] or stamp < state["ready"]:
+            return
+        state["last_stamp"] = stamp
+        if np.max(np.abs(positions - target)) > 0.15:
+            self._finish_calibration("Commanded position not reached; model not saved")
+            return
+        state["samples"].append(error.copy())
+        if len(state["samples"]) < self._visual_cfg.calibration_samples:
+            return
+        samples = np.asarray(state["samples"])
+        noise = float(np.max(np.std(samples, axis=0)))
+        if noise > 0.01:
+            self._finish_calibration("Target moved or detections too noisy; model not saved")
+            return
+        state["commands"].append((target - state["origin"]).tolist())
+        state["points"].append(np.median(samples, axis=0).tolist())
+        # Include observation cadence/inference delay in the conservative
+        # response budget; this is not a physical shaft-delay measurement.
+        state["durations"].append(stamp - state["moved"])
+        state["noise"].append(noise)
+        state["index"] += 1
+        self.bus.publish("tracking.autotune_progress", {
+            "phase": "calibration", "progress": state["index"] / len(state["plan"]),
+            "message": f"Validated probe {state['index']} of {len(state['plan'])}",
+        })
+        if state["index"] < len(state["plan"]):
+            state.update(phase="announce", deadline=now + 45)
+            return
+        try:
+            model = identify_plant(
+                np.asarray(state["commands"]), np.asarray(state["points"]),
+                state["durations"], max(state["noise"]), state["signature"],
+            )
+        except (ValueError, OSError) as exc:
+            self._finish_calibration(str(exc))
+            return
+        state.update(
+            phase="validate", candidate=model,
+            controller=VisualController(self._visual_cfg),
+            initial_error=float(np.max(np.abs(observation[0][:len(positions)]))),
+            centered=0, deadline=now + self._visual_cfg.validation_timeout_s,
+        )
+        self.bus.publish("tracking.autotune_progress", {
+            "stage": "validate", "msg": "Checking live centering before saving calibration",
+        })
+
+    def _validate_calibration(self, now, observation, positions, limits):
+        state = self._calibration
+        if state is None:
+            return
+        error, stamp, _, _ = observation
+        controller = state["controller"]
+        if stamp <= controller.last_stamp or stamp < controller.ready_at:
+            return
+        model = state["candidate"]
+        result = controller.correction(error, positions, limits, stamp, now, model)
+        if result is not None:
+            targets, duration = result
+            token = f"validation-{time.monotonic_ns()}"
+            # Validation corrections follow the same announced-move rule as
+            # identification probes. Keep their observation for the speech phase.
+            state.update(phase="validation_speech", token=token,
+                         validation_targets=targets, validation_duration=duration)
+            self.bus.publish("av.say", {
+                "text": "Calibration validation. Making a small centering correction. Keep still.",
+                "request_id": token,
+            })
+            return
+        norm = float(np.max(np.abs(error[:len(positions)])))
+        if norm <= self._visual_cfg.stop_error:
+            state["centered"] += 1
+        else:
+            state["centered"] = 0
+        if controller.state == "at_limit":
+            self._finish_calibration("Target not reachable within servo limits; model not saved")
+            return
+        if state["centered"] >= self._visual_cfg.calibration_samples:
+            if norm > state["initial_error"] + model.noise:
+                self._finish_calibration("Validation did not improve centering; model not saved")
+                return
+            try:
+                model.save(self._calibration_path())
+            except OSError as exc:
+                self._finish_calibration(f"Could not save calibration: {exc}")
+                return
+            self._plant = model
+            self._calibration_signature = state["signature"]
+            self._finish_calibration()
 
 
 # ── Auto-tune helpers (module-level, testable) ────────────────────────────────

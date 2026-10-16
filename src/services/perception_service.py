@@ -286,7 +286,16 @@ class PerceptionService(Service):
                 continue
             self._last_detect_ts = now
 
-            frame = self._get_frame()
+            captured_at = time.monotonic()
+            rotation = 0
+            frame = None
+            observation = getattr(self._vision_svc, "latest_observation", None)
+            if callable(observation):
+                snapshot = observation()
+                if isinstance(snapshot, tuple) and len(snapshot) == 3:
+                    frame, captured_at, rotation = snapshot
+            if frame is None:
+                frame = self._get_frame()
             if frame is None:
                 continue
 
@@ -500,6 +509,8 @@ class PerceptionService(Service):
                     "backend": self._detector.backend,
                     "frame_w": frame.shape[1],
                     "frame_h": frame.shape[0],
+                    "captured_mono": captured_at,
+                    "rotation_deg": rotation,
                     "ts": time.time(),
                 },
             )

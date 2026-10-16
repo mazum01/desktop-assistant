@@ -292,6 +292,7 @@ class Camera:
 
                 with self._frame_lock:
                     self._latest_array = arr
+                    self._latest_frame_monotonic = time.monotonic()
             except Exception:
                 if not self._running:
                     break
@@ -375,6 +376,17 @@ class Camera:
             if self._latest_array is None:
                 raise RuntimeError("Camera.start() must be called before capture_frame()")
             return self._latest_array.copy()
+
+    def capture_observation(self):
+        """Return an atomic frame/availability-time snapshot, not shaft feedback."""
+        if self._sim:
+            return self.capture_frame(), time.monotonic()
+        if not self._running:
+            raise RuntimeError("Camera.start() must be called before capture")
+        with self._frame_lock:
+            if self._latest_array is None:
+                raise RuntimeError("Camera has no frame")
+            return self._latest_array.copy(), self._latest_frame_monotonic
 
     def capture_still(self, path: str) -> None:
         """

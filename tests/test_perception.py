@@ -237,6 +237,7 @@ class TestPerceptionService:
             assert received[0]["count"] == 0
             assert received[0]["frame_w"] == 640
             assert received[0]["frame_h"] == 480
+            assert received[0]["captured_mono"] <= time.monotonic()
         finally:
             svc.stop()
 

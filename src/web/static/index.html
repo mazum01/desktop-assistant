@@ -231,12 +231,15 @@
 <div id="tuning-sliders"></div>
 <div class="tuning-autotune-row">
 <button class="btn btn-warning" id="autotune-start-btn" onclick="startAutoTune()">
-              🎯 Run Auto-Tune (~20 s)
+              🎯 Calibrate visual tracking
             </button>
 <button class="btn btn-secondary btn-sm" id="autotune-cancel-btn" onclick="cancelAutoTune()" style="display:none">Cancel</button>
 <span class="status-text" id="autotune-status"></span>
 </div>
 </div>
+<p>Keep one face still and visible. Calibration makes small announced moves and
+may take several minutes. Both axes need travel margin. Cancel holds position.
+Face centering uses the visual controller; the sliders above tune legacy idle motion.</p>
 <div class="tuning-chart-wrap">
 <div class="tuning-chart-legend">
 <span style="color:#888">— face raw</span>  

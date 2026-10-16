@@ -946,6 +946,8 @@ class VisionService(Service):
         self._camera = camera
         self._camera_config = camera_config
         self._latest: Optional[np.ndarray] = None
+        self._latest_observation_time: float = 0.0
+        self._latest_observation_rotation: int = 0
         self._latest_jpeg: Optional[bytes] = None
         self._index = 0
         self._lock = threading.Lock()
@@ -1079,7 +1081,7 @@ class VisionService(Service):
         if not getattr(self._camera, "is_ready", True):
             return
         try:
-            frame = self._camera.capture_frame()
+            frame, captured_at = self._camera.capture_observation()
         except Exception:
             log.exception("capture_frame failed")
             self.bus.publish("vision.error", {"reason": "capture_failed"})
@@ -1094,6 +1096,8 @@ class VisionService(Service):
         # Store clean frame for detection consumers and bump the frame index.
         with self._lock:
             self._latest = frame
+            self._latest_observation_time = captured_at
+            self._latest_observation_rotation = rot
             self._index += 1
             idx = self._index
 
@@ -1203,6 +1207,12 @@ class VisionService(Service):
         """Return the most recent raw frame (BGR, no overlay). Used by detection services."""
         with self._lock:
             return None if self._latest is None else self._latest.copy()
+
+    def latest_observation(self):
+        """Copy the frame and its acquisition metadata under the same lock."""
+        with self._lock:
+            frame = None if self._latest is None else self._latest.copy()
+            return frame, self._latest_observation_time, self._latest_observation_rotation
 
     def latest_jpeg(self) -> Optional[bytes]:
         """Return the most recent pre-encoded JPEG (with overlays). Used by WebService."""

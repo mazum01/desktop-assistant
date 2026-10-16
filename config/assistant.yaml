@@ -96,6 +96,22 @@ face_recognition:
   min_face_px: 80
 head_tracking:
   dead_zone_frac: 0.02
+  visual_servo:
+    max_age_s: 1.0
+    acquire_frames: 3
+    association_radius: 0.12
+    stop_error: 0.02
+    restart_error: 0.035
+    gain: 0.35
+    max_step_deg: 2.0
+    max_speed_deg_s: 12.0
+    max_accel_deg_s2: 30.0
+    settle_s: 0.6
+    calibration_step_deg: 2.0
+    calibration_samples: 4
+    calibration_timeout_s: 20.0
+    validation_timeout_s: 90.0
+    calibration_path: config/tracking_calibration.json
   enabled: true
   face_tracking_enabled: true
   fov_degrees: 100.0
