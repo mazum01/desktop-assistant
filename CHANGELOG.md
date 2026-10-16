@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.70.1] - 2026-10-16
+### Fixed
+- Reduce visual-tracking response delay with a higher bounded correction gain,
+  3-degree maximum steps, faster smooth motion, and shorter default settling.
+  Preserve fresh post-settling observations, centering hysteresis, and travel limits.
+- Add timed pan-only and dual-axis step-response regressions with delayed 3 Hz
+  camera feedback and 50 Hz smooth motion.
+
 ## [1.70.0] - 2026-10-16
 ### Added
 - Fresh-observation visual face servoing with stable target association,

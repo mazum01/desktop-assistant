@@ -114,6 +114,57 @@ def test_hysteresis_and_no_windup_at_limit():
     assert result[0][0] > 70
 
 
+@pytest.mark.parametrize("tilt", [False, True])
+def test_step_response_is_faster_with_delayed_three_hz_feedback(tilt):
+    def centering_time(cfg):
+        controller = VisualController(cfg)
+        matrix = np.array([[1 / 70, 0], [0, -1 / 43]])[:, :2 if tilt else 1]
+        plant = PlantModel(matrix.tolist(), cfg.settle_s, 0, {})
+        position = np.full(matrix.shape[1], 90.0)
+        error = np.array([0.2, -0.1 if tilt else 0.0])
+        initial_error = error.copy()
+        profile = None
+        history = []
+        for tick in range(1200):
+            now = tick * 0.02
+            if profile is not None:
+                start, origin, target, duration = profile
+                u = min(1, (now - start) / duration)
+                position = origin + (target - origin) * (10 * u**3 - 15 * u**4 + 6 * u**5)
+                if u == 1:
+                    profile = None
+            error = initial_error + matrix @ (position - 90)
+            history.append(error.copy())
+            assert np.all((70 <= position) & (position <= 110))
+            if np.max(np.abs(error)) <= cfg.stop_error and profile is None:
+                return now
+            # Capture at ~3 Hz, delivered 400 ms later, with 50 Hz motor execution.
+            if tick < 20 or tick % 17:
+                continue
+            stamp = now - 0.4
+            result = controller.correction(
+                history[tick - 20], position, [[70, 110]] * len(position),
+                stamp, now, plant,
+            )
+            if result is not None:
+                assert profile is None
+                target, duration = result
+                distance = np.max(np.abs(target - position))
+                assert distance <= cfg.max_step_deg + 1e-9
+                assert 1.875 * distance / duration <= cfg.max_speed_deg_s + 1e-9
+                assert 5.78 * distance / duration**2 <= cfg.max_accel_deg_s2 + 1e-9
+                profile = now, position.copy(), target, duration
+        pytest.fail("Did not center within 24 seconds")
+
+    previous = centering_time(VisualServoConfig(
+        gain=0.35, max_step_deg=2, max_speed_deg_s=12,
+        max_accel_deg_s2=30, settle_s=0.6,
+    ))
+    faster = centering_time(VisualServoConfig())
+    assert faster <= 8
+    assert faster <= previous * 0.6
+
+
 def probes(axes):
     commands = [np.zeros(axes)]
     for axis in range(axes):

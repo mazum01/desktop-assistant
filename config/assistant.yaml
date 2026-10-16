@@ -102,11 +102,11 @@ head_tracking:
     association_radius: 0.12
     stop_error: 0.02
     restart_error: 0.035
-    gain: 0.35
-    max_step_deg: 2.0
-    max_speed_deg_s: 12.0
-    max_accel_deg_s2: 30.0
-    settle_s: 0.6
+    gain: 0.5
+    max_step_deg: 3.0
+    max_speed_deg_s: 18.0
+    max_accel_deg_s2: 60.0
+    settle_s: 0.15
     calibration_step_deg: 2.0
     calibration_samples: 4
     calibration_timeout_s: 20.0

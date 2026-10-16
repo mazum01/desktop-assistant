@@ -19,11 +19,11 @@ class VisualServoConfig:
     association_radius: float = 0.12
     stop_error: float = 0.02
     restart_error: float = 0.035
-    gain: float = 0.35
-    max_step_deg: float = 2.0
-    max_speed_deg_s: float = 12.0
-    max_accel_deg_s2: float = 30.0
-    settle_s: float = 0.6
+    gain: float = 0.5
+    max_step_deg: float = 3.0
+    max_speed_deg_s: float = 18.0
+    max_accel_deg_s2: float = 60.0
+    settle_s: float = 0.15
     calibration_step_deg: float = 2.0
     calibration_samples: int = 4
     calibration_timeout_s: float = 20.0
