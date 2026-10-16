@@ -18,6 +18,7 @@ class _FakeThermalManager:
     def __init__(self, temp=42.0, ok=True, duty=50.0):
         self.temperature_c = temp
         self.sensor_ok = ok
+        self.sensor_type = "TMP117"
         self.fan_duty = duty
         self.started = False
         self.stopped = False
@@ -43,6 +44,7 @@ def test_thermal_service_publishes_telemetry():
 
     assert fake.started and fake.stopped
     assert temps and temps[-1]["celsius"] == 42.0
+    assert temps[-1]["sensor_type"] == "TMP117"
     assert temps[-1]["fahrenheit"] == pytest.approx(107.6, abs=0.1)
     assert fans and fans[-1]["duty"] == 50.0
 

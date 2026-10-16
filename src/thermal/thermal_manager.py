@@ -1,9 +1,9 @@
 """
-Thermal manager — reads TMP117, reads Pi CPU die temp, drives fan PWM
+Thermal manager — reads TMP117/TMP102, reads Pi CPU die temp, drives fan PWM
 via a configurable piecewise-linear control curve.
 
 Temperature input is a weighted blend of:
-  - TMP117 (case/ambient, I²C)
+  - TMP117 or TMP102 (case/ambient, I²C)
   - Pi SoC die temp (/sys/class/thermal/thermal_zone0/temp)
 Default blend: 20% case + 80% CPU.
 
@@ -21,7 +21,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-from .tmp117 import TMP117, TMP117Error
+from .temperature_sensor import (
+    TMP102Error,
+    TemperatureSensorProbeError,
+    probe_temperature_sensor,
+)
+from .tmp117 import TMP117Error
 from .fan import FanController
 from .fan_tach import FanTach
 
@@ -80,7 +85,7 @@ class ThermalThresholds:
 
 class ThermalManager:
     """
-    Runs a background thread that polls the TMP117 and adjusts fan speed.
+    Runs a background thread that polls the detected sensor and adjusts fan speed.
 
     Usage:
         mgr = ThermalManager()
@@ -97,11 +102,17 @@ class ThermalManager:
         gpio_pin: int = 13,
         tach_gpio: int = 6,
         tach_pulses_per_rev: int = 2,
+        i2c_address: int = 0x48,
     ) -> None:
         self._thresh = thresholds or ThermalThresholds.from_yaml()
         self._on_critical = on_critical
-        self._sensor = TMP117(bus=i2c_bus)
         self._fan = FanController(gpio_pin=gpio_pin)
+        try:
+            self._sensor = probe_temperature_sensor(bus=i2c_bus, address=i2c_address)
+        except TemperatureSensorProbeError:
+            self._fan.set_duty(100.0)
+            raise
+        self._sensor_type = self._sensor.sensor_type
         if self._thresh.tach_enabled:
             self._tach: Optional[FanTach] = FanTach(gpio=tach_gpio, pulses_per_rev=tach_pulses_per_rev)
         else:
@@ -109,7 +120,7 @@ class ThermalManager:
             log.info("FanTach disabled via config")
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
-        self._last_case_c: Optional[float] = None    # TMP117 reading
+        self._last_case_c: Optional[float] = None    # I2C case sensor reading
         self._last_cpu_c: Optional[float] = None     # Pi SoC die reading
         self._last_blended_c: Optional[float] = None # weighted average used for control
         self._case_weight: float = self._thresh.case_weight
@@ -186,6 +197,10 @@ class ThermalManager:
         return self._sensor_ok
 
     @property
+    def sensor_type(self) -> str:
+        return self._sensor_type
+
+    @property
     def override_active(self) -> bool:
         return self._override_duty is not None
 
@@ -236,9 +251,12 @@ class ThermalManager:
                 case_c = self._sensor.read_temperature_c()
                 self._last_case_c = case_c
                 self._sensor_ok = True
-            except TMP117Error:
+            except (TMP117Error, TMP102Error):
                 if self._sensor_ok:
-                    log.error("TMP117 read failed — engaging thermal fail-safe (fan 100%%)")
+                    log.error(
+                        "%s read failed — engaging thermal fail-safe (fan 100%%)",
+                        self._sensor_type,
+                    )
                 self._sensor_ok = False
                 self._fan.set_duty(100.0)
                 self._stop_event.wait(timeout=self._thresh.poll_interval_s)

@@ -1,8 +1,8 @@
 """
 Thermal entry point — safety-critical isolated process.
 
-Owns the TMP117 sensor and PWM fan. Runs alone so a crash in any
-other service cannot stop temperature monitoring. This is the unit
+Owns the detected TMP117 or TMP102 sensor and PWM fan. Runs alone so
+a crash in any other service cannot stop temperature monitoring. This is the unit
 that systemd will restart most aggressively.
 
 Run:

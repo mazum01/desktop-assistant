@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.68.4] - 2026-10-16
+### Added
+- Detect TMP117 and TMP102 sensors at thermal startup, use the matching
+  temperature format, and report the selected sensor in thermal telemetry.
+- Generalize the standalone temperature-sensor bring-up test and update the
+  dashboard label for the detected sensor.
+
 ## [1.68.3] - 2026-10-16
 ### Added
 - Allow the standalone TMP117 probe to select its I²C bus and device address

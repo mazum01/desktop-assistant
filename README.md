@@ -12,7 +12,7 @@ head, and temperature-controlled cooling.
   beamforming, and noise suppression; USB vendor-control channel for
   DSP tuning/telemetry)
 - DS3218 servo (pan, 270° range) on SparkFun Pi Servo pHAT
-- SparkFun Qwiic TMP117 temperature sensor
+- TMP117 (VERA3) or TMP102 (VERA) temperature sensor, auto-detected over I²C
 - Noctua NF-A6x25 PWM fan
 - Sabrent USB audio adapter → stereo speakers
 

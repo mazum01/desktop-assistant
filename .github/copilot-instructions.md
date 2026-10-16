@@ -50,7 +50,7 @@ The agent must follow them unconditionally.
 - **Servo**: Never command the DS3218 outside its 270° mechanical range.
   When crossing the logical 360°→1° wrap, always traverse the long way
   (backward through the mechanical range). Enforce this in code, not just docs.
-- **Fan**: Always fail-safe to 100% duty if TMP117 read fails.
+- **Fan**: Always fail-safe to 100% duty if a TMP117 or TMP102 read fails.
 - **Hailo-8**: Gracefully degrade to CPU inference if accelerator is unavailable.
 
 ## 6. Commit Hygiene

@@ -20,7 +20,7 @@
 **Deliverables / Smoke tests:**
 - DS3218 servo via SparkFun Pi Servo pHAT — sweep test (1°–360° with wrap traversal)
 - NF-A6x25 PWM fan — duty-cycle ramp test
-- SparkFun Qwiic TMP117 — I²C read loop
+- TMP117 / TMP102 — I²C sensor probe and read loop
 - Stereo cameras — frame capture, sync check
 - Dual microphones — record + level meter
 - Sabrent USB audio — playback test
@@ -32,7 +32,7 @@
 ## Phase 2 — Core Services ✅
 **Goal:** Long-running daemons that own each subsystem.
 **Deliverables:**
-- `thermal_service` — reads TMP117, drives fan PWM via control loop ✅
+- `thermal_service` — probes TMP117/TMP102, drives fan PWM via control loop ✅
 - `motion_service` — exposes pan API; enforces 270° mechanical limits and
   long-way traversal across the 360°↔1° wrap ✅
 - `av_service` — TTS + audio out through Sabrent ✅

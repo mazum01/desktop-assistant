@@ -155,7 +155,7 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
             problems.append(f"thermal error: {thermal_err}")
 
         # Temperature: try bus first (populated when thermal process is up),
-        # then fall back to a direct TMP117 read so the core unit always has
+        # then fall back to a direct temperature sensor read so the core unit always has
         # a value at boot even when running standalone.
         temp_bus = bus.last("thermal.temp") or {}
         case_c: float | None = None
@@ -175,10 +175,12 @@ def _run_boot_self_test(started: List[Service], unit_name: str) -> None:
                 # Thermal unit not running or IPC bridge hasn't forwarded yet —
                 # read the sensor directly.
                 try:
-                    from src.thermal.tmp117 import TMP117
-                    _sensor = TMP117()
-                    blended_c = _sensor.read_temperature_c()
-                    _sensor.close()
+                    from src.thermal.temperature_sensor import probe_temperature_sensor
+                    _sensor = probe_temperature_sensor()
+                    try:
+                        blended_c = _sensor.read_temperature_c()
+                    finally:
+                        _sensor.close()
                 except Exception:
                     blended_c = None
 

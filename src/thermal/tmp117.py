@@ -30,6 +30,8 @@ class TMP117Error(Exception):
 class TMP117:
     """Minimal driver for the SparkFun Qwiic TMP117 Breakout."""
 
+    sensor_type = "TMP117"
+
     def __init__(self, bus: int = 1, address: int = 0x48) -> None:
         self._bus_number = bus
         self._bus = smbus2.SMBus(bus)

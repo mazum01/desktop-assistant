@@ -19,7 +19,8 @@ not clone operational state from another VERA.
 ### VERA hardware
 
 - SparkFun Pi Servo pHAT and DS3218 pan servo.
-- SparkFun Qwiic TMP117 and Noctua NF-A6x25 PWM fan.
+- Temperature sensor (TMP117 on VERA3, TMP102 on VERA) and Noctua NF-A6x25
+  PWM fan. Thermal startup probes the fitted sensor automatically.
 - At least one Camera Module 3 or compatible Pi camera.
 - ReSpeaker Flex XVF3800 and a supported USB audio output device.
 - Optional: a second camera, Hailo-8 AI HAT+, and Waveshare ESP32-C6 display.
@@ -127,9 +128,10 @@ python3 scripts/test_tmp117.py
 python3 scripts/test_fan.py
 ```
 
-The Pi Servo pHAT's PCA9685 must appear at `0x40`. The TMP117 address depends
-on its address pin/wiring. If either is absent, stop and correct I2C wiring
-before continuing.
+The Pi Servo pHAT's PCA9685 must appear at `0x40`. The temperature sensor
+address depends on its address pin/wiring; the bring-up test probes for a
+TMP117 or TMP102 at the selected address. If either device is absent, stop and
+correct I2C wiring before continuing.
 
 The DS3218 pan servo belongs on **pHAT channel 15**. Before testing it, ensure
 the assembly cannot hit a mechanical end stop. Run:

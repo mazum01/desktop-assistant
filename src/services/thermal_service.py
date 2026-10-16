@@ -73,6 +73,7 @@ class ThermalService(Service):
                 "blended_celsius":  temp_c,
                 "case_weight":      getattr(m, "case_weight", 0.2),
                 "cpu_weight":       getattr(m, "cpu_weight",  0.8),
+                "sensor_type":      getattr(m, "sensor_type", None),
             },
         )
         override_on   = getattr(m, "override_active", False)

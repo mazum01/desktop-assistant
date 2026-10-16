@@ -6,7 +6,7 @@ the web dashboard) can never disrupt the others.
 
 | Unit | Process | Purpose | Restart policy |
 |---|---|---|---|
-| `desktop-assistant-thermal.service` | `python3 -m src.assistant.thermal_main` | TMP117 sensor + PWM fan loop | `Restart=always`, no rate limit |
+| `desktop-assistant-thermal.service` | `python3 -m src.assistant.thermal_main` | TMP117/TMP102 auto-detected sensor + PWM fan loop | `Restart=always`, no rate limit |
 | `desktop-assistant-core.service`    | `python3 -m src.assistant.core_main`    | Motion, AV, vision/perception, RoomService, PrivacyService, ObjectDetection (Hailo group) | `Restart=on-failure`, rate-limited |
 | `desktop-assistant-media.service`   | `python3 -m src.assistant.media_main`   | Pandora (`MusicService`) + podcasts (`PodcastService`) | `Restart=on-failure`, rate-limited |
 | `desktop-assistant-integrations.service` | `python3 -m src.assistant.integrations_main` | Telegram, notifications, clock announcements, IoT, Skills | `Restart=on-failure`, rate-limited |

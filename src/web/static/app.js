@@ -289,6 +289,10 @@ function updateDashboard(data) {
   // Telemetry
   const temp = last["thermal.temp"];
   if (temp) {
+    const sensorLabel = el("blend-case-label");
+    if (sensorLabel) {
+      sensorLabel.textContent = temp.sensor_type ? `Case (${temp.sensor_type}):` : "Case sensor:";
+    }
     const renderTemp = (elemId, celsius) => {
       if (celsius == null || Number.isNaN(Number(celsius))) {
         el(elemId).textContent = "—";

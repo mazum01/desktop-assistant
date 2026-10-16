@@ -11,7 +11,7 @@
 | Servo Driver | SparkFun Pi Servo pHAT | I²C, PCA9685-based |
 | Pan Servo | DS3218 | 270° mechanical range |
 | Cooling | Noctua NF-A6x25 PWM | 5 V PWM fan |
-| Temp Sensor | SparkFun Qwiic TMP117 | I²C, ±0.1 °C |
+| Temp Sensor | TMP117 (VERA3) or TMP102 (VERA) | I²C, auto-detected at startup |
 | Cameras | Stereo pair (2× CSI or USB) | synchronized capture |
 | Microphones | Dual mic array | for DOA + noise reject |
 | Audio Out | Sabrent USB Audio Adapter | → stereo speakers |
@@ -29,7 +29,7 @@
 - FR-M5: Soft limits with emergency stop API.
 
 ### 2.2 Thermal
-- FR-T1: Sample TMP117 at ≥ 1 Hz.
+- FR-T1: Probe for and sample the installed TMP117 or TMP102 at ≥ 1 Hz.
 - FR-T2: Drive NF-A6x25 PWM fan via closed-loop control on temperature.
 - FR-T3: Define safe / warn / critical thresholds; emit events.
 - FR-T4: Fail-safe to 100 % duty on sensor loss.
