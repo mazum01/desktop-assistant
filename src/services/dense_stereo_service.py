@@ -63,7 +63,6 @@ class DenseStereoService(Service):
     """Per-pixel stereo depth map using StereoSGBM."""
 
     name = "dense_stereo"
-    tick_seconds = 999.0  # event-driven via background thread
 
     def __init__(
         self,
@@ -96,8 +95,6 @@ class DenseStereoService(Service):
         self._enabled: bool = self._cfg.enabled
         self._rectifier: Optional[StereoRectifier] = None
         self._matcher: Optional[DenseStereoMatcher] = None
-        self._thread: Optional[threading.Thread] = None
-        self._stop_event = threading.Event()
         self._unsubs: list = []
 
         # Latest depth map cached for API use
@@ -131,11 +128,6 @@ class DenseStereoService(Service):
                 self.bus.subscribe("depth.set_dense_enabled", self._on_set_enabled)
             )
 
-        self._stop_event.clear()
-        self._thread = threading.Thread(
-            target=self._run_loop, name="dense-stereo", daemon=True
-        )
-        self._thread.start()
         log.info(
             "DenseStereoService started — %dx%d @ %.1fHz, calibrated=%s, enabled=%s",
             self._cfg.proc_width, self._cfg.proc_height,
@@ -149,10 +141,6 @@ class DenseStereoService(Service):
             except Exception:
                 pass
         self._unsubs.clear()
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join(timeout=5)
-            self._thread = None
 
     def _on_set_enabled(self, _topic, payload: dict) -> None:
         self._enabled = bool(payload.get("enabled", True))

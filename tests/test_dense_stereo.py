@@ -145,9 +145,11 @@ class TestDenseStereoService:
         """Service should start and stop cleanly even with no frame input."""
         from src.services.dense_stereo_service import DenseStereoService
         svc = DenseStereoService(bus=MagicMock())
-        svc.on_start()
-        time.sleep(0.1)
-        svc.on_stop()
+        svc.start()
+        try:
+            assert svc.is_running()
+        finally:
+            svc.stop()
 
     def test_process_frame_pair_publishes(self):
         """Injecting a frame pair should produce a payload on the bus."""

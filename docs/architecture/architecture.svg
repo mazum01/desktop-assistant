@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-1208 5788,-1208 5788,4 -4,4"/>
 <text text-anchor="start" x="2604.5" y="-1188.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="2749" y="-1177" font-family="Helvetica,sans-Serif" font-size="10.00">v1.68.4 — TMP117/TMP102 auto&#45;detected thermal sensing</text>
+<text text-anchor="start" x="2749" y="-1177" font-family="Helvetica,sans-Serif" font-size="10.00">v1.68.5 — TMP117/TMP102 auto&#45;detected thermal sensing</text>
 <g id="clust1" class="cluster">
 <title>cluster_updater</title>
 <path fill="#e4f4e4" stroke="black" d="M4413,-740.5C4413,-740.5 5319,-740.5 5319,-740.5 5325,-740.5 5331,-746.5 5331,-752.5 5331,-752.5 5331,-1150 5331,-1150 5331,-1156 5325,-1162 5319,-1162 5319,-1162 4413,-1162 4413,-1162 4407,-1162 4401,-1156 4401,-1150 4401,-1150 4401,-752.5 4401,-752.5 4401,-746.5 4407,-740.5 4413,-740.5"/>

@@ -64,7 +64,6 @@ class MonoDepthService(Service):
     """Per-pixel monocular depth map using device-matched scdepthv3."""
 
     name = "mono_depth"
-    tick_seconds = 999.0  # event-driven via background thread
 
     def __init__(
         self,
@@ -90,8 +89,6 @@ class MonoDepthService(Service):
 
         self._enabled: bool = self._cfg.enabled
         self._engine = None
-        self._thread: Optional[threading.Thread] = None
-        self._stop_event = threading.Event()
         self._latest_payload: Optional[dict] = None
         self._latest_lock = threading.Lock()
         self._unsubs: list = []
@@ -100,12 +97,12 @@ class MonoDepthService(Service):
 
     def on_start(self) -> None:
         from src.perception.hailo_inference import HailoInference
+        self._engine = None
         hef = resolve_model("mono_depth", self._cfg.hef_path)
         if hef is None:
             log.warning("MonoDepthService: compatible model missing; mono depth is idle")
             return
         self._engine = HailoInference(hef)
-        self._stop_event.clear()
         if not self._engine.hardware_ready:
             log.warning("MonoDepthService: Hailo hardware unavailable or HEF incompatible (%s) — mono depth will remain idle", self._cfg.hef_path)
             return
@@ -114,10 +111,6 @@ class MonoDepthService(Service):
             self._unsubs.append(
                 self.bus.subscribe("depth.set_mono_enabled", self._on_set_enabled)
             )
-        self._thread = threading.Thread(
-            target=self._run_loop, name="mono-depth", daemon=True
-        )
-        self._thread.start()
         log.info(
             "MonoDepthService started — %.1f Hz, hardware=%s, enabled=%s",
             self._cfg.rate_hz, self._engine.hardware_ready, self._enabled,
@@ -130,15 +123,12 @@ class MonoDepthService(Service):
             except Exception:
                 pass
         self._unsubs.clear()
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join(timeout=5)
-            self._thread = None
         if self._engine:
             try:
                 self._engine.__exit__(None, None, None)
             except Exception:
                 pass
+        self._engine = None
 
     def _on_set_enabled(self, _topic, payload: dict) -> None:
         self._enabled = bool(payload.get("enabled", True))
@@ -157,7 +147,7 @@ class MonoDepthService(Service):
     def _run_loop(self) -> None:
         interval = max(_MIN_INTERVAL_S, 1.0 / max(0.1, self._cfg.rate_hz))
         while not self._stop_event.is_set():
-            if not self._enabled:
+            if not self._enabled or not self.hardware_ready:
                 self._stop_event.wait(timeout=0.5)
                 continue
             t0 = time.monotonic()

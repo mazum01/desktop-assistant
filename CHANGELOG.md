@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.68.5] - 2026-10-16
+### Fixed
+- Use one service-owned worker for privacy, dense stereo, and monocular depth
+  instead of launching duplicate processing loops against shared inference state.
+- Keep monocular depth idle when its model or accelerator is unavailable, and
+  cover worker startup, shutdown, and restart with lifecycle regression tests.
+
 ## [1.68.4] - 2026-10-16
 ### Added
 - Detect TMP117 and TMP102 sensors at thermal startup, use the matching

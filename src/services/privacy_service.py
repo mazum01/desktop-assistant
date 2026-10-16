@@ -37,7 +37,6 @@ After detection clears for ``clear_frames`` consecutive frames it:
 from __future__ import annotations
 
 import logging
-import threading
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -75,7 +74,6 @@ class PrivacyService(Service):
     """Nudity detection + head look-away service."""
 
     name = "privacy"
-    tick_seconds = 999.0  # driven by background thread
 
     def __init__(
         self,
@@ -88,8 +86,6 @@ class PrivacyService(Service):
         self._cfg = config or PrivacyConfig()
         self._enabled: bool = self._cfg.enabled
         self._detector = None
-        self._thread: Optional[threading.Thread] = None
-        self._stop_event = threading.Event()
         self._unsubs: list = []
 
         # State
@@ -118,11 +114,6 @@ class PrivacyService(Service):
             self._unsubs.append(
                 self.bus.subscribe("perception.faces", self._on_faces)
             )
-        self._stop_event.clear()
-        self._thread = threading.Thread(
-            target=self._run_loop, name="privacy-detect", daemon=True
-        )
-        self._thread.start()
         log.info(
             "PrivacyService started — enabled=%s active_rate=%.2fHz idle_rate=%.2fHz require_person=%s hold=%.1fs threshold=%.2f hw=%s",
             self._enabled,
@@ -141,10 +132,6 @@ class PrivacyService(Service):
             except Exception:
                 pass
         self._unsubs.clear()
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join(timeout=5)
-            self._thread = None
 
     def _on_set_enabled(self, _topic, payload: dict) -> None:
         self._enabled = bool(payload.get("enabled", True))
