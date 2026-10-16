@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.70.2] - 2026-10-16
+### Changed
+- Reduce tracking's stop-start feel with 3.5-degree corrections and a 100 ms
+  settling wait; allow 20 degrees/second while softening acceleration to
+  50 degrees/second-squared. Retain post-settling feedback and travel limits.
+- Verify faster delayed-camera convergence than v1.70.1 and the gentler
+  acceleration/shorter-pause bounds in controller regressions.
+
 ## [1.70.1] - 2026-10-16
 ### Fixed
 - Reduce visual-tracking response delay with a higher bounded correction gain,

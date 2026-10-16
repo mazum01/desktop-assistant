@@ -30,9 +30,11 @@ live under `head_tracking.visual_servo`; legacy tuning sliders/presets affect
 idle/person-seek motion, not the face controller. Decorative saccades and speech
 offsets do not perturb active centering.
 
-The default visual response uses a 0.5 correction gain, steps up to 3 degrees,
-18 degrees/second peak speed, 60 degrees/second-squared peak acceleration, and
-0.15 seconds of post-motion settling. Corrections still wait for an image
+The default visual response uses a 0.5 correction gain, steps up to 3.5 degrees,
+20 degrees/second peak speed, 50 degrees/second-squared peak acceleration, and
+0.1 seconds of post-motion settling. Larger corrections and shorter settling
+reduce stop-start pauses while the gentler acceleration softens each transition.
+Corrections still wait for an image
 captured after motion and settling; camera/inference latency therefore adds to
 response time. A saved empirical model can require a longer settling interval.
 

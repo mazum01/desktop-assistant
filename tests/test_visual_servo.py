@@ -163,6 +163,22 @@ def test_step_response_is_faster_with_delayed_three_hz_feedback(tilt):
     faster = centering_time(VisualServoConfig())
     assert faster <= 8
     assert faster <= previous * 0.6
+    last_release = centering_time(VisualServoConfig(
+        max_step_deg=3, max_speed_deg_s=18, max_accel_deg_s2=60, settle_s=0.15,
+    ))
+    assert faster < last_release
+
+
+def test_response_tuning_shortens_pause_with_gentler_acceleration():
+    cfg = VisualServoConfig()
+    controller = VisualController(cfg)
+    plant = PlantModel([[1 / 70], [0]], cfg.settle_s, 0, {})
+    target, duration = controller.correction([0.2, 0], [90], [[70, 110]], 1, 1, plant)
+    assert abs(target[0] - 90) == pytest.approx(3.5)
+    assert controller.ready_at - (1 + duration) == pytest.approx(0.1)
+    assert 5.78 * abs(target[0] - 90) / duration**2 <= 50 + 1e-9
+    assert controller.correction([0.2, 0], target, [[70, 110]],
+                                 1 + duration, controller.ready_at, plant) is None
 
 
 def probes(axes):
