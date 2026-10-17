@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.71.0] - 2026-10-16
+### Added
+- Support the Waveshare ESP32-C6-Touch-LCD-1.47 with its own LCD pin mapping,
+  172x320 geometry, column offsets, and vendor panel initialization. Leave
+  touch input disabled and retain a legacy non-touch board build profile.
+### Fixed
+- Apply an actual 50% PWM backlight duty after LCD initialization instead of
+  assuming the panel limits brightness when its backlight GPIO is held high.
+
 ## [1.70.2] - 2026-10-16
 ### Changed
 - Reduce tracking's stop-start feel with 3.5-degree corrections and a 100 ms

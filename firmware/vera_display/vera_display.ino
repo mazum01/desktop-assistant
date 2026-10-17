@@ -1,5 +1,5 @@
 /*
- * VERA display firmware for the Waveshare ESP32-C6-LCD-1.47.
+ * VERA display firmware for Waveshare ESP32-C6 1.47-inch LCD boards.
  *
  * Owns the board/display pin contract plus the BLE GATT link to the
  * Raspberry Pi host (src/services/display_service.py). See
@@ -16,29 +16,20 @@
 #include <NimBLEOta.h>
 
 #include "ble_protocol.h"
+#include "display_board.h"
 #include "eq_renderer.h"
 #include "mouth_renderer.h"
 #include "status_renderer.h"
 
 namespace vera_display {
 
-constexpr int LCD_MOSI = 6;
-constexpr int LCD_SCLK = 7;
-constexpr int LCD_CS = 14;
-constexpr int LCD_DC = 15;
-constexpr int LCD_RST = 21;
-constexpr int LCD_BL = 22;
-constexpr uint8_t MAX_BACKLIGHT_PERCENT = 50;
-
 void initialize_hardware() {
-  pinMode(LCD_BL, OUTPUT);
-  // Backlight is driven digitally (on/off) rather than PWM-dimmed; the
-  // Waveshare guidance to keep brightness <=50% is honored by the panel's
-  // own default drive level, not by a duty cycle here.
-  digitalWrite(LCD_BL, HIGH);
+  pinMode(vera_board::BACKLIGHT, OUTPUT);
+  digitalWrite(vera_board::BACKLIGHT, LOW);
   vera_mouth::begin();
   vera_status::begin();
   vera_eq::begin();
+  analogWrite(vera_board::BACKLIGHT, 255 * vera_board::BACKLIGHT_PERCENT / 100);
 }
 
 }  // namespace vera_display
@@ -93,6 +84,8 @@ void send_hello() {
   doc["event"] = "hello";
   doc["fw"] = "vera_display";
   doc["proto"] = vera_ble::PROTOCOL_VERSION;
+  doc["board"] = vera_board::NAME;
+  doc["touch"] = false;
   send_status(doc);
 }
 
@@ -354,6 +347,7 @@ void start_ble() {
 
 void setup() {
   Serial.begin(115200);
+  Serial.printf("VERA display: %s; touch disabled\n", vera_board::NAME);
   vera_display::initialize_hardware();
   start_ble();
 }

@@ -3,27 +3,17 @@
  *
  * See mouth_renderer.h for the public contract. Uses Arduino_GFX
  * (Arduino_ESP32SPI + Arduino_ST7789) per the Waveshare-documented pin
- * mapping for the ESP32-C6-LCD-1.47.
+ * mapping selected in display_board.h.
  */
 
 #include "mouth_renderer.h"
 
 #include <Arduino_GFX_Library.h>
+#include "display_board.h"
 
 namespace vera_mouth {
 
 namespace {
-
-// Pin mapping matches vera_display.ino's board contract
-// (firmware/vera_display/README.md).
-constexpr int PIN_MOSI = 6;
-constexpr int PIN_SCLK = 7;
-constexpr int PIN_CS = 14;
-constexpr int PIN_DC = 15;
-constexpr int PIN_RST = 21;
-
-// Landscape rotation so the mouth shape reads naturally wider than tall.
-constexpr uint8_t DISPLAY_ROTATION = 1;
 
 constexpr uint16_t COLOR_BG = RGB565_BLACK;
 constexpr uint16_t COLOR_MOUTH = RGB565_CYAN;  // calm/friendly "face" accent
@@ -239,9 +229,24 @@ bool parse_state(const char *name, State *out) {
 }
 
 void begin() {
-  g_bus = new Arduino_ESP32SPI(PIN_DC, PIN_CS, PIN_SCLK, PIN_MOSI, -1 /* MISO unused */);
-  g_panel = new Arduino_ST7789(g_bus, PIN_RST, DISPLAY_ROTATION, true /* IPS panel */);
-  g_panel->begin();
+  g_bus = new Arduino_ESP32SPI(vera_board::DC, vera_board::CS, vera_board::SCLK,
+                             vera_board::MOSI, -1 /* MISO unused */);
+#if defined(VERA_DISPLAY_LEGACY_LCD)
+  g_panel = new Arduino_ST7789(g_bus, vera_board::RST, vera_board::ROTATION, true);
+#else
+  g_panel = new Arduino_ST7789(g_bus, vera_board::RST, vera_board::ROTATION,
+                             false, 172, 320, 34, 0, 34, 0);
+#endif
+  if (!g_panel->begin()) {
+    Serial.println("VERA LCD initialization failed");
+    while (true) {
+      delay(1000);
+    }
+  }
+#if !defined(VERA_DISPLAY_LEGACY_LCD)
+  vera_board::initialize_touch_panel(g_bus);
+  g_panel->setRotation(vera_board::ROTATION);
+#endif
 
   // All drawing (mouth + status renderer) happens into this offscreen
   // canvas; nothing reaches the panel until flush() below. A full

@@ -4,7 +4,7 @@
  * Owns the ST7789 GFX display and draws a simple "mouth imitation" shape
  * whose geometry/animation conveys emotion, per the emotional states
  * driven by BLE "mouth" commands (see ble_protocol.h). This is the primary
- * display behavior for the Waveshare ESP32-C6-LCD-1.47.
+ * display behavior for the Waveshare ESP32-C6 1.47-inch LCD boards.
  *
  * Rendering intentionally uses simple filled-shape primitives (no image
  * assets) so it stays cheap to draw at animation frame rates on this
@@ -84,4 +84,3 @@ Arduino_GFX *gfx();
 void flush();
 
 }  // namespace vera_mouth
-

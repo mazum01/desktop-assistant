@@ -6,6 +6,7 @@
 #   VERA_ESP32_FQBN=...     override the board FQBN
 #   ARDUINO_CLI=...         override the arduino-cli binary
 #   BUILD_OUTPUT_DIR=...    also emit the build artefacts (.bin etc) here
+#   VERA_DISPLAY_BOARD=touch|legacy  LCD board profile (default: touch)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,6 +15,13 @@ SKETCH_DIR="$FIRMWARE_DIR/vera_display"
 CLI_CONFIG="$FIRMWARE_DIR/arduino-cli.yaml"
 FQBN="${VERA_ESP32_FQBN:-esp32:esp32:esp32c6}"
 CLI="${ARDUINO_CLI:-arduino-cli}"
+BOARD="${VERA_DISPLAY_BOARD:-touch}"
+BOARD_FLAGS=()
+case "$BOARD" in
+    touch) ;;
+    legacy) BOARD_FLAGS=(--build-property "compiler.cpp.extra_flags=-DVERA_DISPLAY_LEGACY_LCD=1") ;;
+    *) printf 'Unknown VERA_DISPLAY_BOARD: %s (expected touch or legacy)\\n' "$BOARD" >&2; exit 2 ;;
+esac
 
 source "$FIRMWARE_DIR/lib_log.sh"
 
@@ -28,6 +36,7 @@ fi
 if [[ "$BUILD_QUIET_HEADER" != "1" ]]; then
     info "sketch:  $SKETCH_DIR"
     info "fqbn:    $FQBN"
+    info "display: $BOARD (touch input disabled)"
     info "cli:     $(command -v "$CLI")"
     info "verbose: $VERA_VERBOSE"
     printf '\n'
@@ -91,9 +100,9 @@ if [[ -n "${BUILD_OUTPUT_DIR:-}" ]]; then
     info "output dir: $BUILD_OUTPUT_DIR"
     rm -rf "$BUILD_OUTPUT_DIR"
     vrun "$CLI" --config-file "$CLI_CONFIG" compile $(cli_verbose_flags) \
-        --fqbn "$FQBN" --output-dir "$BUILD_OUTPUT_DIR" "$SKETCH_DIR"
+        --fqbn "$FQBN" "${BOARD_FLAGS[@]}" --output-dir "$BUILD_OUTPUT_DIR" "$SKETCH_DIR"
 else
     vrun "$CLI" --config-file "$CLI_CONFIG" compile $(cli_verbose_flags) \
-        --fqbn "$FQBN" "$SKETCH_DIR"
+        --fqbn "$FQBN" "${BOARD_FLAGS[@]}" "$SKETCH_DIR"
 fi
 step_done

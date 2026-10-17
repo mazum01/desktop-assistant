@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-1219 6166.06,-1219 6166.06,4 -4,4"/>
 <text text-anchor="start" x="2793.53" y="-1199.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="2960.53" y="-1188" font-family="Helvetica,sans-Serif" font-size="10.00">v1.70.2 — Calibrated fresh&#45;frame visual servoing</text>
+<text text-anchor="start" x="2962.03" y="-1188" font-family="Helvetica,sans-Serif" font-size="10.00">v1.71.0 — Touch&#45;capable display, touch disabled</text>
 <g id="clust1" class="cluster">
 <title>cluster_updater</title>
 <path fill="#e4f4e4" stroke="black" d="M4630.06,-740.5C4630.06,-740.5 5536.06,-740.5 5536.06,-740.5 5542.06,-740.5 5548.06,-746.5 5548.06,-752.5 5548.06,-752.5 5548.06,-1161 5548.06,-1161 5548.06,-1167 5542.06,-1173 5536.06,-1173 5536.06,-1173 4630.06,-1173 4630.06,-1173 4624.06,-1173 4618.06,-1167 4618.06,-1161 4618.06,-1161 4618.06,-752.5 4618.06,-752.5 4618.06,-746.5 4624.06,-740.5 4630.06,-740.5"/>
@@ -321,10 +321,11 @@
 <!-- hw_display -->
 <g id="node15" class="node">
 <title>hw_display</title>
-<path fill="#ffd6a5" stroke="black" d="M2981.56,-965.5C2981.56,-965.5 2796.56,-965.5 2796.56,-965.5 2790.56,-965.5 2784.56,-959.5 2784.56,-953.5 2784.56,-953.5 2784.56,-922.5 2784.56,-922.5 2784.56,-916.5 2790.56,-910.5 2796.56,-910.5 2796.56,-910.5 2981.56,-910.5 2981.56,-910.5 2987.56,-910.5 2993.56,-916.5 2993.56,-922.5 2993.56,-922.5 2993.56,-953.5 2993.56,-953.5 2993.56,-959.5 2987.56,-965.5 2981.56,-965.5"/>
-<text text-anchor="middle" x="2889.06" y="-946.5" font-family="Helvetica,sans-Serif" font-size="10.00">Waveshare ESP32&#45;C6&#45;LCD&#45;1.47</text>
-<text text-anchor="middle" x="2889.06" y="-935.5" font-family="Helvetica,sans-Serif" font-size="10.00">172×320 ST7789 SPI TFT</text>
-<text text-anchor="middle" x="2889.06" y="-924.5" font-family="Helvetica,sans-Serif" font-size="10.00">(BLE mouth/status display + BLE OTA)</text>
+<path fill="#ffd6a5" stroke="black" d="M2981.56,-971C2981.56,-971 2796.56,-971 2796.56,-971 2790.56,-971 2784.56,-965 2784.56,-959 2784.56,-959 2784.56,-917 2784.56,-917 2784.56,-911 2790.56,-905 2796.56,-905 2796.56,-905 2981.56,-905 2981.56,-905 2987.56,-905 2993.56,-911 2993.56,-917 2993.56,-917 2993.56,-959 2993.56,-959 2993.56,-965 2987.56,-971 2981.56,-971"/>
+<text text-anchor="middle" x="2889.06" y="-952" font-family="Helvetica,sans-Serif" font-size="10.00">Waveshare ESP32&#45;C6&#45;Touch&#45;LCD&#45;1.47</text>
+<text text-anchor="middle" x="2889.06" y="-941" font-family="Helvetica,sans-Serif" font-size="10.00">172×320 SPI TFT (touch disabled)</text>
+<text text-anchor="middle" x="2889.06" y="-930" font-family="Helvetica,sans-Serif" font-size="10.00">(BLE mouth/status display + BLE OTA)</text>
+<text text-anchor="middle" x="2889.06" y="-919" font-family="Helvetica,sans-Serif" font-size="10.00">Legacy non&#45;touch build supported</text>
 </g>
 <!-- fw_display -->
 <g id="node49" class="node">

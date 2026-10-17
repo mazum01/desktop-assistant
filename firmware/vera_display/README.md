@@ -1,22 +1,34 @@
 # VERA Waveshare ESP32-C6 LCD firmware
 
 This Arduino sketch is the firmware project for the
-[Waveshare ESP32-C6-LCD-1.47](https://www.waveshare.com/product/esp32-related/boards-kits/esp32-c6/esp32-c6-lcd-1.47.htm).
+[Waveshare ESP32-C6-Touch-LCD-1.47](https://www.waveshare.com/esp32-c6-touch-lcd-1.47.htm)
+(default), with a separate build profile for the original non-touch
+ESP32-C6-LCD-1.47.
 The firmware runs on the ESP32-C6; the Raspberry Pi host communicates with it
 over BLE GATT.
 
 ## Board contract
 
 - Board: `ESP32-C6`
-- Display: 1.47-inch, 172x320 TFT, ST7789 controller, SPI
+- Display: 1.47-inch, 172x320 TFT, SPI; landscape rendering
 - BLE: ESP32-C6 Bluetooth 5
-- LCD pins: MOSI GPIO6, SCLK GPIO7, CS GPIO14, DC GPIO15, RST GPIO21
-- Backlight: GPIO22
-- Brightness: keep at or below 50%, per
-  [Waveshare's Arduino guidance](https://docs.waveshare.com/ESP32-C6-LCD-1.47/Arduino)
+- Touch-board LCD pins: MOSI GPIO2, SCLK GPIO1, CS GPIO14, DC GPIO15, RST GPIO22
+- Touch-board backlight: GPIO23, driven with 50% PWM after initialization
+- Touch input: **disabled**; no touch driver, I2C initialization, interrupts,
+  or polling. The IMU, SD card, and battery monitoring are also unused.
+- Legacy non-touch pins: MOSI GPIO6, SCLK GPIO7, CS GPIO14, DC GPIO15,
+  RST GPIO21, backlight GPIO22
 
-The pin mapping and display orientation must be verified against the board
-schematic during hardware validation before production flashing.
+The shared pin contract is in `display_board.h`. The touch board uses the
+ST7789-compatible drawing interface with explicit 172x320 dimensions, 34-column
+offsets, and the panel register sequence from Waveshare's
+[official demo](https://files.waveshare.com/wiki/ESP32-C6-Touch-LCD-1.47/ESP32-C6-Touch-LCD-1.47-Demo.zip),
+cross-checked against its
+[schematic](https://files.waveshare.com/wiki/ESP32-C6-Touch-LCD-1.47/ESP32-C6-Touch-LCD-1.47-Schematic.pdf).
+The generic ST7789 initialization alone is not sufficient for this board.
+Physical orientation, colors, and BLE operation still need verification on
+each newly flashed board. The historical validation below covers the old board,
+not the replacement touch model.
 
 ## Hardware validation results (physical Waveshare ESP32-C6-LCD-1.47)
 
@@ -104,6 +116,21 @@ then run:
 ./firmware/build_esp32_display.sh
 VERA_ESP32_PORT=/dev/ttyACM0 ./firmware/upload_esp32_display.sh
 ```
+
+These commands now target the **touch board with touch input disabled**.
+For the original non-touch board, set `VERA_DISPLAY_BOARD=legacy` on both build
+and upload commands, including BLE OTA commands. Never send a touch-board
+binary to the legacy board (or vice versa); their GPIO assignments differ.
+Unknown profile names fail before building.
+
+Connect the replacement directly to the Pi with a USB data cable. Use
+`arduino-cli board list` or `/dev/serial/by-id/` to identify its port; if needed,
+hold BOOT while connecting/resetting to enter download mode. After USB upload,
+verify that the screen displays the neutral mouth, then discover its new
+`VERA-Display` BLE address and update `display.ble_address` on the host.
+The previous board's address must not be reused. Restart core and verify
+mouth, status, and EQ commands; the BLE protocol and OTA service are unchanged.
+The BLE hello notification includes the board profile and `touch: false`.
 
 The scripts keep Arduino CLI data and downloads under `firmware/` (ignored by
 Git), install the ESP32 core and Arduino GFX dependency, and use
