@@ -1,5 +1,5 @@
 /*
- * VERA display firmware for Waveshare ESP32-C6 1.47-inch LCD boards.
+ * VERA display firmware for Waveshare ESP32 1.47-inch LCD boards.
  *
  * Owns the board/display pin contract plus the BLE GATT link to the
  * Raspberry Pi host (src/services/display_service.py). See

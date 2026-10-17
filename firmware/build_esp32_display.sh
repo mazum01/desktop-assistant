@@ -1,27 +1,20 @@
 #!/usr/bin/env bash
-# Builds the VERA ESP32-C6 LCD display firmware.
+# Builds the VERA ESP32 LCD display firmware.
 #
 # Environment:
 #   VERA_VERBOSE=1          echo every command, pass -v to arduino-cli
 #   VERA_ESP32_FQBN=...     override the board FQBN
 #   ARDUINO_CLI=...         override the arduino-cli binary
 #   BUILD_OUTPUT_DIR=...    also emit the build artefacts (.bin etc) here
-#   VERA_DISPLAY_BOARD=touch|legacy  LCD board profile (default: touch)
+#   VERA_DISPLAY_BOARD=s3-touch|touch|legacy (default: s3-touch)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIRMWARE_DIR="$ROOT/firmware"
 SKETCH_DIR="$FIRMWARE_DIR/vera_display"
 CLI_CONFIG="$FIRMWARE_DIR/arduino-cli.yaml"
-FQBN="${VERA_ESP32_FQBN:-esp32:esp32:esp32c6}"
 CLI="${ARDUINO_CLI:-arduino-cli}"
-BOARD="${VERA_DISPLAY_BOARD:-touch}"
-BOARD_FLAGS=()
-case "$BOARD" in
-    touch) ;;
-    legacy) BOARD_FLAGS=(--build-property "compiler.cpp.extra_flags=-DVERA_DISPLAY_LEGACY_LCD=1") ;;
-    *) printf 'Unknown VERA_DISPLAY_BOARD: %s (expected touch or legacy)\\n' "$BOARD" >&2; exit 2 ;;
-esac
+source "$FIRMWARE_DIR/display_board_config.sh"
 
 source "$FIRMWARE_DIR/lib_log.sh"
 

@@ -246,6 +246,11 @@ void begin() {
 #if !defined(VERA_DISPLAY_LEGACY_LCD)
   vera_board::initialize_touch_panel(g_bus);
   g_panel->setRotation(vera_board::ROTATION);
+#if defined(VERA_DISPLAY_S3_TOUCH)
+  g_bus->beginWrite();
+  g_bus->writeC8D8(ST7789_MADCTL, vera_board::PANEL_MADCTL);
+  g_bus->endWrite();
+#endif
 #endif
 
   // All drawing (mouth + status renderer) happens into this offscreen
@@ -254,7 +259,14 @@ void begin() {
   // heap (~300KB with this sketch), so buffering the whole screen is
   // simpler and cheaper than a partial/dirty-rect scheme.
   g_gfx = new Arduino_Canvas(g_panel->width(), g_panel->height(), g_panel);
-  g_gfx->begin();
+  // The panel is already initialized; canvas begin otherwise resets its
+  // vendor registers and S3 color-order correction a second time.
+  if (!g_gfx->begin(GFX_SKIP_OUTPUT_BEGIN)) {
+    Serial.println("VERA display canvas allocation failed");
+    while (true) {
+      delay(1000);
+    }
+  }
   g_gfx->fillScreen(COLOR_BG);
 
   g_current_state = State::kNeutral;

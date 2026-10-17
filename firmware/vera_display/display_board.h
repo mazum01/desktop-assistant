@@ -4,7 +4,12 @@
 
 namespace vera_board {
 
+#if defined(VERA_DISPLAY_S3_TOUCH)
+constexpr uint8_t ROTATION = 3;
+constexpr uint8_t PANEL_MADCTL = 0xA0;  // Landscape RGB, verified on the S3 panel.
+#else
 constexpr uint8_t ROTATION = 1;
+#endif
 constexpr uint8_t BACKLIGHT_PERCENT = 50;
 
 #if defined(VERA_DISPLAY_LEGACY_LCD)
@@ -15,6 +20,14 @@ constexpr int CS = 14;
 constexpr int DC = 15;
 constexpr int RST = 21;
 constexpr int BACKLIGHT = 22;
+#elif defined(VERA_DISPLAY_S3_TOUCH)
+constexpr char NAME[] = "ESP32-S3-Touch-LCD-1.47";
+constexpr int MOSI = 39;
+constexpr int SCLK = 38;
+constexpr int CS = 21;
+constexpr int DC = 45;
+constexpr int RST = 40;
+constexpr int BACKLIGHT = 46;
 #else
 constexpr char NAME[] = "ESP32-C6-Touch-LCD-1.47";
 constexpr int MOSI = 2;
@@ -23,7 +36,9 @@ constexpr int CS = 14;
 constexpr int DC = 15;
 constexpr int RST = 22;
 constexpr int BACKLIGHT = 23;
+#endif
 
+#if !defined(VERA_DISPLAY_LEGACY_LCD)
 // Register data from Waveshare's 01_gfx_helloworld demo for this panel.
 // The ST7789-compatible drawing interface alone is not sufficient to boot it.
 inline void initialize_touch_panel(Arduino_DataBus *bus) {

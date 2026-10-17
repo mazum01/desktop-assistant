@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.72.0] - 2026-10-17
+### Added
+- Support the confirmed ESP32-S3-Touch-LCD-1.47 replacement display, leaving
+  touch disabled and preserving both C6 display profiles.
+### Fixed
+- Share board/chip selection between build and USB upload and reject mismatched
+  chip overrides before compiling or flashing.
+- Flash and verify the S3 replacement over USB/BLE, update the host to its
+  discovered BLE address, and use the configured address for future BLE uploads.
+- Correct the replacement panel's mirrored landscape text and red/blue channel
+  order without changing legacy C6 display orientation or colors.
+- Prevent canvas allocation from reinitializing the physical panel and
+  overwriting its vendor register sequence and color-order correction.
+
 ## [1.71.0] - 2026-10-16
 ### Added
 - Support the Waveshare ESP32-C6-Touch-LCD-1.47 with its own LCD pin mapping,

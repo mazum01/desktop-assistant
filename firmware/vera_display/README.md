@@ -1,44 +1,62 @@
-# VERA Waveshare ESP32-C6 LCD firmware
+# VERA Waveshare ESP32 LCD firmware
 
 This Arduino sketch is the firmware project for the
-[Waveshare ESP32-C6-Touch-LCD-1.47](https://www.waveshare.com/esp32-c6-touch-lcd-1.47.htm)
-(default), with a separate build profile for the original non-touch
-ESP32-C6-LCD-1.47.
-The firmware runs on the ESP32-C6; the Raspberry Pi host communicates with it
+[Waveshare ESP32-S3-Touch-LCD-1.47](https://www.waveshare.com/esp32-s3-touch-lcd-1.47.htm)
+(default), with separate profiles for ESP32-C6-Touch-LCD-1.47 and the original
+non-touch ESP32-C6-LCD-1.47.
+The firmware runs on the ESP32; the Raspberry Pi host communicates with it
 over BLE GATT.
 
 ## Board contract
 
-- Board: `ESP32-C6`
+- Default board: `ESP32-S3-Touch-LCD-1.47` (confirmed by USB chip identification)
 - Display: 1.47-inch, 172x320 TFT, SPI; landscape rendering
-- BLE: ESP32-C6 Bluetooth 5
-- Touch-board LCD pins: MOSI GPIO2, SCLK GPIO1, CS GPIO14, DC GPIO15, RST GPIO22
-- Touch-board backlight: GPIO23, driven with 50% PWM after initialization
+- BLE GATT: identical protocol across all profiles
+- S3 touch-board LCD pins: MOSI GPIO39, SCLK GPIO38, CS GPIO21, DC GPIO45,
+  RST GPIO40; backlight GPIO46, driven with 50% PWM after initialization
+- C6 touch-board LCD pins: MOSI GPIO2, SCLK GPIO1, CS GPIO14, DC GPIO15,
+  RST GPIO22; backlight GPIO23
 - Touch input: **disabled**; no touch driver, I2C initialization, interrupts,
   or polling. The IMU, SD card, and battery monitoring are also unused.
 - Legacy non-touch pins: MOSI GPIO6, SCLK GPIO7, CS GPIO14, DC GPIO15,
   RST GPIO21, backlight GPIO22
 
-The shared pin contract is in `display_board.h`. The touch board uses the
+The shared pin contract is in `display_board.h`. Both touch boards use the
 ST7789-compatible drawing interface with explicit 172x320 dimensions, 34-column
 offsets, and the panel register sequence from Waveshare's
-[official demo](https://files.waveshare.com/wiki/ESP32-C6-Touch-LCD-1.47/ESP32-C6-Touch-LCD-1.47-Demo.zip),
+[official S3 demo](https://files.waveshare.com/wiki/ESP32-S3-Touch-LCD-1.47/ESP32-S3-Touch-LCD-1.47-Demo.zip),
 cross-checked against its
-[schematic](https://files.waveshare.com/wiki/ESP32-C6-Touch-LCD-1.47/ESP32-C6-Touch-LCD-1.47-Schematic.pdf).
+[schematic](https://files.waveshare.com/wiki/ESP32-S3-Touch-LCD-1.47/ESP32-S3-Touch-LCD-1.47-Schematic.pdf).
+The S3 LCD reset is GPIO40, not GPIO47 (touch reset). The vendor's simplest
+HelloWorld example has an inconsistent constructor; the LVGL example uses
+the correct GPIO40. VERA does not configure the touch reset or I2C pins.
 The generic ST7789 initialization alone is not sufficient for this board.
 Physical orientation, colors, and BLE operation still need verification on
 each newly flashed board. The historical validation below covers the old board,
 not the replacement touch model.
 
-## Hardware validation results (physical Waveshare ESP32-C6-LCD-1.47)
+## Replacement S3 hardware validation (2026-10-17)
+
+- USB chip identification: ESP32-S3, base MAC `28:84:85:88:1B:24`.
+- New BLE address: `28:84:85:88:1B:25`, discovered over BLE rather than inferred.
+- USB upload completed with flash hashes verified; BLE service and OTA service
+  advertised, and ping, status, mouth, EQ, and neutral restoration acknowledged.
+- Host `display.ble_address` now targets the replacement. Touch remains disabled.
+- A labeled eight-mode RGB/orientation sweep identified mode 5 (MADCTL `0xA0`,
+  landscape rotation 3, RGB) as correct on this panel. Canvas allocation skips
+  physical output initialization so vendor registers are not reset afterward.
+- Final production firmware was visually confirmed: red text on black,
+  upright and readable left to right. VERA reconnected at the new BLE address.
+
+## Historical hardware validation (physical Waveshare ESP32-C6-LCD-1.47)
 
 Validated end-to-end against the physical board (firmware v1.53.1):
 
 - **BLE discovery/pairing**: device advertises as `VERA-Display`
   (`AC:EB:E6:23:EC:76`); `DisplayService` on the host connects directly by
   address (no interactive pairing required) using `bleak`.
-- **Current host display (2026-10-13)**: the display connected to this host
-  uses `AC:EB:E6:3E:B6:E2`, as configured in `config/assistant.yaml`.
+- **Previous host display (2026-10-13)**: the display connected to this host
+  used `AC:EB:E6:3E:B6:E2`, before the S3 replacement.
   The address above belongs to the earlier hardware validation board.
 - **Persistent connection**: `DisplayService` holds one long-lived
   `BleakClient` session instead of reconnecting per message — connect takes
@@ -117,11 +135,13 @@ then run:
 VERA_ESP32_PORT=/dev/ttyACM0 ./firmware/upload_esp32_display.sh
 ```
 
-These commands now target the **touch board with touch input disabled**.
-For the original non-touch board, set `VERA_DISPLAY_BOARD=legacy` on both build
+These commands now target the **S3 touch board with touch input disabled**.
+Use `VERA_DISPLAY_BOARD=touch` for the C6 touch board.
+For the original C6 non-touch board, set `VERA_DISPLAY_BOARD=legacy` on both build
 and upload commands, including BLE OTA commands. Never send a touch-board
 binary to the legacy board (or vice versa); their GPIO assignments differ.
-Unknown profile names fail before building.
+Unknown profile names and mismatched chip overrides fail before building.
+Build and USB upload share the same profile-to-chip selection.
 
 Connect the replacement directly to the Pi with a USB data cable. Use
 `arduino-cli board list` or `/dev/serial/by-id/` to identify its port; if needed,
@@ -134,8 +154,9 @@ The BLE hello notification includes the board profile and `touch: false`.
 
 The scripts keep Arduino CLI data and downloads under `firmware/` (ignored by
 Git), install the ESP32 core and Arduino GFX dependency, and use
-`esp32:esp32:esp32c6` by default. Override the board or CLI executable with
-`VERA_ESP32_FQBN` or `ARDUINO_CLI` when needed. Upload requires a connected
+`esp32:esp32:esp32s3` by default (`esp32c6` for the C6 profiles).
+Override board options or the CLI executable with `VERA_ESP32_FQBN` or
+`ARDUINO_CLI` when needed; the FQBN must match the profile's chip. Upload requires a connected
 board and permission to access its serial port.
 
 ## BLE OTA firmware updates
@@ -167,7 +188,7 @@ Every build after that can be pushed over BLE.
 To push a new build over BLE once the device has OTA-capable firmware:
 
 ```bash
-VERA_ESP32_BLE_ADDRESS=AC:EB:E6:3E:B6:E2 ./firmware/upload_esp32_display_ble.sh
+./firmware/upload_esp32_display_ble.sh
 ```
 
 This compiles the sketch, locates the resulting `.bin`, and streams it to the
@@ -176,7 +197,7 @@ bundled uploader script;
 chunked 4KB sectors with CRC16 verification and automatic
 retry-on-error, per the NimBLEOta wire protocol). `VERA_ESP32_BLE_ADDRESS`
 defaults to the address already configured in `config/assistant.yaml`
-(`display.ble_address`). Because the ESP32-C6's default partition table
+(`display.ble_address`). Because the default ESP32 partition table
 (`Default 4MB with spiffs`) includes dual OTA app slots, no partition scheme
 change is required.
 

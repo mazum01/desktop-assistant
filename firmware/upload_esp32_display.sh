@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIRMWARE_DIR="$ROOT/firmware"
 SKETCH_DIR="$FIRMWARE_DIR/vera_display"
 CLI_CONFIG="$FIRMWARE_DIR/arduino-cli.yaml"
-FQBN="${VERA_ESP32_FQBN:-esp32:esp32:esp32c6}"
+source "$FIRMWARE_DIR/display_board_config.sh"
 PORT="${VERA_ESP32_PORT:-}"
 CLI="${ARDUINO_CLI:-arduino-cli}"
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Uploads a compiled firmware binary to the VERA ESP32-C6 LCD over Bluetooth
+# Uploads a compiled firmware binary to the VERA ESP32 LCD over Bluetooth
 # Low Energy, using the NimBLEOta GATT service compiled into
 # firmware/vera_display/vera_display.ino (see README.md's "BLE OTA firmware
 # updates" section). Requires the device to already be running a firmware
@@ -8,7 +8,7 @@
 #
 # Environment:
 #   VERA_VERBOSE=1               echo every command, pass -v to arduino-cli
-#   VERA_ESP32_BLE_ADDRESS=...   target BLE MAC (default AC:EB:E6:23:EC:76)
+#   VERA_ESP32_BLE_ADDRESS=...   target BLE MAC (default: config/assistant.yaml)
 #   VERA_PYTHON=...              python interpreter to run the uploader with
 #   VERA_SKIP_BUILD=1            upload the existing .bin, skip recompiling
 set -euo pipefail
@@ -19,8 +19,21 @@ SKETCH_DIR="$FIRMWARE_DIR/vera_display"
 UPLOADER="$FIRMWARE_DIR/nimbleota_uploader.py"
 BUILD_OUT="$FIRMWARE_DIR/.arduino-build-ble-ota"
 
-ADDRESS="${VERA_ESP32_BLE_ADDRESS:-AC:EB:E6:23:EC:76}"
 PYTHON="${VERA_PYTHON:-python3}"
+ADDRESS="${VERA_ESP32_BLE_ADDRESS:-}"
+if [[ -z "$ADDRESS" ]]; then
+    ADDRESS="$("$PYTHON" - "$ROOT/config/assistant.yaml" <<'PY'
+import sys
+import yaml
+
+with open(sys.argv[1]) as config_file:
+    address = yaml.safe_load(config_file)["display"]["ble_address"]
+if not isinstance(address, str) or not address.strip():
+    raise ValueError("display.ble_address must be configured before BLE upload")
+print(address)
+PY
+)"
+fi
 CORE_UNIT="desktop-assistant-core.service"
 SYSTEMCTL=(systemctl)
 KILL=(sudo -n kill)
