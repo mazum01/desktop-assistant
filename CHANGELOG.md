@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.74.0] - 2026-10-18
+### Added
+- Periodic, bounded I2C address polling on the ESP32 display, with responding
+  addresses, configured pins, scan progress, and bus errors reported over BLE.
+  Probe only address acknowledgments; never configure unidentified devices.
+### Fixed
+- Report I2C initialization failures explicitly rather than treating them as
+  an undetected IMU.
+
 ## [1.73.0] - 2026-10-18
 ### Added
 - Explicit VERA commands to list, play, loop, stop, and inspect silent baseline

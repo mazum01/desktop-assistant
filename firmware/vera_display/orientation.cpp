@@ -15,6 +15,41 @@ const char *error = "imu_not_detected";
 Angles angles;
 uint32_t last_poll = 0, last_sample = 0;
 bool configured = false;
+bool bus_ready = false;
+int sda = -1, scl = -1;
+uint8_t scan_next = vera_media_config::I2C_SCAN_FIRST;
+bool scan_active = true;
+bool scan_ack[128] = {};
+uint16_t scan_errors = 0;
+uint8_t scan_last_error = 0;
+uint32_t scan_completed = 0, scan_count = 0;
+
+void scan_bus() {
+  if (!bus_ready) return;
+  if (!scan_active) {
+    if (millis() - scan_completed < vera_media_config::I2C_SCAN_INTERVAL_MS) return;
+    scan_active = true;
+    scan_next = vera_media_config::I2C_SCAN_FIRST;
+    memset(scan_ack, 0, sizeof(scan_ack));
+    scan_errors = 0;
+    scan_last_error = 0;
+  }
+  // One address per main-loop iteration, with no register/data writes.
+  Wire.beginTransmission(scan_next);
+  uint8_t result = Wire.endTransmission();
+  scan_ack[scan_next] = result == 0;
+  if (result != 0 && result != 2) {
+    ++scan_errors;
+    scan_last_error = result;
+  }
+  if (scan_next++ == vera_media_config::I2C_SCAN_LAST) {
+    scan_active = false;
+    scan_completed = millis();
+    ++scan_count;
+    Serial.printf("VERA I2C scan complete: SDA%d SCL%d, %u bus errors\n",
+                  sda, scl, unsigned(scan_errors));
+  }
+}
 
 bool read(uint8_t device, uint8_t reg, uint8_t *data, size_t count) {
   Wire.beginTransmission(device);
@@ -40,14 +75,22 @@ bool available() {
 
 void begin() {
 #if defined(VERA_DISPLAY_S3_TOUCH)
-  Wire.begin(vera_media_config::IMU_SDA_S3, vera_media_config::IMU_SCL_S3);
+  sda = vera_media_config::IMU_SDA_S3;
+  scl = vera_media_config::IMU_SCL_S3;
 #elif !defined(VERA_DISPLAY_LEGACY_LCD)
-  Wire.begin(vera_media_config::IMU_SDA_C6, vera_media_config::IMU_SCL_C6);
+  sda = vera_media_config::IMU_SDA_C6;
+  scl = vera_media_config::IMU_SCL_C6;
 #else
   error = "imu_unsupported_board";
   return;
 #endif
-  Wire.setTimeOut(20);
+  if (!Wire.begin(sda, scl, vera_media_config::I2C_CLOCK_HZ)) {
+    error = "i2c_init_failed";
+    Serial.println("VERA I2C initialization failed");
+    return;
+  }
+  bus_ready = true;
+  Wire.setTimeOut(vera_media_config::I2C_TIMEOUT_MS);
   // Only enable a positively identified QMI8658; never write to a touch IC.
   for (uint8_t candidate : {uint8_t(0x6A), uint8_t(0x6B)}) {
     uint8_t identity = 0;
@@ -77,6 +120,7 @@ void begin() {
 }
 
 void update() {
+  scan_bus();
   uint32_t now = millis();
   if (!configured || now - last_poll < vera_media_config::IMU_PERIOD_MS) return;
   last_poll = now;
@@ -118,6 +162,25 @@ void draw() {
 }
 
 void status(JsonObject out) {
+  JsonObject bus = out["i2c"].to<JsonObject>();
+  bus["ready"] = bus_ready;
+  bus["sda"] = sda;
+  bus["scl"] = scl;
+  bus["clock_hz"] = vera_media_config::I2C_CLOCK_HZ;
+  bus["scanning"] = bus_ready && scan_active;
+  bus["completed_scans"] = scan_count;
+  bus["scan_age_ms"] = scan_count ? millis() - scan_completed : 0;
+  bus["errors"] = scan_errors;
+  bus["last_error_code"] = scan_last_error;
+  JsonArray addresses = bus["addresses"].to<JsonArray>();
+  for (uint8_t device = vera_media_config::I2C_SCAN_FIRST;
+       device <= vera_media_config::I2C_SCAN_LAST; ++device) {
+    if (scan_ack[device]) {
+      char hex[5];
+      snprintf(hex, sizeof(hex), "0x%02X", device);
+      addresses.add(hex);
+    }
+  }
   out["available"] = available();
   out["sensor"] = address ? "QMI8658" : "none";
   out["error"] = error ? error : (available() ? "" : "imu_stale");

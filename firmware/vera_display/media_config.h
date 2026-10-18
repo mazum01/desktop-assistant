@@ -22,4 +22,9 @@ constexpr int IMU_SCL_C6 = 19;
 constexpr uint32_t IMU_PERIOD_MS = 20;
 constexpr uint32_t IMU_STALE_MS = 500;
 constexpr uint32_t FOOTER_PERIOD_MS = 200;
+constexpr uint32_t I2C_CLOCK_HZ = 100000;
+constexpr uint16_t I2C_TIMEOUT_MS = 20;
+constexpr uint32_t I2C_SCAN_INTERVAL_MS = 30000;
+constexpr uint8_t I2C_SCAN_FIRST = 0x08;
+constexpr uint8_t I2C_SCAN_LAST = 0x77;
 }  // namespace vera_media_config

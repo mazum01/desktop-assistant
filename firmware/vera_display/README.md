@@ -157,11 +157,34 @@ ffmpeg -i input.mp4 -an -vf 'scale=320:152:force_original_aspect_ratio=decrease,
 
 ## Orientation footer
 
-The firmware probes only QMI8658 addresses 0x6A/0x6B and checks WHO_AM_I=0x05
+The firmware checks QMI8658 identity at addresses 0x6A/0x6B (WHO_AM_I=0x05)
 before writing sensor configuration. C6 touch uses SDA18/SCL19; S3 uses
-SDA42/SCL41. The S3 product documentation does **not** specify an onboard IMU:
-do not assume that the sensor exists merely because the C6 model has one.
+SDA42/SCL41. A failed identity probe does not prove the IMU is absent:
+board revision, wiring, power, and bus faults can also prevent detection.
 Legacy C6 reports the sensor unsupported. No magnetometer is used.
+
+### I2C address polling
+
+The display scans non-reserved 7-bit addresses **0x08-0x77** at startup and
+30 seconds after each completed scan, on the configured pins at 100 kHz.
+It probes one address per main-loop iteration, with a 20 ms transaction
+timeout, using address-only transmissions (no register/configuration writes).
+It does not poll the Raspberry Pi's I2C bus or guess alternative GPIOs.
+
+Run `vera display video status` and inspect `imu.i2c`:
+
+- `ready`, `sda`, `scl`, `clock_hz`: bus initialization and pin configuration.
+- `scanning`, `completed_scans`, `scan_age_ms`: progress and age of the last
+  completed scan. The first scan normally finishes within a few seconds.
+- `addresses`: hexadecimal addresses that acknowledged in the current/latest
+  scan. Results are partial while `scanning` is true; a new scan clears old ACKs.
+- `errors`, `last_error_code`: failures other than normal address NACK (code 2),
+  using Arduino Wire result codes; e.g. 5 indicates timeout.
+
+An ACK identifies a responding address, **not the device model**. The scanner
+does not configure unknown devices or enable touch input. QMI8658 initialization
+still requires its documented address and identity check; discovery alone does
+not reconfigure the IMU. Interrupt lines are not required for polled readings.
 
 When present, accelerometer/gyro fusion displays roll, pitch, and **relative
 yaw**, in degrees in sensor-board axes (not compensated for the robot mount).
@@ -182,6 +205,10 @@ shows `R:-- P:-- Y:-- IMU not detected`, and status omits numeric angles.
 - The installed S3 returned `imu_not_detected` at both QMI8658 addresses; angle
   math is regression-tested, but physical sensor readings could not be tested
   because no supported onboard IMU was found.
+- v1.74.0 completed repeated address scans on SDA42/SCL41 at 100 kHz: only
+  `0x63` acknowledged, with no bus errors. Neither `0x6A` nor `0x6B` acknowledged.
+  This establishes a responding device on that bus, not its identity or the
+  absence of an IMU on a different board revision/pin assignment.
 
 ## BLE protocol
 
