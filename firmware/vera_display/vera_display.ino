@@ -20,6 +20,12 @@
 #include "eq_renderer.h"
 #include "mouth_renderer.h"
 #include "status_renderer.h"
+#include "sd_video.h"
+#include "orientation.h"
+#include "media_config.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <atomic>
 
 namespace vera_display {
 
@@ -53,8 +59,18 @@ DisplayMode g_display_mode = DisplayMode::kMouth;
 NimBLEServer *g_server = nullptr;
 NimBLECharacteristic *g_command_char = nullptr;
 NimBLECharacteristic *g_status_char = nullptr;
-bool g_connected = false;
+std::atomic<bool> g_connected{false};
+std::atomic<uint16_t> g_connection_handle{BLE_HS_CONN_HANDLE_NONE};
+std::atomic<bool> g_hello_pending{false};
+std::atomic<bool> g_queue_overflow{false};
+std::atomic<bool> g_message_overflow{false};
+bool g_discard_message = false;
 String g_rx_buffer;
+struct PendingCommand { char line[vera_ble::MAX_MESSAGE_BYTES + 1]; };
+QueueHandle_t g_commands = nullptr;
+String g_request_id;
+uint32_t g_footer_at = 0;
+bool g_mouth_override = false;
 
 NimBLEOta g_ota;
 
@@ -63,10 +79,21 @@ void send_status(JsonDocument &doc) {
     return;
   }
   String out;
+  if (g_request_id.length()) doc["request_id"] = g_request_id;
   serializeJson(doc, out);
   out += '\n';
-  g_status_char->setValue(reinterpret_cast<const uint8_t *>(out.c_str()), out.length());
-  g_status_char->notify();
+  uint16_t handle = g_connection_handle.load();
+  uint16_t mtu = g_server->getPeerMTU(handle);
+  size_t fragment = mtu > 23 ? min(size_t(244), size_t(mtu - 3)) : 20;
+  for (size_t offset = 0; offset < out.length(); offset += fragment) {
+    size_t count = min(fragment, out.length() - offset);
+    if (!g_status_char->notify(
+            reinterpret_cast<const uint8_t *>(out.c_str()) + offset, count, handle)) {
+      Serial.println("VERA BLE status notification failed");
+      break;
+    }
+    delay(20);
+  }
 }
 
 void send_ack(const char *cmd, bool ok, const char *error = nullptr) {
@@ -86,6 +113,12 @@ void send_hello() {
   doc["proto"] = vera_ble::PROTOCOL_VERSION;
   doc["board"] = vera_board::NAME;
   doc["touch"] = false;
+  doc["video"] =
+#if defined(VERA_DISPLAY_S3_TOUCH)
+      "mjpeg";
+#else
+      "unsupported";
+#endif
   send_status(doc);
 }
 
@@ -112,6 +145,7 @@ vera_status::Level level_for_state(const char *state_name) {
 // commands/states are ack'd with ok=false rather than dropped silently so
 // the host can detect a protocol mismatch.
 void handle_command(const String &line) {
+  g_request_id = "";
   if (line.length() == 0) {
     return;
   }
@@ -123,8 +157,55 @@ void handle_command(const String &line) {
   }
 
   const char *cmd = doc["cmd"] | "";
+  g_request_id = String(doc["request_id"] | "").substring(0, 64);
   if (strcmp(cmd, "ping") == 0) {
     send_ack("ping", true);
+    return;
+  }
+  if (strcmp(cmd, "video") == 0) {
+    const char *action = doc["action"] | "";
+    JsonDocument reply;
+    reply["cmd"] = "video";
+    reply["action"] = action;
+    const char *error = nullptr;
+    bool ok = true;
+    if (strcmp(action, "play") == 0) {
+      if (!doc["path"].is<const char *>() ||
+          (doc["fps"].is<int>() == false && !doc["fps"].isNull()) ||
+          (!doc["loop"].isNull() && !doc["loop"].is<bool>())) {
+        ok = false;
+        error = "invalid_video_arguments";
+      } else {
+        ok = vera_video::play(doc["path"], doc["fps"] | vera_media_config::DEFAULT_FPS,
+                              doc["loop"] | false, &error);
+        if (ok) {
+          g_display_mode = DisplayMode::kMouth;
+          g_mouth_override = false;
+          vera_eq::clear();
+        }
+      }
+    } else if (strcmp(action, "stop") == 0) {
+      vera_video::stop();
+      g_display_mode = DisplayMode::kMouth;
+      vera_mouth::force_redraw();
+    } else if (strcmp(action, "list") == 0) {
+      if (!doc["offset"].isNull() && !doc["offset"].is<unsigned>()) {
+        ok = false;
+        error = "invalid_list_offset";
+      } else {
+        ok = vera_video::list(reply.to<JsonObject>(), doc["offset"] | 0U, &error);
+        reply["cmd"] = "video";
+        reply["action"] = action;
+      }
+    } else if (strcmp(action, "status") != 0) {
+      ok = false;
+      error = "unknown_video_action";
+    }
+    reply["ok"] = ok;
+    if (error) reply["error"] = error;
+    vera_video::status(reply["video"].to<JsonObject>());
+    vera_orientation::status(reply["imu"].to<JsonObject>());
+    send_status(reply);
     return;
   }
   if (strcmp(cmd, "mouth") == 0) {
@@ -139,6 +220,7 @@ void handle_command(const String &line) {
       return;
     }
     vera_mouth::set_state(state);
+    g_mouth_override = state != vera_mouth::State::kNeutral;
     // Speech/emotion outranks the music visualization: drop the bars so the
     // mouth is visible immediately.
     vera_eq::clear();
@@ -150,6 +232,10 @@ void handle_command(const String &line) {
     return;
   }
   if (strcmp(cmd, "eq") == 0) {
+    if (vera_video::active()) {
+      send_ack("eq", true);
+      return;
+    }
     JsonArrayConst bins = doc["bins"].as<JsonArrayConst>();
     if (bins.isNull()) {
       send_ack("eq", false, "missing_bins");
@@ -212,15 +298,27 @@ void feed_command_bytes(const uint8_t *data, size_t len) {
   for (size_t i = 0; i < len; ++i) {
     char c = static_cast<char>(data[i]);
     if (c == '\n') {
-      handle_command(g_rx_buffer);
+      if (g_discard_message) {
+        g_discard_message = false;
+        continue;
+      }
+      PendingCommand command{};
+      g_rx_buffer.toCharArray(command.line, sizeof(command.line));
+      if (xQueueSend(g_commands, &command, 0) != pdTRUE) {
+        Serial.println("VERA display command queue full");
+        g_queue_overflow = true;
+        // The main loop owns drawing, SD, I2C and reply framing.
+      }
       g_rx_buffer = "";
       continue;
     }
+    if (g_discard_message) continue;
     if (g_rx_buffer.length() >= vera_ble::MAX_MESSAGE_BYTES) {
       // Drop an oversized/unterminated message to avoid unbounded growth
       // from a misbehaving or disconnected peer.
       g_rx_buffer = "";
-      send_ack("unknown", false, "message_too_large");
+      g_discard_message = true;
+      g_message_overflow = true;
       continue;
     }
     g_rx_buffer += c;
@@ -238,14 +336,18 @@ class CommandCallbacks : public NimBLECharacteristicCallbacks {
 
 class ServerCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer *server, NimBLEConnInfo &connInfo) override {
+    g_connection_handle = connInfo.getConnHandle();
     g_connected = true;
     g_rx_buffer = "";
-    send_hello();
+    g_discard_message = false;
+    g_hello_pending = true;
   }
 
   void onDisconnect(NimBLEServer *server, NimBLEConnInfo &connInfo, int reason) override {
     g_connected = false;
+    g_connection_handle = BLE_HS_CONN_HANDLE_NONE;
     g_rx_buffer = "";
+    g_discard_message = false;
     // Resume advertising so the host's DisplayService can reconnect after a
     // drop (sleep, out-of-range, host restart, etc.) without a firmware
     // reboot.
@@ -349,10 +451,48 @@ void setup() {
   Serial.begin(115200);
   Serial.printf("VERA display: %s; touch disabled\n", vera_board::NAME);
   vera_display::initialize_hardware();
+  vera_orientation::begin();
+  g_commands = xQueueCreate(12, sizeof(PendingCommand));
+  if (!g_commands) {
+    Serial.println("VERA display command queue allocation failed");
+    while (true) delay(1000);
+  }
   start_ble();
 }
 
 void loop() {
+  if (g_hello_pending.exchange(false)) send_hello();
+  if (g_queue_overflow.exchange(false) || g_message_overflow.load()) {
+    JsonDocument reply;
+    reply["event"] = "command_error";
+    reply["ok"] = false;
+    reply["error"] = g_message_overflow.exchange(false) ? "message_too_large" : "command_queue_full";
+    send_status(reply);
+  }
+  PendingCommand command;
+  for (int count = 0; count < 4 && xQueueReceive(g_commands, &command, 0) == pdTRUE; ++count) {
+    handle_command(String(command.line));
+    g_request_id = "";
+  }
+  vera_orientation::update();
+  bool was_playing = vera_video::active();
+  bool visible = g_display_mode == DisplayMode::kMouth && !g_mouth_override;
+  bool video_frame = vera_video::update(visible);
+  if (const char *error = vera_video::take_error()) {
+    JsonDocument reply;
+    reply["event"] = "video_error";
+    reply["ok"] = false;
+    reply["error"] = error;
+    send_status(reply);
+    vera_status::show(vera_status::Level::kError, error);
+    g_display_mode = DisplayMode::kStatus;
+  } else if (was_playing && !vera_video::active()) {
+    JsonDocument reply;
+    reply["event"] = "video_finished";
+    reply["ok"] = true;
+    send_status(reply);
+    vera_mouth::force_redraw();
+  }
   if (g_display_mode == DisplayMode::kStatus) {
     vera_status::update();
     if (vera_status::consume_ready_expired()) {
@@ -367,8 +507,12 @@ void loop() {
       g_display_mode = DisplayMode::kMouth;
       vera_mouth::force_redraw();
     }
-  } else {
+  } else if (!vera_video::active() || g_mouth_override) {
     vera_mouth::update();
+  }
+  if (!video_frame && millis() - g_footer_at >= vera_media_config::FOOTER_PERIOD_MS) {
+    g_footer_at = millis();
+    vera_mouth::flush();
   }
   delay(20);
 }

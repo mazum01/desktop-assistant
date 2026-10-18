@@ -12,6 +12,7 @@
 #include <Arduino_GFX_Library.h>
 
 #include "mouth_renderer.h"
+#include "media_config.h"
 
 namespace vera_status {
 
@@ -104,7 +105,7 @@ void draw(const char *message, uint16_t color) {
   gfx->fillScreen(COLOR_BG);
 
   int16_t screen_w = gfx->width();
-  int16_t screen_h = gfx->height();
+  int16_t screen_h = gfx->height() - vera_media_config::FOOTER_HEIGHT;
   int max_chars_per_line = (screen_w - 2 * MARGIN) / GLYPH_W;
   if (max_chars_per_line < 4) {
     max_chars_per_line = 4;

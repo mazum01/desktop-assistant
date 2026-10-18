@@ -49,7 +49,7 @@ vrun "$CLI" --config-file "$CLI_CONFIG" core install esp32:esp32
 step_done
 
 step "Installing Arduino libraries"
-for lib in "GFX Library for Arduino" "NimBLE-Arduino" "ArduinoJson"; do
+for lib in "GFX Library for Arduino" "NimBLE-Arduino" "ArduinoJson" "JPEGDEC"; do
     info "library: $lib"
     vrun "$CLI" --config-file "$CLI_CONFIG" lib install "$lib"
 done

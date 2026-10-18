@@ -21,6 +21,17 @@
  *   {"cmd": "status", "state": "boot", "message": "Display status service online"}
  *   {"cmd": "eq", "bins": [0.1, 0.8, 0.4, ...]}
  *   {"cmd": "ping"}
+ *   {"cmd":"video","action":"play","path":"/videos/clip.mjpg","fps":10,
+ *    "loop":true,"request_id":"caller-generated-id"}
+ *   {"cmd":"video","action":"list","offset":0,"request_id":"..."}
+ *   {"cmd":"video","action":"stop","request_id":"..."}
+ *   {"cmd":"video","action":"status","request_id":"..."}
+ *
+ * Video replies echo request_id (up to 64 bytes), cmd, action and ok, plus
+ * video/imu objects and error on failure. List adds files and next_offset.
+ * Notifications include video_finished, video_error, and command_error events.
+ * Baseline-JPEG raw MJPEG only; no AVI/MP4/audio. A play ACK confirms opening,
+ * not successful decoding of subsequent frames. See README.md for bounds.
  *
  * The "eq" command drives the real-time graphic-EQ visualization: "bins" is
  * an ordered array of normalized 0.0-1.0 band levels (low frequency first),

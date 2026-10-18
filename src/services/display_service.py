@@ -5,12 +5,18 @@ Publishes human-readable startup/restart status updates and optionally writes
 them to an ESP32 over BLE.
 
 Topics subscribed:
+    display.video           {action, request_id, path?, fps?, loop?, offset?}
     display.set_mouth_state {"state": str}   — set mouth emotion (see MOUTH_STATES)
     av.speaking_started     {"text", "ts"}   — switch mouth to "speaking"
     av.spoke                {"text", "ts"}   — TTS finished; switch mouth back to "neutral"
     system.startup_status, service.started, service.stopped,
     av.version_announced, thermal.error, vision.error, audio.error,
     perception.error        — surfaced as status text on the display
+
+Topics published:
+    display.reply, display.reply.<request_id> — correlated device responses/errors
+    display.device_event    — asynchronous firmware events (finished/decode errors)
+    display.error           — validation, transport, or device failures
 
 The speaking/neutral mouth transitions are automatic and best-effort: they
 are skipped when the BLE display is disabled, and any other explicit
@@ -89,6 +95,7 @@ class DisplayService(Service):
         self._ble_stop = threading.Event()
         self._speaking = False
         self._last_spectrum_sent = 0.0
+        self._notification_buffer = bytearray()
         # None = no link state observed yet, so the first successful connect
         # after boot announces rather than being treated as a no-op transition.
         self._ble_connected: Optional[bool] = None
@@ -107,6 +114,7 @@ class DisplayService(Service):
             self.bus.subscribe("audio.error", self._on_audio_error),
             self.bus.subscribe("perception.error", self._on_perception_error),
             self.bus.subscribe("display.set_mouth_state", self._on_set_mouth_state),
+            self.bus.subscribe("display.video", self._on_video),
             self.bus.subscribe("display.spectrum", self._on_spectrum),
             self.bus.subscribe("av.speaking_started", self._on_speaking_started),
             self.bus.subscribe("av.spoke", self._on_spoke),
@@ -193,6 +201,73 @@ class DisplayService(Service):
         elif payload:
             state = str(payload).strip()
         self.set_mouth_state(state)
+
+    def _on_video(self, _topic, payload) -> None:
+        request_id = payload.get("request_id") if isinstance(payload, dict) else None
+        error = None
+        if not isinstance(payload, dict) or payload.get("action") not in ("play", "stop", "list", "status"):
+            error = "invalid_video_action"
+        elif (not isinstance(request_id, str) or not 1 <= len(request_id) <= 64):
+            error = "video_request_id_required"
+        elif (not self._cfg.ble_enabled or not self._cfg.ble_address
+              or not self._cfg.ble_characteristic_uuid or not self._cfg.ble_status_characteristic_uuid):
+            error = "ble_display_not_configured"
+        elif payload["action"] == "play":
+            path = payload.get("path")
+            fps = payload.get("fps", 10)
+            if (not isinstance(path, str) or not path.startswith("/videos/")
+                    or len(path.encode("utf-8")) >= 96 or ".." in path or "\\" in path
+                    or "/" in path[8:] or not path.endswith((".mjpg", ".mjpeg"))):
+                error = "use_/videos/name.mjpg_or_mjpeg"
+            elif type(fps) is not int or not 1 <= fps <= 20 or type(payload.get("loop", False)) is not bool:
+                error = "invalid_video_fps_or_loop"
+        elif payload["action"] == "list" and (
+                type(payload.get("offset", 0)) is not int or not 0 <= payload.get("offset", 0) <= 100000):
+            error = "invalid_video_list_offset"
+        if error:
+            reply = {"cmd": "video", "ok": False, "error": error, "request_id": request_id}
+            self._publish_reply(reply)
+            self.bus.publish("display.error", reply)
+            return
+        fields = {key: payload[key] for key in ("action", "path", "fps", "loop", "offset", "request_id")
+                  if key in payload}
+        encoded = (json.dumps({"cmd": "video", **fields}, separators=(",", ":")) + "\n").encode()
+        try:
+            self._ble_queue.put_nowait(encoded)
+        except queue.Full:
+            reply = {"cmd": "video", "ok": False, "error": "display_queue_full", "request_id": request_id}
+            self._publish_reply(reply)
+            self.bus.publish("display.error", reply)
+
+    def _publish_reply(self, reply: dict) -> None:
+        self.bus.publish("display.reply", reply)
+        request_id = reply.get("request_id")
+        if isinstance(request_id, str) and 1 <= len(request_id) <= 64:
+            self.bus.publish(f"display.reply.{request_id}", reply)
+
+    def _on_ble_notification(self, _characteristic, data: bytearray) -> None:
+        self._notification_buffer.extend(data)
+        if len(self._notification_buffer) > 8192:
+            self._notification_buffer.clear()
+            self.bus.publish("display.error", {"error": "oversized_display_reply"})
+            return
+        while b"\n" in self._notification_buffer:
+            line, _, rest = self._notification_buffer.partition(b"\n")
+            self._notification_buffer[:] = rest
+            try:
+                reply = json.loads(line)
+                if not isinstance(reply, dict):
+                    raise ValueError("Display reply must be an object")
+            except (ValueError, UnicodeDecodeError):
+                log.warning("Invalid BLE display reply", exc_info=True)
+                self.bus.publish("display.error", {"error": "invalid_display_reply"})
+                continue
+            if reply.get("cmd") == "video":
+                self._publish_reply(reply)
+            elif reply.get("event"):
+                self.bus.publish("display.device_event", reply)
+            if reply.get("ok") is False:
+                self.bus.publish("display.error", reply)
 
     def _on_speaking_started(self, _topic, _payload) -> None:
         """Switch the mouth display to 'speaking' while TTS audio is playing.
@@ -379,9 +454,16 @@ class DisplayService(Service):
             self._ble_queue.put_nowait(encoded)
         except queue.Full:
             try:
-                _ = self._ble_queue.get_nowait()
+                dropped = self._ble_queue.get_nowait()
             except queue.Empty:
-                pass
+                dropped = None
+            if dropped is not None:
+                command = json.loads(dropped)
+                if command.get("cmd") == "video":
+                    reply = {"cmd": "video", "ok": False, "error": "display_queue_full",
+                             "request_id": command.get("request_id")}
+                    self._publish_reply(reply)
+                    self.bus.publish("display.error", reply)
             try:
                 self._ble_queue.put_nowait(encoded)
             except queue.Full:
@@ -418,6 +500,10 @@ class DisplayService(Service):
                     timeout=float(self._cfg.connect_timeout_s),
                 ) as client:
                     log.info("DisplayService: connected to BLE display (%s)", self._cfg.ble_address)
+                    self._notification_buffer.clear()
+                    if self._cfg.ble_status_characteristic_uuid:
+                        await client.start_notify(self._cfg.ble_status_characteristic_uuid,
+                                                  self._on_ble_notification)
                     self._set_ble_connected(True)
                     try:
                         while not self._ble_stop.is_set() and client.is_connected:
@@ -431,11 +517,12 @@ class DisplayService(Service):
                                 return
 
                             try:
-                                await client.write_gatt_char(
-                                    self._cfg.ble_characteristic_uuid,
-                                    encoded,
-                                    response=False,
-                                )
+                                for start in range(0, len(encoded), 20):
+                                    await client.write_gatt_char(
+                                        self._cfg.ble_characteristic_uuid,
+                                        encoded[start:start + 20],
+                                        response=True,
+                                    )
                             except Exception:
                                 log.exception("DisplayService BLE write failed")
                                 self.bus.publish("display.error", {"error": "ble_write_failed", "ts": time.time()})

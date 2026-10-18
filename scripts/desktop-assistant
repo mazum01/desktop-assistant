@@ -205,6 +205,28 @@ def cmd_display_mouth(args) -> int:
     return 0 if r.get("ok") else 1
 
 
+def cmd_display_video(args) -> int:
+    request_id = str(uuid.uuid4())
+    payload = {"action": args.video_action, "request_id": request_id}
+    for key in ("path", "fps", "loop", "offset"):
+        if hasattr(args, key):
+            payload[key] = getattr(args, key)
+    result = _request({"cmd": "publish", "topic": "display.video", "payload": payload})
+    if not result.get("ok"):
+        print(json.dumps(result, indent=2))
+        return 1
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        result = _request({"cmd": "last", "topic": f"display.reply.{request_id}"})
+        reply = result.get("payload")
+        if isinstance(reply, dict) and reply.get("request_id") == request_id:
+            print(json.dumps(reply, indent=2))
+            return 0 if reply.get("ok") else 1
+        time.sleep(0.1)
+    print(json.dumps({"ok": False, "error": "display_reply_timeout", "request_id": request_id}))
+    return 1
+
+
 def cmd_servo_enable(_args) -> int:
     r = _request({
         "cmd": "publish",
@@ -1862,9 +1884,12 @@ def cmd_help(args) -> int:
                             "                  person-seek enable    Pan toward detected persons (no face locked).\n"
                             "                  person-seek disable   Ignore body detections; face tracking only.\n"
                             "                  person-seek status    Show current state.",
-        "display":          "Control the ESP32-C6 LCD display (BLE). Sub-commands:\n"
+        "display":          "Control the ESP32 LCD display (BLE). Sub-commands:\n"
                             "                  display mouth <state>   Set mouth/emotion state: neutral, listening,\n"
-                            "                                          speaking, happy, sad, surprised, error.",
+                            "                                          speaking, happy, sad, surprised, error.\n"
+                            "                  display video list [--offset N]   List SD MJPEG clips.\n"
+                            "                  display video play /videos/name.mjpg [--fps 10] [--loop]\n"
+                            "                  display video stop|status         Stop or inspect video/IMU.",
         "system":           "System management. Sub-commands:\n"
                             "                  system ping             Round-trip latency check.\n"
                             "                  system restart          Restart vera-core service.\n"
@@ -3380,13 +3405,25 @@ def main() -> int:
     ps_sub.add_parser("disable", help="Ignore person detections; rely on face tracking only").set_defaults(func=cmd_person_seek_disable)
     ps_sub.add_parser("status",  help="Show current person seek state").set_defaults(func=cmd_person_seek_status)
 
-    # ── Display (ESP32-C6 LCD) subcommands ───────────────────────────
-    disp_sp = sub.add_parser("display", help="Control the ESP32-C6 LCD display (BLE)")
+    # ── Display (ESP32 LCD) subcommands ──────────────────────────────
+    disp_sp = sub.add_parser("display", help="Control the ESP32 LCD display (BLE)")
     disp_sub = disp_sp.add_subparsers(dest="disp_cmd", metavar="<subcommand>")
     disp_sub.required = True
     dmp = disp_sub.add_parser("mouth", help="Set mouth/emotion state on the LCD display")
     dmp.add_argument("state", choices=DISPLAY_MOUTH_STATES, help="Mouth state to display")
     dmp.set_defaults(func=cmd_display_mouth)
+    video = disp_sub.add_parser("video", help="Control SD-card MJPEG playback and inspect IMU status")
+    video_sub = video.add_subparsers(dest="video_action", required=True)
+    play = video_sub.add_parser("play", help="Play /videos/name.mjpg or .mjpeg from the display SD card")
+    play.add_argument("path")
+    play.add_argument("--fps", type=int, choices=range(1, 21), default=10)
+    play.add_argument("--loop", action="store_true")
+    play.set_defaults(func=cmd_display_video)
+    listing = video_sub.add_parser("list", help="List one page of SD clips")
+    listing.add_argument("--offset", type=int, default=0)
+    listing.set_defaults(func=cmd_display_video)
+    for action in ("stop", "status"):
+        video_sub.add_parser(action, help=f"{action.capitalize()} SD video").set_defaults(func=cmd_display_video)
 
     sp = sub.add_parser("watch", help="Stream all bus events")
     sp.add_argument("--topic", default="", help="Topic prefix filter (default: all)")

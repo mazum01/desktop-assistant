@@ -10,6 +10,7 @@
 
 #include <Arduino_GFX_Library.h>
 #include "display_board.h"
+#include "orientation.h"
 
 namespace vera_mouth {
 
@@ -309,6 +310,7 @@ void flush() {
   if (g_gfx == nullptr) {
     return;
   }
+  vera_orientation::draw();
   // static_cast is safe: g_gfx is always constructed as an Arduino_Canvas
   // in begin(); the base-class pointer is only for API cleanliness.
   static_cast<Arduino_Canvas *>(g_gfx)->flush();

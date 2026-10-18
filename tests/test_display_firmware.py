@@ -107,7 +107,8 @@ def test_upload_build_profiles_agree(profile, chip, flag):
         ["bash", "-c", 'source firmware/display_board_config.sh; printf "%s\\n" "$FQBN" "${BOARD_FLAGS[@]}"'],
         cwd=root, env=env, check=True, capture_output=True, text=True,
     )
-    assert result.stdout.splitlines()[0] == f"esp32:esp32:{chip}"
+    expected = f"esp32:esp32:{chip}" + (":PSRAM=opi" if profile == "s3-touch" else "")
+    assert result.stdout.splitlines()[0] == expected
     if flag:
         assert flag in result.stdout
     env["VERA_ESP32_FQBN"] = "esp32:esp32:esp32s3" if chip == "esp32c6" else "esp32:esp32:esp32c6"

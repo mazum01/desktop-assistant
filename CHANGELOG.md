@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.73.0] - 2026-10-18
+### Added
+- Explicit VERA commands to list, play, loop, stop, and inspect silent baseline
+  JPEG MJPEG streams on the S3 display's microSD card, with bounded decoding and
+  downscaling, correlated BLE replies, and visible playback errors.
+- Persistent roll/pitch/relative-yaw footer when a QMI8658 is positively
+  identified; report absent or stale IMU hardware instead of invented readings.
+### Changed
+- Keep display command processing on the firmware main loop; retain speech/status
+  priority and touch-disabled operation, and enable the S3 board's OPI PSRAM.
+
 ## [1.72.0] - 2026-10-17
 ### Added
 - Support the confirmed ESP32-S3-Touch-LCD-1.47 replacement display, leaving

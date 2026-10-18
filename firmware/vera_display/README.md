@@ -16,8 +16,9 @@ over BLE GATT.
   RST GPIO40; backlight GPIO46, driven with 50% PWM after initialization
 - C6 touch-board LCD pins: MOSI GPIO2, SCLK GPIO1, CS GPIO14, DC GPIO15,
   RST GPIO22; backlight GPIO23
-- Touch input: **disabled**; no touch driver, I2C initialization, interrupts,
-  or polling. The IMU, SD card, and battery monitoring are also unused.
+- Touch input: **disabled**; no touch driver, interrupts, reset, or polling.
+  I2C is used only to probe an optional QMI8658 IMU; battery monitoring is unused.
+- S3 microSD: SD_MMC 1-bit mode, CLK16/CMD15/D0=17; OPI PSRAM enabled.
 - Legacy non-touch pins: MOSI GPIO6, SCLK GPIO7, CS GPIO14, DC GPIO15,
   RST GPIO21, backlight GPIO22
 
@@ -29,7 +30,7 @@ cross-checked against its
 [schematic](https://files.waveshare.com/wiki/ESP32-S3-Touch-LCD-1.47/ESP32-S3-Touch-LCD-1.47-Schematic.pdf).
 The S3 LCD reset is GPIO40, not GPIO47 (touch reset). The vendor's simplest
 HelloWorld example has an inconsistent constructor; the LVGL example uses
-the correct GPIO40. VERA does not configure the touch reset or I2C pins.
+the correct GPIO40. VERA does not configure the touch reset.
 The generic ST7789 initialization alone is not sufficient for this board.
 Physical orientation, colors, and BLE operation still need verification on
 each newly flashed board. The historical validation below covers the old board,
@@ -95,9 +96,8 @@ Validated end-to-end against the physical board (firmware v1.53.1):
 
 `vera_display.ino` implements the board scaffold, BLE GATT link (see
 [BLE protocol](#ble-protocol) below), and dispatches `"mouth"` commands to the
-mouth renderer. Startup/status rendering (text/iconography) is a separate
-follow-on task; `"status"` commands with a `degraded`/`error` state are
-reflected onto the mouth as a safe fallback until that renderer lands.
+mouth, status, EQ, and SD video renderers. The main loop owns ordinary command
+processing, drawing, SD access, IMU updates, and BLE response framing.
 
 `mouth_renderer.h`/`mouth_renderer.cpp` render the primary "mouth imitation"
 display using `Arduino_GFX` (`Arduino_ESP32SPI` + `Arduino_ST7789`). Each
@@ -109,6 +109,79 @@ retune. An unrecognized state defaults to the `error` rendering (distinct red
 color) rather than silently freezing on stale content.
 
 `libraries.txt` records the external Arduino library dependencies.
+
+## Commanded microSD video (S3)
+
+Supported codec/container: **baseline JPEG Motion JPEG in raw concatenated
+JPEG streams**, lowercase `.mjpg` or `.mjpeg`, **without audio**. This is not
+an AVI/MP4 demuxer: H.264, H.265, VP8/VP9, AV1, WebM, progressive JPEG, and
+MJPEG inside AVI are not supported. Files already encoded in the supported
+format play directly from the card; other originals require conversion elsewhere.
+There is no autoplay and no video streaming over BLE.
+
+Place clips in `/videos/` on a FAT32 microSD card, safely ejected from the computer.
+Only filenames directly inside that directory are allowed (under 96 bytes total;
+no subdirectories, `..`, or backslashes). No card formatting is attempted.
+
+```bash
+vera display video list
+vera display video list --offset 4
+vera display video play /videos/clip.mjpg --fps 10 --loop
+vera display video status
+vera display video stop
+```
+
+These commands wait for an actual device reply, with a 20-second timeout.
+After restarting VERA, allow startup announcements and the BLE connection to
+finish before issuing video commands; queued startup traffic can delay replies.
+`list` returns at most four filenames and a `next_offset` when more are available.
+`status` includes SD mount state, playback/frame counters, and IMU availability.
+Playback starts only after `play`; opening a file is acknowledged before its
+first frame is decoded, so subsequent decode errors appear as device events
+and an on-screen error. A non-looping clip emits `video_finished` at EOF.
+Speech/non-neutral mouth expressions and status messages pause video; neutral
+resumes it once the status screen releases control. EQ cannot replace active video.
+
+Video is centered in a 320x152 area above the 20-pixel footer. JPEGDEC selects
+1/2/4/8 downscaling to fit without cropping or upscaling; clips too large to
+fit at 1/8 scale fail explicitly. Each source dimension is limited to 2560
+pixels, compressed frames to 96 KiB, and frame reads to 100 ms. Frame rate
+is fixed by `--fps` (1-20, default 10), not file timestamps; decoding/SD/display
+throughput may lower the achieved rate. Missed frames do not cause catch-up bursts.
+For predictable results, encode directly to 320x152:
+
+```bash
+ffmpeg -i input.mp4 -an -vf 'scale=320:152:force_original_aspect_ratio=decrease,fps=10' \
+  -c:v mjpeg -pix_fmt yuvj420p -q:v 7 -f mjpeg clip.mjpg
+```
+
+## Orientation footer
+
+The firmware probes only QMI8658 addresses 0x6A/0x6B and checks WHO_AM_I=0x05
+before writing sensor configuration. C6 touch uses SDA18/SCL19; S3 uses
+SDA42/SCL41. The S3 product documentation does **not** specify an onboard IMU:
+do not assume that the sensor exists merely because the C6 model has one.
+Legacy C6 reports the sensor unsupported. No magnetometer is used.
+
+When present, accelerometer/gyro fusion displays roll, pitch, and **relative
+yaw**, in degrees in sensor-board axes (not compensated for the robot mount).
+Yaw starts at zero on initialization, drifts, and is **not compass heading**.
+Gravity corrects roll/pitch only near 1g; Euler gyro updates are guarded near
+the pitch singularity. Samples older than 500 ms are unavailable, and resuming
+after a stale stream reinitializes orientation. With no detected IMU the footer
+shows `R:-- P:-- Y:-- IMU not detected`, and status omits numeric angles.
+
+### Physical validation (2026-10-18)
+
+- USB flash verified, S3 and C6 touch profiles compiled, and host CLI/BLE
+  list/play/status/stop commands exercised against the inserted 29,620 MiB card.
+- Generated 320x152 test stream looped past 60 frames; speech paused frame
+  consumption and neutral resumed it. Non-looping playback finished at exactly
+  20 frames; missing files returned explicit failures.
+- The user confirmed the moving test pattern and correct orientation.
+- The installed S3 returned `imu_not_detected` at both QMI8658 addresses; angle
+  math is regression-tested, but physical sensor readings could not be tested
+  because no supported onboard IMU was found.
 
 ## BLE protocol
 

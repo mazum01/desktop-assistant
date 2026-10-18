@@ -3,4 +3,5 @@
 GFX Library for Arduino
 NimBLE-Arduino
 ArduinoJson
+JPEGDEC
 NimBLEOta (fetched from https://github.com/h2zero/NimBLEOta.git via --git-url — not in Arduino Library Manager index; see build_esp32_display.sh)
