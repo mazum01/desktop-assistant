@@ -16,9 +16,11 @@ elbows. Each workspace has a distinct navigation color; the selected workspace
 colors the main frame and section bars. Section vertical bars are 24px wide
 (20px on mobile), with circular inner arcs; the upper and lower navigation
 rails share a 52px width.
-Sparse static number clusters decorate
-navigation and framing, are hidden from assistive technology, and do not represent
-live readings. No external fonts, templates, sounds, or number animations are required.
+Sparse number clusters decorate navigation and framing, are hidden from assistive
+technology, and do not represent live readings. Only the title-frame numbers
+refresh when switching workspaces; reselecting the active workspace leaves them
+unchanged. Button and sub-frame numbers stay fixed. No external fonts, templates,
+sounds, or number animations are required.
 The title spells out VERA as "Vision-Enabled Reasoning Agent" below the name.
 
 | Workspace | Controls |

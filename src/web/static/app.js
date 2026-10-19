@@ -24,6 +24,12 @@ function switchTab(tabId) {
   document.getElementById('workspace-description').textContent = pane.dataset.description;
   document.title = `VERA / ${pane.dataset.title}`;
   localStorage.setItem(_TAB_KEY, tabId);
+  if (previous !== pane) {
+    document.querySelectorAll('.frame-code').forEach(code => {
+      code.textContent = code.textContent.replace(/\d/g,
+        digit => String((Number(digit) + 1 + Math.floor(Math.random() * 9)) % 10));
+    });
+  }
   if (previous && previous !== pane) window.scrollTo({ top: 0, behavior: 'instant' });
 }
 

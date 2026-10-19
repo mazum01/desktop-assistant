@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.76.5] - 2026-10-19
+### Changed
+- Refresh only the title-frame decorative numbers when switching workspaces,
+  preserving their format and leaving button numbers and section codes fixed.
+
 ## [1.76.4] - 2026-10-19
 ### Changed
 - Widen section-frame vertical bars slightly to 24px on desktop and 20px on

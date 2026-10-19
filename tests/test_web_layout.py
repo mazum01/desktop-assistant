@@ -166,11 +166,14 @@ let focused;
 const panes = ids.map(id => Object.assign(node('tab-'+id), {dataset:{title:id,description:id+' description'}}));
 const buttons = ids.map(id => Object.assign(node('nav-'+id), {dataset:{tab:id}}));
 const title = node('workspace-title'), description = node('workspace-description'), target = node('card-quiet');
+const frameCode = {textContent: '47-0821 / 1701'};
+const fixedCode = {textContent: '308-72'};
 let keydown;
 const document = {
   body: {dataset: {}},
   getElementById: id => [...panes,...buttons,title,description,target].find(n=>n.id===id),
-  querySelectorAll: q => q==='.tab-pane' ? panes : buttons,
+  querySelectorAll: q => q==='.tab-pane' ? panes : q==='.tab-btn' ? buttons
+    : q==='.frame-code' ? [frameCode] : [frameCode, fixedCode],
   querySelector: q => q==='.tab-pane.active' ? panes.find(p=>p.classList.contains('active'))
     : {addEventListener: (_,handler) => {keydown=handler;}},
 };
@@ -184,7 +187,14 @@ assert.equal(document.body.dataset.workspace, 'controls');
 assert.equal(panes.filter(p=>p.classList.contains('active')).length, 1);
 assert.equal(buttons[2].attrs['aria-selected'], 'true');
 assert.equal(title.textContent,'controls');
+assert.match(frameCode.textContent, /^\d{2}-\d{4} \/ \d{4}$/);
+assert.notEqual(frameCode.textContent, '47-0821 / 1701');
+const initialCode = frameCode.textContent;
+vm.runInContext("switchTab('controls')", context);
+assert.equal(frameCode.textContent, initialCode);
 keydown({key:'ArrowRight',target:buttons[2],preventDefault(){}});
+assert.notEqual(frameCode.textContent, initialCode);
+assert.equal(fixedCode.textContent, '308-72');
 assert.equal(values['vera-active-tab'], 'voice');
 assert.equal(document.body.dataset.workspace, 'voice');
 assert.equal(focused,buttons[3]);
