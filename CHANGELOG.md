@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.76.3] - 2026-10-19
+### Changed
+- Double section-frame vertical bars to 20px on desktop and 16px on mobile,
+  and match the lower navigation rail to the title frame's 52px vertical bar.
+- Display "Vision-Enabled Reasoning Agent" beneath VERA in the dashboard title.
+
 ## [1.76.2] - 2026-10-19
 ### Changed
 - Refine LCARS framing with continuous rounded elbows and flat-ended bars,

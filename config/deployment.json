@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "1.76.2",
+  "version": "1.76.3",
   "platforms": ["aarch64:bookworm", "aarch64:trixie"],
   "apt": [
     "alsa-utils", "build-essential", "ca-certificates", "cmake", "curl",

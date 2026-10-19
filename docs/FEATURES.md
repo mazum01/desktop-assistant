@@ -13,9 +13,12 @@ This document tracks which features are accessible via each interface:
 The dashboard uses an original LCARS-inspired visual system: black backgrounds,
 orange/peach action surfaces, readable mixed-case content, and continuous rounded
 elbows. Each workspace has a distinct navigation color; the selected workspace
-colors the main frame and section bars. Sparse static number clusters decorate
+colors the main frame and section bars. Section vertical bars are 20px wide
+(16px on mobile); the upper and lower navigation rails share a 52px width.
+Sparse static number clusters decorate
 navigation and framing, are hidden from assistive technology, and do not represent
 live readings. No external fonts, templates, sounds, or number animations are required.
+The title spells out VERA as "Vision-Enabled Reasoning Agent" below the name.
 
 | Workspace | Controls |
 |-----------|----------|
