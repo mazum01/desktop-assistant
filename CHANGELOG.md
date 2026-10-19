@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.76.0] - 2026-10-19
+### Changed
+- Redesign the web dashboard with an original LCARS-inspired black, orange,
+  peach, and lavender interface, swept navigation framing, high-contrast
+  controls, keyboard-accessible workspaces, and responsive mobile layouts.
+- Organize controls by task: place Pandora, podcasts, output volume, mute,
+  voice level, and EQ together in Media & Audio; group camera feeds, motion,
+  tracking, and perception settings in Vision & Motion; collect speech,
+  recognition, microphone input, greetings, skills, and quiet hours in
+  Voice & Behavior. Keep advanced hardware/DSP setup in System.
+- Collapse advanced EQ and hardware settings, add focused workspace shortcuts,
+  preserve existing control handlers, and migrate the old Audio tab preference
+  without carrying obsolete card ordering into the new layout.
+
 ## [1.75.0] - 2026-10-19
 ### Added
 - Machine-local body identity with matching servo and tracking profiles:

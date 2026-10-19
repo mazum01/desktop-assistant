@@ -6,18 +6,52 @@ const _TAB_KEY     = 'vera-active-tab';
 const _DEFAULT_TAB = 'overview';
 
 function switchTab(tabId) {
+  // Older bookmarks/preferences used "audio" for controls now grouped with media.
+  if (tabId === 'audio') tabId = 'controls';
+  if (!document.getElementById('tab-' + tabId)) tabId = _DEFAULT_TAB;
+  const previous = document.querySelector('.tab-pane.active');
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    const selected = b.dataset.tab === tabId;
+    b.classList.toggle('active', selected);
+    b.setAttribute('aria-selected', String(selected));
+    b.tabIndex = selected ? 0 : -1;
+  });
   const pane = document.getElementById('tab-' + tabId);
-  if (pane) pane.classList.add('active');
-  const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
-  if (btn) btn.classList.add('active');
+  pane.classList.add('active');
+  document.getElementById('workspace-title').textContent = pane.dataset.title;
+  document.getElementById('workspace-description').textContent = pane.dataset.description;
+  document.title = `VERA / ${pane.dataset.title}`;
   localStorage.setItem(_TAB_KEY, tabId);
+  if (previous && previous !== pane) window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+function openWorkspace(tabId, cardId) {
+  switchTab(tabId);
+  const target = document.getElementById(cardId || 'workspace-title');
+  target.closest('details')?.setAttribute('open', '');
+  target.querySelector('details')?.setAttribute('open', '');
+  target.setAttribute('tabindex', '-1');
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: 'start' });
 }
 
 function initTabs() {
   const saved = localStorage.getItem(_TAB_KEY) || _DEFAULT_TAB;
   switchTab(saved);
+  document.querySelector('.tab-nav').addEventListener('keydown', event => {
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const buttons = Array.from(document.querySelectorAll('.tab-btn'));
+    const index = buttons.indexOf(event.target);
+    if (index < 0) return;
+    event.preventDefault();
+    const direction = ['ArrowUp', 'ArrowLeft'].includes(event.key) ? -1 : 1;
+    const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+      : (index + direction + buttons.length) % buttons.length;
+    const next = buttons[nextIndex];
+    switchTab(next.dataset.tab);
+    next.focus();
+  });
 }
 
 // ── Software updates ──────────────────────────────────────────────────────
@@ -3989,7 +4023,7 @@ function _drawTrackingChart(cv) {
 // Cards are reordered by dragging the ⠿ handle in each card's header.
 // Order is persisted in localStorage (per tab-pane) so it survives page refresh.
 
-const _CARD_ORDER_KEY = "da-tab-order";
+const _CARD_ORDER_KEY = "vera-lcars-card-order-v1";
 let _dragSrcCard = null;
 let _dragHandleDown = false;
 
@@ -4000,7 +4034,13 @@ function initCardDragDrop() {
   // Restore saved card order for each pane independently
   document.querySelectorAll('.tab-pane').forEach(pane => {
     const key = `${_CARD_ORDER_KEY}-${pane.id}`;
-    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    let saved;
+    try {
+      saved = JSON.parse(localStorage.getItem(key) || "null");
+    } catch (error) {
+      console.warn("Ignoring invalid saved workspace order", key, error);
+      localStorage.removeItem(key);
+    }
     if (saved && Array.isArray(saved)) {
       saved.forEach(id => {
         const card = document.getElementById(id);

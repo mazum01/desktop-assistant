@@ -38,6 +38,13 @@ Body selection applies matching hardware and tracking settings together.
 See [body profiles and tracking](docs/FEATURES.md#body-profiles) for wiring,
 safe limits, tuning persistence, and runtime-state migration.
 
+## Web dashboard
+
+The local dashboard uses LCARS-inspired task workspaces. **Media & Audio**
+combines music, podcasts, volume, mute, and EQ; **Vision & Motion** combines
+cameras and head controls. See the [workspace guide](docs/FEATURES.md#web-control-workspaces)
+for the complete organization and keyboard/mobile navigation.
+
 ## Repo Layout
 ```
 config/          runtime configuration

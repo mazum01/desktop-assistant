@@ -8,6 +8,40 @@ This document tracks which features are accessible via each interface:
 
 ---
 
+## Web control workspaces
+
+The dashboard uses an original LCARS-inspired visual system: black backgrounds,
+orange/peach action surfaces, lavender framing, readable mixed-case content,
+and swept framing that doubles as workspace navigation. No external fonts,
+templates, sounds, or decorative number animations are required.
+
+| Workspace | Controls |
+|-----------|----------|
+| Overview | Telemetry, room status, last spoken text, resources/processes, service health, quick-access links |
+| Vision & Motion | Both camera feeds, snapshots, pan/tracking controls, scene services, tuning, depth, face registry, camera geometry, privacy |
+| Media & Audio | Pandora, podcasts, output volume/mute, voice output level, EQ preset, collapsible custom voice EQ |
+| Voice & Behavior | Speak/record/play clips, microphone input/analyzer, recognition/wake settings, greetings, quiet hours, skills, transcript history |
+| Smart Home | Connected IoT devices and device management |
+| System | Updates, fan settings, collapsible audio hardware and microphone DSP, events, power, help |
+
+Daily playback never requires opening hardware configuration. A direct link from
+Media & Audio opens System's audio setup when device routing needs attention.
+Quick-access links focus and scroll to their destination, revealing advanced
+settings when needed. Tabs support arrow keys, Home/End, visible keyboard focus,
+and a skip-to-workspace link. Narrow displays use a two-row navigation grid and
+single-column cards; motion-reduction preferences are respected.
+
+The old Audio tab preference migrates to Media & Audio. Existing per-tab card
+orders are retained in browser storage but not applied to the new task layout;
+subsequent dragging saves a new, workspace-specific order.
+
+Design references (principles/palette only; no template code or artwork copied):
+[LCARS Manifesto](http://www.lcars-terminal.de/tutorial/manifesto.htm),
+[Creating a Coherent LCARS Interface](http://www.lcars-terminal.de/tutorial/guideline.htm),
+and [TheLCARS classic theme palette](https://www.thelcars.com/assets/classic-2702.css).
+
+---
+
 ## Vision & Tracking
 
 ### Body profiles

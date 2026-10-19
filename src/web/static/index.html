@@ -10,54 +10,38 @@
 <link href="/static/favicon-32.png" rel="icon" sizes="32x32" type="image/png"/>
 <link href="/static/favicon-16.png" rel="icon" sizes="16x16" type="image/png"/>
 <link href="/static/favicon-192.png" rel="apple-touch-icon" sizes="192x192"/>
-<link href="/static/style.css?v=1.41.43" rel="stylesheet"/>
+<link href="/static/style.css?v=1.76.0" rel="stylesheet"/>
 </head>
-<body>
+<body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
 <div class="page-header"><header>
 <div class="header-left">
-<span class="logo">🤖</span>
-<div>
+<span aria-hidden="true" class="logo">V</span>
+<div><span class="brand-caption">LCARS / LOCAL CONTROL</span>
 <h1>VERA</h1>
 <span class="subtext" id="version-uptime">connecting…</span>
 </div>
 </div>
 <div class="badge badge-unknown" id="health-badge">⬤ connecting</div>
 </header>
-<nav class="tab-nav"><button class="tab-btn" data-tab="overview" onclick="switchTab('overview')">🏠 Overview</button><button class="tab-btn" data-tab="perception" onclick="switchTab('perception')">🎭 Perception</button><button class="tab-btn" data-tab="smart-home" onclick="switchTab('smart-home')">🏡 Smart Home</button><button class="tab-btn" data-tab="controls" onclick="switchTab('controls')">🎵 Music</button><button class="tab-btn" data-tab="audio" onclick="switchTab('audio')">🔊 Audio</button><button class="tab-btn" data-tab="system" onclick="switchTab('system')">⚙️ System</button></nav>
+<nav aria-label="Workspaces" aria-orientation="vertical" class="tab-nav" role="tablist">
+<button aria-controls="tab-overview" aria-selected="false" class="tab-btn" data-tab="overview" id="nav-overview" onclick="switchTab('overview')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">01</span><span>Overview</span></button>
+<button aria-controls="tab-perception" aria-selected="false" class="tab-btn" data-tab="perception" id="nav-perception" onclick="switchTab('perception')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">02</span><span>Vision &amp; Motion</span></button>
+<button aria-controls="tab-controls" aria-selected="false" class="tab-btn" data-tab="controls" id="nav-controls" onclick="switchTab('controls')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">03</span><span>Media &amp; Audio</span></button>
+<button aria-controls="tab-voice" aria-selected="false" class="tab-btn" data-tab="voice" id="nav-voice" onclick="switchTab('voice')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">04</span><span>Voice &amp; Behavior</span></button>
+<button aria-controls="tab-smart-home" aria-selected="false" class="tab-btn" data-tab="smart-home" id="nav-smart-home" onclick="switchTab('smart-home')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">05</span><span>Smart Home</span></button>
+<button aria-controls="tab-system" aria-selected="false" class="tab-btn" data-tab="system" id="nav-system" onclick="switchTab('system')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">06</span><span>System</span></button></nav>
 </div>
-<main>
-<!-- ══ TAB: OVERVIEW ════════════════════════════════════════ -->
-<div class="tab-pane" id="tab-overview">
-<section class="card camera-card" id="card-camera">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Camera Feeds</h2>
-<div class="camera-feeds">
-<div class="camera-feed-wrap">
-<div class="camera-label">Cam 1 — Face Tracking</div>
-<div class="camera-wrap">
-<img alt="camera stream" id="camera-stream" src="/stream"/>
-<span class="face-overlay" id="face-overlay">0 faces</span>
-<span class="fps-overlay" id="fps-overlay-1">– fps</span>
+<main id="main-content" tabindex="-1">
+<div class="workspace-heading">
+<div><p class="eyebrow">DESKTOP ASSISTANT / CONTROL SURFACE</p>
+<h2 id="workspace-title">Overview</h2>
+<p id="workspace-description">Live status and shortcuts to the controls you use most.</p></div>
+<button class="btn btn-secondary" onclick="openWorkspace('voice', 'card-quiet')">Quiet hours</button>
 </div>
-<div class="camera-actions">
-<button class="btn btn-sm btn-secondary" id="snap1-btn" onclick="saveSnapshot(1)">📷 Save Frame</button>
-<span class="snap-status" id="snap1-status"></span>
-</div>
-</div>
-<div class="camera-feed-wrap" id="cam2-wrap">
-<div class="camera-label">Cam 2 — Raw</div>
-<div class="camera-wrap">
-<img alt="camera 2 stream" id="camera-stream2" src=""/>
-<span class="fps-overlay" id="fps-overlay-2">– fps</span>
-</div>
-<div class="camera-actions">
-<button class="btn btn-sm btn-secondary" id="snap2-btn" onclick="saveSnapshot(2)">📷 Save Frame</button>
-<span class="snap-status" id="snap2-status"></span>
-</div>
-</div>
-</div>
-</section>
-<section class="card" id="card-telemetry">
+
+<div aria-labelledby="nav-overview" class="tab-pane" data-description="Live status and shortcuts to the controls you use most." data-title="Overview" id="tab-overview" role="tabpanel">
+<section aria-label="Telemetry" class="card" id="card-telemetry" tabindex="-1">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Telemetry</h2>
 <div class="grid-6">
 <div class="stat-box">
@@ -127,7 +111,16 @@
 <span class="qh-status" id="repeat-spoken-status"></span>
 </div>
 </section>
-<section class="card" id="card-resources">
+<section aria-label="Quick access" class="card" id="card-workspaces" tabindex="-1">
+<h2>Quick access</h2>
+<div class="workspace-shortcuts">
+<button class="workspace-shortcut" onclick="openWorkspace('controls', 'card-audio-runtime')"><strong>Media &amp; Audio</strong><span>Music, podcasts, volume &amp; mute</span></button>
+<button class="workspace-shortcut" onclick="openWorkspace('perception', 'card-controls')"><strong>Vision &amp; Motion</strong><span>Cameras, head movement &amp; tracking</span></button>
+<button class="workspace-shortcut" onclick="openWorkspace('voice', 'card-speech')"><strong>Voice &amp; Behavior</strong><span>Speak, record &amp; set quiet hours</span></button>
+<button class="workspace-shortcut" onclick="openWorkspace('smart-home')"><strong>Smart Home</strong><span>Connected devices &amp; sensors</span></button>
+</div>
+</section>
+<section aria-label="System Resources" class="card" id="card-resources" tabindex="-1">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>System Resources</h2>
 <div class="resource-graphs">
 <div class="resource-graph-wrap">
@@ -166,49 +159,121 @@
 </table>
 </div>
 </section>
-<section class="card" id="card-services">
+<section aria-label="Services ⟳ Restart Daemon" class="card" id="card-services" tabindex="-1">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Services  <button class="btn btn-warning btn-sm" onclick="restartDaemon()" title="Restart the vera-core systemd service">⟳ Restart Daemon</button></h2>
 <div class="pill-row" id="services-container">
 <span class="pill pill-unknown">loading…</span>
 </div>
-</section>
-<section class="card" id="card-events">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Event Log <span class="subtext">(last 20)</span></h2>
-<div class="event-log" id="event-log"></div>
-</section>
-<section class="card" id="card-stt-transcripts">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>STT Transcript History <span class="subtext">(last 20)</span></h2>
-<div class="event-log" id="stt-transcript-log"></div>
-</section>
+</section></div>
+<div aria-labelledby="nav-perception" class="tab-pane" data-description="See the camera feeds, direct the head, and tune perception." data-title="Vision &amp; Motion" id="tab-perception" role="tabpanel">
+<section aria-label="Camera Feeds" class="card camera-card" id="card-camera" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Camera Feeds</h2>
+<div class="camera-feeds">
+<div class="camera-feed-wrap">
+<div class="camera-label">Cam 1 — Face Tracking</div>
+<div class="camera-wrap">
+<img alt="camera stream" id="camera-stream" src="/stream"/>
+<span class="face-overlay" id="face-overlay">0 faces</span>
+<span class="fps-overlay" id="fps-overlay-1">– fps</span>
 </div>
-<!-- ══ TAB: PERCEPTION ══════════════════════════════════════ -->
-<div class="tab-pane" id="tab-perception">
-<section class="card" id="card-faces">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Face Registry  <button class="btn btn-danger btn-sm" onclick="deleteAllFaces()" title="Delete all known faces permanently">🗑 Delete All</button>  <button class="btn btn-warning btn-sm" onclick="deleteGuestFaces()" title="Remove unnamed Guest entries">👤 Remove Guests</button>  <button class="btn btn-secondary btn-sm" onclick="refreshFaces()" title="Prune outlier embeddings and re-identify all faces">↺ Re-identify</button></h2>
-<div id="face-registry-wrap">
-<table id="face-table">
-<thead>
-<tr>
-<th></th>
-<th>Name</th>
-<th>First Seen</th>
-<th>Last Seen</th>
-<th>Seen</th>
-<th>Actions</th>
-</tr>
-</thead>
-<tbody id="face-tbody">
-<tr><td class="empty-row" colspan="6">Loading…</td></tr>
-</tbody>
-</table>
-<div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-<button class="btn btn-secondary btn-sm" onclick="loadFaces()" title="Reload the face list">↺ Refresh</button>
-<button class="btn btn-primary btn-sm" disabled="" id="merge-btn" onclick="mergeFaces()" title="Select exactly two faces to merge">⛓ Merge Selected</button>
-<span id="merge-hint" style="font-size:12px;color:var(--muted)">Select 2 faces to merge</span>
+<div class="camera-actions">
+<button class="btn btn-sm btn-secondary" id="snap1-btn" onclick="saveSnapshot(1)">📷 Save Frame</button>
+<span class="snap-status" id="snap1-status"></span>
+</div>
+</div>
+<div class="camera-feed-wrap" id="cam2-wrap">
+<div class="camera-label">Cam 2 — Raw</div>
+<div class="camera-wrap">
+<img alt="camera 2 stream" id="camera-stream2" src=""/>
+<span class="fps-overlay" id="fps-overlay-2">– fps</span>
+</div>
+<div class="camera-actions">
+<button class="btn btn-sm btn-secondary" id="snap2-btn" onclick="saveSnapshot(2)">📷 Save Frame</button>
+<span class="snap-status" id="snap2-status"></span>
+</div>
 </div>
 </div>
 </section>
-<section class="card" id="card-tracking">
+<section aria-label="Head movement" class="card" id="card-controls" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Head movement</h2>
+<div class="controls-grid">
+
+
+<div class="control-group">
+<label>Pan servo  <span id="pan-angle-display">180°</span></label>
+<div class="row-input">
+<input id="pan-slider" max="360" min="1" type="range" value="180"/>
+<button class="btn btn-primary" onclick="doPan()">Go</button>
+</div>
+<div class="row-input" style="margin-top:6px">
+<label class="qh-toggle" style="margin:0">
+<input id="servo-enabled" onchange="saveServoEnabled(this.checked)" type="checkbox"/>
+<span>Enable servo motion</span>
+</label>
+</div>
+<div class="row-input" style="margin-top:4px">
+<label class="qh-toggle" style="margin:0">
+<input id="face-tracking-enabled" onchange="saveFaceTrackingEnabled(this.checked)" type="checkbox"/>
+<span>Face tracking (servo follows detected face)</span>
+</label>
+</div>
+<div class="row-input" style="margin-top:4px">
+<label class="qh-toggle" style="margin:0">
+<input id="random-motion-enabled" onchange="saveRandomMotionEnabled(this.checked)" type="checkbox"/>
+<span>Random motion (idle gaze when no face)</span>
+</label>
+</div>
+<div class="row-input" style="margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap">
+<label style="font-size:13px;color:var(--text-dim)">Travel limits:</label>
+<label style="font-size:13px">
+              Min <input id="servo-travel-min" max="359" min="1" step="1" style="width:65px;margin-left:4px" type="number" value="135"/>°
+            </label>
+<label style="font-size:13px">
+              Max <input id="servo-travel-max" max="360" min="2" step="1" style="width:65px;margin-left:4px" type="number" value="215"/>°
+            </label>
+<button class="btn btn-primary btn-sm" onclick="saveServoLimits()">Set</button>
+<span class="qh-status" id="servo-limits-status"></span>
+</div>
+</div>
+
+
+
+
+
+
+
+</div>
+</section>
+<section aria-label="Scene awareness" class="card" id="card-scene" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>Scene awareness</h2>
+<div class="control-group">
+<label>Vision &amp; cloud services</label>
+<div class="row-input">
+
+<button class="btn btn-secondary" onclick="doDescribe()">Describe What I See</button>
+</div>
+<div class="row-input" style="margin-top:6px">
+<span class="qh-status" id="vision-describe-status"></span>
+</div>
+<div class="row-input" style="margin-top:6px">
+<label class="qh-toggle" style="margin:0">
+<input id="object-detection-enabled" onchange="saveObjectDetectionEnabled(this.checked)" type="checkbox"/>
+<span>Object classification (detects COCO objects via Hailo-8)</span>
+</label>
+</div>
+<div class="row-input" style="margin-top:6px">
+<label class="qh-toggle" style="margin:0">
+<input id="anthropic-enabled" onchange="saveAnthropicEnabled(this.checked)" type="checkbox"/>
+<span>Anthropic Claude API (room ID + OpenClaw greetings)</span>
+</label>
+</div>
+<div class="row-input" style="margin-top:6px">
+<label class="qh-toggle" style="margin:0">
+<input id="room-checking-enabled" onchange="saveRoomCheckingEnabled(this.checked)" type="checkbox"/>
+<span>Room-change checking (periodic panoramic servo sweep; obeys quiet hours)</span>
+</label>
+</div>
+</div></section>
+<section aria-label="Head Tracking Tuning ▾ Show" class="card" id="card-tracking" tabindex="-1">
 <h2>
 <span class="drag-handle" title="Drag to reorder">⠿</span>Head Tracking Tuning
         <button class="btn btn-sm btn-secondary" id="tuning-toggle-btn" onclick="toggleTuningPanel()" style="float:right">▾ Show</button>
@@ -251,8 +316,8 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section>
-<section class="card" id="card-depth">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>📐 Depth Estimation</h2>
+<section aria-label="Depth Estimation" class="card" id="card-depth" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Depth Estimation</h2>
 <div class="control-group">
 <label>Dense Stereo (SGBM)</label>
 <div class="row-input">
@@ -304,546 +369,32 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section>
-</div>
-<!-- ══ TAB: SMART HOME ══════════════════════════════════════ -->
-<div class="tab-pane" id="tab-smart-home">
-<div class="iot-toolbar" id="iot-toolbar">
-  <span class="iot-toolbar-title">🏡 Smart Home</span>
-  <button class="btn btn-sm" id="iot-add-btn" data-iot-action="add">＋ Add IoT Device</button>
-</div>
-</div>
-<!-- ══ TAB: CONTROLS ════════════════════════════════════════ -->
-<div class="tab-pane" id="tab-controls">
-
-<section class="card" id="card-music">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎵 Music (Pandora)</h2>
-<div id="music-not-configured" style="display:none;color:var(--yellow);margin-bottom:8px;font-size:0.9em">
-        ⚠ pianobar not configured. Create <code>~/.config/pianobar/config</code> with your Pandora credentials.
-      </div>
-<!-- Album art + metadata row -->
-<div class="music-player-row">
-<div class="music-art" id="music-art-wrap">
-<img alt="Album Art" id="music-art-img" onerror="this.style.display='none';document.getElementById('music-art-placeholder').style.display='flex'" src="" style="display:none"/>
-<div class="music-art-placeholder" id="music-art-placeholder">♫</div>
-</div>
-<div class="music-info">
-<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-<span id="music-state-icon" style="font-size:1.2em">■</span>
-<span id="music-song-title" style="font-weight:600">—</span>
-</div>
-<div style="font-size:0.85em;color:var(--text-muted)">
-<span id="music-song-artist"></span>
-</div>
-<div style="font-size:0.8em;color:var(--text-muted);margin-top:2px">
-<span id="music-song-album"></span>
-</div>
-<div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;opacity:0.7">
-<span id="music-song-station"></span>
-</div>
-</div>
-</div>
-<!-- Progress bar -->
-<div class="music-progress-row">
-<span id="music-elapsed" style="font-size:0.8em;color:var(--text-muted);min-width:38px">0:00</span>
-<input class="music-progress-bar" disabled="" id="music-progress-bar" max="100" min="0" type="range" value="0"/>
-<span id="music-duration" style="font-size:0.8em;color:var(--text-muted);min-width:38px;text-align:right">0:00</span>
-</div>
-<!-- Playback controls -->
-<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-<button class="btn btn-primary" onclick="musicPlay()">▶ Play</button>
-<button class="btn btn-sm" onclick="musicPause()">⏸ Pause</button>
-<button class="btn btn-sm" onclick="musicNext()">⏭ Next</button>
-<button class="btn btn-sm" onclick="musicStop()">■ Stop</button>
-<button class="btn btn-sm" onclick="musicThumbsUp()" title="Love this song">👍</button>
-<button class="btn btn-sm" onclick="musicThumbsDown()" title="Ban this song">👎</button>
-</div>
-<!-- Station selector -->
-<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-<label style="font-size:0.9em">Station</label>
-<select id="music-station-select" onchange="musicSetStation(this.value)" style="flex:1;min-width:180px">
-<option value="">— select station —</option>
-</select>
-<span id="music-status" style="font-size:0.85em;color:var(--green)"></span>
-</div>
-</section>
-<section class="card" id="card-podcasts">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎙 Apple Podcasts</h2>
-<div class="control-group">
-<label>Search or subscribe</label>
-<div class="row-input" style="gap:8px;flex-wrap:wrap">
-<input id="podcast-query" placeholder="Podcast name or RSS feed URL" style="flex:1;min-width:220px" type="text"/>
-<button class="btn btn-secondary btn-sm" onclick="podcastSearch()">Search</button>
-<button class="btn btn-primary btn-sm" onclick="podcastSubscribe()">Subscribe</button>
-</div>
-<div id="podcast-search-results" style="margin-top:8px;font-size:0.85em;color:var(--text-muted)"></div>
-</div>
-<div class="control-group">
-<label>Subscriptions</label>
-<div class="row-input" style="gap:8px;flex-wrap:wrap">
-<select id="podcast-sub-select" onchange="podcastLoadEpisodes()" style="flex:1;min-width:220px">
-<option value="">— no subscriptions —</option>
-</select>
-<button class="btn btn-sm" onclick="podcastRefresh()">↺ Refresh</button>
-<button class="btn btn-danger btn-sm" onclick="podcastUnsubscribe()">Unsubscribe</button>
-</div>
-</div>
-<div class="control-group">
-<label>Episodes</label>
-<div class="row-input" style="gap:8px;flex-wrap:wrap">
-<select id="podcast-episode-select" style="flex:1;min-width:220px">
-<option value="0">— latest episode —</option>
-</select>
-</div>
-</div>
-<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-<button class="btn btn-primary btn-sm" onclick="podcastPlay()">▶ Play</button>
-<button class="btn btn-sm" onclick="podcastPause()">⏸ Pause</button>
-<button class="btn btn-sm" onclick="podcastResume()">▶ Resume</button>
-<button class="btn btn-sm" onclick="podcastStop()">■ Stop</button>
-<button class="btn btn-sm" onclick="podcastSkip(-15)">↺ 15s</button>
-<button class="btn btn-sm" onclick="podcastSkip(30)">↻ 30s</button>
-</div>
-<div class="music-progress-row" style="margin-top:4px">
-<span id="podcast-elapsed" style="font-size:0.8em;color:var(--text-muted);min-width:38px">0:00</span>
-<input class="music-progress-bar" id="podcast-progress-bar" max="100" min="0" oninput="podcastPreviewSeek(this.value)" onchange="podcastCommitSeek(this.value)" type="range" value="0"/>
-<span id="podcast-duration" style="font-size:0.8em;color:var(--text-muted);min-width:38px;text-align:right">0:00</span>
-</div>
-<div id="podcast-status" style="font-size:0.85em;color:var(--text-muted)">No podcast playback</div>
-</section>
-<section class="card" id="card-greeting">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>💬 Greeting Settings</h2>
-<div class="qh-form">
-<div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-<label style="flex:1;min-width:160px">
-            Cooldown (min)
-            <input id="greeting-cooldown" max="240" min="1" step="1" style="width:80px;margin-left:8px" type="number" value="30"/>
-</label>
-<label style="flex:1;min-width:160px">
-            Jitter (%)
-            <input id="greeting-jitter" max="50" min="0" step="5" style="width:70px;margin-left:8px" type="number" value="25"/>
-</label>
-</div>
-<div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:8px">
-<label style="flex:1;min-width:160px">
-            Min absence (s)
-            <input id="greeting-min-absence" max="300" min="5" step="5" style="width:70px;margin-left:8px" type="number" value="30"/>
-</label>
-<label style="flex:1;min-width:160px">
-            Min confidence
-            <input id="greeting-confidence" max="1.0" min="0.1" step="0.05" style="width:70px;margin-left:8px" type="number" value="0.5"/>
-</label>
-</div>
-<button class="btn btn-primary" onclick="saveGreetingSettings()" style="margin-top:10px">Save</button>
-<span class="qh-status" id="greeting-status"></span>
-</div>
-</section>
-<section class="card" id="card-quiet">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🌙 Quiet Hours</h2>
-<div class="qh-form">
-<label class="qh-toggle">
-<input id="qh-enabled" type="checkbox"/>
-<span>Enable quiet hours</span>
-</label>
-<div class="qh-times">
-<label>
-            Start
-            <input id="qh-start" type="time" value="21:00"/>
-</label>
-<span class="qh-sep">→</span>
-<label>
-            End
-            <input id="qh-end" type="time" value="06:00"/>
-</label>
-</div>
-<button class="btn btn-primary" onclick="saveQuietHours()">Save</button>
-<span class="qh-status" id="qh-status"></span>
-</div>
-</section>
-<section class="card" id="card-skills">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎯 Voice Skills <button class="btn btn-secondary btn-sm" id="skills-toggle-btn" onclick="toggleSkills()">Show</button></h2>
-<div id="skills-panel" style="display:none">
-<p style="font-size:13px;color:var(--text-dim);margin:4px 0 8px 0">
-          Speak these phrases (or type them below) to trigger a skill.
-          Use the toggle to enable/disable skills and ⚙ to configure them.
-        </p>
-<table class="help-table" id="skills-table">
-<thead><tr><th style="width:28px"></th><th>Skill</th><th>Example phrase</th><th style="width:32px"></th></tr></thead>
-<tbody id="skills-tbody"><tr><td colspan="4">Loading…</td></tr></tbody>
-</table>
-<div class="btn-row" style="margin-top:8px">
-<input class="text-input" id="utterance-input" placeholder="Type an utterance to test…" style="flex:1" type="text"/>
-<button class="btn btn-primary" onclick="sendUtterance()">Dispatch</button>
-</div>
-</div>
-</section>
-</div>
-<!-- ══ TAB: AUDIO ═══════════════════════════════════════════ -->
-<div class="tab-pane" id="tab-audio">
-<section class="card" id="card-audio-runtime">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🔊 Audio Controls</h2>
-<div class="control-group">
-<label>Output Volume</label>
-<div class="music-volume-row">
-<label style="font-size:0.85em;min-width:56px">🔊 Vol</label>
-<input id="music-volume-slider" max="100" min="0" oninput="musicSetVolume(this.value)" style="flex:1" type="range" value="50"/>
-<span id="music-volume-label" style="font-size:0.85em;min-width:36px;text-align:right">50%</span>
-<button class="btn btn-secondary btn-sm" id="audio-mute-btn" onclick="audioToggleMute()" style="margin-left:8px" type="button">🔇 Mute</button>
-<span class="qh-status" id="audio-mute-status"></span>
-</div>
-</div>
-<div class="control-group">
-<label>Equalizer Preset</label>
-<div style="display:flex;gap:8px;align-items:center;margin-top:8px">
-<label style="font-size:0.85em;min-width:56px">🎚 EQ</label>
-<select id="music-eq-select" onchange="musicSetEq(this.value)" style="flex:1">
-<option value="flat">Flat</option>
-<option value="bass_boost">Bass Boost</option>
-<option value="treble_boost">Treble Boost</option>
-<option value="vocal">Vocal</option>
-<option value="loudness">Loudness</option>
-<option value="warm">Warm</option>
-<option value="custom">Custom…</option>
-</select>
-</div>
-</div>
-<div class="control-group">
-<label>Voice Output Volume</label>
-<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-<label style="font-size:0.85em;min-width:56px">🗣 Voice</label>
-<input id="audio-voice-gain-slider" max="400" min="10" oninput="audioSetVoiceGain(this.value)" style="flex:1" type="range" value="100"/>
-<span id="audio-voice-gain-label" style="font-size:0.85em;min-width:42px;text-align:right">100%</span>
-<span class="qh-status" id="audio-voice-gain-status"></span>
-</div>
-</div>
-<div class="control-group">
-<label>Microphone Input Gain</label>
-<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-<label style="font-size:0.85em;min-width:56px">🎙 Gain</label>
-<input id="audio-input-gain-slider" max="100" min="0" oninput="audioSetInputGain(this.value)" style="flex:1" type="range" value="80"/>
-<span id="audio-input-gain-label" style="font-size:0.85em;min-width:36px;text-align:right">80%</span>
-<span class="qh-status" id="audio-input-gain-status"></span>
-</div>
-</div>
-<div class="control-group" id="audio-analyzer-group">
-<label>Live Input Analyzer <span id="audio-vad-state" style="font-size:0.85em;color:var(--text-dim);margin-left:8px">Idle</span></label>
-<canvas class="resource-canvas" id="audio-spectrum-canvas" width="400" height="90"></canvas>
-<div id="audio-spectrum-meta" style="font-size:0.8em;color:var(--text-muted);margin-top:6px">Waiting for input…</div>
-<div id="audio-spectrum-tone-now" style="font-size:0.8em;color:var(--text-dim);margin-top:4px">Now playing: —</div>
-<div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-<button class="btn btn-secondary btn-sm" onclick="audioPlaySpectrumTest()">▶ Test Analyzer Tones</button>
-<span class="qh-status" id="audio-spectrum-test-status"></span>
-</div>
-</div>
-<!-- Custom EQ bands — shown only when "Custom" is selected -->
-<div id="custom-eq-panel" style="display:none;margin-top:12px;padding:10px;
-           border:1px solid var(--border);border-radius:6px">
-<div style="font-size:0.85em;font-weight:600;margin-bottom:8px">Custom EQ Bands (voice TTS only)</div>
-<table id="custom-eq-table" style="width:100%;font-size:0.8em;border-collapse:collapse">
+<section aria-label="Face Registry 🗑 Delete All 👤 Remove Guests ↺ Re-identify" class="card" id="card-faces" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Face Registry  <button class="btn btn-danger btn-sm" onclick="deleteAllFaces()" title="Delete all known faces permanently">🗑 Delete All</button>  <button class="btn btn-warning btn-sm" onclick="deleteGuestFaces()" title="Remove unnamed Guest entries">👤 Remove Guests</button>  <button class="btn btn-secondary btn-sm" onclick="refreshFaces()" title="Prune outlier embeddings and re-identify all faces">↺ Re-identify</button></h2>
+<div id="face-registry-wrap">
+<table id="face-table">
 <thead>
 <tr>
-<th style="text-align:left;padding:2px 6px">Band</th>
-<th style="text-align:left;padding:2px 6px">Hz</th>
-<th style="text-align:left;padding:2px 6px">Gain (dB)</th>
-<th style="text-align:left;padding:2px 6px">Q</th>
 <th></th>
+<th>Name</th>
+<th>First Seen</th>
+<th>Last Seen</th>
+<th>Seen</th>
+<th>Actions</th>
 </tr>
 </thead>
-<tbody id="custom-eq-rows"></tbody>
+<tbody id="face-tbody">
+<tr><td class="empty-row" colspan="6">Loading…</td></tr>
+</tbody>
 </table>
-<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-<button class="btn btn-secondary btn-sm" onclick="customEqAddBand()">+ Band</button>
-<button class="btn btn-primary btn-sm" onclick="customEqSave()">Apply</button>
-<span class="qh-status" id="custom-eq-status"></span>
+<div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+<button class="btn btn-secondary btn-sm" onclick="loadFaces()" title="Reload the face list">↺ Refresh</button>
+<button class="btn btn-primary btn-sm" disabled="" id="merge-btn" onclick="mergeFaces()" title="Select exactly two faces to merge">⛓ Merge Selected</button>
+<span id="merge-hint" style="font-size:12px;color:var(--muted)">Select 2 faces to merge</span>
 </div>
 </div>
 </section>
-
-<section class="card" id="card-audio">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>🎙 Audio Backend</h2>
-
-<div class="control-group">
-  <label for="audio-backend-select">Hardware Backend</label>
-  <select id="audio-backend-select" onchange="onAudioBackendChange()" style="width:100%;max-width:320px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
-    <option value="default">Default (built-in mic + aplay → PipeWire)</option>
-    <option value="respeaker_flex">ReSpeaker Flex Linear USB array</option>
-  </select>
-  <p id="audio-backend-note" style="font-size:0.82em;color:var(--text-muted);margin:6px 0 0 0">
-    A service restart is required for backend changes to take effect.
-  </p>
-</div>
-
-<!-- Default backend settings -->
-<div id="audio-section-default" class="audio-backend-section">
-  <hr style="margin:12px 0;border-color:var(--border)">
-  <h3 style="font-size:0.9em;color:var(--text-muted);margin:0 0 10px 0">Default Backend Settings</h3>
-  <div class="control-group">
-    <label>Input Device Name <small style="color:var(--text-muted)">(empty = OS default)</small></label>
-    <input id="audio-default-input-device" type="text" placeholder="e.g. USB Audio" style="width:100%;max-width:320px"/>
-  </div>
-  <div class="control-group">
-    <label>Input Sample Rate (Hz)</label>
-    <input id="audio-default-input-rate" type="number" min="8000" max="192000" step="100" style="width:130px"/>
-  </div>
-  <div class="control-group">
-    <label>Output ALSA Device</label>
-    <input id="audio-default-output-alsa" type="text" placeholder="pulse" style="width:100%;max-width:320px"/>
-  </div>
-  <div class="control-group">
-    <label>Output Sample Rate (Hz)</label>
-    <input id="audio-default-output-rate" type="number" min="8000" max="192000" step="100" style="width:130px"/>
-  </div>
-  <div class="control-group">
-    <label>Loudness Boost <small style="color:var(--text-muted)">(1.0 = off, 2–4 = boosted)</small></label>
-    <input id="audio-default-loudness" type="number" min="0" max="10" step="0.1" style="width:100px"/>
-  </div>
-  <div class="control-group">
-    <label>EQ Preset</label>
-    <select id="audio-default-eq" style="width:200px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
-      <option value="flat">flat</option>
-      <option value="bass_boost">bass_boost</option>
-      <option value="treble_boost">treble_boost</option>
-      <option value="vocal">vocal</option>
-      <option value="loudness">loudness</option>
-      <option value="warm">warm</option>
-      <option value="custom">custom</option>
-    </select>
-  </div>
-</div>
-
-<!-- ReSpeaker Flex settings -->
-<div id="audio-section-respeaker_flex" class="audio-backend-section" style="display:none">
-  <hr style="margin:12px 0;border-color:var(--border)">
-  <h3 style="font-size:0.9em;color:var(--text-muted);margin:0 0 10px 0">ReSpeaker Flex Linear Settings</h3>
-  <div class="control-group">
-    <label>Input Device Name <small style="color:var(--text-muted)">(ALSA substring match)</small></label>
-    <input id="audio-rs-input-device" type="text" placeholder="ReSpeaker" style="width:100%;max-width:320px"/>
-  </div>
-  <div class="control-group">
-    <label>Input Sample Rate (Hz) <small style="color:var(--text-muted)">(native: 16000)</small></label>
-    <input id="audio-rs-input-rate" type="number" min="8000" max="192000" step="100" style="width:130px"/>
-  </div>
-  <div class="control-group">
-    <label>Raw Input Channels <small style="color:var(--text-muted)">(4 mic + 2 ref = 6)</small></label>
-    <input id="audio-rs-raw-ch" type="number" min="1" max="16" step="1" style="width:80px"/>
-  </div>
-  <div class="control-group">
-    <label>
-      <input id="audio-rs-proc-enabled" type="checkbox"/>
-      <span>Input processing enabled <small style="color:var(--text-muted)">(AEC/beamformed)</small></span>
-    </label>
-  </div>
-  <div class="control-group">
-    <label>Processed Channel Index <small style="color:var(--text-muted)">(used when processing is ON, usually 0)</small></label>
-    <input id="audio-rs-proc-ch" type="number" min="0" max="15" step="1" style="width:80px"/>
-  </div>
-  <div class="control-group">
-    <label>Raw Mic Channel Index <small style="color:var(--text-muted)">(used when processing is OFF, try 1)</small></label>
-    <input id="audio-rs-raw-mic-ch" type="number" min="0" max="15" step="1" style="width:80px"/>
-  </div>
-  <div class="control-group">
-    <label>Output ALSA Device <small style="color:var(--text-muted)">("pulse" to mix, "plughw:ReSpeaker,0" for direct)</small></label>
-    <input id="audio-rs-output-alsa" type="text" placeholder="pulse" style="width:100%;max-width:320px"/>
-  </div>
-  <div class="control-group">
-    <label>Output Sample Rate (Hz)</label>
-    <input id="audio-rs-output-rate" type="number" min="8000" max="192000" step="100" style="width:130px"/>
-  </div>
-  <div class="control-group">
-    <label>Loudness Boost <small style="color:var(--text-muted)">(1.0 = off, 2–4 = boosted)</small></label>
-    <input id="audio-rs-loudness" type="number" min="0" max="10" step="0.1" style="width:100px"/>
-  </div>
-  <div class="control-group">
-    <label>EQ Preset</label>
-    <select id="audio-rs-eq" style="width:200px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
-      <option value="flat">flat</option>
-      <option value="bass_boost">bass_boost</option>
-      <option value="treble_boost">treble_boost</option>
-      <option value="vocal">vocal</option>
-      <option value="loudness">loudness</option>
-      <option value="warm">warm</option>
-      <option value="custom">custom</option>
-    </select>
-  </div>
-  <div class="control-group">
-    <label>
-      <input id="audio-rs-led" type="checkbox"/>
-      <span>LED ring enabled <small style="color:var(--text-muted)">(requires pip install usb-pixel-ring-v2)</small></span>
-    </label>
-  </div>
-</div>
-
-<hr style="margin:12px 0;border-color:var(--border)">
-<h3 style="font-size:0.9em;color:var(--text-muted);margin:0 0 10px 0">Voice STT Settings</h3>
-<div class="control-group">
-  <label>
-    <input id="voice-enabled" type="checkbox"/>
-    <span>Voice command pipeline enabled</span>
-  </label>
-</div>
-<div class="control-group">
-  <label>STT Backend</label>
-  <select id="voice-stt-backend" style="width:200px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
-    <option value="faster_whisper">faster_whisper</option>
-    <option value="shell">shell</option>
-    <option value="null">null (disable transcription)</option>
-  </select>
-</div>
-<div class="control-group">
-  <label>STT Command <small style="color:var(--text-muted)">(uses <code>{wav_path}</code>, <code>{sample_rate}</code>, <code>{language}</code>)</small></label>
-  <input id="voice-stt-command" type="text" placeholder="e.g. whisper-cli ... -f {wav_path}" style="width:100%"/>
-</div>
-<div class="control-group">
-  <label>Language</label>
-  <input id="voice-stt-language" type="text" placeholder="en" style="width:110px"/>
-</div>
-<div class="control-group">
-  <label>STT Timeout (seconds)</label>
-  <input id="voice-stt-timeout" type="number" min="1" max="120" step="0.5" style="width:110px"/>
-</div>
-<div class="control-group">
-  <label>Wake Threshold (dBFS)</label>
-  <input id="voice-wake-threshold" type="number" min="-120" max="0" step="0.5" style="width:110px"/>
-</div>
-<div class="control-group">
-  <label>Wake Cooldown (seconds)</label>
-  <input id="voice-wake-cooldown" type="number" min="0" max="30" step="0.1" style="width:110px"/>
-</div>
-<div style="margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-  <button class="btn btn-primary btn-sm" onclick="saveVoiceSettings()">Save Voice STT</button>
-  <button class="btn btn-secondary btn-sm" onclick="loadVoiceSettings()">Reload Voice STT</button>
-  <span class="qh-status" id="voice-status"></span>
-</div>
-
-<!-- Available input devices -->
-<details style="margin-top:10px">
-  <summary style="cursor:pointer;font-size:0.85em;color:var(--text-muted)">Available input devices</summary>
-  <ul id="audio-devices-list" style="font-size:0.82em;padding-left:16px;margin:6px 0 0 0;color:var(--text-muted)">
-    <li>Loading…</li>
-  </ul>
-</details>
-
-<div style="margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-  <button class="btn btn-primary btn-sm" onclick="saveAudioSettings()">Save</button>
-  <button class="btn btn-secondary btn-sm" onclick="loadAudioSettings()">Reload</button>
-  <span class="qh-status" id="audio-status"></span>
-</div>
-</section>
-<section class="card" id="card-xvf">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>ReSpeaker Flex XVF3800</h2>
-<p style="font-size:0.85em;color:var(--text-muted);margin-bottom:12px">
-  Live diagnostics and safe DSP tuning from the XVF host-control interface.
-  Use <strong>Save to Device Flash</strong> only when you want the hardware to
-  keep the current values across reboots.
-</p>
-<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-  <button class="btn btn-secondary btn-sm" onclick="loadXvfState()">Refresh XVF</button>
-  <button class="btn btn-primary btn-sm" onclick="saveXvfTunables()">Apply Tunables</button>
-  <button class="btn btn-warning btn-sm" onclick="saveXvfConfiguration()">Save to Device Flash</button>
-  <span class="qh-status" id="xvf-status"></span>
-</div>
-<div class="xvf-meta" id="xvf-meta">Loading XVF3800 state…</div>
-<div class="control-group" style="margin-top:14px">
-  <label>Read-only diagnostics</label>
-  <table class="help-table xvf-table">
-    <tbody id="xvf-readonly-rows"><tr><td colspan="3">Loading…</td></tr></tbody>
-  </table>
-</div>
-<div class="control-group" style="margin-top:14px">
-  <label>Tunable parameters</label>
-  <table class="help-table xvf-table">
-    <tbody id="xvf-tunable-rows"><tr><td colspan="4">Loading…</td></tr></tbody>
-  </table>
-</div>
-</section>
-</div>
-<!-- ══ TAB: SYSTEM ══════════════════════════════════════════ -->
-<div class="tab-pane" id="tab-system">
-<section class="card" id="card-updates">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Updates</h2>
-<div class="update-versions">
-<span>Installed: <strong id="update-installed">—</strong></span>
-<span>Available: <strong id="update-available">—</strong></span>
-<a id="update-release" target="_blank" rel="noopener noreferrer" hidden>Release notes</a>
-</div>
-<p id="update-status" role="status" aria-live="polite">Connecting to updater…</p>
-<p id="update-reboot" hidden>Reboot pending. Installation is not complete until the updater confirms it.</p>
-<div class="row-input update-actions">
-<button class="btn btn-secondary" id="update-check" onclick="requestUpdate('check')" disabled>Check now</button>
-<button class="btn btn-primary" id="update-install" onclick="requestUpdate('install')" disabled>Install update…</button>
-<button class="btn btn-secondary" id="update-retry" onclick="requestUpdate('install', true)" disabled>Retry failed update…</button>
-</div>
-<form id="update-settings" onsubmit="saveUpdateSettings(event)">
-<label class="qh-toggle"><input id="update-enabled" type="checkbox" disabled/>Enable automatic updates</label>
-<div class="row-input update-actions">
-<label>Window start <input id="update-start" type="time" required disabled/></label>
-<label>Window end <input id="update-end" type="time" required disabled/></label>
-<button class="btn btn-primary" id="update-save" type="submit" disabled>Save window</button>
-</div>
-<p class="update-hint">Local time; windows may cross midnight. Manual installation may restart VERA.</p>
-</form>
-<p id="update-action-status" role="status" aria-live="polite"></p>
-<details><summary>Update history</summary><ul id="update-history"></ul></details>
-</section>
-      <section class="card" id="card-controls">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Controls</h2>
-<div class="controls-grid">
-<div class="control-group">
-<label>Say something</label>
-<div class="row-input">
-<input id="say-input" placeholder="Enter text to speak…" type="text"/>
-<button class="btn btn-primary" onclick="doSay()">Speak</button>
-</div>
-</div>
-<div class="control-group">
-<label>Audio Clip</label>
-<div class="row-input" style="align-items:center;gap:10px;flex-wrap:wrap">
-<label style="font-size:13px;color:var(--text-dim)">Seconds</label>
-<input id="record-seconds" max="120" min="1" step="1" style="width:80px" type="number" value="5"/>
-<button class="btn btn-secondary" onclick="doRecordClip()">Record</button>
-<button class="btn btn-primary" onclick="doPlaybackClip()">Playback</button>
-<span class="qh-status" id="record-status"></span>
-</div>
-<div class="row-input" style="margin-top:6px;align-items:center;gap:10px;flex-wrap:wrap">
-<progress id="record-progress" max="1" style="width:220px;display:none" value="0"></progress>
-<span id="record-remaining" style="font-size:12px;color:var(--text-muted)"></span>
-</div>
-</div>
-<div class="control-group">
-<label>Pan servo  <span id="pan-angle-display">180°</span></label>
-<div class="row-input">
-<input id="pan-slider" max="360" min="1" type="range" value="180"/>
-<button class="btn btn-primary" onclick="doPan()">Go</button>
-</div>
-<div class="row-input" style="margin-top:6px">
-<label class="qh-toggle" style="margin:0">
-<input id="servo-enabled" onchange="saveServoEnabled(this.checked)" type="checkbox"/>
-<span>Enable servo motion</span>
-</label>
-</div>
-<div class="row-input" style="margin-top:4px">
-<label class="qh-toggle" style="margin:0">
-<input id="face-tracking-enabled" onchange="saveFaceTrackingEnabled(this.checked)" type="checkbox"/>
-<span>Face tracking (servo follows detected face)</span>
-</label>
-</div>
-<div class="row-input" style="margin-top:4px">
-<label class="qh-toggle" style="margin:0">
-<input id="random-motion-enabled" onchange="saveRandomMotionEnabled(this.checked)" type="checkbox"/>
-<span>Random motion (idle gaze when no face)</span>
-</label>
-</div>
-<div class="row-input" style="margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap">
-<label style="font-size:13px;color:var(--text-dim)">Travel limits:</label>
-<label style="font-size:13px">
-              Min <input id="servo-travel-min" max="359" min="1" step="1" style="width:65px;margin-left:4px" type="number" value="135"/>°
-            </label>
-<label style="font-size:13px">
-              Max <input id="servo-travel-max" max="360" min="2" step="1" style="width:65px;margin-left:4px" type="number" value="215"/>°
-            </label>
-<button class="btn btn-primary btn-sm" onclick="saveServoLimits()">Set</button>
-<span class="qh-status" id="servo-limits-status"></span>
-</div>
-</div>
+<section aria-label="Camera configuration" class="card" id="card-camera-settings" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>Camera configuration</h2>
 <div class="control-group">
 <label>Cam 1 Rotation  <span id="cam-rotation-display">0°</span></label>
 <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
@@ -923,39 +474,8 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </select>
 <span class="qh-status" id="cam-stream-resolution-status"></span>
 </div>
-</div>
-<div class="control-group">
-<label>System</label>
-<div class="row-input">
-<button class="btn btn-secondary" onclick="doVersion()">Speak Version</button>
-<button class="btn btn-secondary" onclick="doDescribe()">Describe What I See</button>
-</div>
-<div class="row-input" style="margin-top:6px">
-<span class="qh-status" id="vision-describe-status"></span>
-</div>
-<div class="row-input" style="margin-top:6px">
-<label class="qh-toggle" style="margin:0">
-<input id="object-detection-enabled" onchange="saveObjectDetectionEnabled(this.checked)" type="checkbox"/>
-<span>Object classification (detects COCO objects via Hailo-8)</span>
-</label>
-</div>
-<div class="row-input" style="margin-top:6px">
-<label class="qh-toggle" style="margin:0">
-<input id="anthropic-enabled" onchange="saveAnthropicEnabled(this.checked)" type="checkbox"/>
-<span>Anthropic Claude API (room ID + OpenClaw greetings)</span>
-</label>
-</div>
-<div class="row-input" style="margin-top:6px">
-<label class="qh-toggle" style="margin:0">
-<input id="room-checking-enabled" onchange="saveRoomCheckingEnabled(this.checked)" type="checkbox"/>
-<span>Room-change checking (periodic panoramic servo sweep; obeys quiet hours)</span>
-</label>
-</div>
-</div>
-</div>
-</section>
-
-<section class="card" id="card-privacy-settings">
+</div></section>
+<section aria-label="Privacy Mode" class="card" id="card-privacy-settings" tabindex="-1">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Privacy Mode</h2>
 <div class="control-group">
 <label class="qh-toggle" style="margin:0">
@@ -1002,57 +522,551 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 <button class="btn btn-secondary btn-sm" onclick="loadPrivacySettings()">Reload</button>
 <span class="qh-status" id="privacy-status"></span>
 </div>
-</section>
-
-<section class="card" id="card-fan-curve">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Fan Control Points</h2>
-
-<div class="control-group" style="margin-bottom:12px">
-  <label>Temperature Blend</label>
-  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <label id="blend-case-label" style="min-width:110px">Case sensor:
-      <span id="blend-case-pct" style="font-weight:bold">20%</span>
-    </label>
-    <input id="blend-slider" max="100" min="0" step="1" type="range" value="20"
-           style="flex:1;min-width:160px" oninput="updateBlendLabels()"/>
-    <label style="min-width:110px">CPU die:
-      <span id="blend-cpu-pct" style="font-weight:bold">80%</span>
-    </label>
-  </div>
+</section></div>
+<div aria-labelledby="nav-controls" class="tab-pane" data-description="Playback, stations, podcasts, volume, and equalization in one place." data-title="Media &amp; Audio" id="tab-controls" role="tabpanel">
+<section aria-label="Output levels &amp; equalizer" class="card" id="card-audio-runtime" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Output levels &amp; equalizer</h2>
+<div class="control-group">
+<label>Output Volume</label>
+<div class="music-volume-row">
+<label style="font-size:0.85em;min-width:56px">🔊 Vol</label>
+<input aria-label="Output volume" id="music-volume-slider" max="100" min="0" oninput="musicSetVolume(this.value)" style="flex:1" type="range" value="50"/>
+<span id="music-volume-label" style="font-size:0.85em;min-width:36px;text-align:right">50%</span>
+<button class="btn btn-secondary btn-sm" id="audio-mute-btn" onclick="audioToggleMute()" style="margin-left:8px" type="button">🔇 Mute</button>
+<span class="qh-status" id="audio-mute-status"></span>
 </div>
+</div>
+<div class="control-group">
+<label>Equalizer Preset</label>
+<div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+<label style="font-size:0.85em;min-width:56px">🎚 EQ</label>
+<select aria-label="Equalizer preset" id="music-eq-select" onchange="musicSetEq(this.value)" style="flex:1">
+<option value="flat">Flat</option>
+<option value="bass_boost">Bass Boost</option>
+<option value="treble_boost">Treble Boost</option>
+<option value="vocal">Vocal</option>
+<option value="loudness">Loudness</option>
+<option value="warm">Warm</option>
+<option value="custom">Custom…</option>
+</select>
+</div>
+</div>
+<div class="control-group">
+<label>Voice Output Volume</label>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+<label style="font-size:0.85em;min-width:56px">🗣 Voice</label>
+<input aria-label="Voice output volume" id="audio-voice-gain-slider" max="400" min="10" oninput="audioSetVoiceGain(this.value)" style="flex:1" type="range" value="100"/>
+<span id="audio-voice-gain-label" style="font-size:0.85em;min-width:42px;text-align:right">100%</span>
+<span class="qh-status" id="audio-voice-gain-status"></span>
+</div>
+</div>
+
+
+<!-- Custom EQ bands — shown only when "Custom" is selected -->
+<details class="advanced-panel" id="custom-eq-panel" style="display:none;margin-top:12px;padding:10px;
+           border:1px solid var(--border);border-radius:6px">
+<summary>Custom voice EQ — edit bands</summary>
+<table id="custom-eq-table" style="width:100%;font-size:0.8em;border-collapse:collapse">
+<thead>
+<tr>
+<th style="text-align:left;padding:2px 6px">Band</th>
+<th style="text-align:left;padding:2px 6px">Hz</th>
+<th style="text-align:left;padding:2px 6px">Gain (dB)</th>
+<th style="text-align:left;padding:2px 6px">Q</th>
+<th></th>
+</tr>
+</thead>
+<tbody id="custom-eq-rows"></tbody>
+</table>
+<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn btn-secondary btn-sm" onclick="customEqAddBand()">+ Band</button>
+<button class="btn btn-primary btn-sm" onclick="customEqSave()">Apply</button>
+<span class="qh-status" id="custom-eq-status"></span>
+</div>
+</details>
+<div class="workspace-crosslink"><span>Output routing &amp; device setup</span><button class="btn btn-secondary btn-sm" onclick="openWorkspace('system', 'card-audio')">Audio hardware →</button></div>
+</section>
+<section aria-label="Music (Pandora)" class="card" id="card-music" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Music (Pandora)</h2>
+<div id="music-not-configured" style="display:none;color:var(--yellow);margin-bottom:8px;font-size:0.9em">
+        ⚠ pianobar not configured. Create <code>~/.config/pianobar/config</code> with your Pandora credentials.
+      </div>
+<!-- Album art + metadata row -->
+<div class="music-player-row">
+<div class="music-art" id="music-art-wrap">
+<img alt="Album Art" id="music-art-img" onerror="this.style.display='none';document.getElementById('music-art-placeholder').style.display='flex'" src="" style="display:none"/>
+<div class="music-art-placeholder" id="music-art-placeholder">♫</div>
+</div>
+<div class="music-info">
+<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+<span id="music-state-icon" style="font-size:1.2em">■</span>
+<span id="music-song-title" style="font-weight:600">—</span>
+</div>
+<div style="font-size:0.85em;color:var(--text-muted)">
+<span id="music-song-artist"></span>
+</div>
+<div style="font-size:0.8em;color:var(--text-muted);margin-top:2px">
+<span id="music-song-album"></span>
+</div>
+<div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;opacity:0.7">
+<span id="music-song-station"></span>
+</div>
+</div>
+</div>
+<!-- Progress bar -->
+<div class="music-progress-row">
+<span id="music-elapsed" style="font-size:0.8em;color:var(--text-muted);min-width:38px">0:00</span>
+<input class="music-progress-bar" disabled="" id="music-progress-bar" max="100" min="0" type="range" value="0"/>
+<span id="music-duration" style="font-size:0.8em;color:var(--text-muted);min-width:38px;text-align:right">0:00</span>
+</div>
+<!-- Playback controls -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+<button class="btn btn-primary" onclick="musicPlay()">▶ Play</button>
+<button class="btn btn-sm" onclick="musicPause()">⏸ Pause</button>
+<button class="btn btn-sm" onclick="musicNext()">⏭ Next</button>
+<button class="btn btn-sm" onclick="musicStop()">■ Stop</button>
+<button class="btn btn-sm" onclick="musicThumbsUp()" title="Love this song">👍</button>
+<button class="btn btn-sm" onclick="musicThumbsDown()" title="Ban this song">👎</button>
+</div>
+<!-- Station selector -->
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+<label style="font-size:0.9em">Station</label>
+<select id="music-station-select" onchange="musicSetStation(this.value)" style="flex:1;min-width:180px">
+<option value="">— select station —</option>
+</select>
+<span id="music-status" style="font-size:0.85em;color:var(--green)"></span>
+</div>
+</section>
+<section aria-label="Apple Podcasts" class="card" id="card-podcasts" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Apple Podcasts</h2>
+<div class="control-group">
+<label>Search or subscribe</label>
+<div class="row-input" style="gap:8px;flex-wrap:wrap">
+<input id="podcast-query" placeholder="Podcast name or RSS feed URL" style="flex:1;min-width:220px" type="text"/>
+<button class="btn btn-secondary btn-sm" onclick="podcastSearch()">Search</button>
+<button class="btn btn-primary btn-sm" onclick="podcastSubscribe()">Subscribe</button>
+</div>
+<div id="podcast-search-results" style="margin-top:8px;font-size:0.85em;color:var(--text-muted)"></div>
+</div>
+<div class="control-group">
+<label>Subscriptions</label>
+<div class="row-input" style="gap:8px;flex-wrap:wrap">
+<select id="podcast-sub-select" onchange="podcastLoadEpisodes()" style="flex:1;min-width:220px">
+<option value="">— no subscriptions —</option>
+</select>
+<button class="btn btn-sm" onclick="podcastRefresh()">↺ Refresh</button>
+<button class="btn btn-danger btn-sm" onclick="podcastUnsubscribe()">Unsubscribe</button>
+</div>
+</div>
+<div class="control-group">
+<label>Episodes</label>
+<div class="row-input" style="gap:8px;flex-wrap:wrap">
+<select id="podcast-episode-select" style="flex:1;min-width:220px">
+<option value="0">— latest episode —</option>
+</select>
+</div>
+</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+<button class="btn btn-primary btn-sm" onclick="podcastPlay()">▶ Play</button>
+<button class="btn btn-sm" onclick="podcastPause()">⏸ Pause</button>
+<button class="btn btn-sm" onclick="podcastResume()">▶ Resume</button>
+<button class="btn btn-sm" onclick="podcastStop()">■ Stop</button>
+<button class="btn btn-sm" onclick="podcastSkip(-15)">↺ 15s</button>
+<button class="btn btn-sm" onclick="podcastSkip(30)">↻ 30s</button>
+</div>
+<div class="music-progress-row" style="margin-top:4px">
+<span id="podcast-elapsed" style="font-size:0.8em;color:var(--text-muted);min-width:38px">0:00</span>
+<input class="music-progress-bar" id="podcast-progress-bar" max="100" min="0" onchange="podcastCommitSeek(this.value)" oninput="podcastPreviewSeek(this.value)" type="range" value="0"/>
+<span id="podcast-duration" style="font-size:0.8em;color:var(--text-muted);min-width:38px;text-align:right">0:00</span>
+</div>
+<div id="podcast-status" style="font-size:0.85em;color:var(--text-muted)">No podcast playback</div>
+</section></div>
+<div aria-labelledby="nav-voice" class="tab-pane" data-description="Speech, microphone input, greetings, skills, and quiet hours." data-title="Voice &amp; Behavior" id="tab-voice" role="tabpanel">
+<section aria-label="Speech &amp; recording" class="card" id="card-speech" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>Speech &amp; recording</h2>
+<div class="control-group">
+<label>Say something</label>
+<div class="row-input">
+<input id="say-input" placeholder="Enter text to speak…" type="text"/>
+<button class="btn btn-primary" onclick="doSay()">Speak</button>
+</div>
+</div>
+<div class="control-group">
+<label>Audio Clip</label>
+<div class="row-input" style="align-items:center;gap:10px;flex-wrap:wrap">
+<label style="font-size:13px;color:var(--text-dim)">Seconds</label>
+<input id="record-seconds" max="120" min="1" step="1" style="width:80px" type="number" value="5"/>
+<button class="btn btn-secondary" onclick="doRecordClip()">Record</button>
+<button class="btn btn-primary" onclick="doPlaybackClip()">Playback</button>
+<span class="qh-status" id="record-status"></span>
+</div>
+<div class="row-input" style="margin-top:6px;align-items:center;gap:10px;flex-wrap:wrap">
+<progress id="record-progress" max="1" style="width:220px;display:none" value="0"></progress>
+<span id="record-remaining" style="font-size:12px;color:var(--text-muted)"></span>
+</div>
+</div></section>
+<section aria-label="Microphone &amp; input analyzer" class="card" id="card-microphone" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>Microphone &amp; input analyzer</h2>
+<div class="control-group">
+<label>Microphone Input Gain</label>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+<label style="font-size:0.85em;min-width:56px">🎙 Gain</label>
+<input aria-label="Microphone input gain" id="audio-input-gain-slider" max="100" min="0" oninput="audioSetInputGain(this.value)" style="flex:1" type="range" value="80"/>
+<span id="audio-input-gain-label" style="font-size:0.85em;min-width:36px;text-align:right">80%</span>
+<span class="qh-status" id="audio-input-gain-status"></span>
+</div>
+</div>
+<div class="control-group" id="audio-analyzer-group">
+<label>Live Input Analyzer <span id="audio-vad-state" style="font-size:0.85em;color:var(--text-dim);margin-left:8px">Idle</span></label>
+<canvas class="resource-canvas" height="90" id="audio-spectrum-canvas" width="400"></canvas>
+<div id="audio-spectrum-meta" style="font-size:0.8em;color:var(--text-muted);margin-top:6px">Waiting for input…</div>
+<div id="audio-spectrum-tone-now" style="font-size:0.8em;color:var(--text-dim);margin-top:4px">Now playing: —</div>
+<div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+<button class="btn btn-secondary btn-sm" onclick="audioPlaySpectrumTest()">▶ Test Analyzer Tones</button>
+<span class="qh-status" id="audio-spectrum-test-status"></span>
+</div>
+</div></section>
+<section aria-label="Voice recognition" class="card" id="card-voice-settings" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Voice recognition</h2>
+<details class="advanced-panel">
+<summary>Configure speech recognition &amp; wake behavior</summary>
+<div class="control-group">
+<label><input id="voice-enabled" type="checkbox"/><span>Voice command pipeline enabled</span></label>
+</div>
+<div class="control-group">
+<label for="voice-stt-backend">STT Backend</label>
+<select id="voice-stt-backend">
+<option value="faster_whisper">faster_whisper</option>
+<option value="shell">shell</option>
+<option value="null">null (disable transcription)</option>
+</select>
+</div>
+<div class="control-group">
+<label for="voice-stt-command">STT Command <small>(uses <code>{wav_path}</code>, <code>{sample_rate}</code>, <code>{language}</code>)</small></label>
+<input id="voice-stt-command" placeholder="e.g. whisper-cli ... -f {wav_path}" style="width:100%" type="text"/>
+</div>
+<div class="control-group">
+<label for="voice-stt-language">Language</label>
+<input id="voice-stt-language" placeholder="en" style="width:110px" type="text"/>
+</div>
+<div class="control-group">
+<label for="voice-stt-timeout">STT Timeout (seconds)</label>
+<input id="voice-stt-timeout" max="120" min="1" step="0.5" style="width:110px" type="number"/>
+</div>
+<div class="control-group">
+<label for="voice-wake-threshold">Wake Threshold (dBFS)</label>
+<input id="voice-wake-threshold" max="0" min="-120" step="0.5" style="width:110px" type="number"/>
+</div>
+<div class="control-group">
+<label for="voice-wake-cooldown">Wake Cooldown (seconds)</label>
+<input id="voice-wake-cooldown" max="30" min="0" step="0.1" style="width:110px" type="number"/>
+</div>
+<div class="btn-row">
+<button class="btn btn-primary btn-sm" onclick="saveVoiceSettings()">Save Voice STT</button>
+<button class="btn btn-secondary btn-sm" onclick="loadVoiceSettings()">Reload Voice STT</button>
+<span class="qh-status" id="voice-status"></span>
+</div>
+</details>
+</section>
+<section aria-label="Quiet Hours" class="card" id="card-quiet" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Quiet Hours</h2>
+<div class="qh-form">
+<label class="qh-toggle">
+<input id="qh-enabled" type="checkbox"/>
+<span>Enable quiet hours</span>
+</label>
+<div class="qh-times">
+<label>
+            Start
+            <input id="qh-start" type="time" value="21:00"/>
+</label>
+<span class="qh-sep">→</span>
+<label>
+            End
+            <input id="qh-end" type="time" value="06:00"/>
+</label>
+</div>
+<button class="btn btn-primary" onclick="saveQuietHours()">Save</button>
+<span class="qh-status" id="qh-status"></span>
+</div>
+</section>
+<section aria-label="Greeting Settings" class="card" id="card-greeting" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Greeting Settings</h2>
+<div class="qh-form">
+<div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+<label style="flex:1;min-width:160px">
+            Cooldown (min)
+            <input id="greeting-cooldown" max="240" min="1" step="1" style="width:80px;margin-left:8px" type="number" value="30"/>
+</label>
+<label style="flex:1;min-width:160px">
+            Jitter (%)
+            <input id="greeting-jitter" max="50" min="0" step="5" style="width:70px;margin-left:8px" type="number" value="25"/>
+</label>
+</div>
+<div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:8px">
+<label style="flex:1;min-width:160px">
+            Min absence (s)
+            <input id="greeting-min-absence" max="300" min="5" step="5" style="width:70px;margin-left:8px" type="number" value="30"/>
+</label>
+<label style="flex:1;min-width:160px">
+            Min confidence
+            <input id="greeting-confidence" max="1.0" min="0.1" step="0.05" style="width:70px;margin-left:8px" type="number" value="0.5"/>
+</label>
+</div>
+<button class="btn btn-primary" onclick="saveGreetingSettings()" style="margin-top:10px">Save</button>
+<span class="qh-status" id="greeting-status"></span>
+</div>
+</section>
+<section aria-label="Voice Skills" class="card" id="card-skills" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Voice Skills <button class="btn btn-secondary btn-sm" id="skills-toggle-btn" onclick="toggleSkills()">Show</button></h2>
+<div id="skills-panel" style="display:none">
+<p style="font-size:13px;color:var(--text-dim);margin:4px 0 8px 0">
+          Speak these phrases (or type them below) to trigger a skill.
+          Use the toggle to enable/disable skills and ⚙ to configure them.
+        </p>
+<table class="help-table" id="skills-table">
+<thead><tr><th style="width:28px"></th><th>Skill</th><th>Example phrase</th><th style="width:32px"></th></tr></thead>
+<tbody id="skills-tbody"><tr><td colspan="4">Loading…</td></tr></tbody>
+</table>
+<div class="btn-row" style="margin-top:8px">
+<input class="text-input" id="utterance-input" placeholder="Type an utterance to test…" style="flex:1" type="text"/>
+<button class="btn btn-primary" onclick="sendUtterance()">Dispatch</button>
+</div>
+</div>
+</section>
+<section aria-label="STT Transcript History (last 20)" class="card" id="card-stt-transcripts" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>STT Transcript History <span class="subtext">(last 20)</span></h2>
+<div class="event-log" id="stt-transcript-log"></div>
+</section></div>
+<div aria-labelledby="nav-smart-home" class="tab-pane" data-description="Connected devices, environmental readings, and home controls." data-title="Smart Home" id="tab-smart-home" role="tabpanel">
+<div class="iot-toolbar" id="iot-toolbar">
+<span class="iot-toolbar-title">🏡 Smart Home</span>
+<button class="btn btn-sm" data-iot-action="add" id="iot-add-btn">＋ Add IoT Device</button>
+</div></div>
+<div aria-labelledby="nav-system" class="tab-pane" data-description="Software updates, cooling, audio hardware, diagnostics, and power." data-title="System" id="tab-system" role="tabpanel">
+<section aria-label="Updates" class="card" id="card-updates" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Updates</h2>
+<div class="update-versions">
+<span>Installed: <strong id="update-installed">—</strong></span>
+<span>Available: <strong id="update-available">—</strong></span>
+<a hidden="" id="update-release" rel="noopener noreferrer" target="_blank">Release notes</a>
+</div>
+<p aria-live="polite" id="update-status" role="status">Connecting to updater…</p>
+<p hidden="" id="update-reboot">Reboot pending. Installation is not complete until the updater confirms it.</p>
+<div class="row-input update-actions">
+<button class="btn btn-secondary" disabled="" id="update-check" onclick="requestUpdate('check')">Check now</button>
+<button class="btn btn-primary" disabled="" id="update-install" onclick="requestUpdate('install')">Install update…</button>
+<button class="btn btn-secondary" disabled="" id="update-retry" onclick="requestUpdate('install', true)">Retry failed update…</button>
+</div>
+<form id="update-settings" onsubmit="saveUpdateSettings(event)">
+<label class="qh-toggle"><input disabled="" id="update-enabled" type="checkbox"/>Enable automatic updates</label>
+<div class="row-input update-actions">
+<label>Window start <input disabled="" id="update-start" required="" type="time"/></label>
+<label>Window end <input disabled="" id="update-end" required="" type="time"/></label>
+<button class="btn btn-primary" disabled="" id="update-save" type="submit">Save window</button>
+</div>
+<p class="update-hint">Local time; windows may cross midnight. Manual installation may restart VERA.</p>
+</form>
+<p aria-live="polite" id="update-action-status" role="status"></p>
+<details><summary>Update history</summary><ul id="update-history"></ul></details>
+</section>
+<section aria-label="Fan Control Points" class="card" id="card-fan-curve" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Fan Control Points</h2>
+<div class="control-group" style="margin-bottom:12px">
+<label>Temperature Blend</label>
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+<label id="blend-case-label" style="min-width:110px">Case sensor:
+      <span id="blend-case-pct" style="font-weight:bold">20%</span>
+</label>
+<input id="blend-slider" max="100" min="0" oninput="updateBlendLabels()" step="1" style="flex:1;min-width:160px" type="range" value="20"/>
+<label style="min-width:110px">CPU die:
+      <span id="blend-cpu-pct" style="font-weight:bold">80%</span>
+</label>
+</div>
+</div>
+<div class="control-group">
+<label>Control Points <small style="color:var(--text-muted)">(floor &amp; ceiling rows are always kept)</small></label>
+<table id="fan-curve-table" style="width:100%;border-collapse:collapse;margin-bottom:8px">
+<thead>
+<tr>
+<th style="text-align:left;padding:4px 8px">Temp (°C)</th>
+<th style="text-align:left;padding:4px 8px">Duty (%)</th>
+<th style="width:48px"></th>
+</tr>
+</thead>
+<tbody id="fan-curve-tbody">
+<!-- rows injected by JS -->
+</tbody>
+</table>
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+<button class="btn btn-secondary btn-sm" onclick="addFanCurveRow()">+ Add Point</button>
+<button class="btn btn-primary btn-sm" onclick="saveFanControlPoints()">Save</button>
+<button class="btn btn-secondary btn-sm" onclick="loadFanControlPoints()">Reload</button>
+<span class="qh-status" id="fan-curve-status"></span>
+</div>
+</div>
+</section>
+<section aria-label="Audio hardware" class="card" id="card-audio" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>Audio hardware</h2><details class="advanced-panel"><summary>Configure audio hardware</summary>
 
 <div class="control-group">
-  <label>Control Points <small style="color:var(--text-muted)">(floor &amp; ceiling rows are always kept)</small></label>
-  <table id="fan-curve-table" style="width:100%;border-collapse:collapse;margin-bottom:8px">
-    <thead>
-      <tr>
-        <th style="text-align:left;padding:4px 8px">Temp (°C)</th>
-        <th style="text-align:left;padding:4px 8px">Duty (%)</th>
-        <th style="width:48px"></th>
-      </tr>
-    </thead>
-    <tbody id="fan-curve-tbody">
-      <!-- rows injected by JS -->
-    </tbody>
-  </table>
-  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-    <button class="btn btn-secondary btn-sm" onclick="addFanCurveRow()">+ Add Point</button>
-    <button class="btn btn-primary btn-sm" onclick="saveFanControlPoints()">Save</button>
-    <button class="btn btn-secondary btn-sm" onclick="loadFanControlPoints()">Reload</button>
-    <span class="qh-status" id="fan-curve-status"></span>
-  </div>
+<label for="audio-backend-select">Hardware Backend</label>
+<select id="audio-backend-select" onchange="onAudioBackendChange()" style="width:100%;max-width:320px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
+<option value="default">Default (built-in mic + aplay → PipeWire)</option>
+<option value="respeaker_flex">ReSpeaker Flex Linear USB array</option>
+</select>
+<p id="audio-backend-note" style="font-size:0.82em;color:var(--text-muted);margin:6px 0 0 0">
+    A service restart is required for backend changes to take effect.
+  </p>
 </div>
-</section>
+<!-- Default backend settings -->
+<div class="audio-backend-section" id="audio-section-default">
+<hr style="margin:12px 0;border-color:var(--border)"/>
+<h3 style="font-size:0.9em;color:var(--text-muted);margin:0 0 10px 0">Default Backend Settings</h3>
+<div class="control-group">
+<label>Input Device Name <small style="color:var(--text-muted)">(empty = OS default)</small></label>
+<input id="audio-default-input-device" placeholder="e.g. USB Audio" style="width:100%;max-width:320px" type="text"/>
+</div>
+<div class="control-group">
+<label>Input Sample Rate (Hz)</label>
+<input id="audio-default-input-rate" max="192000" min="8000" step="100" style="width:130px" type="number"/>
+</div>
+<div class="control-group">
+<label>Output ALSA Device</label>
+<input id="audio-default-output-alsa" placeholder="pulse" style="width:100%;max-width:320px" type="text"/>
+</div>
+<div class="control-group">
+<label>Output Sample Rate (Hz)</label>
+<input id="audio-default-output-rate" max="192000" min="8000" step="100" style="width:130px" type="number"/>
+</div>
+<div class="control-group">
+<label>Loudness Boost <small style="color:var(--text-muted)">(1.0 = off, 2–4 = boosted)</small></label>
+<input id="audio-default-loudness" max="10" min="0" step="0.1" style="width:100px" type="number"/>
+</div>
+<div class="control-group">
+<label>EQ Preset</label>
+<select id="audio-default-eq" style="width:200px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
+<option value="flat">flat</option>
+<option value="bass_boost">bass_boost</option>
+<option value="treble_boost">treble_boost</option>
+<option value="vocal">vocal</option>
+<option value="loudness">loudness</option>
+<option value="warm">warm</option>
+<option value="custom">custom</option>
+</select>
+</div>
+</div>
+<!-- ReSpeaker Flex settings -->
+<div class="audio-backend-section" id="audio-section-respeaker_flex" style="display:none">
+<hr style="margin:12px 0;border-color:var(--border)"/>
+<h3 style="font-size:0.9em;color:var(--text-muted);margin:0 0 10px 0">ReSpeaker Flex Linear Settings</h3>
+<div class="control-group">
+<label>Input Device Name <small style="color:var(--text-muted)">(ALSA substring match)</small></label>
+<input id="audio-rs-input-device" placeholder="ReSpeaker" style="width:100%;max-width:320px" type="text"/>
+</div>
+<div class="control-group">
+<label>Input Sample Rate (Hz) <small style="color:var(--text-muted)">(native: 16000)</small></label>
+<input id="audio-rs-input-rate" max="192000" min="8000" step="100" style="width:130px" type="number"/>
+</div>
+<div class="control-group">
+<label>Raw Input Channels <small style="color:var(--text-muted)">(4 mic + 2 ref = 6)</small></label>
+<input id="audio-rs-raw-ch" max="16" min="1" step="1" style="width:80px" type="number"/>
+</div>
+<div class="control-group">
+<label>
+<input id="audio-rs-proc-enabled" type="checkbox"/>
+<span>Input processing enabled <small style="color:var(--text-muted)">(AEC/beamformed)</small></span>
+</label>
+</div>
+<div class="control-group">
+<label>Processed Channel Index <small style="color:var(--text-muted)">(used when processing is ON, usually 0)</small></label>
+<input id="audio-rs-proc-ch" max="15" min="0" step="1" style="width:80px" type="number"/>
+</div>
+<div class="control-group">
+<label>Raw Mic Channel Index <small style="color:var(--text-muted)">(used when processing is OFF, try 1)</small></label>
+<input id="audio-rs-raw-mic-ch" max="15" min="0" step="1" style="width:80px" type="number"/>
+</div>
+<div class="control-group">
+<label>Output ALSA Device <small style="color:var(--text-muted)">("pulse" to mix, "plughw:ReSpeaker,0" for direct)</small></label>
+<input id="audio-rs-output-alsa" placeholder="pulse" style="width:100%;max-width:320px" type="text"/>
+</div>
+<div class="control-group">
+<label>Output Sample Rate (Hz)</label>
+<input id="audio-rs-output-rate" max="192000" min="8000" step="100" style="width:130px" type="number"/>
+</div>
+<div class="control-group">
+<label>Loudness Boost <small style="color:var(--text-muted)">(1.0 = off, 2–4 = boosted)</small></label>
+<input id="audio-rs-loudness" max="10" min="0" step="0.1" style="width:100px" type="number"/>
+</div>
+<div class="control-group">
+<label>EQ Preset</label>
+<select id="audio-rs-eq" style="width:200px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
+<option value="flat">flat</option>
+<option value="bass_boost">bass_boost</option>
+<option value="treble_boost">treble_boost</option>
+<option value="vocal">vocal</option>
+<option value="loudness">loudness</option>
+<option value="warm">warm</option>
+<option value="custom">custom</option>
+</select>
+</div>
+<div class="control-group">
+<label>
+<input id="audio-rs-led" type="checkbox"/>
+<span>LED ring enabled <small style="color:var(--text-muted)">(requires pip install usb-pixel-ring-v2)</small></span>
+</label>
+</div>
+</div>
+<!-- Available input devices -->
+<details style="margin-top:10px">
+<summary style="cursor:pointer;font-size:0.85em;color:var(--text-muted)">Available input devices</summary>
+<ul id="audio-devices-list" style="font-size:0.82em;padding-left:16px;margin:6px 0 0 0;color:var(--text-muted)">
+<li>Loading…</li>
+</ul>
+</details>
+<div style="margin-top:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+<button class="btn btn-primary btn-sm" onclick="saveAudioSettings()">Save</button>
+<button class="btn btn-secondary btn-sm" onclick="loadAudioSettings()">Reload</button>
+<span class="qh-status" id="audio-status"></span>
+</div>
+</details></section>
+<section aria-label="ReSpeaker Flex XVF3800" class="card" id="card-xvf" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>ReSpeaker Flex XVF3800</h2><details class="advanced-panel"><summary>Inspect &amp; tune microphone DSP</summary>
 
-<section class="card" id="card-power">
+<p style="font-size:0.85em;color:var(--text-muted);margin-bottom:12px">
+  Live diagnostics and safe DSP tuning from the XVF host-control interface.
+  Use <strong>Save to Device Flash</strong> only when you want the hardware to
+  keep the current values across reboots.
+</p>
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+<button class="btn btn-secondary btn-sm" onclick="loadXvfState()">Refresh XVF</button>
+<button class="btn btn-primary btn-sm" onclick="saveXvfTunables()">Apply Tunables</button>
+<button class="btn btn-warning btn-sm" onclick="saveXvfConfiguration()">Save to Device Flash</button>
+<span class="qh-status" id="xvf-status"></span>
+</div>
+<div class="xvf-meta" id="xvf-meta">Loading XVF3800 state…</div>
+<div class="control-group" style="margin-top:14px">
+<label>Read-only diagnostics</label>
+<table class="help-table xvf-table">
+<tbody id="xvf-readonly-rows"><tr><td colspan="3">Loading…</td></tr></tbody>
+</table>
+</div>
+<div class="control-group" style="margin-top:14px">
+<label>Tunable parameters</label>
+<table class="help-table xvf-table">
+<tbody id="xvf-tunable-rows"><tr><td colspan="4">Loading…</td></tr></tbody>
+</table>
+</div>
+</details></section>
+<section aria-label="Event Log (last 20)" class="card" id="card-events" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Event Log <span class="subtext">(last 20)</span></h2>
+<div class="event-log" id="event-log"></div>
+</section>
+<section aria-label="System Power" class="card" id="card-power" tabindex="-1">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>System Power</h2>
 <div class="btn-row">
 <button class="btn btn-warning" id="btn-reboot" onclick="systemReboot()">↺ Reboot</button>
 <button class="btn btn-danger" id="btn-shutdown" onclick="systemShutdown()">⏻ Shutdown</button>
-</div>
+<button class="btn btn-secondary" onclick="doVersion()">Speak Version</button></div>
 </section>
-<section class="card" id="card-help">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>❓ Help <button class="btn btn-secondary btn-sm" id="help-toggle-btn" onclick="toggleHelp()">Show</button></h2>
+<section aria-label="Help" class="card" id="card-help" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Help <button class="btn btn-secondary btn-sm" id="help-toggle-btn" onclick="toggleHelp()">Show</button></h2>
 <div id="help-panel" style="display:none">
 <div class="help-grid">
 <div>
@@ -1106,19 +1120,14 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </table>
 </div>
 <div>
-<h3>Dashboard Sections</h3>
+<h3>Workspaces</h3>
 <ul class="help-list">
-<li><strong>Camera Feed</strong> — Live MJPEG stream with face ovals (green) and object boxes (cyan).</li>
-<li><strong>Telemetry</strong> — Case/SoC/blended temperature, fan duty, servo angle, microphone level, and last spoken text.</li>
-<li><strong>Services</strong> — Live status of each internal service. Use ⟳ to restart the daemon.</li>
-<li><strong>Face Registry</strong> — Known faces with thumbnails, seen counts, and merge/delete actions. Click a thumbnail to enlarge.</li>
-<li><strong>Controls</strong> — Say text, pan servo, toggle tracking, adjust travel limits, speak version, describe scene.</li>
-<li><strong>Greeting Settings</strong> — Configure face greeting cooldown, jitter, minimum absence, and confidence threshold.</li>
-<li><strong>Music (Pandora)</strong> — Play, pause, skip, love/ban songs, and select stations via pianobar.</li>
-<li><strong>Quiet Hours</strong> — Suppress TTS announcements during a configured time window.</li>
-<li><strong>Voice Skills</strong> — Live list of all registered skills with example phrases. Test utterances directly from the browser.</li>
-<li><strong>Event Log</strong> — Last 20 bus events (newest first).</li>
-<li><strong>System Power</strong> — Reboot or shut down the Pi from the browser.</li>
+<li><strong>Overview</strong> — Live telemetry, room awareness, service health, and workspace shortcuts.</li>
+<li><strong>Vision &amp; Motion</strong> — Both camera feeds, head movement, tracking, depth, face registry, scene awareness, and privacy.</li>
+<li><strong>Media &amp; Audio</strong> — Pandora, podcasts, output volume, mute, voice level, and equalization. Expand custom voice EQ to edit bands.</li>
+<li><strong>Voice &amp; Behavior</strong> — Speak text, record/play clips, adjust microphone input, configure recognition, greetings, skills, and quiet hours.</li>
+<li><strong>Smart Home</strong> — Connected IoT devices and their controls.</li>
+<li><strong>System</strong> — Updates, cooling, audio hardware/DSP, event log, power, and help.</li>
 </ul>
 <h3>Object Detection</h3>
 <p style="font-size:13px;color:var(--text-dim);margin:4px 0">
@@ -1129,10 +1138,8 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </div>
-</section>
-</div>
-</main>
-<script src="/static/app.js?v=1.42.5"></script>
+</section></div></main>
+<script src="/static/app.js?v=1.76.0"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">
@@ -1203,19 +1210,19 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 <h3 class="iot-modal-title">🔌 Add IoT Device</h3>
 <p class="iot-modal-desc">Select a plugin type and optionally provide a JSON config object.</p>
 <div class="iot-modal-field">
-  <label>Plugin Type</label>
-  <select id="iot-add-type-select">
-    <option value="">— loading types… —</option>
-  </select>
+<label>Plugin Type</label>
+<select id="iot-add-type-select">
+<option value="">— loading types… —</option>
+</select>
 </div>
 <div class="iot-modal-field">
-  <label>Config (JSON)</label>
-  <textarea id="iot-add-config" rows="4" placeholder="{}" spellcheck="false">{}</textarea>
+<label>Config (JSON)</label>
+<textarea id="iot-add-config" placeholder="{}" rows="4" spellcheck="false">{}</textarea>
 </div>
-<div id="iot-add-error" class="iot-modal-error" style="display:none"></div>
+<div class="iot-modal-error" id="iot-add-error" style="display:none"></div>
 <div class="iot-modal-actions">
-  <button class="btn btn-secondary btn-sm" onclick="closeIoTAddModal()">Cancel</button>
-  <button class="btn btn-sm" id="iot-add-submit-btn" onclick="submitIoTAdd()">Register Device</button>
+<button class="btn btn-secondary btn-sm" onclick="closeIoTAddModal()">Cancel</button>
+<button class="btn btn-sm" id="iot-add-submit-btn" onclick="submitIoTAdd()">Register Device</button>
 </div>
 </div>
 </div>
@@ -1226,15 +1233,15 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 <h3 class="iot-modal-title" id="iot-config-modal-title">⚙️ Configure Device</h3>
 <p class="iot-modal-desc">Edit the JSON config for this device. The device will be stopped and restarted.</p>
 <div class="iot-modal-field">
-  <label>Config (JSON)</label>
-  <textarea id="iot-config-textarea" rows="6" spellcheck="false">{}</textarea>
+<label>Config (JSON)</label>
+<textarea id="iot-config-textarea" rows="6" spellcheck="false">{}</textarea>
 </div>
-<div id="iot-config-error" class="iot-modal-error" style="display:none"></div>
+<div class="iot-modal-error" id="iot-config-error" style="display:none"></div>
 <div class="iot-modal-actions">
-  <button class="btn btn-secondary btn-sm" onclick="closeIoTConfigModal()">Cancel</button>
-  <button class="btn btn-sm" id="iot-config-submit-btn" onclick="submitIoTConfig()">Save Config</button>
+<button class="btn btn-secondary btn-sm" onclick="closeIoTConfigModal()">Cancel</button>
+<button class="btn btn-sm" id="iot-config-submit-btn" onclick="submitIoTConfig()">Save Config</button>
 </div>
 </div>
 </div>
-</body>
+</div></body>
 </html>
