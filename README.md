@@ -26,6 +26,18 @@ head, and temperature-controlled cooling.
 - [Automatic releases and device updates](docs/UPDATES.md)
 - [TODO](docs/TODO.md)
 
+## Body selection
+
+Set the machine-local, git-ignored `config/body.yaml` to `body: original` on
+the original geared, pan-only VERA, or `body: new` on the direct-drive pan/tilt
+body. Restart the core daemon after changing identity. Updates preserve this
+file; do not copy it between different bodies. If it is absent, VERA keeps
+new-body behavior for backward compatibility and logs a warning.
+
+Body selection applies matching hardware and tracking settings together.
+See [body profiles and tracking](docs/FEATURES.md#body-profiles) for wiring,
+safe limits, tuning persistence, and runtime-state migration.
+
 ## Repo Layout
 ```
 config/          runtime configuration

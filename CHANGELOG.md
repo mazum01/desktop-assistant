@@ -4,6 +4,23 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.75.0] - 2026-10-19
+### Added
+- Machine-local body identity with matching servo and tracking profiles:
+  original VERA uses legacy Kalman/minimum-jerk pan tracking; the new body
+  retains fresh-frame visual pan/tilt tracking and guarded plant calibration.
+- Body/controller visibility in tracking status and the tuning dashboard,
+  with body-local tuning persistence and visual calibration disabled for
+  the legacy controller.
+### Fixed
+- Restore the original body's pan channel, geared range, mount direction,
+  and travel limits without enabling a nonexistent tilt servo. Keep the
+  enforced safe 500-2500 microsecond pulse range.
+- Discard saved servo geometry when switching bodies or migrating untagged
+  runtime state to the original body, while preserving user enable switches
+  and camera settings. Untagged new-body settings and an absent identity
+  retain new-body behavior with explicit warnings.
+
 ## [1.74.0] - 2026-10-18
 ### Added
 - Periodic, bounded I2C address polling on the ESP32 display, with responding

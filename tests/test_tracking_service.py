@@ -38,6 +38,125 @@ def test_person_seek_disabled_via_ctor():
     assert svc.person_seek_enabled is False
 
 
+def make_legacy_svc(**kwargs):
+    kwargs.setdefault("config", HeadTrackerConfig(
+        frame_width=640, frame_height=480, servo_min=135, servo_max=215,
+        servo_center=175, saccade_amplitude_deg=0,
+    ))
+    svc, bus = make_tracking_svc(controller="legacy", body="original", **kwargs)
+    svc.on_start()
+    bus.publish.reset_mock()
+    return svc, bus
+
+
+def test_legacy_accepts_one_face_without_visual_lock_or_capture_timestamp():
+    svc, bus = make_legacy_svc(random_motion_enabled=False)
+    svc._on_faces(None, {"faces": [
+        {"centroid": [100, 200], "confidence": 0.6},
+        {"centroid": [500, 200], "confidence": 0.9},
+    ]})
+    assert svc._current_face_cx == 500
+    assert svc._observation is None
+    with patch.object(svc._tracker, "update", return_value=180) as update:
+        svc._legacy_tick(time.monotonic(), 0.05)
+    update.assert_called_once_with(500, 0.05, None)
+    assert bus.publish.call_args_list[0] == call("motion.pan_to", {
+        "angle": 180, "move_time_ms": 100, "override_quiet": True,
+    })
+
+
+@pytest.mark.parametrize("x,direction", [(80, -1), (560, 1)])
+def test_legacy_face_drives_original_pan_in_legacy_direction_within_limits(x, direction):
+    svc, bus = make_legacy_svc(random_motion_enabled=False)
+    position = 175
+    angles = []
+    for _ in range(30):
+        svc._on_faces(None, {"faces": [{"centroid": [x, 200], "confidence": 0.9}]})
+        svc._on_position(None, {"angle": position})
+        svc._legacy_tick(time.monotonic(), 0.05)
+        pan = [c.args[1] for c in bus.publish.call_args_list if c.args[0] == "motion.pan_to"][-1]
+        position = pan["angle"]
+        angles.append(position)
+    assert (position - 175) * direction > 2
+    assert all(135 <= a <= 215 for a in angles)
+    assert all(c.args[0] != "motion.tilt_to" for c in bus.publish.call_args_list)
+
+
+def test_legacy_loop_routes_to_legacy_not_visual_controller():
+    svc, _ = make_legacy_svc()
+    with patch.object(svc, "_legacy_tick") as legacy, patch.object(svc, "_visual_tick") as visual:
+        run_one_tick(svc)
+    legacy.assert_called_once()
+    visual.assert_not_called()
+
+
+@pytest.mark.parametrize("reason", ["missing", "stale", "disabled", "invalid"])
+def test_legacy_holds_without_valid_active_face_or_person(reason):
+    svc, bus = make_legacy_svc(random_motion_enabled=False)
+    svc._on_faces(None, {"faces": [{"centroid": [500, 200]}]})
+    if reason == "missing":
+        svc._on_faces(None, {"faces": []})
+    elif reason == "stale":
+        svc._face_ts -= 3
+    elif reason == "disabled":
+        svc._on_set_face_tracking(None, {"enabled": False})
+    else:
+        svc._on_faces(None, {"faces": [{"centroid": [float("nan"), 200]}]})
+    bus.publish.reset_mock()
+    svc._legacy_tick(time.monotonic(), 0.05)
+    bus.publish.assert_not_called()
+
+
+def test_legacy_person_seek_is_fallback_and_expires():
+    svc, bus = make_legacy_svc(random_motion_enabled=False)
+    svc._on_objects(None, make_obj_payload([(100, 50, 300, 400, 0.9)]))
+    with patch.object(svc._tracker, "update", return_value=170) as update:
+        svc._legacy_tick(time.monotonic(), 0.05)
+    update.assert_called_once_with(200, 0.05, None)
+    svc._person_cx_ts -= 3
+    bus.publish.reset_mock()
+    svc._legacy_tick(time.monotonic(), 0.05)
+    bus.publish.assert_not_called()
+
+
+def test_legacy_face_takes_priority_over_person_seek():
+    svc, _ = make_legacy_svc(random_motion_enabled=False)
+    svc._on_objects(None, make_obj_payload([(100, 50, 300, 400, 0.9)]))
+    svc._on_faces(None, {"faces": [{"centroid": [500, 200]}]})
+    with patch.object(svc._tracker, "update", return_value=180) as update:
+        svc._legacy_tick(time.monotonic(), 0.05)
+    update.assert_called_once_with(500, 0.05, None)
+
+
+def test_legacy_speaking_motion_stays_inside_original_limits():
+    svc, bus = make_legacy_svc(speaking_motion_amplitude_deg=1000)
+    svc._speaking_until = 100
+    with patch.object(svc._tracker, "update", return_value=215):
+        svc._legacy_tick(0.1, 0.05)
+    assert bus.publish.call_args_list[0].args[1]["angle"] == 215
+
+
+def test_legacy_random_motion_respects_quiet_hours_and_never_tilts():
+    svc, bus = make_legacy_svc(random_motion_enabled=True)
+    enable_tilt(svc)
+    assert svc._tilt_tracker is None
+    svc._legacy_tick(time.monotonic(), 0.05)
+    pan = bus.publish.call_args_list[0]
+    assert pan.args[0] == "motion.pan_to"
+    assert pan.args[1]["override_quiet"] is False
+    assert all(c.args[0] != "motion.tilt_to" for c in bus.publish.call_args_list)
+
+
+def test_legacy_rejects_visual_calibration_without_moving():
+    svc, bus = make_legacy_svc()
+    svc._on_start_calibration(None, {})
+    assert not svc._calibration_requested
+    assert bus.publish.call_args.args[0] == "tracking.autotune_done"
+    assert bus.publish.call_args.args[1]["ok"] is False
+    assert svc.get_tunable_params()["controller"] == "legacy"
+    assert svc.get_tunable_params()["body"] == "original"
+
+
 # ---------------------------------------------------------------------------
 # _on_set_person_seek
 # ---------------------------------------------------------------------------

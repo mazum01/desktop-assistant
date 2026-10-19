@@ -1,0 +1,32 @@
+original:
+  servo:
+    pan_channel: 0
+    range_deg: 360
+    pulse_min_us: 500
+    pulse_max_us: 2500
+    soft_min_deg: 135
+    soft_max_deg: 215
+    tilt_channel: 1
+    tilt_enabled: false
+  head_tracking:
+    controller: legacy
+    invert_pan: false
+    invert_tilt: false
+    dead_zone_frac: 0.06
+new:
+  servo:
+    pan_channel: 1
+    range_deg: 180
+    pulse_min_us: 500
+    pulse_max_us: 2500
+    soft_min_deg: 70
+    soft_max_deg: 110
+    tilt_channel: 0
+    tilt_enabled: true
+    tilt_min_deg: 70
+    tilt_max_deg: 110
+  head_tracking:
+    controller: visual_servo
+    invert_pan: true
+    invert_tilt: false
+    dead_zone_frac: 0.02

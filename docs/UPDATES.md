@@ -4,6 +4,16 @@ Each device independently follows published stable releases from
 `mazum01/desktop-assistant`. A push to `main` does **not** deploy it. Drafts and
 prereleases are ignored. The updater never automatically downgrades.
 
+## Body identity stays with the device
+
+On original pan-only VERA hardware, create `config/body.yaml` containing
+`body: original` before starting v1.75.0 or later. On the new pan/tilt body,
+use `body: new`; an absent file retains new-body behavior with a warning.
+This git-ignored file is preserved by checkout updates and included in the
+updater's configuration backups. Never copy another body's identity or
+body-tagged servo runtime state to a different device. See
+[body profiles](FEATURES.md#body-profiles) for controller and wiring details.
+
 ## One-time installation on each existing device
 
 Start with a reviewed updater-aware checkout (v1.64.0 or later). For this

@@ -16,6 +16,7 @@ import sys
 
 from src.assistant.runner import run_services
 from src.core.bus import MessageBus
+from src.core.body import load_body_config
 from src.services.audio_capture_service import AudioCaptureService, AudioCaptureConfig
 from src.services.av_service import AVService
 from src.services.face_service import FaceService
@@ -80,7 +81,8 @@ def main() -> int:
     _cfg = yaml.safe_load(_cfg_path.read_text()) if _cfg_path.exists() else {}
 
     # Runtime state overlays the base config for toggle settings.
-    _rt = _load_runtime()
+    _body = load_body_config(_cfg, _load_runtime(), _cfg_path.parent)
+    _cfg, _rt = _body.config, _body.runtime
 
     _tracking_enabled = _cfg.get("head_tracking", {}).get("enabled", True)
     _face_tracking_enabled = _rt.get("head_tracking", {}).get(
@@ -243,6 +245,7 @@ def main() -> int:
 
     # Persist toggle state changes so they survive daemon restarts.
     _rt_state: dict = {
+        "body": _body.name,
         "servo": {
             "enabled": _servo_enabled,
             "soft_min_deg": _soft_min_deg,
@@ -272,6 +275,8 @@ def main() -> int:
             "confidence_threshold": _confidence_threshold,
         },
     }
+
+    _save_runtime(_rt_state)
 
     def _on_servo_changed(_t, payload):
         if isinstance(payload, dict) and "enabled" in payload:
@@ -640,6 +645,9 @@ def main() -> int:
         speaking_motion_amplitude_deg=float(_speaking_motion_cfg.get("amplitude_deg", 1.5)),
         speaking_motion_freq_hz=float(_speaking_motion_cfg.get("freq_hz", 2.5)),
         visual_config=_ht_cfg_raw.get("visual_servo", {}),
+        controller=_ht_cfg_raw["controller"],
+        body=_body.name,
+        params_path=_body.identity_path,
     )
     services.append(tracking_svc)
 
@@ -758,6 +766,8 @@ def main() -> int:
         return {
             "ok": True,
             "status": {
+                "body": _body.name,
+                "controller": _ht_cfg_raw["controller"],
                 "face_tracking_enabled": tracking_svc.face_tracking_enabled,
                 "random_motion_enabled": tracking_svc.random_motion_enabled,
                 "person_seek_enabled":   tracking_svc.person_seek_enabled,

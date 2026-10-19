@@ -3759,6 +3759,18 @@ async function loadTrackingParams() {
     if (!r.ok) return;
     const data = await r.json();
     _trackingRanges = data.ranges || {};
+    const legacy = data.controller === "legacy";
+    const description = el("tracking-controller-description");
+    if (description) {
+      description.textContent = legacy
+        ? "Original body: legacy Kalman/minimum-jerk pan tracking. Sliders and presets tune face tracking and idle motion. Visual plant calibration is not used."
+        : "New body: fresh-frame visual pan/tilt tracking. Sliders tune legacy idle/person-seek motion only. For calibration, keep one face still and visible; small announced moves need travel margin on both axes. Cancel holds position.";
+    }
+    const calibrate = el("autotune-start-btn");
+    if (calibrate) {
+      calibrate.disabled = legacy;
+      calibrate.title = legacy ? "Visual calibration is only available on the new body" : "";
+    }
     _buildTrackingSliders(data.params || {}, _trackingRanges);
   } catch (e) {
     console.warn("loadTrackingParams failed", e);
@@ -4069,8 +4081,10 @@ async function loadDepthSettings() {
     el("depth-dense-enabled").checked = !!d.dense_enabled;
     el("depth-mono-enabled").checked  = !!d.mono_enabled;
     const calBadge = el("depth-dense-cal");
-    calBadge.textContent = d.calibrated ? "✓ calibrated" : "⚠ not calibrated";
-    calBadge.style.color = d.calibrated ? "var(--green)" : "var(--yellow)";
+    calBadge.textContent = d.controller === "legacy"
+      ? "legacy controller" : d.calibrated ? "✓ calibrated" : "⚠ not calibrated";
+    calBadge.style.color = d.controller === "legacy"
+      ? "var(--text)" : d.calibrated ? "var(--green)" : "var(--yellow)";
     const hwBadge = el("depth-mono-hw");
     hwBadge.textContent = d.mono_hardware_ready ? "✓ hardware ready" : "⚠ no hardware";
     hwBadge.style.color = d.mono_hardware_ready ? "var(--green)" : "var(--yellow)";

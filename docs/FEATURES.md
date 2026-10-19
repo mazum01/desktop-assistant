@@ -10,6 +10,49 @@ This document tracks which features are accessible via each interface:
 
 ## Vision & Tracking
 
+### Body profiles
+
+The machine-local `config/body.yaml` selects the body independently of software
+version, hostname, or attached peripherals:
+
+```yaml
+body: original
+```
+
+Use `body: new` on the new body. The file is git-ignored, survives updates,
+and must remain with its hardware. Missing identity keeps new-body behavior
+for backward compatibility and logs a warning; an invalid identity is an
+explicit startup error. Restart `desktop-assistant-core.service` after changing
+identity. No servo probing or hardware guesses are used to select the body.
+
+The versioned `config/body_profiles.yaml` overrides the corresponding
+`servo` and `head_tracking` defaults in `config/assistant.yaml`:
+
+| Body | Tracker | Pan hardware | Tilt |
+|------|---------|--------------|------|
+| `original` | Legacy Kalman/minimum-jerk | PCA9685 channel 0, geared logical 1-360 degrees, soft limits 135-215 degrees, non-inverted pan | Disabled |
+| `new` | Fresh-frame visual servo | PCA9685 channel 1, direct-drive 0-180 degrees, soft limits 70-110 degrees, inverted pan | Channel 0, limits 70-110 degrees |
+
+Both profiles enforce safe 500-2500 microsecond pulses; the original profile
+does **not** restore the old unsafe 10-2950 microsecond calibration.
+Legacy tracking selects the highest-confidence face without the visual
+controller's multi-frame acquisition gate, feeds the existing Kalman/minimum-
+jerk controller at 20 Hz, and falls back to fresh person detections or optional
+idle motion. Stale faces are discarded after two seconds. Face/person tracking
+still works during quiet hours; random idle motion does not override silence.
+
+Runtime servo limits/channels are reused when the saved `body` matches
+the selected identity. Untagged state remains compatible with the new body;
+for the original body or a body change, discard mismatched servo geometry but
+preserve enable switches, tracking toggles, and camera settings.
+Subsequent runtime saves include body identity. Dashboard tuning saves to the
+local identity file's `head_tracking` section, not the shared body profiles.
+The tuning panel and `tracking.get_status` / `tracking.get_tunable_params` RPCs
+report the selected body/controller. Visual calibration is unavailable on the
+original body.
+
+### New-body visual tracking
+
 Face centering uses timestamped, actual-size detection frames. A visual controller
 locks onto one spatially/identity-consistent face over several fresh frames.
 It makes at most one bounded correction per new post-settling observation,
@@ -22,7 +65,7 @@ Pan and optional tilt execute quintic motion profiles with configured
 speed/acceleration bounds. Tilt commands stay
 within both the configured tilt travel limits and 20 degrees either side of
 their midpoint; tilt holds position when the face is lost or tracking is off.
-Set `servo.tilt_enabled: true` only on hardware with a connected tilt servo
+Set `servo.tilt_enabled: true` in the selected body profile only on hardware with a connected tilt servo
 (the default when omitted is false). PWM hardware cannot detect whether a
 servo is physically plugged in. `head_tracking.invert_pan` and `invert_tilt`
 allow for reversed mounts in the uncalibrated model. Active centering settings
@@ -40,7 +83,7 @@ response time. A saved empirical model can require a longer settling interval.
 
 ### Automatic tracking calibration
 
-Use **Calibrate visual tracking** in the existing tracking-tuning panel.
+On the new body, use **Calibrate visual tracking** in the tracking-tuning panel.
 Enable tracking, keep exactly one face still and visible, and manually position
 the head so both available axes have at least the configured probe-step margin.
 The procedure takes several minutes, announces and waits for speech completion

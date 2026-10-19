@@ -13,8 +13,9 @@ the head pan toward the person so SCRFD can pick up their face.  Once a face
 locks on, face tracking takes over immediately; person seek is inactive while
 a face is tracked.
 
-Legacy ``HeadTracker`` parameters control idle/person-seek motion only.
-Decorative speaking motion is restricted to idle mode, never face centering.
+The original body uses the legacy Kalman/minimum-jerk ``HeadTracker`` for
+pan-only face tracking. The new body uses fresh-frame visual servoing;
+its legacy parameters control idle/person-seek motion only.
 
 Topics subscribed
 -----------------
@@ -89,8 +90,16 @@ class TrackingService(Service):
         speaking_motion_amplitude_deg: float = 1.5,
         speaking_motion_freq_hz: float = 2.5,
         visual_config: Optional[dict] = None,
+        controller: str = "visual_servo",
+        body: str = "new",
+        params_path: Optional[Path] = None,
     ) -> None:
         super().__init__(bus=bus)
+        if controller not in ("legacy", "visual_servo"):
+            raise ValueError(f"Unknown tracking controller: {controller!r}")
+        self._controller = controller
+        self._body = body
+        self._params_path = params_path or Path(__file__).parents[2] / "config" / "assistant.yaml"
         self._tracker_cfg = config or HeadTrackerConfig()
         self._enabled = enabled
         self._face_tracking_enabled = face_tracking_enabled
@@ -178,7 +187,13 @@ class TrackingService(Service):
             "params": params,
             "ranges": TUNABLE_FIELDS,
             "presets": list(PRESETS.keys()),
-            "controller": "fresh-frame visual servo; legacy parameters apply to idle motion",
+            "body": self._body,
+            "controller": self._controller,
+            "controller_description": (
+                "Legacy Kalman/minimum-jerk pan tracking"
+                if self._controller == "legacy" else
+                "Fresh-frame visual servo; legacy parameters apply to idle motion"
+            ),
             "calibrated": self._plant is not None,
         }
 
@@ -230,9 +245,10 @@ class TrackingService(Service):
         if isinstance(settings, dict):
             self._on_motion_settings("motion.settings", settings)
         log.info(
-            "TrackingService started (%d Hz, enabled=%s, face_tracking=%s, random_motion=%s, person_seek=%s)",
+            "TrackingService started (%d Hz, enabled=%s, face_tracking=%s, random_motion=%s, person_seek=%s, body=%s, controller=%s)",
             _UPDATE_HZ, self._enabled, self._face_tracking_enabled,
             self._random_motion_enabled, self._person_seek_enabled,
+            self._body, self._controller,
         )
 
     def on_stop(self) -> None:
@@ -276,7 +292,7 @@ class TrackingService(Service):
             return
         with self._lock:
             self._motion_settings = dict(payload)
-            if not payload.get("tilt_available", False):
+            if self._controller == "legacy" or not payload.get("tilt_available", False):
                 self._tilt_tracker = None
                 return
             try:
@@ -345,6 +361,21 @@ class TrackingService(Service):
                 )):
             self.update_frame_width(width, height)
         now = time.monotonic()
+        if self._controller == "legacy":
+            primary = max(faces, key=lambda f: f.get("confidence", 0.0)) if faces else None
+            centroid = primary.get("centroid") if primary else None
+            if primary is not None and (
+                not isinstance(centroid, (list, tuple)) or len(centroid) != 2
+                or any(isinstance(v, bool) or not isinstance(v, (int, float))
+                       or not math.isfinite(v) for v in centroid)
+            ):
+                log.warning("Legacy tracking holds: invalid face centroid %r", centroid)
+                centroid = None
+            with self._lock:
+                self._current_face_cx = float(centroid[0]) if centroid else None
+                self._current_face_cy = float(centroid[1]) if centroid else None
+                self._face_ts = now
+            return
         stamp = payload.get("captured_mono")
         if not isinstance(stamp, (int, float)) or not math.isfinite(stamp):
             log.warning("Tracking holds: face result has no valid acquisition timestamp")
@@ -408,20 +439,23 @@ class TrackingService(Service):
         self._speaking_until = 0.0
 
     def _on_save_params(self, _topic, _payload) -> None:
-        """Persist current tracker config to config/assistant.yaml."""
-        import os
+        """Persist tuning to the selected body's local identity file."""
         import yaml
-        cfg_path = os.path.join(os.path.dirname(__file__), "..", "..", "config", "assistant.yaml")
-        cfg_path = os.path.normpath(cfg_path)
+        cfg_path = self._params_path
         try:
-            with open(cfg_path) as f:
-                full_cfg = yaml.safe_load(f) or {}
+            if cfg_path.name == "body.yaml" and not cfg_path.exists():
+                full_cfg = {"body": self._body}
+            else:
+                full_cfg = yaml.safe_load(cfg_path.read_text()) or {}
+            if cfg_path.name == "body.yaml" and full_cfg.get("body") != self._body:
+                raise ValueError("Body identity changed; restart before saving tracking parameters")
             with self._lock:
                 params = self._tracker.get_config() if self._tracker else {}
             ht = full_cfg.setdefault("head_tracking", {})
             ht.update(params)
-            with open(cfg_path, "w") as f:
-                yaml.dump(full_cfg, f, default_flow_style=False, sort_keys=False)
+            temporary = cfg_path.with_suffix(".yaml.tmp")
+            temporary.write_text(yaml.safe_dump(full_cfg, sort_keys=False))
+            temporary.replace(cfg_path)
             log.info("TrackingService: params saved to %s", cfg_path)
         except Exception as exc:
             log.error("TrackingService: failed to save params: %s", exc)
@@ -455,15 +489,54 @@ class TrackingService(Service):
         if not self._enabled:
             self._stop_event.wait()
             return
+        last_t = time.monotonic()
         while not self._stop_event.is_set():
+            now = time.monotonic()
             try:
-                self._visual_tick(time.monotonic())
+                if self._controller == "legacy":
+                    self._legacy_tick(now, max(0.001, now - last_t))
+                else:
+                    self._visual_tick(now)
             except (ValueError, OSError, KeyError, TypeError):
-                log.exception("Visual tracking failed; holding position")
+                log.exception("%s tracking failed; holding position", self._controller)
                 self.bus.publish("motion.stop", {})
                 if self._calibration is not None:
                     self._finish_calibration("Calibration failed; previous model retained")
+            last_t = now
             self._stop_event.wait(_UPDATE_INTERVAL)
+
+    def _legacy_tick(self, now: float, dt: float) -> None:
+        with self._lock:
+            tracker = self._tracker
+            if tracker is None:
+                return
+            face = (
+                self._current_face_cx
+                if self._face_tracking_enabled and now - self._face_ts < _FACE_STALE_S
+                else None
+            )
+            person = (
+                self._person_cx
+                if self._face_tracking_enabled and self._person_seek_enabled
+                and now - self._person_cx_ts < _PERSON_SEEK_STALE_S else None
+            )
+            target_cx = face if face is not None else person
+            if target_cx is None and not self._random_motion_enabled:
+                return
+            target = tracker.update(target_cx, dt, self._current_servo_angle)
+            if self._speaking_motion_enabled and now < self._speaking_until:
+                target += self._speaking_motion_amplitude * math.sin(
+                    2 * math.pi * self._speaking_motion_freq * now
+                )
+            target = max(self._tracker_cfg.servo_min, min(self._tracker_cfg.servo_max, target))
+            debug = tracker.get_debug_state()
+        self.bus.publish("motion.pan_to", {
+            "angle": round(target, 2), "move_time_ms": _UPDATE_INTERVAL * 2000,
+            "override_quiet": target_cx is not None,
+        })
+        self.bus.publish("tracking.debug", {
+            **debug, "body": self._body, "controller": self._controller,
+        })
 
     def _signature(self):
         keys = ("pan_channel", "tilt_channel", "range_deg", "soft_min_deg",
@@ -549,6 +622,7 @@ class TrackingService(Service):
         if result is not None:
             self._send_targets(*result)
         self.bus.publish("tracking.debug", {
+            "body": self._body, "controller": self._controller,
             "mode": self._visual.state, "face_raw": self._current_face_cx,
             "face_smoothed": self._current_face_cx, "face_vel": 0,
             "servo_angle": float(positions[0]), "target": float(positions[0]),
@@ -586,6 +660,14 @@ class TrackingService(Service):
         })
 
     def _on_start_calibration(self, _topic, _payload):
+        if self._controller == "legacy":
+            message = "Visual plant calibration is only available on the new body"
+            log.warning(message)
+            self.bus.publish("tracking.autotune_done", {
+                "ok": False, "error": message, "reason": message,
+                "controller": self._controller,
+            })
+            return
         self._calibration_requested = True
 
     def _on_cancel_calibration(self, _topic, _payload):
