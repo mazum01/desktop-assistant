@@ -10,7 +10,7 @@
 <link href="/static/favicon-32.png" rel="icon" sizes="32x32" type="image/png"/>
 <link href="/static/favicon-16.png" rel="icon" sizes="16x16" type="image/png"/>
 <link href="/static/favicon-192.png" rel="apple-touch-icon" sizes="192x192"/>
-<link href="/static/style.css?v=1.76.1" rel="stylesheet"/>
+<link href="/static/style.css?v=1.76.2" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -23,18 +23,19 @@
 </div>
 </div>
 <div class="badge badge-unknown" id="health-badge">⬤ connecting</div>
+<span aria-hidden="true" class="lcars-code frame-code">47-0821 / 1701</span>
 </header>
 <nav aria-label="Workspaces" aria-orientation="vertical" class="tab-nav" role="tablist">
-<button aria-controls="tab-overview" aria-selected="false" class="tab-btn" data-tab="overview" id="nav-overview" onclick="switchTab('overview')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">01</span><span>Overview</span></button>
-<button aria-controls="tab-perception" aria-selected="false" class="tab-btn" data-tab="perception" id="nav-perception" onclick="switchTab('perception')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">02</span><span>Vision &amp; Motion</span></button>
-<button aria-controls="tab-controls" aria-selected="false" class="tab-btn" data-tab="controls" id="nav-controls" onclick="switchTab('controls')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">03</span><span>Media &amp; Audio</span></button>
-<button aria-controls="tab-voice" aria-selected="false" class="tab-btn" data-tab="voice" id="nav-voice" onclick="switchTab('voice')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">04</span><span>Voice &amp; Behavior</span></button>
-<button aria-controls="tab-smart-home" aria-selected="false" class="tab-btn" data-tab="smart-home" id="nav-smart-home" onclick="switchTab('smart-home')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">05</span><span>Smart Home</span></button>
-<button aria-controls="tab-system" aria-selected="false" class="tab-btn" data-tab="system" id="nav-system" onclick="switchTab('system')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">06</span><span>System</span></button></nav>
+<button aria-controls="tab-overview" aria-selected="false" class="tab-btn" data-tab="overview" id="nav-overview" onclick="switchTab('overview')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">01-47</span><span>Overview</span></button>
+<button aria-controls="tab-perception" aria-selected="false" class="tab-btn" data-tab="perception" id="nav-perception" onclick="switchTab('perception')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">02-83</span><span>Vision &amp; Motion</span></button>
+<button aria-controls="tab-controls" aria-selected="false" class="tab-btn" data-tab="controls" id="nav-controls" onclick="switchTab('controls')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">03-26</span><span>Media &amp; Audio</span></button>
+<button aria-controls="tab-voice" aria-selected="false" class="tab-btn" data-tab="voice" id="nav-voice" onclick="switchTab('voice')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">04-91</span><span>Voice &amp; Behavior</span></button>
+<button aria-controls="tab-smart-home" aria-selected="false" class="tab-btn" data-tab="smart-home" id="nav-smart-home" onclick="switchTab('smart-home')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">05-62</span><span>Smart Home</span></button>
+<button aria-controls="tab-system" aria-selected="false" class="tab-btn" data-tab="system" id="nav-system" onclick="switchTab('system')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">06-18</span><span>System</span></button></nav>
 </div>
 <main id="main-content" tabindex="-1">
 <div class="workspace-heading">
-<div><p class="eyebrow">DESKTOP ASSISTANT / CONTROL SURFACE</p>
+<div><p class="eyebrow">DESKTOP ASSISTANT / CONTROL SURFACE <span aria-hidden="true" class="lcars-code">0092-471 / 86</span></p>
 <h2 id="workspace-title">Overview</h2>
 <p id="workspace-description">Live status and shortcuts to the controls you use most.</p></div>
 <button class="btn btn-secondary" onclick="openWorkspace('voice', 'card-quiet')">Quiet hours</button>
@@ -42,7 +43,7 @@
 
 <div aria-labelledby="nav-overview" class="tab-pane" data-description="Live status and shortcuts to the controls you use most." data-title="Overview" id="tab-overview" role="tabpanel">
 <section aria-label="Telemetry" class="card" id="card-telemetry" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Telemetry</h2>
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Telemetry<span aria-hidden="true" class="lcars-code section-code">308-72</span></h2>
 <div class="grid-6">
 <div class="stat-box">
 <div class="stat-label">Case Temp</div>
@@ -167,7 +168,7 @@
 </section></div>
 <div aria-labelledby="nav-perception" class="tab-pane" data-description="See the camera feeds, direct the head, and tune perception." data-title="Vision &amp; Motion" id="tab-perception" role="tabpanel">
 <section aria-label="Camera Feeds" class="card camera-card" id="card-camera" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Camera Feeds</h2>
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Camera Feeds<span aria-hidden="true" class="lcars-code section-code">824-09</span></h2>
 <div class="camera-feeds">
 <div class="camera-feed-wrap">
 <div class="camera-label">Cam 1 — Face Tracking</div>
@@ -525,7 +526,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </section></div>
 <div aria-labelledby="nav-controls" class="tab-pane" data-description="Playback, stations, podcasts, volume, and equalization in one place." data-title="Media &amp; Audio" id="tab-controls" role="tabpanel">
 <section aria-label="Output levels &amp; equalizer" class="card" id="card-audio-runtime" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Output levels &amp; equalizer</h2>
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Output levels &amp; equalizer<span aria-hidden="true" class="lcars-code section-code">196-53</span></h2>
 <div class="control-group">
 <label>Output Volume</label>
 <div class="music-volume-row">
@@ -1139,7 +1140,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.76.1"></script>
+<script src="/static/app.js?v=1.76.2"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

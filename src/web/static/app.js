@@ -19,6 +19,7 @@ function switchTab(tabId) {
   });
   const pane = document.getElementById('tab-' + tabId);
   pane.classList.add('active');
+  document.body.dataset.workspace = tabId;
   document.getElementById('workspace-title').textContent = pane.dataset.title;
   document.getElementById('workspace-description').textContent = pane.dataset.description;
   document.title = `VERA / ${pane.dataset.title}`;

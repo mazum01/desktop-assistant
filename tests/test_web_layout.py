@@ -51,6 +51,17 @@ def test_ids_remain_unique(layout):
     assert all(count == 1 for count in counts.values())
 
 
+def test_decorative_codes_are_sparse_and_hidden_from_assistive_technology(layout):
+    codes = [
+        node for node in layout
+        if "lcars-code" in node["attrs"].get("class", "").split()
+    ]
+    assert 3 <= len(codes) <= 6
+    assert all(node["attrs"].get("aria-hidden") == "true" for node in codes)
+    assert any("frame-code" in node["attrs"]["class"] for node in codes)
+    assert any("section-code" in node["attrs"]["class"] for node in codes)
+
+
 @pytest.mark.parametrize("workspace,controls", [
     ("controls", [
         "music-volume-slider", "music-eq-select", "audio-mute-btn",
@@ -157,6 +168,7 @@ const buttons = ids.map(id => Object.assign(node('nav-'+id), {dataset:{tab:id}})
 const title = node('workspace-title'), description = node('workspace-description'), target = node('card-quiet');
 let keydown;
 const document = {
+  body: {dataset: {}},
   getElementById: id => [...panes,...buttons,title,description,target].find(n=>n.id===id),
   querySelectorAll: q => q==='.tab-pane' ? panes : buttons,
   querySelector: q => q==='.tab-pane.active' ? panes.find(p=>p.classList.contains('active'))
@@ -168,16 +180,19 @@ const context = vm.createContext({document, localStorage, window:{scrollTo() {}}
 vm.runInContext(fs.readFileSync(process.argv[2],'utf8'), context);
 vm.runInContext('initTabs()', context);
 assert.equal(values['vera-active-tab'], 'controls');
+assert.equal(document.body.dataset.workspace, 'controls');
 assert.equal(panes.filter(p=>p.classList.contains('active')).length, 1);
 assert.equal(buttons[2].attrs['aria-selected'], 'true');
 assert.equal(title.textContent,'controls');
 keydown({key:'ArrowRight',target:buttons[2],preventDefault(){}});
 assert.equal(values['vera-active-tab'], 'voice');
+assert.equal(document.body.dataset.workspace, 'voice');
 assert.equal(focused,buttons[3]);
 keydown({key:'End',target:buttons[3],preventDefault(){}});
 assert.equal(values['vera-active-tab'],'system');
 keydown({key:'ArrowDown',target:buttons[5],preventDefault(){}});
 assert.equal(values['vera-active-tab'],'overview');
+assert.equal(document.body.dataset.workspace,'overview');
 keydown({key:'Home',target:buttons[0],preventDefault(){}});
 assert.equal(values['vera-active-tab'],'overview');
 vm.runInContext("switchTab('no-longer-exists')",context);

@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.76.2] - 2026-10-19
+### Changed
+- Refine LCARS framing with continuous rounded elbows and flat-ended bars,
+  give each workspace a distinct navigation color with matching selected
+  framing, and add sparse, static decorative identifiers hidden from assistive
+  technology.
+
 ## [1.76.1] - 2026-10-19
 ### Fixed
 - Keep the EQ selector synchronized while its new advanced panel is collapsed,

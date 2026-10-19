@@ -11,9 +11,11 @@ This document tracks which features are accessible via each interface:
 ## Web control workspaces
 
 The dashboard uses an original LCARS-inspired visual system: black backgrounds,
-orange/peach action surfaces, lavender framing, readable mixed-case content,
-and swept framing that doubles as workspace navigation. No external fonts,
-templates, sounds, or decorative number animations are required.
+orange/peach action surfaces, readable mixed-case content, and continuous rounded
+elbows. Each workspace has a distinct navigation color; the selected workspace
+colors the main frame and section bars. Sparse static number clusters decorate
+navigation and framing, are hidden from assistive technology, and do not represent
+live readings. No external fonts, templates, sounds, or number animations are required.
 
 | Workspace | Controls |
 |-----------|----------|
