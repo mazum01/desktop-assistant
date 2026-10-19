@@ -183,9 +183,10 @@ main {
   min-width: 0;
   background: var(--bg2);
   border: 1px solid var(--border);
-  border-left: 20px solid var(--panel-accent);
+  border-left: 24px solid var(--panel-accent);
   border-top: 10px solid var(--panel-accent);
-  border-radius: 32px 0 0 0;
+  /* Offset the unequal border widths to keep the inner arc circular. */
+  border-radius: 48px 0 0 0 / 34px 0 0 0;
   padding: 16px 20px 20px;
   scroll-margin-top: 154px;
 }
@@ -1262,7 +1263,7 @@ main:focus { outline: none; }
   .workspace-heading p:last-child { font-size: 12px; }
   .workspace-heading > .btn { display: none; }
   .eyebrow { font-size: 9px; }
-  .card { padding: 14px 12px 18px; border-left-width: 16px; border-top-width: 8px; border-top-left-radius: 24px; scroll-margin-top: 140px; }
+  .card { padding: 14px 12px 18px; border-left-width: 20px; border-top-width: 8px; border-top-left-radius: 40px 28px; scroll-margin-top: 140px; }
   .section-code { display: none; }
   .eyebrow .lcars-code { display: block; margin-left: 0; }
   .card h2 { font-size: 13px; }
