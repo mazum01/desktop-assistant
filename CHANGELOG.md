@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.76.1] - 2026-10-19
+### Fixed
+- Keep the EQ selector synchronized while its new advanced panel is collapsed,
+  preserve edits while expanded, and expand the editor when Custom is selected.
+
 ## [1.76.0] - 2026-10-19
 ### Changed
 - Redesign the web dashboard with an original LCARS-inspired black, orange,

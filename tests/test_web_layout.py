@@ -191,3 +191,62 @@ assert.equal(buttons.filter(b=>b.tabIndex===0).length,1);
     runner = tmp_path / "test.cjs"
     runner.write_text(script)
     subprocess.run(["node", str(runner), str(navigation)], check=True, capture_output=True, text=True)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for EQ regression")
+def test_collapsed_eq_syncs_and_custom_selection_opens_editor(tmp_path):
+    script = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(process.argv[2], 'utf8');
+const panel = {style: {display: 'block'}, open: false};
+const selector = {value: 'custom'};
+const elements = {'custom-eq-panel': panel, 'music-eq-select': selector};
+let preset = 'bass_boost', loaded = 0;
+const writes = [];
+const context = vm.createContext({
+  el: id => elements[id] || (elements[id] = {style: {}}),
+  _applyMusicState() {}, _applyMusicSong() {}, _applyMusicStations() {},
+  loadCustomEq: async () => {loaded++;},
+  fetch: async (url, options) => {
+    if (options) writes.push(JSON.parse(options.body));
+    return {json: async () => ({eq_preset: preset})};
+  },
+});
+vm.runInContext(source.slice(source.indexOf('async function loadMusicStatus()'),
+  source.indexOf('function _applyMusicState(')), context);
+vm.runInContext(source.slice(source.indexOf('async function musicSetEq('),
+  source.indexOf('async function loadCustomEq(')), context);
+async function run() {
+  await context.loadMusicStatus();
+  assert.equal(selector.value, 'bass_boost');
+  assert.equal(panel.style.display, 'none');
+  assert.equal(panel.open, false);
+  preset = 'custom';
+  await context.loadMusicStatus();
+  assert.equal(selector.value, 'custom');
+  assert.equal(panel.style.display, 'block');
+  assert.equal(panel.open, false);
+  assert.equal(loaded, 1);
+  await context.musicSetEq('custom');
+  assert.equal(panel.open, true);
+  assert.equal(loaded, 2);
+  assert.equal(writes.length, 0);
+  preset = 'flat';
+  await context.loadMusicStatus();
+  assert.equal(selector.value, 'custom');
+  assert.equal(loaded, 2);
+  await context.musicSetEq('flat');
+  assert.equal(panel.open, false);
+  assert.equal(panel.style.display, 'none');
+  assert.equal(writes[0].preset, 'flat');
+}
+run().catch(error => {console.error(error); process.exitCode = 1;});
+"""
+    runner = tmp_path / "eq.cjs"
+    runner.write_text(script)
+    subprocess.run(
+        ["node", str(runner), str(STATIC / "app.js")],
+        check=True, capture_output=True, text=True,
+    )

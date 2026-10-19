@@ -3161,7 +3161,7 @@ async function loadMusicStatus() {
     if (muteBtn) muteBtn.textContent = d.muted ? "🔊 Unmute" : "🔇 Mute";
     // EQ — skip if user has the custom EQ panel open (they're actively editing)
     const _customPanel = el("custom-eq-panel");
-    const _customPanelOpen = _customPanel && _customPanel.style.display !== "none";
+    const _customPanelOpen = _customPanel && _customPanel.open;
     if (d.eq_preset && !_customPanelOpen) {
       el("music-eq-select").value = d.eq_preset;
       // Show custom EQ panel immediately if preset is "custom".
@@ -3344,7 +3344,10 @@ async function audioSetVoiceGain(level) {
 
 async function musicSetEq(preset) {
   const panel = el("custom-eq-panel");
-  if (panel) panel.style.display = (preset === "custom") ? "block" : "none";
+  if (panel) {
+    panel.style.display = (preset === "custom") ? "block" : "none";
+    panel.open = preset === "custom";
+  }
   if (preset === "custom") {
     await loadCustomEq();
     return; // don't PUT named preset — wait for user to click Apply
