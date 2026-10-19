@@ -72,7 +72,8 @@ def test_decorative_codes_are_sparse_and_hidden_from_assistive_technology(layout
     ("perception", [
         "camera-stream", "camera-stream2", "pan-slider", "servo-enabled",
         "face-tracking-enabled", "random-motion-enabled", "servo-travel-min",
-        "servo-travel-max", "cam-rotation-slider", "cam2-rotation-slider",
+        "servo-travel-max", "servo-pan-channel", "servo-tilt-channel",
+        "cam-rotation-slider", "cam2-rotation-slider",
         "cam-capture-resolution-select", "cam2-capture-resolution-select",
         "cam-stream-resolution-select", "cam2-stream-resolution-select",
         "face-table", "privacy-enabled", "object-detection-enabled",

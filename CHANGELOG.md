@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.77.0] - 2026-10-19
+### Added
+- PCA9685 servo channel settings in every UI surface: a Pan/Tilt channel form
+  in the WebUI Head movement card (`GET/PUT /api/settings/servo/channels`),
+  `vera servo channels [--pan N] [--tilt N]`, and channels in `vera servo status`.
+### Fixed
+- The original body's pan servo is on PCA9685 channel 15, not channel 0.
+  Body profiles now carry a `revision`; the original profile moves to revision 2
+  so servo geometry saved under the wrong channel is discarded on startup.
+- `motion.set_channels` now works on pan-only bodies instead of rejecting every
+  request when no tilt controller exists.
+
 ## [1.76.5] - 2026-10-19
 ### Changed
 - Refresh only the title-frame decorative numbers when switching workspaces,

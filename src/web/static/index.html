@@ -10,7 +10,7 @@
 <link href="/static/favicon-32.png" rel="icon" sizes="32x32" type="image/png"/>
 <link href="/static/favicon-16.png" rel="icon" sizes="16x16" type="image/png"/>
 <link href="/static/favicon-192.png" rel="apple-touch-icon" sizes="192x192"/>
-<link href="/static/style.css?v=1.76.5" rel="stylesheet"/>
+<link href="/static/style.css?v=1.77.0" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -235,6 +235,17 @@
             </label>
 <button class="btn btn-primary btn-sm" onclick="saveServoLimits()">Set</button>
 <span class="qh-status" id="servo-limits-status"></span>
+</div>
+<div class="row-input" style="margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap">
+<label style="font-size:13px;color:var(--text-dim)">PCA9685 channels:</label>
+<label style="font-size:13px">
+              Pan <input id="servo-pan-channel" max="15" min="0" step="1" style="width:55px;margin-left:4px" type="number" value="15"/>
+            </label>
+<label style="font-size:13px">
+              Tilt <input id="servo-tilt-channel" max="15" min="0" step="1" style="width:55px;margin-left:4px" type="number" value="1"/>
+            </label>
+<button class="btn btn-primary btn-sm" onclick="saveServoChannels()">Set</button>
+<span class="qh-status" id="servo-channels-status"></span>
 </div>
 </div>
 
@@ -1081,6 +1092,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 <tr><td><code>da servo pan --to 180</code></td><td>Pan servo to angle</td></tr>
 <tr><td><code>da servo enable/disable</code></td><td>Enable or disable servo</td></tr>
 <tr><td><code>da servo limits --min 135 --max 215</code></td><td>Set travel limits</td></tr>
+<tr><td><code>da servo channels --pan 15 --tilt 1</code></td><td>Set PCA9685 servo channels</td></tr>
 <tr><td><code>da face-tracking enable</code></td><td>Head follows detected faces</td></tr>
 <tr><td><code>da random-motion enable</code></td><td>Idle gaze drifts</td></tr>
 <tr><td><code>da object-detection enable</code></td><td>Enable COCO object classification</td></tr>
@@ -1141,7 +1153,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.76.5"></script>
+<script src="/static/app.js?v=1.77.0"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

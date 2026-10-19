@@ -1,6 +1,7 @@
 original:
+  revision: 2
   servo:
-    pan_channel: 0
+    pan_channel: 15
     range_deg: 360
     pulse_min_us: 500
     pulse_max_us: 2500

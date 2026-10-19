@@ -138,17 +138,22 @@ class MotionService(Service):
             raise ValueError("Pan and tilt channels must be different")
 
     def set_channels(self, pan: int, tilt: int) -> None:
-        self._validate_channels(pan, tilt)
+        if self._tilt_enabled:
+            self._validate_channels(pan, tilt)
+        elif any(type(ch) is not int or not 0 <= ch <= 15 for ch in (pan, tilt)):
+            raise ValueError("Channels must be integers from 0 to 15")
         with self._target_lock:
-            if self._controller is None or self._tilt_controller is None:
+            if self._controller is None or (self._tilt_enabled and self._tilt_controller is None):
                 raise ValueError("Servo controllers are not initialized")
+            controllers = [c for c in (self._controller, self._tilt_controller) if c is not None]
             self._target_angle = self._tilt_target = None
             self._profiles.clear()
             try:
-                for controller in (self._controller, self._tilt_controller):
+                for controller in controllers:
                     controller.relax()
                 self._controller.set_channel(pan)
-                self._tilt_controller.set_channel(tilt)
+                if self._tilt_controller is not None:
+                    self._tilt_controller.set_channel(tilt)
             except Exception:
                 self._servo_enabled = False
                 log.exception("Channel reassignment failed; disabling motion")
@@ -156,7 +161,8 @@ class MotionService(Service):
                 self.bus.publish("motion.error", {"error": "Channel reassignment failed; motion disabled"})
                 try:
                     self._controller.set_channel(self._pan_channel)
-                    self._tilt_controller.set_channel(self._tilt_channel)
+                    if self._tilt_controller is not None:
+                        self._tilt_controller.set_channel(self._tilt_channel)
                 except Exception:
                     log.exception("Failed to restore original servo channels")
                 raise

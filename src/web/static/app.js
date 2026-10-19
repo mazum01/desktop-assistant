@@ -1796,6 +1796,45 @@ async function saveServoLimits() {
   setTimeout(() => { st.textContent = ""; }, 3000);
 }
 
+async function loadServoChannels() {
+  try {
+    const r = await fetch("/api/settings/servo/channels");
+    if (!r.ok) return;
+    const d = await r.json();
+    el("servo-pan-channel").value = d.pan_channel;
+    el("servo-tilt-channel").value = d.tilt_channel;
+  } catch (e) { /* ignore */ }
+}
+
+async function saveServoChannels() {
+  const pan_channel = Number(el("servo-pan-channel").value);
+  const tilt_channel = Number(el("servo-tilt-channel").value);
+  const st = el("servo-channels-status");
+  const valid = ch => Number.isInteger(ch) && ch >= 0 && ch <= 15;
+  if (!valid(pan_channel) || !valid(tilt_channel)) {
+    st.textContent = "Channels must be 0–15";
+    st.style.color = "var(--red)";
+    setTimeout(() => { st.textContent = ""; }, 3000);
+    return;
+  }
+  try {
+    const r = await fetch("/api/settings/servo/channels", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pan_channel, tilt_channel }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || "Error");
+    st.textContent = "Saved ✓";
+    st.style.color = "var(--green)";
+  } catch (e) {
+    st.textContent = e.message || "Error";
+    st.style.color = "var(--red)";
+    loadServoChannels();
+  }
+  setTimeout(() => { st.textContent = ""; }, 4000);
+}
+
 async function loadFaceTrackingEnabled() {
   try {
     const r = await fetch("/api/settings/face-tracking");
@@ -3078,6 +3117,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadAudioVoiceGain();
   loadServoEnabled();
   loadServoLimits();
+  loadServoChannels();
   loadFaceTrackingEnabled();
   loadRandomMotionEnabled();
   loadGreetingSettings();

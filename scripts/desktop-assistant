@@ -288,6 +288,9 @@ def cmd_servo_status(_args) -> int:
     print(f"    Face tracking   : {on if face_tracking  else off}")
     print(f"    Random motion   : {on if random_motion  else off}")
     print(f"    Travel limits   : {soft_min_deg}° – {soft_max_deg}°")
+    motion = _request({"cmd": "motion.get_status"}).get("status") or {}
+    if "pan_channel" in motion:
+        print(f"    Channels        : pan {motion['pan_channel']}, tilt {motion.get('tilt_channel')}")
     print(f"    Current angle   : {angle}°")
     print()
     return 0
@@ -309,6 +312,27 @@ def cmd_servo_limits(args) -> int:
         print(f"Travel limits set: {min_deg}° – {max_deg}°")
         return 0
     print(f"Error: {r}")
+    return 1
+
+
+def cmd_servo_channels(args) -> int:
+    """Show or set the PCA9685 pan/tilt servo channels."""
+    status_reply = _request({"cmd": "motion.get_status"})
+    if not status_reply.get("ok"):
+        print(f"Error: {status_reply.get('error', status_reply)}")
+        return 1
+    status = status_reply.get("status", {})
+    if args.pan is None and args.tilt is None:
+        tilt_note = "" if status.get("tilt_available") else " (tilt disabled)"
+        print(f"Pan channel: {status.get('pan_channel')}  Tilt channel: {status.get('tilt_channel')}{tilt_note}")
+        return 0
+    pan = status.get("pan_channel") if args.pan is None else args.pan
+    tilt = status.get("tilt_channel") if args.tilt is None else args.tilt
+    r = _request({"cmd": "motion.set_channels", "pan_channel": pan, "tilt_channel": tilt})
+    if r.get("ok"):
+        print(f"Servo channels set: pan {pan}, tilt {tilt}")
+        return 0
+    print(f"Error: {r.get('error', r)}")
     return 1
 
 
@@ -1871,7 +1895,8 @@ def cmd_help(args) -> int:
                             "                    [--move-time-ms <ms>]  Optional movement duration.\n"
                             "                  servo move <deg> <ms>    Move to position with explicit time.\n"
                             "                    [-as]  Announce before moving.  [-af]  Announce when done.\n"
-                            "                  servo limits --min <deg> --max <deg>  Set travel limits.",
+                            "                  servo limits --min <deg> --max <deg>  Set travel limits.\n"
+                            "                  servo channels [--pan <0-15>] [--tilt <0-15>]  Show/set PCA9685 channels.",
         "face-tracking":    "Enable/disable servo tracking of detected faces. Sub-commands:\n"
                             "                  face-tracking enable    Head follows detected faces.\n"
                             "                  face-tracking disable   Head does not follow faces.\n"
@@ -3353,7 +3378,7 @@ def main() -> int:
     sp.set_defaults(func=cmd_playback)
 
     # ── Consolidated servo subcommands ───────────────────────────────
-    servo_sp = sub.add_parser("servo", help="Servo control (enable/disable/status/pan/move)")
+    servo_sp = sub.add_parser("servo", help="Servo control (enable/disable/status/limits/channels/pan/move)")
     servo_sub = servo_sp.add_subparsers(dest="servo_cmd", metavar="<servo-command>")
     servo_sub.required = True
 
@@ -3365,6 +3390,11 @@ def main() -> int:
     ssp.add_argument("--min", type=float, required=True, help="Minimum logical angle (1–359)")
     ssp.add_argument("--max", type=float, required=True, help="Maximum logical angle (2–360)")
     ssp.set_defaults(func=cmd_servo_limits)
+
+    ssp = servo_sub.add_parser("channels", help="Show or set PCA9685 pan/tilt channels")
+    ssp.add_argument("--pan", type=int, choices=range(16), metavar="0-15", help="Pan servo channel")
+    ssp.add_argument("--tilt", type=int, choices=range(16), metavar="0-15", help="Tilt servo channel")
+    ssp.set_defaults(func=cmd_servo_channels)
 
     ssp = servo_sub.add_parser("pan", help="Pan servo to a logical angle (1–360°)")
     ssp.add_argument("--to", type=float, required=True, help="logical degrees 1–360")

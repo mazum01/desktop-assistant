@@ -135,6 +135,9 @@ def web_and_core(tmp_path, monkeypatch):
 
     core.ipc.register_rpc("room.get_status", _rpc_room_get_status)
     core.ipc.register_rpc("motion.get_status", _rpc_motion_get_status)
+    core.ipc.register_rpc("motion.set_channels", lambda msg: {
+        "ok": True, "status": {"pan_channel": msg["pan_channel"], "tilt_channel": msg["tilt_channel"]},
+    })
     core.ipc.register_rpc("vision.latest_jpeg", _rpc_vision_latest_jpeg)
     core.ipc.register_rpc("camera2.get_status", _rpc_camera2_get_status)
     core.ipc.register_rpc("depth.get_enabled_flags", _rpc_depth_get_enabled_flags)
@@ -186,6 +189,9 @@ def test_motion_status_rpc_round_trips_through_proxy(web_and_core):
     assert status["servo_enabled"] is True
     assert status["soft_min_deg"] == 135.0
     assert status["soft_max_deg"] == 215.0
+    reply = proxy.set_channels(15, 1)
+    assert reply["ok"] is True
+    assert reply["status"] == {"pan_channel": 15, "tilt_channel": 1}
 
 
 def test_vision_latest_jpeg_rpc_round_trips_and_decodes_base64(web_and_core):

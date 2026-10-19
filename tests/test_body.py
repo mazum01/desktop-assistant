@@ -33,7 +33,7 @@ def select_body(config_dir, name, runtime=None):
 
 
 @pytest.mark.parametrize("body,channel,angle_range,limits,tilt,controller,invert", [
-    ("original", 0, 360, (135, 215), False, "legacy", False),
+    ("original", 15, 360, (135, 215), False, "legacy", False),
     ("new", 1, 180, (70, 110), True, "visual_servo", True),
 ])
 def test_body_selects_matching_hardware_and_controller(
@@ -75,9 +75,22 @@ def test_original_discards_new_or_unidentified_runtime_geometry(config_dir, save
 
 
 def test_same_body_preserves_runtime_limits_and_channels(config_dir):
-    state = {"body": "original", "servo": {"soft_min_deg": 140, "pan_channel": 2}}
+    state = {
+        "body": "original", "body_revision": 2,
+        "servo": {"soft_min_deg": 140, "pan_channel": 2},
+    }
     selected = select_body(config_dir, "original", state)
     assert selected.runtime == state
+
+
+def test_original_discards_geometry_saved_before_channel_15_correction(config_dir):
+    selected = select_body(config_dir, "original", {
+        "body": "original",
+        "servo": {"enabled": True, "pan_channel": 0, "tilt_channel": 1, "soft_min_deg": 140},
+    })
+    assert selected.runtime["servo"] == {"enabled": True}
+    assert selected.runtime["body_revision"] == selected.revision == 2
+    assert selected.config["servo"]["pan_channel"] == 15
 
 
 def test_new_body_preserves_untagged_runtime_for_backward_compatibility(config_dir):
@@ -178,10 +191,13 @@ def test_original_motion_writes_only_legacy_pan_channel(config_dir):
     )
     motion.on_start()
     try:
-        assert motion.get_status()["pan_channel"] == 0
+        assert motion.get_status()["pan_channel"] == 15
         assert motion.get_status()["range_deg"] == 360
         assert motion.get_status()["tilt_available"] is False
         assert motion._tilt_controller is None
-        assert {args.args[0] for args in kit.servo.__getitem__.call_args_list} == {0}
+        assert {args.args[0] for args in kit.servo.__getitem__.call_args_list} == {15}
+        motion.set_channels(14, 1)
+        assert motion.get_status()["pan_channel"] == 14
+        assert kit.servo.__getitem__.call_args_list[-1].args[0] == 14
     finally:
         motion.on_stop()

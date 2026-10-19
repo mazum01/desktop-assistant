@@ -20,6 +20,7 @@ class BodyConfiguration:
     config: dict
     runtime: dict
     identity_path: Path
+    revision: int = 1
 
 
 def load_body_config(config: dict, runtime: dict, config_dir: Path) -> BodyConfiguration:
@@ -38,6 +39,9 @@ def load_body_config(config: dict, runtime: dict, config_dir: Path) -> BodyConfi
     name = identity["body"]
     profiles = yaml.safe_load((config_dir / "body_profiles.yaml").read_text())
     profile = profiles[name]
+    # Bump a profile's revision when its wiring/geometry is corrected so stale
+    # saved servo settings from the previous revision are not reapplied.
+    revision = profile.get("revision", 1)
     resolved = deepcopy(config)
     for section in ("servo", "head_tracking"):
         resolved.setdefault(section, {}).update(profile[section])
@@ -53,16 +57,18 @@ def load_body_config(config: dict, runtime: dict, config_dir: Path) -> BodyConfi
 
     state = deepcopy(runtime)
     saved_body = state.get("body")
-    if saved_body is None and name == "new":
+    saved_revision = state.get("body_revision", 1)
+    if saved_body is None and name == "new" and saved_revision == revision:
         log.warning("Adopting untagged new-body servo settings for backward compatibility")
-    elif saved_body != name:
+    elif saved_body != name or saved_revision != revision:
         log.warning(
-            "Body %s selected; discarding servo geometry saved for body %r",
-            name, saved_body,
+            "Body %s revision %s selected; discarding servo geometry saved for body %r revision %s",
+            name, revision, saved_body, saved_revision,
         )
         # Preserve the user's enable switch, but never reuse another body's wiring/limits.
         state["servo"] = {
             key: value for key, value in state.get("servo", {}).items() if key == "enabled"
         }
     state["body"] = name
-    return BodyConfiguration(name, resolved, state, identity_path)
+    state["body_revision"] = revision
+    return BodyConfiguration(name, resolved, state, identity_path, revision)

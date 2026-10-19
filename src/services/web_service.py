@@ -37,6 +37,8 @@ GET  /api/settings/servo  Get servo enabled state
 PUT  /api/settings/servo  Set servo enabled state  body: {"enabled": bool}
 GET  /api/settings/servo/limits  Get servo travel limits
 PUT  /api/settings/servo/limits  Set servo travel limits  body: {"min_deg": float, "max_deg": float}
+GET  /api/settings/servo/channels  Get PCA9685 pan/tilt channels
+PUT  /api/settings/servo/channels  Set PCA9685 channels  body: {"pan_channel": int, "tilt_channel": int}
 GET  /api/settings/face-tracking  Get face tracking enabled state
 PUT  /api/settings/face-tracking  Set face tracking  body: {"enabled": bool}
 GET  /api/settings/random-motion  Get random motion enabled state
@@ -309,6 +311,11 @@ class _ServoBody(BaseModel):
 class _ServoLimitsBody(BaseModel):
     min_deg: float
     max_deg: float
+
+
+class _ServoChannelsBody(BaseModel):
+    pan_channel: int
+    tilt_channel: int
 
 
 class _GreetingBody(BaseModel):
@@ -1620,6 +1627,36 @@ class WebService:
                     {"min_deg": body.min_deg, "max_deg": body.max_deg},
                 )
             return {"ok": True, "min_deg": body.min_deg, "max_deg": body.max_deg}
+
+        @app.get("/api/settings/servo/channels")
+        async def api_get_servo_channels():
+            if not self._motion_svc:
+                raise HTTPException(503, "motion service unavailable")
+            status = await asyncio.to_thread(self._motion_svc.get_status)
+            if "pan_channel" not in status:
+                raise HTTPException(503, "motion status unavailable")
+            return {
+                "pan_channel": status["pan_channel"],
+                "tilt_channel": status.get("tilt_channel"),
+                "tilt_available": status.get("tilt_available", False),
+            }
+
+        @app.put("/api/settings/servo/channels")
+        async def api_put_servo_channels(body: _ServoChannelsBody):
+            if not self._motion_svc:
+                raise HTTPException(503, "motion service unavailable")
+            try:
+                reply = await asyncio.to_thread(
+                    self._motion_svc.set_channels, body.pan_channel, body.tilt_channel,
+                )
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+            if isinstance(reply, dict) and not reply.get("ok"):
+                raise HTTPException(422, reply.get("error", "channel update failed"))
+            return {
+                "ok": True,
+                "pan_channel": body.pan_channel, "tilt_channel": body.tilt_channel,
+            }
 
         @app.get("/api/settings/face-tracking")
         async def api_get_face_tracking():

@@ -72,7 +72,7 @@ The versioned `config/body_profiles.yaml` overrides the corresponding
 
 | Body | Tracker | Pan hardware | Tilt |
 |------|---------|--------------|------|
-| `original` | Legacy Kalman/minimum-jerk | PCA9685 channel 0, geared logical 1-360 degrees, soft limits 135-215 degrees, non-inverted pan | Disabled |
+| `original` | Legacy Kalman/minimum-jerk | PCA9685 channel 15, geared logical 1-360 degrees, soft limits 135-215 degrees, non-inverted pan | Disabled |
 | `new` | Fresh-frame visual servo | PCA9685 channel 1, direct-drive 0-180 degrees, soft limits 70-110 degrees, inverted pan | Channel 0, limits 70-110 degrees |
 
 Both profiles enforce safe 500-2500 microsecond pulses; the original profile
@@ -83,8 +83,9 @@ jerk controller at 20 Hz, and falls back to fresh person detections or optional
 idle motion. Stale faces are discarded after two seconds. Face/person tracking
 still works during quiet hours; random idle motion does not override silence.
 
-Runtime servo limits/channels are reused when the saved `body` matches
-the selected identity. Untagged state remains compatible with the new body;
+Runtime servo limits/channels are reused when the saved `body` and profile
+`revision` match the selected identity; bumping a profile's `revision`
+discards stale saved geometry after a wiring correction. Untagged state remains compatible with the new body;
 for the original body or a body change, discard mismatched servo geometry but
 preserve enable switches, tracking toggles, and camera settings.
 Subsequent runtime saves include body identity. Dashboard tuning saves to the

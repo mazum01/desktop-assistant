@@ -1298,3 +1298,23 @@ def test_put_anthropic_settings_missing_enabled_returns_error(app_client):
     r = client.put("/api/settings/anthropic", json={})
     assert r.status_code == 200
     assert r.json()["ok"] is False
+
+
+def test_servo_channels_get_and_put_use_motion_service(app_client_with_motion):
+    client, _bus, _svc, motion = app_client_with_motion
+    motion.get_status.return_value = {"pan_channel": 15, "tilt_channel": 1, "tilt_available": False}
+    assert client.get("/api/settings/servo/channels").json() == {
+        "pan_channel": 15, "tilt_channel": 1, "tilt_available": False,
+    }
+    motion.set_channels.return_value = {"ok": True}
+    r = client.put("/api/settings/servo/channels", json={"pan_channel": 14, "tilt_channel": 1})
+    assert r.status_code == 200
+    motion.set_channels.assert_called_once_with(14, 1)
+
+
+def test_servo_channels_put_reports_rejected_channels(app_client_with_motion):
+    client, _bus, _svc, motion = app_client_with_motion
+    motion.set_channels.return_value = {"ok": False, "error": "Channels must be integers from 0 to 15"}
+    r = client.put("/api/settings/servo/channels", json={"pan_channel": 16, "tilt_channel": 1})
+    assert r.status_code == 422
+    assert "0 to 15" in r.json()["detail"]

@@ -205,7 +205,7 @@ class PerceptionServiceProxy:
 
 
 class MotionServiceProxy:
-    """Proxies `WebService`'s `/api/settings/servo*` GET routes."""
+    """Proxies `WebService`'s `/api/settings/servo*` status and channel routes."""
 
     name = "motion"
 
@@ -218,6 +218,11 @@ class MotionServiceProxy:
             log.warning("core RPC failed (motion.get_status): %s", reply.get("error"))
             return {}
         return reply.get("status", {})
+
+    def set_channels(self, pan: int, tilt: int) -> dict:
+        return self._client.call({
+            "cmd": "motion.set_channels", "pan_channel": pan, "tilt_channel": tilt,
+        })
 
 
 class TrackingServiceProxy:

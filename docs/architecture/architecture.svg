@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-1186 6689,-1186 6689,4 -4,4"/>
 <text text-anchor="start" x="3055" y="-1166.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="3143" y="-1155" font-family="Helvetica,sans-Serif" font-size="10.00">v1.76.5 — LCARS&#45;inspired task workspaces; body&#45;selected hardware and tracking</text>
+<text text-anchor="start" x="3170.5" y="-1155" font-family="Helvetica,sans-Serif" font-size="10.00">v1.77.0 — servo channel controls; original body pan on PCA9685 ch 15</text>
 <g id="clust1" class="cluster">
 <title>cluster_updater</title>
 <path fill="#e4f4e4" stroke="black" d="M4071,-707.5C4071,-707.5 4978,-707.5 4978,-707.5 4984,-707.5 4990,-713.5 4990,-719.5 4990,-719.5 4990,-1128 4990,-1128 4990,-1134 4984,-1140 4978,-1140 4978,-1140 4071,-1140 4071,-1140 4065,-1140 4059,-1134 4059,-1128 4059,-1128 4059,-719.5 4059,-719.5 4059,-713.5 4065,-707.5 4071,-707.5"/>

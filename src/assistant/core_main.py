@@ -246,6 +246,7 @@ def main() -> int:
     # Persist toggle state changes so they survive daemon restarts.
     _rt_state: dict = {
         "body": _body.name,
+        "body_revision": _body.revision,
         "servo": {
             "enabled": _servo_enabled,
             "soft_min_deg": _soft_min_deg,
