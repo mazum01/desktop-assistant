@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.75.0] - 2026-10-19
+### Added
+- Add independent pan and tilt controls, configurable servo channels and
+  travel limits, dashboard/API support, and a guarded announced movement test.
+### Changed
+- Use configured pan limits for named motion and room panorama sweeps.
+
 ## [1.74.0] - 2026-10-18
 ### Added
 - Periodic, bounded I2C address polling on the ESP32 display, with responding
@@ -109,6 +116,30 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Report the selected I²C bus number rather than its file descriptor when a
   TMP117 read fails, and close the bus if device verification fails.
+
+## [1.68.2] - 2026-10-16
+### Changed
+- Swap the configured pan and tilt servo channels.
+
+## [1.68.1] - 2026-10-15
+### Changed
+- Replace the obsolete full-range channel-15 servo bring-up with an announced,
+  status-checked pan/tilt test that moves each configured channel +/-20 degrees
+  from center and waits for speech before moving.
+
+## [1.68.0] - 2026-10-15
+### Added
+- Independent head tilt and persistent, distinct PCA9685 pan/tilt channel
+  assignments in the web controls, REST API, CLI, and OpenClaw pan-camera skill.
+- Tilt travel-limit settings and independent position feedback, honoring servo
+  disable, stop/relax, and quiet hours.
+
+### Changed
+- Configure this unit's direct-drive 180-degree pan and tilt servos on channels
+  0 and 1, centered at 90 degrees with initial safe travel limits of 70-110.
+  Retain the legacy geared 360-degree mapping for existing configurations.
+- Use configured pan limits for tracking, voice directions, room sweeps, and
+  centering rather than hardcoded geared-servo angles.
 
 ## [1.67.1] - 2026-10-15
 ### Fixed

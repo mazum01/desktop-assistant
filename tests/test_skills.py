@@ -201,6 +201,24 @@ def test_motion_control(text, expected_angle):
     assert payload["angle"] == pytest.approx(expected_angle)
 
 
+@pytest.mark.parametrize("text,topic,angle", [
+    ("look left", "motion.pan_to", 70),
+    ("look right", "motion.pan_to", 110),
+    ("face center", "motion.pan_to", 90),
+    ("look up", "motion.tilt_to", 70),
+    ("tilt down", "motion.tilt_to", 110),
+])
+def test_motion_control_uses_live_axis_limits(text, topic, angle):
+    bus = make_bus()
+    bus.last.return_value = {
+        "soft_min_deg": 70, "soft_max_deg": 110,
+        "tilt_min_deg": 70, "tilt_max_deg": 110,
+    }
+    skill = MotionControlSkill()
+    skill.handle(text, skill.match(text), bus)
+    bus.publish.assert_called_once_with(topic, {"angle": angle})
+
+
 # ---------------------------------------------------------------------------
 # MusicControlSkill
 # ---------------------------------------------------------------------------

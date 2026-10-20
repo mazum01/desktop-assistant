@@ -18,14 +18,15 @@ not clone operational state from another VERA.
 
 ### VERA hardware
 
-- SparkFun Pi Servo pHAT and DS3218 pan servo.
+- SparkFun Pi Servo pHAT with direct-drive pan and tilt servos. The default
+  PCA9685 channels are 0 (pan) and 1 (tilt).
 - Temperature sensor (TMP117 on VERA3, TMP102 on VERA) and Noctua NF-A6x25
   PWM fan. Thermal startup probes the fitted sensor automatically.
 - At least one Camera Module 3 or compatible Pi camera.
 - ReSpeaker Flex XVF3800 and a supported USB audio output device.
 - Optional: a second camera, Hailo-8 AI HAT+, and Waveshare ESP32-C6 display.
 
-Do not power the DS3218 from the Pi's 5 V rail. Use the servo pHAT's correctly
+Do not power the servos from the Pi's 5 V rail. Use the servo pHAT's correctly
 rated external servo supply and connect grounds as specified by the pHAT and
 servo documentation.
 
@@ -133,16 +134,9 @@ address depends on its address pin/wiring; the bring-up test probes for a
 TMP117 or TMP102 at the selected address. If either device is absent, stop and
 correct I2C wiring before continuing.
 
-The DS3218 pan servo belongs on **pHAT channel 15**. Before testing it, ensure
-the assembly cannot hit a mechanical end stop. Run:
-
-```bash
-python3 scripts/test_servo.py
-```
-
-The test verifies VERA's required wrap-safe path for `350° → 10°`; it must
-traverse backward through the usable mechanical range, never through the
-servo's dead zone.
+Confirm that the PCA9685 appears at `0x40` and that the pan and tilt servos are
+connected to their configured channels. The safe movement test requires the
+core and audio services to be running; run it after starting VERA in section 6.
 
 ### Cameras
 
@@ -193,8 +187,8 @@ Review `config/assistant.yaml` before starting VERA. At minimum, set:
 
 - `display.ble_address` for the VERA3 display, or set `display.enabled: false`;
 - camera indexes and `rotation_deg`;
-- servo pulse/safe limits, inversion, and tracking settings after physical
-  calibration;
+- servo pan/tilt channels, pulse/safe limits, inversion, and tracking settings
+  after physical calibration;
 - audio device names;
 - `watchdog.wifi_connection_id` to VERA3's NetworkManager connection name;
 - VERA3-specific quiet hours and notification preferences.
@@ -264,6 +258,18 @@ systemctl --no-pager --full status \
   desktop-assistant-watchdog
 curl --fail http://127.0.0.1:8080/health
 ```
+
+After both the core and audio services are running, verify the configured servo
+channels with the announced, limited-travel test:
+
+```bash
+python3 scripts/test_servo.py
+```
+
+The test reads the active pan/tilt channels and travel limits, announces and
+waits for each move, then exercises each axis at center and +/-20 degrees. It
+refuses to move if the hardware is unavailable or either axis lacks enough
+configured travel.
 
 The dashboard should then be available at `http://vera3.local:8080/` or the
 Pi's LAN address. Do not expose it to the public internet until the TLS,

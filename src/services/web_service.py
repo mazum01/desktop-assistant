@@ -87,6 +87,7 @@ POST /api/audio/xvf/save   Persist current XVF3800 config to flash
 """
 
 import asyncio
+import math
 import collections
 import io
 import json
@@ -104,7 +105,7 @@ from src.core.ipc_client import IPCClient
 from src.core.quiet_hours import QuietHours
 from src.services.object_service import _build_scene_description
 
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictInt
 from starlette.requests import Request
 
 log = logging.getLogger(__name__)
@@ -309,6 +310,11 @@ class _ServoBody(BaseModel):
 class _ServoLimitsBody(BaseModel):
     min_deg: float
     max_deg: float
+
+
+class _ServoChannelsBody(BaseModel):
+    pan_channel: StrictInt
+    tilt_channel: StrictInt
 
 
 class _GreetingBody(BaseModel):
@@ -1587,6 +1593,38 @@ class WebService:
 
         # ── Servo settings ─────────────────────────────────────────────
 
+        @app.get("/api/settings/servo/channels")
+        async def api_get_servo_channels():
+            if not self._motion_svc:
+                raise HTTPException(503, "motion service unavailable")
+            status = await asyncio.to_thread(self._motion_svc.get_status)
+            if not status:
+                raise HTTPException(503, "motion service unavailable")
+            return status
+
+        @app.put("/api/settings/servo/channels")
+        async def api_put_servo_channels(body: _ServoChannelsBody):
+            if (not 0 <= body.pan_channel <= 15 or not 0 <= body.tilt_channel <= 15
+                    or body.pan_channel == body.tilt_channel):
+                raise HTTPException(422, "Choose distinct pan and tilt channels from 0 to 15")
+            if not self._motion_svc:
+                raise HTTPException(503, "motion service unavailable")
+            try:
+                await asyncio.to_thread(
+                    self._motion_svc.set_channels, body.pan_channel, body.tilt_channel)
+            except (RuntimeError, ValueError) as exc:
+                raise HTTPException(503, str(exc)) from exc
+            return {"ok": True}
+
+        @app.put("/api/settings/servo/tilt-limits")
+        async def api_put_tilt_limits(body: _ServoLimitsBody):
+            if not 0 <= body.min_deg < body.max_deg <= 180:
+                raise HTTPException(422, "Tilt limits must satisfy 0 <= min < max <= 180")
+            if not self.bus:
+                raise HTTPException(503, "bus unavailable")
+            self.bus.publish("motion.set_tilt_limits", body.model_dump())
+            return {"ok": True}
+
         @app.get("/api/settings/servo")
         async def api_get_servo():
             if not self._motion_svc:
@@ -1612,8 +1650,10 @@ class WebService:
 
         @app.put("/api/settings/servo/limits")
         async def api_put_servo_limits(body: _ServoLimitsBody):
-            if body.min_deg < 1 or body.max_deg > 360 or body.min_deg >= body.max_deg:
-                raise HTTPException(422, "min_deg must be >= 1, max_deg <= 360, and min < max")
+            status = (await asyncio.to_thread(self._motion_svc.get_status)
+                      if self._motion_svc else {})
+            if not 0 <= body.min_deg < body.max_deg <= status.get("range_deg", 360):
+                raise HTTPException(422, "Pan limits must fit the configured servo range")
             if self.bus:
                 self.bus.publish(
                     "motion.set_limits",
@@ -2209,6 +2249,15 @@ class WebService:
             self.bus.publish("motion.pan_to", {"angle": body.angle, "override_quiet": True})
             return {"ok": True}
 
+        @app.post("/api/tilt")
+        async def api_tilt(body: _PanBody):
+            if not self.bus:
+                raise HTTPException(503, "bus unavailable")
+            if not math.isfinite(body.angle):
+                raise HTTPException(422, "Angle must be finite")
+            self.bus.publish("motion.tilt_to", {"angle": body.angle, "override_quiet": True})
+            return {"ok": True}
+
         @app.get("/api/snapshot")
         async def api_snapshot():
             """Return the current camera 1 frame as a full-resolution JPEG."""
@@ -2300,7 +2349,7 @@ class WebService:
                 # Center the head; MotionService.on_stop() also centers but
                 # publishing here gives a 1 s head-start before the process exits.
                 if self.bus:
-                    self.bus.publish("motion.pan_to", {"angle": 180.0})
+                    self.bus.publish("motion.center", {})
                 await asyncio.sleep(1.2)
                 subprocess.Popen(["sudo", "reboot"], close_fds=True)
 
@@ -2314,7 +2363,7 @@ class WebService:
 
             async def _do_shutdown():
                 if self.bus:
-                    self.bus.publish("motion.pan_to", {"angle": 180.0})
+                    self.bus.publish("motion.center", {})
                 await asyncio.sleep(1.2)
                 subprocess.Popen(["sudo", "shutdown", "-h", "now"], close_fds=True)
 

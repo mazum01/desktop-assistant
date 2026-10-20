@@ -11,7 +11,8 @@ head, and temperature-controlled cooling.
 - Seeed Studio ReSpeaker Flex XVF3800 (6-mic USB array with onboard AEC,
   beamforming, and noise suppression; USB vendor-control channel for
   DSP tuning/telemetry)
-- DS3218 servo (pan, 270° range) on SparkFun Pi Servo pHAT
+- Pan and head-tilt servos (180° range) on SparkFun Pi Servo pHAT
+  (legacy geared DS3218 pan configurations remain supported)
 - TMP117 (VERA3) or TMP102 (VERA) temperature sensor, auto-detected over I²C
 - Noctua NF-A6x25 PWM fan
 - Sabrent USB audio adapter → stereo speakers
@@ -41,7 +42,7 @@ src/             application code
   services/        service layer (audio, vision, media, IoT, skills dispatch, etc.)
   skills/          in-process skill implementations (describe-scene, depth-query, ...)
   perception/      vision + audio understanding
-  motion/          pan servo controller
+  motion/          pan/tilt servo controller
   thermal/         temperature + fan control
   audio/           capture & playback, ReSpeaker XVF control
   voice/           voice command pipeline (wake word, STT, dialog)
@@ -60,6 +61,32 @@ monolith: `desktop-assistant-core`, `desktop-assistant-thermal`,
 services (IoT, Skills) planned to move out of `core` per the
 [Process Isolation Proposal](docs/architecture/PROCESS_ISOLATION_PROPOSAL.md).
 
+## Pan and head tilt
+
+Both installed servos are direct-drive 180° models: center 90°, initial safe
+travel 70–110°. Pan defaults to PCA9685 channel 0, tilt to channel 1.
+Set different, distinct channels (0–15) in the web Controls tab or CLI:
+
+```bash
+vera servo channels --pan 0 --tilt 1
+vera servo status
+vera servo pan --to 90
+vera servo tilt --to 90 --move-time-ms 1000
+vera servo limits --axis pan --min 70 --max 110
+vera servo limits --axis tilt --min 70 --max 110
+```
+
+Channels and travel limits persist across restarts. Reassigning channels
+releases both old outputs and clears queued moves without moving new outputs.
+Disable autonomous tracking before rewiring or changing assignments.
+The REST API exposes `GET/PUT /api/settings/servo/channels`,
+`PUT /api/settings/servo/tilt-limits`, and `POST /api/tilt` (`{"angle": 90}`).
+`motion.position` retains pan `angle` and adds `tilt_angle`.
+Base calibration belongs in `config/assistant.yaml` under `servo`:
+`range_deg`, `pulse_min_us`, `pulse_max_us`, channels, and axis limits.
+`range_deg: 180` uses direct angular mapping; omitted/360 retains the legacy
+geared pan mapping. Tilt always uses 180° direct mapping.
+
 ## OpenClaw Integration
 Natural-language control via Telegram using the [OpenClaw](https://openclaw.dev)
 AI gateway. See [`.github/skills/README.md`](.github/skills/README.md) for installation.
@@ -68,7 +95,7 @@ Available skills (26, see [`.github/skills/`](.github/skills/)):
 
 | Skill | Description |
 |-------|-------------|
-| **pan-camera** | "look left", "pan to 90°", "face me" |
+| **pan-camera** | "look left", "tilt to 90°", "set pan channel 0 and tilt channel 1" |
 | **grab-frame** | "take a photo", "snapshot from camera 2" |
 | **describe-scene** | "what do you see?", "describe your surroundings" |
 | **face-tracking** | Enable/disable servo face-following behavior |

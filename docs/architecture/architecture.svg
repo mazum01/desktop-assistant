@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-1186 6589,-1186 6589,4 -4,4"/>
 <text text-anchor="start" x="3005" y="-1166.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="3121.5" y="-1155" font-family="Helvetica,sans-Serif" font-size="10.00">v1.74.0 — Display I2C address polling and diagnostics; touch disabled</text>
+<text text-anchor="start" x="3116" y="-1155" font-family="Helvetica,sans-Serif" font-size="10.00">v1.75.0 — Independent pan/tilt controls and configurable servo channels</text>
 <g id="clust1" class="cluster">
 <title>cluster_updater</title>
 <path fill="#e4f4e4" stroke="black" d="M3933,-707.5C3933,-707.5 4840,-707.5 4840,-707.5 4846,-707.5 4852,-713.5 4852,-719.5 4852,-719.5 4852,-1128 4852,-1128 4852,-1134 4846,-1140 4840,-1140 4840,-1140 3933,-1140 3933,-1140 3927,-1140 3921,-1134 3921,-1128 3921,-1128 3921,-719.5 3921,-719.5 3921,-713.5 3927,-707.5 3933,-707.5"/>
@@ -181,7 +181,7 @@
 <text text-anchor="middle" x="3207" y="-897" font-family="Helvetica,sans-Serif" font-size="10.00">(VERA3, I²C 0x48)</text>
 </g>
 <!-- drv_tmp117 -->
-<g id="node19" class="node">
+<g id="node18" class="node">
 <title>drv_tmp117</title>
 <path fill="#a5c8ff" stroke="black" d="M3819,-761C3819,-761 3727,-761 3727,-761 3721,-761 3715,-755 3715,-749 3715,-749 3715,-737 3715,-737 3715,-731 3721,-725 3727,-725 3727,-725 3819,-725 3819,-725 3825,-725 3831,-731 3831,-737 3831,-737 3831,-749 3831,-749 3831,-755 3825,-761 3819,-761"/>
 <text text-anchor="middle" x="3773" y="-740.5" font-family="Helvetica,sans-Serif" font-size="10.00">thermal/tmp117.py</text>
@@ -201,7 +201,7 @@
 <text text-anchor="middle" x="3342" y="-897" font-family="Helvetica,sans-Serif" font-size="10.00">(VERA, I²C 0x48)</text>
 </g>
 <!-- drv_temp -->
-<g id="node18" class="node">
+<g id="node19" class="node">
 <title>drv_temp</title>
 <path fill="#a5c8ff" stroke="black" d="M3535,-651.5C3535,-651.5 3383,-651.5 3383,-651.5 3377,-651.5 3371,-645.5 3371,-639.5 3371,-639.5 3371,-619.5 3371,-619.5 3371,-613.5 3377,-607.5 3383,-607.5 3383,-607.5 3535,-607.5 3535,-607.5 3541,-607.5 3547,-613.5 3547,-619.5 3547,-619.5 3547,-639.5 3547,-639.5 3547,-645.5 3541,-651.5 3535,-651.5"/>
 <text text-anchor="middle" x="3459" y="-632.5" font-family="Helvetica,sans-Serif" font-size="10.00">thermal/temperature_sensor.py</text>
@@ -377,6 +377,13 @@
 <text text-anchor="middle" x="1233" y="-632.1" font-family="Helvetica,sans-Serif" font-size="8.00">I2C 0x6A/0x6B</text>
 <text text-anchor="middle" x="1233" y="-623.1" font-family="Helvetica,sans-Serif" font-size="8.00">identity + checked samples</text>
 </g>
+<!-- drv_tmp117&#45;&gt;drv_temp -->
+<g id="edge9" class="edge">
+<title>drv_tmp117&#45;&gt;drv_temp</title>
+<path fill="none" stroke="#555555" d="M3739.73,-724.87C3727.69,-718.99 3713.89,-712.61 3701,-707.5 3649.82,-687.21 3590.99,-668.39 3544.15,-654.44"/>
+<polygon fill="#555555" stroke="#555555" points="3544.93,-651.02 3534.35,-651.54 3542.94,-657.73 3544.93,-651.02"/>
+<text text-anchor="middle" x="3663.5" y="-681.6" font-family="Helvetica,sans-Serif" font-size="8.00">TMP117 ID</text>
+</g>
 <!-- drv_thmgr -->
 <g id="node22" class="node">
 <title>drv_thmgr</title>
@@ -388,13 +395,6 @@
 <title>drv_temp&#45;&gt;drv_thmgr</title>
 <path fill="none" stroke="#555555" d="M3463.65,-607.34C3469.31,-581.62 3478.86,-538.18 3485.05,-510.05"/>
 <polygon fill="#555555" stroke="#555555" points="3488.51,-510.61 3487.24,-500.09 3481.67,-509.11 3488.51,-510.61"/>
-</g>
-<!-- drv_tmp117&#45;&gt;drv_temp -->
-<g id="edge9" class="edge">
-<title>drv_tmp117&#45;&gt;drv_temp</title>
-<path fill="none" stroke="#555555" d="M3739.73,-724.87C3727.69,-718.99 3713.89,-712.61 3701,-707.5 3649.82,-687.21 3590.99,-668.39 3544.15,-654.44"/>
-<polygon fill="#555555" stroke="#555555" points="3544.93,-651.02 3534.35,-651.54 3542.94,-657.73 3544.93,-651.02"/>
-<text text-anchor="middle" x="3663.5" y="-681.6" font-family="Helvetica,sans-Serif" font-size="8.00">TMP117 ID</text>
 </g>
 <!-- drv_fan&#45;&gt;drv_thmgr -->
 <g id="edge32" class="edge">

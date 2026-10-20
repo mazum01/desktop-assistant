@@ -9,7 +9,7 @@
 | Compute | Raspberry Pi 5 (8 GB recommended) | Main SBC |
 | AI Accel | Hailo-8 M.2 | via PCIe HAT |
 | Servo Driver | SparkFun Pi Servo pHAT | I²C, PCA9685-based |
-| Pan Servo | DS3218 | 270° mechanical range |
+| Pan/Tilt Servos | Two direct-drive servos | 180° travel each; PCA9685 channels are independently configurable |
 | Cooling | Noctua NF-A6x25 PWM | 5 V PWM fan |
 | Temp Sensor | TMP117 (VERA3) or TMP102 (VERA) | I²C, auto-detected at startup |
 | Cameras | Stereo pair (2× CSI or USB) | synchronized capture |
@@ -18,15 +18,18 @@
 
 ## 2. Functional Requirements
 
-### 2.1 Motion (Pan)
-- FR-M1: Logical pan range 1°–360°.
-- FR-M2: Servo mechanical range is 270°; commands map to mechanical positions
-  via calibration table.
-- FR-M3: When commanded across the wrap (e.g., 350° → 10°), the controller
-  **must traverse the long way** through the mechanical range (i.e., back
-  through 340°, 300°, … to 10°) rather than crossing the dead zone.
-- FR-M4: Configurable max angular velocity and acceleration.
-- FR-M5: Soft limits with emergency stop API.
+### 2.1 Motion (Pan and Tilt)
+- FR-M1: Support independent pan and tilt axes with configured travel limits.
+- FR-M2: Pan and tilt PCA9685 channels are configurable from 0–15, must be
+  distinct, and persist across daemon restarts.
+- FR-M3: The installed direct-drive servos use independent 180° angular
+  mapping; legacy geared pan configurations retain their 1°–360° mapping.
+- FR-M4: Legacy geared pan movement across the wrap (e.g., 350° → 10°) must
+  traverse the long way through the mechanical range, never through the dead
+  zone.
+- FR-M5: Configurable max angular velocity and soft travel limits.
+- FR-M6: The servo bring-up test exercises each configured axis at center and
+  +/-20° and waits for a spoken announcement before each move.
 
 ### 2.2 Thermal
 - FR-T1: Probe for and sample the installed TMP117 or TMP102 at ≥ 1 Hz.

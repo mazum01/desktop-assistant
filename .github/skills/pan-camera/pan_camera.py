@@ -1,79 +1,74 @@
 #!/usr/bin/env python3
-"""Pan the VERA camera to a given angle via ZMQ IPC."""
+"""Control VERA pan/tilt and channel assignments through local IPC."""
 
+import argparse
 import json
+import math
 import sys
 
 REP_ENDPOINT = "ipc:///tmp/desktop-assistant.rep"
 
 
-def get_servo_limits():
-    """Query live servo limits from `da servo status`. Falls back to (0, 270)."""
-    import subprocess, re
-    try:
-        out = subprocess.check_output(["da", "servo", "status"], stderr=subprocess.DEVNULL, text=True)
-        m = re.search(r"Travel limits\s*:\s*([\d.]+)°\s*[–-]\s*([\d.]+)°", out)
-        if m:
-            return float(m.group(1)), float(m.group(2))
-    except Exception:
-        pass
-    return 0.0, 270.0
+def request(message):
+    import zmq
 
-
-def main():
-    if len(sys.argv) != 2:
-        print(json.dumps({"ok": False, "error": "Usage: pan_camera.py <angle_degrees>"}))
-        sys.exit(1)
-
-    try:
-        angle = float(sys.argv[1])
-    except ValueError:
-        print(json.dumps({"ok": False, "error": f"Invalid angle: {sys.argv[1]!r}"}))
-        sys.exit(1)
-
-    min_angle, max_angle = get_servo_limits()
-    if not (min_angle <= angle <= max_angle):
-        print(json.dumps({
-            "ok": False,
-            "error": f"Angle {angle} out of range [{min_angle}, {max_angle}]"
-        }))
-        sys.exit(1)
-
-    try:
-        import zmq
-    except ImportError:
-        print(json.dumps({"ok": False, "error": "pyzmq not installed on this host"}))
-        sys.exit(1)
-
-    ctx = zmq.Context.instance()
-    sock = ctx.socket(zmq.REQ)
+    sock = zmq.Context.instance().socket(zmq.REQ)
     sock.setsockopt(zmq.LINGER, 0)
     sock.setsockopt(zmq.RCVTIMEO, 3000)
     sock.setsockopt(zmq.SNDTIMEO, 3000)
     try:
         sock.connect(REP_ENDPOINT)
-        req = json.dumps({
-            "cmd": "publish",
-            "topic": "motion.pan_to",
-            "payload": {"angle": angle, "override_quiet": True}
-        })
-        sock.send_string(req)
-        raw = sock.recv_string()
-        reply = json.loads(raw)
-        if reply.get("ok"):
-            print(json.dumps({"ok": True, "angle": angle, "message": f"Panning to {angle}°"}))
-        else:
-            print(json.dumps({"ok": False, "error": reply.get("error", "unknown")}))
-            sys.exit(1)
-    except zmq.Again:
-        print(json.dumps({"ok": False, "error": "Timeout — VERA daemon not responding"}))
-        sys.exit(1)
-    except Exception as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}))
-        sys.exit(1)
+        sock.send_json(message)
+        reply = sock.recv_json()
+        if not reply.get("ok"):
+            raise RuntimeError(reply.get("error", "VERA request failed"))
+        return reply
     finally:
         sock.close()
 
 
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("angle", nargs="?", type=float)
+    parser.add_argument("--axis", choices=("pan", "tilt"), default="pan")
+    parser.add_argument("--status", action="store_true")
+    parser.add_argument("--pan-channel", type=int)
+    parser.add_argument("--tilt-channel", type=int)
+    args = parser.parse_args()
+    try:
+        channels = (args.pan_channel, args.tilt_channel)
+        if any(ch is not None for ch in channels):
+            if (any(ch is None or not 0 <= ch <= 15 for ch in channels)
+                    or args.pan_channel == args.tilt_channel):
+                raise ValueError("Provide distinct --pan-channel and --tilt-channel (0-15)")
+            reply = request({
+                "cmd": "motion.set_channels",
+                "pan_channel": args.pan_channel, "tilt_channel": args.tilt_channel,
+            })
+        else:
+            reply = request({"cmd": "motion.get_status"})
+
+        if args.angle is not None:
+            status = reply["status"]
+            mn = status["soft_min_deg" if args.axis == "pan" else "tilt_min_deg"]
+            mx = status["soft_max_deg" if args.axis == "pan" else "tilt_max_deg"]
+            if not math.isfinite(args.angle) or not mn <= args.angle <= mx:
+                raise ValueError(f"{args.axis} angle must be within [{mn}, {mx}]")
+            if not status["servo_enabled"] or not status["hardware_ready"]:
+                raise RuntimeError("Servo motion is disabled or hardware is unavailable")
+            reply = request({
+                "cmd": "publish", "topic": f"motion.{args.axis}_to",
+                "payload": {"angle": args.angle, "override_quiet": True},
+            })
+            reply.update(axis=args.axis, angle=args.angle, message="Movement requested")
+        elif not args.status and all(ch is None for ch in channels):
+            raise ValueError("Provide an angle, --status, or both channel assignments")
+        print(json.dumps(reply))
+        return 0
+    except Exception as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}))
+        return 1
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -219,6 +219,13 @@ class MotionServiceProxy:
             return {}
         return reply.get("status", {})
 
+    def set_channels(self, pan: int, tilt: int) -> None:
+        reply = self._client.call({
+            "cmd": "motion.set_channels", "pan_channel": pan, "tilt_channel": tilt,
+        })
+        if not reply.get("ok"):
+            raise RuntimeError(reply.get("error", "Servo channel configuration failed"))
+
 
 class TrackingServiceProxy:
     """Proxies `WebService`'s `/api/settings/{face-tracking,random-motion,

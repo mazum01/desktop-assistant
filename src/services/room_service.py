@@ -814,7 +814,12 @@ class RoomService(Service):
             # Pause face tracking to avoid servo contention during the sweep.
             self.bus.publish("tracking.set_face_tracking", {"enabled": False})
             try:
-                for angle in _SWEEP_ANGLES:
+                settings = self.bus.last("motion.settings") or {}
+                angles = _SWEEP_ANGLES
+                if isinstance(settings, dict) and settings:
+                    mn, mx = settings["soft_min_deg"], settings["soft_max_deg"]
+                    angles = (mn, (mn + mx) / 2, mx)
+                for angle in angles:
                     self.bus.publish(
                         "motion.pan_to",
                         {"angle": angle, "override_quiet": True},

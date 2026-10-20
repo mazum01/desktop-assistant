@@ -53,6 +53,42 @@ def app_client_with_quiet(tmp_path):
 
 # ── Faces API ────────────────────────────────────────────────────────────────
 
+def test_servo_channel_settings_and_tilt(app_client):
+    client, bus, svc = app_client
+    motion = MagicMock()
+    motion.get_status.return_value = {
+        "pan_channel": 0, "tilt_channel": 1, "range_deg": 180,
+        "tilt_min_deg": 70, "tilt_max_deg": 110,
+    }
+    svc._motion_svc = motion
+    assert client.get("/api/settings/servo/channels").json()["tilt_channel"] == 1
+    assert client.put("/api/settings/servo/channels",
+                      json={"pan_channel": 2, "tilt_channel": 3}).status_code == 200
+    motion.set_channels.assert_called_once_with(2, 3)
+    for pan, tilt in [(0, 0), (-1, 1), (0, 16)]:
+        assert client.put("/api/settings/servo/channels",
+                          json={"pan_channel": pan, "tilt_channel": tilt}).status_code == 422
+    assert client.post("/api/tilt", json={"angle": 90}).status_code == 200
+    assert bus.last("motion.tilt_to") == {"angle": 90, "override_quiet": True}
+    assert client.put("/api/settings/servo/tilt-limits",
+                      json={"min_deg": 70, "max_deg": 110}).status_code == 200
+    assert bus.last("motion.set_tilt_limits") == {"min_deg": 70, "max_deg": 110}
+    assert client.put("/api/settings/servo/limits",
+                      json={"min_deg": 70, "max_deg": 190}).status_code == 422
+    assert client.put("/api/settings/servo/tilt-limits",
+                      json={"min_deg": 110, "max_deg": 70}).status_code == 422
+
+
+def test_servo_channel_settings_surface_rpc_failure(app_client):
+    client, bus, svc = app_client
+    assert client.get("/api/settings/servo/channels").status_code == 503
+    svc._motion_svc = MagicMock()
+    svc._motion_svc.set_channels.side_effect = RuntimeError("hardware failed")
+    response = client.put("/api/settings/servo/channels",
+                          json={"pan_channel": 0, "tilt_channel": 1})
+    assert response.status_code == 503
+    assert "hardware failed" in response.json()["detail"]
+
 def test_get_faces_returns_list(app_client):
     client, bus, svc = app_client
     r = client.get("/api/faces")

@@ -115,6 +115,18 @@ class TestComputeDepthSignature:
         assert np.all(sig == 0.0)
 
 
+def test_panorama_sweeps_configured_pan_limits(tmp_path):
+    frame = np.full((48, 64, 3), 100, dtype=np.uint8)
+    svc = _make_service(tmp_path, vision_svc=_make_vision(frame))
+    svc._current_angle = 90
+    svc.bus.publish("motion.settings", {"soft_min_deg": 70, "soft_max_deg": 110})
+    angles = []
+    svc.bus.subscribe("motion.pan_to", lambda _t, payload: angles.append(payload["angle"]))
+    with patch("src.services.room_service.time.sleep"):
+        assert svc._panoramic_signature() is not None
+    assert angles == [70, 90, 110, 90]
+
+
 class TestBhattacharyya:
     def test_identical_distributions_score_one(self):
         h = np.ones(32) / 32

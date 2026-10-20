@@ -809,10 +809,27 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 <div class="control-group">
-<label>Pan servo  <span id="pan-angle-display">180°</span></label>
+<label>Pan servo  <span id="pan-angle-display">90°</span></label>
 <div class="row-input">
-<input id="pan-slider" max="360" min="1" type="range" value="180"/>
+<input id="pan-slider" max="110" min="70" type="range" value="90"/>
 <button class="btn btn-primary" onclick="doPan()">Go</button>
+</div>
+<label style="margin-top:10px">Head tilt <span id="tilt-angle-display">90°</span></label>
+<div class="row-input">
+<input id="tilt-slider" max="110" min="70" type="range" value="90" oninput="document.getElementById('tilt-angle-display').textContent=this.value+'°'"/>
+<button class="btn btn-primary" onclick="doTilt()">Go</button>
+</div>
+<div class="row-input" style="margin-top:10px;gap:12px;flex-wrap:wrap">
+<label>Pan channel <input id="servo-pan-channel" type="number" min="0" max="15" step="1" value="0" style="width:65px"/></label>
+<label>Tilt channel <input id="servo-tilt-channel" type="number" min="0" max="15" step="1" value="1" style="width:65px"/></label>
+<button class="btn btn-primary btn-sm" onclick="saveServoChannels()">Set channels</button>
+<span id="servo-channels-status" class="qh-status"></span>
+</div>
+<div class="row-input" style="margin-top:10px;gap:12px;flex-wrap:wrap">
+<label>Tilt min <input id="tilt-travel-min" type="number" min="0" max="179" value="70" style="width:65px"/></label>
+<label>Tilt max <input id="tilt-travel-max" type="number" min="1" max="180" value="110" style="width:65px"/></label>
+<button class="btn btn-primary btn-sm" onclick="saveTiltLimits()">Set tilt limits</button>
+<span id="tilt-limits-status" class="qh-status"></span>
 </div>
 <div class="row-input" style="margin-top:6px">
 <label class="qh-toggle" style="margin:0">
@@ -833,12 +850,12 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </label>
 </div>
 <div class="row-input" style="margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap">
-<label style="font-size:13px;color:var(--text-dim)">Travel limits:</label>
+<label style="font-size:13px;color:var(--text-dim)">Pan travel limits:</label>
 <label style="font-size:13px">
-              Min <input id="servo-travel-min" max="359" min="1" step="1" style="width:65px;margin-left:4px" type="number" value="135"/>°
+              Min <input id="servo-travel-min" max="179" min="0" step="1" style="width:65px;margin-left:4px" type="number" value="70"/>°
             </label>
 <label style="font-size:13px">
-              Max <input id="servo-travel-max" max="360" min="2" step="1" style="width:65px;margin-left:4px" type="number" value="215"/>°
+              Max <input id="servo-travel-max" max="180" min="1" step="1" style="width:65px;margin-left:4px" type="number" value="110"/>°
             </label>
 <button class="btn btn-primary btn-sm" onclick="saveServoLimits()">Set</button>
 <span class="qh-status" id="servo-limits-status"></span>
@@ -1062,9 +1079,12 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 <tr><td><code>da say "hello"</code></td><td>Speak text through speakers</td></tr>
 <tr><td><code>da joke</code></td><td>Tell a random joke</td></tr>
 <tr><td><code>da time</code></td><td>Announce current time</td></tr>
-<tr><td><code>da servo pan --to 180</code></td><td>Pan servo to angle</td></tr>
+<tr><td><code>da servo pan --to 90</code></td><td>Pan servo to angle</td></tr>
 <tr><td><code>da servo enable/disable</code></td><td>Enable or disable servo</td></tr>
-<tr><td><code>da servo limits --min 135 --max 215</code></td><td>Set travel limits</td></tr>
+<tr><td><code>da servo limits --min 70 --max 110</code></td><td>Set pan travel limits</td></tr>
+<tr><td><code>da servo channels --pan 0 --tilt 1</code></td><td>Assign pan and tilt channels</td></tr>
+<tr><td><code>da servo tilt --to 90</code></td><td>Tilt head within configured limits</td></tr>
+<tr><td><code>da servo limits --axis tilt --min 70 --max 110</code></td><td>Set tilt travel limits</td></tr>
 <tr><td><code>da face-tracking enable</code></td><td>Head follows detected faces</td></tr>
 <tr><td><code>da random-motion enable</code></td><td>Idle gaze drifts</td></tr>
 <tr><td><code>da object-detection enable</code></td><td>Enable COCO object classification</td></tr>
