@@ -1,117 +1,193 @@
 #!/usr/bin/env python3
-"""
-Bring-up test: DS3218 pan servo.
+"""Safely exercise the configured pan and tilt servo channels."""
 
-Performs a full sweep 1° → 360° then back to 1° using the wrap-safe
-path planner.  Also tests the critical 350° → 10° wrap scenario to
-confirm backward traversal is used.
+from __future__ import annotations
 
-Exits 0 on success, 1 on any hardware or logic failure.
-
-Usage:
-    python scripts/test_servo.py [--speed 60]
-"""
-
+import argparse
+import math
+import os
+from pathlib import Path
 import sys
 import time
-import argparse
-import logging
-import subprocess
+import uuid
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-log = logging.getLogger(__name__)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
+from src.core.ipc_client import IPCClient
 
 
-def check_prerequisites() -> bool:
-    """Print diagnostic info and return False if setup looks wrong."""
-    ok = True
+def _request(client: IPCClient, request: dict, operation: str) -> dict:
+    response = client.call(request)
+    if not response.get("ok"):
+        raise RuntimeError(f"{operation} failed: {response.get('error', response)}")
+    return response
 
-    # Check I2C devices
-    print("\n── I²C bus scan ──")
-    try:
-        result = subprocess.run(
-            ["i2cdetect", "-y", "1"], capture_output=True, text=True, timeout=5
-        )
-        print(result.stdout)
-        if "40" not in result.stdout:
-            print("WARNING: PCA9685 (0x40) not found on I²C bus 1!")
-            ok = False
-        else:
-            print("✓ PCA9685 detected at 0x40")
-    except FileNotFoundError:
-        print("  i2cdetect not available (install i2c-tools to enable scan)")
-    except Exception as exc:
-        print(f"  I²C scan failed: {exc}")
 
-    print("\n── Python library check ──")
-    try:
-        import smbus2  # noqa: F401
-        print("✓ smbus2 is installed (used for PCA9685 direct I²C)")
-    except ImportError:
-        print("ERROR: smbus2 is NOT installed. Run: pip install smbus2")
-        ok = False
+def _last_payload(client: IPCClient, topic: str) -> dict | None:
+    payload = _request(client, {"cmd": "last", "topic": topic}, f"read {topic}")["payload"]
+    return payload if isinstance(payload, dict) else None
 
-    print()
-    return ok
+
+def _wait_for_speech(client: IPCClient, request_id: str, timeout: float) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        payload = _last_payload(client, "av.spoke")
+        if payload and payload.get("request_id") == request_id:
+            return
+        time.sleep(0.1)
+    raise TimeoutError("TTS did not confirm playback; no servo move was issued")
+
+
+def _announce(client: IPCClient, text: str, timeout: float) -> None:
+    request_id = uuid.uuid4().hex
+    _request(
+        client,
+        {
+            "cmd": "publish",
+            "topic": "av.say",
+            "payload": {"text": text, "request_id": request_id},
+        },
+        "announce move",
+    )
+    _wait_for_speech(client, request_id, timeout)
+    print(f"Announced: {text}")
+
+
+def _wait_for_position(
+    client: IPCClient, axis: str, target: float, timeout: float
+) -> None:
+    key = "angle" if axis == "pan" else "tilt_angle"
+    deadline = time.monotonic() + timeout
+    time.sleep(0.15)
+    while time.monotonic() < deadline:
+        payload = _last_payload(client, "motion.position")
+        if payload and payload.get(key) is not None:
+            position = float(payload[key])
+            if math.isfinite(position) and abs(position - target) <= 0.5:
+                return
+        time.sleep(0.1)
+    raise TimeoutError(f"{axis} did not reach {target:.1f} degrees")
+
+
+def _move(
+    client: IPCClient,
+    axis: str,
+    channel: int,
+    angle: float,
+    label: str,
+    speech_timeout: float,
+    move_timeout: float,
+) -> None:
+    text = f"Servo test. {axis} channel {channel}: {label}, {angle:.0f} degrees."
+    _announce(client, text, speech_timeout)
+    _request(
+        client,
+        {
+            "cmd": "publish",
+            "topic": f"motion.{axis}_to",
+            "payload": {"angle": angle, "move_time_ms": 1000},
+        },
+        f"move {axis} to {angle:.1f} degrees",
+    )
+    _wait_for_position(client, axis, angle, move_timeout)
+    print(f"Reached {axis} {angle:.1f} degrees on channel {channel}")
+
+
+def _axis_limits(status: dict, axis: str) -> tuple[float, float]:
+    min_key, max_key = (
+        ("soft_min_deg", "soft_max_deg")
+        if axis == "pan"
+        else ("tilt_min_deg", "tilt_max_deg")
+    )
+    minimum, maximum = float(status[min_key]), float(status[max_key])
+    if not (math.isfinite(minimum) and math.isfinite(maximum) and minimum < maximum):
+        raise ValueError(f"Invalid {axis} travel limits: {minimum}–{maximum}")
+    return minimum, maximum
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--speed", type=float, default=60.0, help="deg/sec")
-    parser.add_argument("--skip-prereq", action="store_true", help="Skip prerequisite checks")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--speech-timeout",
+        type=float,
+        default=30.0,
+        help="seconds to wait for each spoken announcement to finish",
+    )
+    parser.add_argument(
+        "--move-timeout",
+        type=float,
+        default=15.0,
+        help="seconds to wait for each servo position",
+    )
     args = parser.parse_args()
+    if args.speech_timeout <= 0 or args.move_timeout <= 0:
+        parser.error("timeouts must be positive")
 
-    print(f"Servo bring-up test — channel=15, speed={args.speed}°/s")
+    endpoint = os.environ.get("DA_BUS_REP_ENDPOINT", "ipc:///tmp/desktop-assistant.rep")
+    client = IPCClient(endpoint, timeout_ms=5000)
+    try:
+        status_reply = _request(client, {"cmd": "motion.get_status"}, "read servo status")
+        status = status_reply.get("status")
+        if not isinstance(status, dict):
+            raise RuntimeError("motion.get_status returned no status object")
+        if not status.get("hardware_ready"):
+            raise RuntimeError("servo hardware is not ready; refusing to move")
+        if not status.get("servo_enabled"):
+            raise RuntimeError("servo motion is disabled; refusing to move")
+        tracking = _request(
+            client, {"cmd": "tracking.get_status"}, "read tracking status",
+        )["status"]
+        flags = ("face_tracking_enabled", "random_motion_enabled", "person_seek_enabled")
+        if any(tracking.get(flag) is not False for flag in flags):
+            raise RuntimeError(
+                "disable face tracking, random motion, and person seek before testing"
+            )
 
-    if not args.skip_prereq:
-        if not check_prerequisites():
-            print("FAIL: Prerequisites not met. Fix the issues above and retry.")
-            return 1
+        channels = (status.get("pan_channel"), status.get("tilt_channel"))
+        if any(type(channel) is not int or not 0 <= channel <= 15 for channel in channels):
+            raise RuntimeError(f"invalid configured servo channels: {channels}")
+        tilt_available = status.get("tilt_available", False)
+        if tilt_available and channels[0] == channels[1]:
+            raise RuntimeError("pan and tilt must use distinct PCA9685 channels")
 
-    from src.motion.servo_controller import ServoController, ServoConfig
-    cfg = ServoConfig(speed_deg_per_sec=args.speed)
-    ctrl = ServoController(config=cfg)
+        axes = []
+        for axis, channel in zip(("pan", "tilt"), channels):
+            if axis == "tilt" and not tilt_available:
+                continue
+            minimum, maximum = _axis_limits(status, axis)
+            center = (minimum + maximum) / 2
+            low, high = center - 20, center + 20
+            if low < minimum or high > maximum:
+                raise RuntimeError(
+                    f"{axis} limits {minimum:.1f}–{maximum:.1f} do not allow "
+                    "a safe +/-20 degree test around center"
+                )
+            axes.append((axis, channel, center, low, high))
 
-    if not ctrl.hardware_ready:
-        print(
-            "\nFAIL: ServoController is in simulation mode — hardware not initialised.\n"
-            "  Check that:\n"
-            "    1. The SparkFun Pi Servo pHAT is connected and I²C is enabled\n"
-            "       (sudo raspi-config → Interface Options → I2C → Enable)\n"
-            "    2. adafruit-circuitpython-servokit is installed\n"
-            "    3. The PCA9685 is visible at 0x40 on I²C bus 1\n"
-            "       (run: i2cdetect -y 1)\n"
-            "    4. The pan servo is plugged into channel 15 of the pHAT\n"
-        )
+        print("Testing " + ", ".join(f"{axis} channel {channel}" for axis, channel, *_ in axes)
+              + " with announced +/-20 degree moves.")
+
+        for axis, channel, center, low, high in axes:
+            _move(
+                client, axis, channel, center, "centering",
+                args.speech_timeout, args.move_timeout,
+            )
+        for axis, channel, center, low, high in axes:
+            for angle, label in (
+                (low, "minus 20"),
+                (center, "returning to center"),
+                (high, "plus 20"),
+                (center, "returning to center"),
+            ):
+                _move(
+                    client, axis, channel, angle, label,
+                    args.speech_timeout, args.move_timeout,
+                )
+    except (RuntimeError, TimeoutError, ValueError, KeyError) as exc:
+        print(f"Servo channel test FAILED: {exc}", file=sys.stderr)
         return 1
 
-    print("✓ Hardware initialised — servo on channel 15")
-
-    # --- Test 1: full forward sweep ---
-    print("\n[1] Full forward sweep: 1° → 360°")
-    ctrl.move_to(1.0)
-    time.sleep(5)
-    ctrl.move_to(360.0)
-    print(f"    Position after sweep: {ctrl.position:.1f}°")
-
-    # --- Test 2: wrap traversal (the critical safety test) ---
-    print("\n[2] Wrap traversal: 350° → 10°  (must go BACKWARD)")
-    ctrl.set_immediate(350.0)
-    direction = ServoController.plan_direction(350.0, 10.0)
-    print(f"    Planned direction: {direction}")
-    assert direction == "backward", f"FAIL: expected 'backward', got '{direction}'"
-    ctrl.move_to(10.0)
-    print(f"    Position after traversal: {ctrl.position:.1f}°  ✓")
-
-    # --- Test 3: centre ---
-    print("\n[3] Move to centre: 180°")
-    ctrl.move_to(180.0)
-    print(f"    Position: {ctrl.position:.1f}°")
-
-    ctrl.stop()
-    print("\nServo test PASSED ✓")
+    print("Servo channel test PASSED.")
     return 0
 
 

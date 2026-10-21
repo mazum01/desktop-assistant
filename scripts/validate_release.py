@@ -2,6 +2,7 @@
 """Validate updater-aware release metadata without publishing anything."""
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -17,8 +18,9 @@ def main():
     parser.add_argument("--tag", required=True)
     args = parser.parse_args()
     manifest = load_manifest(ROOT)
-    if args.tag != "v" + manifest["version"]:
-        parser.error("Tag must match VERSION and deployment manifest")
+    base_tag = "v" + manifest["version"]
+    if args.tag != base_tag and not re.fullmatch(re.escape(base_tag) + r"-rc\.[1-9][0-9]*", args.tag):
+        parser.error("Tag must match VERSION and deployment manifest, optionally with -rc.N")
     changed = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain"],
                              check=True, text=True, capture_output=True).stdout.splitlines()
     if any(line[3:] not in ("config/assistant.yaml", "config/thermal.yaml", "config/stereo_cal.npz")

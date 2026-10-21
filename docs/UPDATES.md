@@ -14,6 +14,46 @@ updater's configuration backups. Never copy another body's identity or
 body-tagged servo runtime state to a different device. See
 [body profiles](FEATURES.md#body-profiles) for controller and wiring details.
 
+## Development on VERA devices
+
+Use one shared `main` branch and short-lived feature branches, not permanent
+branches per robot. Develop in a separate worktree; do not edit the checkout
+used by running services. For example, from the live checkout:
+
+```bash
+git fetch origin main
+git worktree add -b feature/my-change ../desktop-assistant-my-change origin/main
+```
+
+The worktree does not inherit ignored machine-local configuration, credentials,
+models, or calibration. Do not start its hardware services just to run unit
+tests. Tests must use mocks and temporary configuration rather than production
+devices or saved user settings.
+
+Before activation, back up each device independently and explicitly confirm its
+body identity. Preserve its runtime servo limits/channels, camera roles and
+orientation, calibration, display address, and Hailo family/model selection.
+Do not copy the other VERA's configuration. In particular, the new body's
+default tilt limits are not a replacement for locally calibrated limits.
+Body selection does not select cameras, accelerator drivers, or display firmware.
+
+Open a PR and require tests for both body profiles and all affected components.
+Merge the integrated branch, assign consistent release metadata, and publish
+only the exact verified commit. A prerelease is suitable for an unvalidated
+hardware candidate and is ignored by unattended device updates. Stable releases
+require supervised validation on the affected hardware; roll out to one device
+first, verify readiness and rollback, then the other.
+
+Candidate tags use `vX.Y.Z-rc.N`; `VERSION` and the deployment manifest retain
+the target `X.Y.Z`. Validate with the actual candidate tag, and publish with
+GitHub's prerelease flag. Candidates must never be marked as the latest stable
+release or installed by the unattended updater.
+
+Confirm loaded version and revision through `deployment.readiness`, not only
+the on-disk `VERSION`. Identify whether units run under `systemctl --user` or
+the system manager before checking or restarting them. Application deployment
+does not include display flashing or accelerator-family/driver migration.
+
 ## One-time installation on each existing device
 
 Start with a reviewed updater-aware checkout (v1.64.0 or later). For this

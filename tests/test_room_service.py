@@ -32,6 +32,13 @@ from src.services.room_service import (
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+@pytest.fixture(autouse=True)
+def isolate_room_checking_state(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "src.services.room_service._ROOM_CHECKING_STATE_FILE",
+        tmp_path / "room_checking_enabled.txt",
+    )
+
 
 def _make_service(
     tmp_path: Path,
@@ -113,6 +120,18 @@ class TestComputeDepthSignature:
         depth = np.zeros((10, 10))
         sig = _compute_depth_signature(depth)
         assert np.all(sig == 0.0)
+
+
+def test_panorama_sweeps_configured_pan_limits(tmp_path):
+    frame = np.full((48, 64, 3), 100, dtype=np.uint8)
+    svc = _make_service(tmp_path, vision_svc=_make_vision(frame))
+    svc._current_angle = 90
+    svc.bus.publish("motion.settings", {"soft_min_deg": 70, "soft_max_deg": 110})
+    angles = []
+    svc.bus.subscribe("motion.pan_to", lambda _t, payload: angles.append(payload["angle"]))
+    with patch("src.services.room_service.time.sleep"):
+        assert svc._panoramic_signature() is not None
+    assert angles == [70, 90, 110, 90]
 
 
 class TestBhattacharyya:

@@ -100,6 +100,28 @@ def test_new_body_preserves_untagged_runtime_for_backward_compatibility(config_d
     assert selected.runtime["body"] == "new"
 
 
+def test_new_body_preserves_this_devices_calibrated_tilt_and_other_hardware(config_dir):
+    runtime = {
+        "servo": {
+            "pan_channel": 1, "tilt_channel": 0,
+            "soft_min_deg": 70, "soft_max_deg": 110,
+            "tilt_min_deg": 50, "tilt_max_deg": 90,
+        },
+        "camera": {"rotation_deg": 90},
+    }
+    config = {
+        "camera": {"width": 640}, "camera2": {"enabled": False},
+        "display": {"ble_address": "device-local"},
+        "depth": {"mono_enabled": False},
+    }
+    (config_dir / "body.yaml").write_text("body: new\n")
+    selected = load_body_config(config, runtime, config_dir)
+    assert selected.runtime["servo"] == runtime["servo"]
+    assert selected.runtime["camera"] == runtime["camera"]
+    for section in ("camera", "camera2", "display", "depth"):
+        assert selected.config[section] == config[section]
+
+
 def test_switching_to_new_body_discards_original_geometry(config_dir):
     selected = select_body(config_dir, "new", {
         "body": "original", "servo": {"pan_channel": 0, "soft_max_deg": 215},

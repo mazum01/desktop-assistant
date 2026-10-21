@@ -51,6 +51,12 @@ def test_ids_remain_unique(layout):
     assert all(count == 1 for count in counts.values())
 
 
+def test_servo_handlers_are_not_shadowed_by_duplicate_declarations():
+    source = (STATIC / "app.js").read_text()
+    for name in ("loadServoChannels", "saveServoChannels", "saveTiltLimits", "doTilt"):
+        assert len(re.findall(r"async function " + name + r"\(", source)) == 1
+
+
 def test_decorative_codes_are_sparse_and_hidden_from_assistive_technology(layout):
     codes = [
         node for node in layout
@@ -73,6 +79,7 @@ def test_decorative_codes_are_sparse_and_hidden_from_assistive_technology(layout
         "camera-stream", "camera-stream2", "pan-slider", "servo-enabled",
         "face-tracking-enabled", "random-motion-enabled", "servo-travel-min",
         "servo-travel-max", "servo-pan-channel", "servo-tilt-channel",
+        "tilt-slider", "tilt-travel-min", "tilt-travel-max",
         "cam-rotation-slider", "cam2-rotation-slider",
         "cam-capture-resolution-select", "cam2-capture-resolution-select",
         "cam-stream-resolution-select", "cam2-stream-resolution-select",

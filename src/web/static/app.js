@@ -364,7 +364,9 @@ function updateDashboard(data) {
 
   const motion = last["motion.position"];
   if (motion) {
-    el("stat-servo").textContent = `${num(motion.angle, 1)}°`;
+    el("stat-servo").textContent = motion.tilt_angle == null
+      ? `${num(motion.angle, 1)}°`
+      : `Pan ${num(motion.angle, 1)}° / Tilt ${num(motion.tilt_angle, 1)}°`;
     if (!_isDragging) {
       const slider = el("pan-slider");
       if (slider) {
@@ -1742,6 +1744,90 @@ async function loadServoEnabled() {
   } catch (e) { /* ignore */ }
 }
 
+async function servoRequest(path, method = "GET", body) {
+  const response = await fetch(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Servo request failed");
+  return data;
+}
+
+async function loadServoChannels() {
+  const status = el("servo-channels-status");
+  try {
+    const d = await servoRequest("/api/settings/servo/channels");
+    el("servo-pan-channel").value = d.pan_channel;
+    el("servo-tilt-channel").value = d.tilt_channel;
+    el("tilt-travel-min").value = d.tilt_min_deg;
+    el("tilt-travel-max").value = d.tilt_max_deg;
+    el("tilt-slider").min = d.tilt_min_deg;
+    el("tilt-slider").max = d.tilt_max_deg;
+    el("tilt-controls").hidden = !d.tilt_available;
+    el("servo-tilt-channel").disabled = !d.tilt_available;
+    el("tilt-slider").value = Math.max(d.tilt_min_deg, Math.min(d.tilt_max_deg, Number(el("tilt-slider").value)));
+    el("tilt-angle-display").textContent = `${el("tilt-slider").value}°`;
+    el("servo-travel-min").min = 0;
+    el("servo-travel-max").min = 1;
+    el("servo-travel-min").max = d.range_deg - 1;
+    el("servo-travel-max").max = d.range_deg;
+    status.textContent = "";
+  } catch (e) {
+    status.textContent = e.message;
+    status.style.color = "var(--red)";
+  }
+}
+
+async function saveServoChannels() {
+  const status = el("servo-channels-status");
+  try {
+    const pan_channel = Number(el("servo-pan-channel").value);
+    const tilt_channel = Number(el("servo-tilt-channel").value);
+    if (![pan_channel, tilt_channel].every(ch => Number.isInteger(ch) && ch >= 0 && ch <= 15)
+        || (!el("servo-tilt-channel").disabled && pan_channel === tilt_channel)) {
+      throw new Error("Choose channels from 0 to 15, distinct when tilt is enabled");
+    }
+    await servoRequest("/api/settings/servo/channels", "PUT", { pan_channel, tilt_channel });
+    status.textContent = "Channels saved";
+    status.style.color = "var(--green)";
+  } catch (e) {
+    status.textContent = e.message;
+    status.style.color = "var(--red)";
+  }
+}
+
+async function saveTiltLimits() {
+  const status = el("tilt-limits-status");
+  try {
+    const min_deg = Number(el("tilt-travel-min").value);
+    const max_deg = Number(el("tilt-travel-max").value);
+    if (!(0 <= min_deg && min_deg < max_deg && max_deg <= 180)) {
+      throw new Error("Tilt limits must satisfy 0 <= min < max <= 180");
+    }
+    await servoRequest("/api/settings/servo/tilt-limits", "PUT", { min_deg, max_deg });
+    el("tilt-slider").min = min_deg;
+    el("tilt-slider").max = max_deg;
+    status.textContent = "Tilt limits saved";
+    status.style.color = "var(--green)";
+  } catch (e) {
+    status.textContent = e.message;
+    status.style.color = "var(--red)";
+  }
+}
+
+async function doTilt() {
+  const status = el("tilt-limits-status");
+  try {
+    await servoRequest("/api/tilt", "POST", { angle: Number(el("tilt-slider").value) });
+    status.textContent = "Tilt command sent";
+  } catch (e) {
+    status.textContent = e.message;
+    status.style.color = "var(--red)";
+  }
+}
+
 async function saveServoEnabled(enabled) {
   try {
     await fetch("/api/settings/servo", {
@@ -1772,18 +1858,14 @@ async function saveServoLimits() {
   const min_deg = parseFloat(el("servo-travel-min").value);
   const max_deg = parseFloat(el("servo-travel-max").value);
   const st = el("servo-limits-status");
-  if (min_deg >= max_deg || min_deg < 1 || max_deg > 360) {
+  if (!(0 <= min_deg && min_deg < max_deg && max_deg <= Number(el("servo-travel-max").max))) {
     st.textContent = "Invalid range";
     st.style.color = "var(--red)";
     setTimeout(() => { st.textContent = ""; }, 3000);
     return;
   }
   try {
-    await fetch("/api/settings/servo/limits", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ min_deg, max_deg }),
-    });
+    await servoRequest("/api/settings/servo/limits", "PUT", { min_deg, max_deg });
     st.textContent = "Saved ✓";
     st.style.color = "var(--green)";
     // Update pan slider range
@@ -1794,45 +1876,6 @@ async function saveServoLimits() {
     st.style.color = "var(--red)";
   }
   setTimeout(() => { st.textContent = ""; }, 3000);
-}
-
-async function loadServoChannels() {
-  try {
-    const r = await fetch("/api/settings/servo/channels");
-    if (!r.ok) return;
-    const d = await r.json();
-    el("servo-pan-channel").value = d.pan_channel;
-    el("servo-tilt-channel").value = d.tilt_channel;
-  } catch (e) { /* ignore */ }
-}
-
-async function saveServoChannels() {
-  const pan_channel = Number(el("servo-pan-channel").value);
-  const tilt_channel = Number(el("servo-tilt-channel").value);
-  const st = el("servo-channels-status");
-  const valid = ch => Number.isInteger(ch) && ch >= 0 && ch <= 15;
-  if (!valid(pan_channel) || !valid(tilt_channel)) {
-    st.textContent = "Channels must be 0–15";
-    st.style.color = "var(--red)";
-    setTimeout(() => { st.textContent = ""; }, 3000);
-    return;
-  }
-  try {
-    const r = await fetch("/api/settings/servo/channels", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pan_channel, tilt_channel }),
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.detail || "Error");
-    st.textContent = "Saved ✓";
-    st.style.color = "var(--green)";
-  } catch (e) {
-    st.textContent = e.message || "Error";
-    st.style.color = "var(--red)";
-    loadServoChannels();
-  }
-  setTimeout(() => { st.textContent = ""; }, 4000);
 }
 
 async function loadFaceTrackingEnabled() {
@@ -3116,8 +3159,8 @@ document.addEventListener("DOMContentLoaded", () => {
   loadAudioInputGain();
   loadAudioVoiceGain();
   loadServoEnabled();
-  loadServoLimits();
   loadServoChannels();
+  loadServoLimits();
   loadFaceTrackingEnabled();
   loadRandomMotionEnabled();
   loadGreetingSettings();
