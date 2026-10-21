@@ -44,7 +44,7 @@ jobs:
           # install above before uvicorn gets installed — breaking any test that calls
           # WebService.start() (spins a real uvicorn server thread), even though
           # `pip install -r requirements.txt` succeeds fine on 3.11/3.12.
-          pip install pytest numpy soundfile sounddevice fastapi "uvicorn[standard]" httpx psutil ruamel.yaml pyzmq opencv-python-headless pyyaml paho-mqtt dropmqttapi yalesmartalarmclient
+          pip install pytest numpy soundfile sounddevice fastapi "uvicorn[standard]" httpx psutil ruamel.yaml pyzmq opencv-python-headless pyyaml paho-mqtt dropmqttapi yalesmartalarmclient smbus2
 
       - name: Pytest
         env:

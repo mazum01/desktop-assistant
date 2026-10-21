@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.78.1] - 2026-10-20
+### Fixed
+- Explicitly install the mocked I2C tests' `smbus2` dependency in CI when
+  unsupported Pi-only packages abort the best-effort dependency installation.
+
 ## [1.78.0] - 2026-10-20
 ### Added
 - Integrate the direct-drive VERA's tilt controls and announced servo tests
