@@ -45,7 +45,7 @@ systemctl --user restart openclaw-gateway.service
 | `system-status`     | Health: CPU, memory, temp, FPS, services                  | "How are you?", "What's your temperature?"           |
 | `quiet-hours`       | Enable/disable/configure TTS silence window               | "Enable quiet mode", "Set quiet hours 10pm–7am"     |
 | `object-detection`  | Enable/disable Hailo-8 COCO object classifier             | "Enable object detection", "What objects do you see?"|
-| `pan-camera`        | Pan servo to angle or named direction                     | "Look left", "Face me", "Pan to 135°"                |
+| `pan-camera`        | Pan/tilt, live travel limits, and persistent channel assignments | "Look left", "Tilt to 90°", "Set pan channel 0 and tilt 1" |
 | `grab-frame`        | Capture full-res JPEG from camera 1 or 2                 | "Take a photo", "Snapshot from camera 2"             |
 
 ---

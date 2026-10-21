@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.78.0] - 2026-10-20
+### Added
+- Integrate the direct-drive VERA's tilt controls and announced servo tests
+  with the shared body profiles, original pan-only support, and LCARS dashboard.
+### Fixed
+- Preserve device-local hardware settings rather than publishing one device's
+  runtime tuning as shared defaults.
+- Use configured pan limits for voice directions and panoramic room sweeps.
+- Consolidate overlapping servo routes and dashboard handlers, hide unavailable
+  tilt controls, and isolate hardware/configuration state in regression tests.
+### Changed
+- Support validated `-rc.N` release tags for supervised hardware testing without
+  publishing a stable automatic-update candidate.
+
 ## [1.77.0] - 2026-10-19
 ### Added
 - PCA9685 servo channel settings in every UI surface: a Pan/Tilt channel form

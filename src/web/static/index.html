@@ -10,7 +10,7 @@
 <link href="/static/favicon-32.png" rel="icon" sizes="32x32" type="image/png"/>
 <link href="/static/favicon-16.png" rel="icon" sizes="16x16" type="image/png"/>
 <link href="/static/favicon-192.png" rel="apple-touch-icon" sizes="192x192"/>
-<link href="/static/style.css?v=1.77.0" rel="stylesheet"/>
+<link href="/static/style.css?v=1.78.0" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -207,6 +207,19 @@
 <input id="pan-slider" max="360" min="1" type="range" value="180"/>
 <button class="btn btn-primary" onclick="doPan()">Go</button>
 </div>
+<div id="tilt-controls" hidden>
+<label>Head tilt <span id="tilt-angle-display">90°</span></label>
+<div class="row-input">
+<input id="tilt-slider" max="110" min="70" type="range" value="90" oninput="document.getElementById('tilt-angle-display').textContent=this.value+'°'"/>
+<button class="btn btn-primary" onclick="doTilt()">Go</button>
+</div>
+<div class="row-input" style="margin-top:10px;gap:12px;flex-wrap:wrap">
+<label>Tilt min <input id="tilt-travel-min" type="number" min="0" max="179" value="70" style="width:65px"/></label>
+<label>Tilt max <input id="tilt-travel-max" type="number" min="1" max="180" value="110" style="width:65px"/></label>
+<button class="btn btn-primary btn-sm" onclick="saveTiltLimits()">Set tilt limits</button>
+<span id="tilt-limits-status" class="qh-status"></span>
+</div>
+</div>
 <div class="row-input" style="margin-top:6px">
 <label class="qh-toggle" style="margin:0">
 <input id="servo-enabled" onchange="saveServoEnabled(this.checked)" type="checkbox"/>
@@ -226,7 +239,7 @@
 </label>
 </div>
 <div class="row-input" style="margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap">
-<label style="font-size:13px;color:var(--text-dim)">Travel limits:</label>
+<label style="font-size:13px;color:var(--text-dim)">Pan travel limits:</label>
 <label style="font-size:13px">
               Min <input id="servo-travel-min" max="359" min="1" step="1" style="width:65px;margin-left:4px" type="number" value="135"/>°
             </label>
@@ -1090,6 +1103,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 <tr><td><code>da joke</code></td><td>Tell a random joke</td></tr>
 <tr><td><code>da time</code></td><td>Announce current time</td></tr>
 <tr><td><code>da servo pan --to 180</code></td><td>Pan servo to angle</td></tr>
+<tr><td><code>da servo tilt --to 90</code></td><td>Tilt within this body's configured limits (if available)</td></tr>
 <tr><td><code>da servo enable/disable</code></td><td>Enable or disable servo</td></tr>
 <tr><td><code>da servo limits --min 135 --max 215</code></td><td>Set travel limits</td></tr>
 <tr><td><code>da servo channels --pan 15 --tilt 1</code></td><td>Set PCA9685 servo channels</td></tr>
@@ -1153,7 +1167,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.77.0"></script>
+<script src="/static/app.js?v=1.78.0"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

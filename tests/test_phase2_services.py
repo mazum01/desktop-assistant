@@ -27,6 +27,8 @@ class _FakeCamera:
         self._counter += 1
         # Vary content so latest_frame() differs across ticks.
         return np.full((4, 4, 3), self._counter % 256, dtype=np.uint8)
+    def capture_observation(self):
+        return self.capture_frame(), time.monotonic()
     def capture_still(self, path):
         self.stills.append(path)
 

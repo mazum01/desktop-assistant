@@ -1,6 +1,8 @@
 """Release metadata and scheduling tests."""
 
 import datetime as dt
+import subprocess
+from unittest.mock import Mock
 
 import pytest
 
@@ -56,3 +58,25 @@ def test_incompatible_config_requires_migration():
 def test_unsafe_paths(path):
     with pytest.raises(ValueError):
         relative_path(path)
+
+
+@pytest.mark.parametrize("suffix", ["", "-rc.1", "-rc.12"])
+def test_release_validator_accepts_matching_stable_or_candidate_tag(monkeypatch, suffix):
+    from scripts import validate_release
+
+    version = (validate_release.ROOT / "VERSION").read_text().strip()
+    monkeypatch.setattr("sys.argv", ["validate_release", "--tag", "v" + version + suffix])
+    monkeypatch.setattr(validate_release.subprocess, "run", Mock(
+        return_value=subprocess.CompletedProcess([], 0, stdout=""),
+    ))
+    validate_release.main()
+
+
+@pytest.mark.parametrize("suffix", ["-rc.0", "-rc.01", "-rc.x", "-anything"])
+def test_release_validator_rejects_invalid_candidate_tag(monkeypatch, suffix):
+    from scripts import validate_release
+
+    version = (validate_release.ROOT / "VERSION").read_text().strip()
+    monkeypatch.setattr("sys.argv", ["validate_release", "--tag", "v" + version + suffix])
+    with pytest.raises(SystemExit):
+        validate_release.main()

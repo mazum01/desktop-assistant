@@ -12,6 +12,14 @@ from src.services.motion_service import MotionService
 from src.services.av_service import AVService
 
 
+@pytest.fixture(autouse=True)
+def isolate_audio_hardware(monkeypatch):
+    monkeypatch.setattr(AVService, "_restore_pipewire_eq", lambda self: None)
+    monkeypatch.setattr("src.audio.hw_mixer.ensure_max_playback_gain", lambda: None)
+    monkeypatch.setattr("src.audio.pipewire_eq.apply_preset", lambda _preset: False)
+    monkeypatch.setattr("src.audio.pipewire_eq.apply_custom_bands", lambda _bands: False)
+
+
 # ── Thermal ──────────────────────────────────────────────────────────────
 
 class _FakeThermalManager:
