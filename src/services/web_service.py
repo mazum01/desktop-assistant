@@ -98,7 +98,7 @@ import re
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import psutil
 import zmq
@@ -107,7 +107,7 @@ from src.core.ipc_client import IPCClient
 from src.core.quiet_hours import QuietHours
 from src.services.object_service import _build_scene_description
 
-from pydantic import BaseModel, StrictInt
+from pydantic import BaseModel, Field, StrictInt
 from starlette.requests import Request
 
 log = logging.getLogger(__name__)
@@ -328,6 +328,11 @@ class _GreetingBody(BaseModel):
 
 class _CameraRotationBody(BaseModel):
     rotation_deg: int
+
+
+class _CameraFocusBody(BaseModel):
+    af_mode: Literal["continuous", "auto", "manual", "off"]
+    lens_position: float = Field(ge=0, allow_inf_nan=False, strict=True)
 
 
 class _CameraResolutionBody(BaseModel):
@@ -2407,6 +2412,29 @@ class WebService:
                 raise HTTPException(503, "object service unavailable")
             result = await asyncio.to_thread(self._object_svc.query_objects, body.query, True)
             return {"ok": bool(result.get("ok", False)), **result}
+
+        @app.get("/api/settings/{camera_name}/focus")
+        async def api_get_camera_focus(camera_name: Literal["camera", "camera2"]):
+            service = self._vision_svc if camera_name == "camera" else self._camera2_svc
+            if service is None:
+                raise HTTPException(503, "camera unavailable")
+            try:
+                return await asyncio.to_thread(service.get_focus)
+            except (RuntimeError, OSError) as exc:
+                raise HTTPException(503, str(exc)) from exc
+
+        @app.put("/api/settings/{camera_name}/focus")
+        async def api_put_camera_focus(camera_name: Literal["camera", "camera2"], body: _CameraFocusBody):
+            service = self._vision_svc if camera_name == "camera" else self._camera2_svc
+            if service is None:
+                raise HTTPException(503, "camera unavailable")
+            try:
+                focus = await asyncio.to_thread(service.set_focus, body.af_mode, body.lens_position)
+                return {"ok": True, **focus}
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+            except (RuntimeError, OSError) as exc:
+                raise HTTPException(503, str(exc)) from exc
 
         # ── Camera rotation ────────────────────────────────────────────
 

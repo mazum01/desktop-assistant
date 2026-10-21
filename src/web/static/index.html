@@ -10,7 +10,7 @@
 <link href="/static/favicon-32.png" rel="icon" sizes="32x32" type="image/png"/>
 <link href="/static/favicon-16.png" rel="icon" sizes="16x16" type="image/png"/>
 <link href="/static/favicon-192.png" rel="apple-touch-icon" sizes="192x192"/>
-<link href="/static/style.css?v=1.78.1" rel="stylesheet"/>
+<link href="/static/style.css?v=1.79.0" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -421,6 +421,36 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </section>
 <section aria-label="Camera configuration" class="card" id="card-camera-settings" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>Camera configuration</h2>
+<div class="control-group">
+<label for="camera-focus-mode">Cam 1 Focus</label>
+<div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
+<select id="camera-focus-mode" disabled onchange="updateFocusInput('camera')">
+<option value="continuous">Autofocus: continuous</option>
+<option value="auto">Autofocus: single scan</option>
+<option value="manual">Manual focus</option>
+</select>
+<label for="camera-focus-position">Diopters</label>
+<input id="camera-focus-position" type="number" min="0" step="0.1" value="0" required disabled style="width:90px"/>
+<button id="camera-focus-save" class="btn btn-primary btn-sm" disabled onclick="saveCameraFocus('camera')">Set</button>
+<span id="camera-focus-status" role="status"></span>
+</div>
+<small>Manual: 0 = infinity, 1 = 1 m, 2 = 0.5 m. Driver tuning may limit lens travel.</small>
+</div>
+<div class="control-group">
+<label for="camera2-focus-mode">Cam 2 Focus</label>
+<div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
+<select id="camera2-focus-mode" disabled onchange="updateFocusInput('camera2')">
+<option value="continuous">Autofocus: continuous</option>
+<option value="auto">Autofocus: single scan</option>
+<option value="manual">Manual focus</option>
+</select>
+<label for="camera2-focus-position">Diopters</label>
+<input id="camera2-focus-position" type="number" min="0" step="0.1" value="0" required disabled style="width:90px"/>
+<button id="camera2-focus-save" class="btn btn-primary btn-sm" disabled onclick="saveCameraFocus('camera2')">Set</button>
+<span id="camera2-focus-status" role="status"></span>
+</div>
+<small>Settings are independent and saved across restarts. Fixed-focus cameras cannot be adjusted.</small>
+</div>
 <div class="control-group">
 <label>Cam 1 Rotation  <span id="cam-rotation-display">0°</span></label>
 <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
@@ -1167,7 +1197,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.78.1"></script>
+<script src="/static/app.js?v=1.79.0"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

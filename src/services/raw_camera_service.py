@@ -201,6 +201,19 @@ class RawCameraService(Service):
     def hardware_ready(self) -> bool:
         return bool(getattr(self._camera, "hardware_ready", False))
 
+    def get_focus(self) -> dict:
+        if self._camera is None:
+            raise RuntimeError("camera unavailable")
+        return self._camera.get_focus()
+
+    def set_focus(self, af_mode: str, lens_position: float) -> dict:
+        if self._camera is None:
+            raise RuntimeError("camera unavailable")
+        status = self._camera.set_focus(af_mode, lens_position)
+        self._cam_cfg.af_mode = af_mode
+        self._cam_cfg.lens_position = lens_position
+        return status
+
     # ── Bus handlers ─────────────────────────────────────────────────────
 
     def _on_set_rotation(self, _topic, payload) -> None:
@@ -228,6 +241,8 @@ class RawCameraService(Service):
                 framerate=self._cam_cfg.framerate,
                 rotation_deg=self._cam_cfg.rotation_deg,
                 jpeg_quality=self._cam_cfg.jpeg_quality,
+                af_mode=self._cam_cfg.af_mode,
+                lens_position=self._cam_cfg.lens_position,
                 stream_width=self._stream_width,
                 stream_height=self._stream_height,
             )

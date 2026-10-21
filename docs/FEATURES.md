@@ -52,6 +52,39 @@ and [TheLCARS classic theme palette](https://www.thelcars.com/assets/classic-270
 
 ## Vision & Tracking
 
+### Camera focus
+
+In **Vision & Motion > Camera configuration**, each camera has independent
+continuous autofocus, single-scan autofocus, and manual focus controls. Select
+**Manual focus** to enable the diopter input, then press **Set**. Zero means
+infinity; 1 diopter is approximately 1 metre and 2 diopters is 0.5 metres.
+Changes apply without restarting capture and are saved in the device-local
+`config/runtime_state.yaml`, overriding the corresponding `af_mode` and
+`lens_position` defaults under `camera` or `camera2` in `config/assistant.yaml`.
+For example:
+
+```yaml
+camera:
+  af_mode: manual
+  lens_position: 0.0
+camera2:
+  af_mode: continuous
+  lens_position: 0.0
+```
+
+Focus controls are disabled when the camera is missing or does not advertise
+autofocus and lens-position controls. The input uses the camera driver's reported
+range; tuning can clamp physical lens travel further. Applying a position does
+not guarantee optical sharpness. Enabling autofocus retains the manual setting
+for reuse.
+
+`GET /api/settings/camera/focus` and `GET /api/settings/camera2/focus` return
+capability, configured mode/position, latest reported lens position, and control
+limits. The matching `PUT` endpoints accept `{"af_mode":"manual","lens_position":0.0}`.
+Modes are `continuous`, `auto` (single scan), `manual`, and the legacy `off` alias.
+Invalid values return HTTP 422; unavailable hardware, RPC failures, and persistence
+errors return HTTP 503 rather than reporting success.
+
 ### Body profiles
 
 The machine-local `config/body.yaml` selects the body independently of software

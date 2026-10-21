@@ -1057,6 +1057,16 @@ class VisionService(Service):
     def hardware_ready(self) -> bool:
         return bool(getattr(self._camera, "hardware_ready", False))
 
+    def get_focus(self) -> dict:
+        if self._camera is None:
+            raise RuntimeError("camera unavailable")
+        return self._camera.get_focus()
+
+    def set_focus(self, af_mode: str, lens_position: float) -> dict:
+        if self._camera is None:
+            raise RuntimeError("camera unavailable")
+        return self._camera.set_focus(af_mode, lens_position)
+
     @property
     def rotation_deg(self) -> int:
         with self._rotation_lock:

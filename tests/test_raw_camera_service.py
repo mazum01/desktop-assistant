@@ -39,6 +39,23 @@ class TestRawCameraServiceInit:
         svc, _ = _make_service()
         assert svc.latest_jpeg() is None
 
+    def test_focus_retained_after_resolution_change(self):
+        svc, _ = _make_service()
+        svc._camera = MagicMock()
+        svc._camera.set_focus.return_value = {"af_mode": "manual", "lens_position": 2.}
+        assert svc.set_focus("manual", 2.)["lens_position"] == 2.
+        svc._on_set_resolution("camera2.set_resolution", {"width": 1920, "height": 1080})
+        assert svc._cam_cfg.af_mode == "manual"
+        assert svc._cam_cfg.lens_position == 2.
+
+    def test_focus_failure_does_not_update_config(self):
+        svc, _ = _make_service()
+        svc._camera = MagicMock()
+        svc._camera.set_focus.side_effect = RuntimeError("focus failed")
+        with pytest.raises(RuntimeError, match="focus failed"):
+            svc.set_focus("manual", 2.)
+        assert svc._cam_cfg.af_mode == "continuous"
+
 
 class TestRawCameraServiceTick:
     def test_tick_encodes_and_stores_jpeg(self):

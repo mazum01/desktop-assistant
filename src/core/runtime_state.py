@@ -34,7 +34,7 @@ def load(path: Path = _DEFAULT_PATH) -> dict:
     return {}
 
 
-def save(state: dict, path: Path = _DEFAULT_PATH) -> None:
+def save(state: dict, path: Path = _DEFAULT_PATH, *, raise_errors: bool = False) -> None:
     """Atomically write runtime state dict to disk."""
     with _lock:
         try:
@@ -43,3 +43,5 @@ def save(state: dict, path: Path = _DEFAULT_PATH) -> None:
             tmp.replace(path)
         except Exception as exc:
             log.warning("runtime_state: save failed: %s", exc)
+            if raise_errors:
+                raise

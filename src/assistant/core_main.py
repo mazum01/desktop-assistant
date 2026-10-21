@@ -164,8 +164,8 @@ def main() -> int:
         height=_cam_height,
         framerate=int(_cam_cfg_raw.get("framerate", 30)),
         rotation_deg=_camera_rotation_deg,
-        af_mode=str(_cam_cfg_raw.get("af_mode", "continuous")),
-        lens_position=float(_cam_cfg_raw.get("lens_position", 0.0)),
+        af_mode=str(_rt.get("camera", {}).get("af_mode", _cam_cfg_raw.get("af_mode", "continuous"))),
+        lens_position=float(_rt.get("camera", {}).get("lens_position", _cam_cfg_raw.get("lens_position", 0.0))),
         stream_width=_cam_stream_width,
         stream_height=_cam_stream_height,
     )
@@ -260,6 +260,8 @@ def main() -> int:
             "person_seek_enabled": _person_seek_enabled,
         },
         "camera": {
+            "af_mode": _camera_cfg.af_mode,
+            "lens_position": _camera_cfg.lens_position,
             "rotation_deg": _camera_rotation_deg,
             "width": _cam_width,
             "height": _cam_height,
@@ -267,6 +269,8 @@ def main() -> int:
             "stream_height": _cam_stream_height,
         },
         "camera2": {
+            "af_mode": str(_rt.get("camera2", {}).get("af_mode", _cam2_cfg_raw_early.get("af_mode", "continuous"))),
+            "lens_position": float(_rt.get("camera2", {}).get("lens_position", _cam2_cfg_raw_early.get("lens_position", 0.0))),
             "rotation_deg": _camera2_rotation_deg,
         },
         "face_recognition": {
@@ -506,8 +510,8 @@ def main() -> int:
                 height=_cam_height,
                 framerate=int(_cam2_cfg_raw.get("framerate", 15)),
                 rotation_deg=_camera2_rotation_deg,  # from runtime state
-                af_mode=str(_cam2_cfg_raw.get("af_mode", "continuous")),
-                lens_position=float(_cam2_cfg_raw.get("lens_position", 0.0)),
+                af_mode=_rt_state["camera2"]["af_mode"],
+                lens_position=_rt_state["camera2"]["lens_position"],
                 stream_width=int(_cam_cfg_raw.get("stream_width", 640)),
                 stream_height=int(_cam_cfg_raw.get("stream_height", 360)),
             ),
@@ -905,6 +909,26 @@ def main() -> int:
     ipc.register_rpc("tracking.get_status", _rpc_tracking_get_status)
     ipc.register_rpc("tracking.get_tunable_params", _rpc_tracking_get_tunable_params)
     ipc.register_rpc("tracking.set_tunable_param", _rpc_tracking_set_tunable_param)
+    def _focus_rpc(service, section, msg, *, update=False):
+        if service is None:
+            return {"ok": False, "error": "camera not configured"}
+        try:
+            if update:
+                focus = service.set_focus(msg.get("af_mode"), msg.get("lens_position"))
+                _rt_state[section].update(
+                    af_mode=focus["af_mode"], lens_position=focus["lens_position"],
+                )
+                _save_runtime(_rt_state, raise_errors=True)
+            else:
+                focus = service.get_focus()
+            return {"ok": True, "focus": focus}
+        except ValueError as exc:
+            return {"ok": False, "invalid": True, "error": str(exc)}
+
+    ipc.register_rpc("vision.get_focus", lambda msg: _focus_rpc(vis, "camera", msg))
+    ipc.register_rpc("vision.set_focus", lambda msg: _focus_rpc(vis, "camera", msg, update=True))
+    ipc.register_rpc("camera2.get_focus", lambda msg: _focus_rpc(cam2_svc, "camera2", msg))
+    ipc.register_rpc("camera2.set_focus", lambda msg: _focus_rpc(cam2_svc, "camera2", msg, update=True))
     ipc.register_rpc("vision.get_status", _rpc_vision_get_status)
     ipc.register_rpc("vision.latest_jpeg", _rpc_vision_latest_jpeg)
     ipc.register_rpc("vision.snapshot_jpeg", _rpc_vision_snapshot_jpeg)
