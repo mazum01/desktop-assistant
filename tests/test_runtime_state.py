@@ -37,6 +37,12 @@ def test_save_is_atomic(tmp_path):
     assert not tmp.exists()
 
 
+def test_focus_save_surfaces_persistence_failure(tmp_path):
+    with pytest.raises(OSError):
+        save({"camera": {"af_mode": "manual", "lens_position": 0.}},
+             path=tmp_path / "missing" / "runtime.yaml", raise_errors=True)
+
+
 def test_load_corrupt_file(tmp_path):
     """Corrupt YAML returns empty dict rather than raising."""
     path = tmp_path / "runtime_state.yaml"

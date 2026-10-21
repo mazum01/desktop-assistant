@@ -275,6 +275,22 @@ class VisionServiceProxy:
         data = reply.get("jpeg_b64")
         return base64.b64decode(data) if data else None
 
+    def get_focus(self) -> dict:
+        reply = self._client.call({"cmd": "vision.get_focus"})
+        if not reply.get("ok"):
+            raise RuntimeError(reply.get("error", "focus settings unavailable"))
+        return reply["focus"]
+
+    def set_focus(self, af_mode: str, lens_position: float) -> dict:
+        reply = self._client.call({
+            "cmd": "vision.set_focus", "af_mode": af_mode, "lens_position": lens_position,
+        })
+        if not reply.get("ok"):
+            if reply.get("invalid"):
+                raise ValueError(reply.get("error", "invalid focus settings"))
+            raise RuntimeError(reply.get("error", "focus update failed"))
+        return reply["focus"]
+
     def snapshot_jpeg(self, quality: int = 95) -> Optional[bytes]:
         reply = self._client.call({"cmd": "vision.snapshot_jpeg", "quality": quality}, timeout_ms=3000)
         if not reply.get("ok"):
@@ -320,6 +336,22 @@ class Camera2ServiceProxy:
             return None
         data = reply.get("jpeg_b64")
         return base64.b64decode(data) if data else None
+
+    def get_focus(self) -> dict:
+        reply = self._client.call({"cmd": "camera2.get_focus"})
+        if not reply.get("ok"):
+            raise RuntimeError(reply.get("error", "focus settings unavailable"))
+        return reply["focus"]
+
+    def set_focus(self, af_mode: str, lens_position: float) -> dict:
+        reply = self._client.call({
+            "cmd": "camera2.set_focus", "af_mode": af_mode, "lens_position": lens_position,
+        })
+        if not reply.get("ok"):
+            if reply.get("invalid"):
+                raise ValueError(reply.get("error", "invalid focus settings"))
+            raise RuntimeError(reply.get("error", "focus update failed"))
+        return reply["focus"]
 
     def snapshot_jpeg(self, quality: int = 95) -> Optional[bytes]:
         reply = self._client.call({"cmd": "camera2.snapshot_jpeg", "quality": quality}, timeout_ms=3000)

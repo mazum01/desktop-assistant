@@ -29,6 +29,7 @@ See docs/architecture/PROCESS_ISOLATION_PROPOSAL.md §6 (Phase 3).
 import base64
 import time
 import uuid
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -52,6 +53,26 @@ def _unique_endpoints(prefix: str):
         f"ipc:///tmp/test-{prefix}-{tag}.pub",
         f"ipc:///tmp/test-{prefix}-{tag}.rep",
     )
+
+
+@pytest.mark.parametrize("proxy_cls,prefix", [(VisionServiceProxy, "vision"), (Camera2ServiceProxy, "camera2")])
+def test_focus_proxies_report_errors_and_forward_settings(proxy_cls, prefix):
+    client = MagicMock()
+    proxy = proxy_cls(client)
+    focus = {"supported": True, "af_mode": "manual", "lens_position": 2.}
+    client.call.return_value = {"ok": True, "focus": focus}
+    assert proxy.get_focus() == focus
+    client.call.assert_called_with({"cmd": f"{prefix}.get_focus"})
+    assert proxy.set_focus("manual", 2.) == focus
+    client.call.assert_called_with({"cmd": f"{prefix}.set_focus", "af_mode": "manual", "lens_position": 2.})
+    client.call.return_value = {"ok": False, "invalid": True, "error": "out of range"}
+    with pytest.raises(ValueError, match="out of range"):
+        proxy.set_focus("manual", 99.)
+    client.call.return_value = {"ok": False, "error": "camera unavailable"}
+    with pytest.raises(RuntimeError, match="camera unavailable"):
+        proxy.get_focus()
+    with pytest.raises(RuntimeError, match="camera unavailable"):
+        proxy.set_focus("manual", 0.)
 
 
 def _wait_until(predicate, timeout_s: float = 3.0, interval_s: float = 0.02) -> bool:

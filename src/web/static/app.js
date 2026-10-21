@@ -2578,6 +2578,69 @@ async function audioPlaySpectrumTest() {
   setTimeout(() => { if (st) st.textContent = ""; }, 4500);
 }
 
+function updateFocusInput(camera) {
+  const mode = el(`${camera}-focus-mode`);
+  el(`${camera}-focus-position`).disabled = mode.disabled || mode.value !== "manual";
+}
+
+async function loadCameraFocus(camera) {
+  const status = el(`${camera}-focus-status`);
+  const mode = el(`${camera}-focus-mode`);
+  mode.disabled = true;
+  el(`${camera}-focus-save`).disabled = true;
+  updateFocusInput(camera);
+  try {
+    const r = await fetch(`/api/settings/${camera}/focus`);
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+    mode.value = d.af_mode === "off" ? "manual" : d.af_mode;
+    const input = el(`${camera}-focus-position`);
+    input.value = d.lens_position;
+    input.min = d.min_position;
+    input.max = d.max_position;
+    mode.disabled = !d.supported;
+    el(`${camera}-focus-save`).disabled = !d.supported;
+    updateFocusInput(camera);
+    status.textContent = d.supported ? "" : "Focus control unavailable";
+    status.style.color = d.supported ? "" : "var(--red)";
+  } catch (e) {
+    status.textContent = e.message;
+    status.style.color = "var(--red)";
+  }
+}
+
+async function saveCameraFocus(camera) {
+  const status = el(`${camera}-focus-status`);
+  const button = el(`${camera}-focus-save`);
+  const input = el(`${camera}-focus-position`);
+  if (!input.checkValidity()) {
+    input.reportValidity();
+    return;
+  }
+  button.disabled = true;
+  status.textContent = "Applying...";
+  try {
+    const r = await fetch(`/api/settings/${camera}/focus`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        af_mode: el(`${camera}-focus-mode`).value,
+        lens_position: Number(input.value),
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(typeof d.detail === "string" ? d.detail : `HTTP ${r.status}`);
+    input.value = d.lens_position;
+    status.textContent = "Saved";
+    status.style.color = "var(--green)";
+  } catch (e) {
+    status.textContent = e.message;
+    status.style.color = "var(--red)";
+  } finally {
+    button.disabled = el(`${camera}-focus-mode`).disabled;
+  }
+}
+
 async function loadCamRotation() {
   try {
     const r = await fetch("/api/settings/camera/rotation");
@@ -3166,6 +3229,8 @@ document.addEventListener("DOMContentLoaded", () => {
   loadGreetingSettings();
   loadCamRotation();
   loadCam2Rotation();
+  loadCameraFocus("camera");
+  loadCameraFocus("camera2");
   loadCamCaptureResolution();
   loadStreamResolution();
   loadCam2Resolutions();

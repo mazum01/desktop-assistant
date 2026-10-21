@@ -115,6 +115,17 @@ class TestCameraHardwareReady:
 
 
 class TestCameraLifecycle:
+    def test_manual_infinity_applied_on_start(self):
+        cam = Camera(CameraConfig(af_mode="manual", lens_position=0.))
+        cam._sim = False
+        cam._cam = MagicMock()
+        with patch.object(cam, "_capture_loop"), patch("src.vision.camera.time.sleep"):
+            cam.start()
+        controls = cam._cam.create_video_configuration.call_args.kwargs["controls"]
+        assert controls["AfMode"] == 0
+        assert controls["LensPosition"] == 0.
+        cam.close()
+
     def test_not_running_before_start(self):
         cam = Camera()
         assert cam.is_running is False
@@ -181,8 +192,68 @@ class TestSimMode:
         assert frame.shape == (480, 640, 3)
         cam.close()
 
+
     def test_sim_capture_still_no_raise(self, tmp_path):
         cam = Camera(CameraConfig(index=99))
         cam.start()
         cam.capture_still(str(tmp_path / "test.jpg"))  # should not raise
         cam.close()
+
+
+class TestFocusControls:
+    @pytest.fixture
+    def camera(self):
+        cam = Camera(CameraConfig())
+        cam._sim = False
+        cam._running = True
+        cam._cam = MagicMock()
+        cam._cam.camera_controls = {"AfMode": (0, 2, 0), "LensPosition": (0., 15., 1.)}
+        return cam
+
+    @pytest.mark.parametrize("mode,position,controls", [
+        ("manual", 0., {"AfMode": 0, "LensPosition": 0.}),
+        ("manual", 2., {"AfMode": 0, "LensPosition": 2.}),
+        ("continuous", 2., {"AfMode": 2, "AfSpeed": 1}),
+        ("auto", 2., {"AfMode": 1, "AfTrigger": 0}),
+        ("off", 0., {"AfMode": 0, "LensPosition": 0.}),
+    ])
+    def test_applies_focus_and_retains_config(self, camera, mode, position, controls):
+        result = camera.set_focus(mode, position)
+        camera._cam.set_controls.assert_called_once_with(controls)
+        assert result["af_mode"] == mode
+        assert result["lens_position"] == position
+        assert result["supported"]
+        assert result["max_position"] == 15.
+        camera._sim = True
+        camera.set_resolution(1920, 1080)
+        assert camera.config.af_mode == mode
+        assert camera.config.lens_position == position
+
+    @pytest.mark.parametrize("value", [-1., 16., float("nan"), float("inf"), "2", True, None])
+    def test_rejects_invalid_position_without_hardware_write(self, camera, value):
+        with pytest.raises(ValueError):
+            camera.set_focus("manual", value)
+        camera._cam.set_controls.assert_not_called()
+
+    def test_rejects_invalid_mode(self, camera):
+        with pytest.raises(ValueError):
+            camera.set_focus("invalid", 0.)
+        camera._cam.set_controls.assert_not_called()
+
+    def test_surfaces_hardware_failure_without_updating_config(self, camera):
+        camera._cam.set_controls.side_effect = RuntimeError("actuator failed")
+        with pytest.raises(RuntimeError, match="actuator failed"):
+            camera.set_focus("manual", 2.)
+        assert camera.config.af_mode == "continuous"
+
+    def test_fixed_focus_camera_is_unsupported(self, camera):
+        camera._cam.camera_controls = {}
+        assert not camera.get_focus()["supported"]
+        with pytest.raises(RuntimeError, match="unavailable"):
+            camera.set_focus("manual", 0.)
+
+    def test_simulated_camera_is_unsupported(self):
+        camera = Camera(CameraConfig(index=99))
+        assert not camera.get_focus()["supported"]
+        with pytest.raises(RuntimeError, match="unavailable"):
+            camera.set_focus("manual", 0.)

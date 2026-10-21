@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.79.0] - 2026-10-21
+### Added
+- Independent dashboard focus controls for both cameras: continuous autofocus,
+  single-scan autofocus, or manual lens position in diopters (0 = infinity).
+- Apply focus changes live through acknowledged RPCs, validate camera control
+  limits, and persist per-device settings across restarts.
+### Fixed
+- Preserve secondary-camera focus configuration when capture resolution changes.
+
 ## [1.78.1] - 2026-10-20
 ### Fixed
 - Explicitly install the mocked I2C tests' `smbus2` dependency in CI when

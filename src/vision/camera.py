@@ -12,6 +12,7 @@ or the camera is not detected — identical pattern to ServoController.
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from dataclasses import dataclass, field
@@ -180,6 +181,42 @@ class Camera:
             self._cam.set_controls({"AfMode": 2, "AfSpeed": 1})
         except Exception as exc:
             log.debug("Camera %d: set_continuous_af() failed: %s", self._cfg.index, exc)
+
+    def get_focus(self) -> dict:
+        controls = self._cam.camera_controls if not self._sim and self._cam else {}
+        limits = controls.get("LensPosition", (0.0, 0.0, 0.0))
+        return {
+            "supported": self.hardware_ready and "AfMode" in controls and "LensPosition" in controls,
+            "af_mode": self._cfg.af_mode,
+            "lens_position": self._cfg.lens_position,
+            "current_lens_position": self.current_lens_position,
+            "min_position": float(limits[0]),
+            "max_position": float(limits[1]),
+        }
+
+    def set_focus(self, af_mode: str, lens_position: float) -> dict:
+        """Apply focus controls without restarting capture; propagate hardware errors."""
+        if af_mode not in _AF_MODE_MAP:
+            raise ValueError("invalid autofocus mode")
+        if isinstance(lens_position, bool) or not isinstance(lens_position, (int, float)):
+            raise ValueError("lens_position must be a finite number")
+        status = self.get_focus()
+        if not status["supported"] or not self._running:
+            raise RuntimeError("camera focus control unavailable")
+        if not math.isfinite(lens_position) or not status["min_position"] <= lens_position <= status["max_position"]:
+            raise ValueError("lens_position outside camera control range")
+        mode = _AF_MODE_MAP[af_mode]
+        controls: dict[str, int | float] = {"AfMode": mode}
+        if mode == 0:
+            controls["LensPosition"] = float(lens_position)
+        elif mode == 1:
+            controls["AfTrigger"] = 0
+        else:
+            controls["AfSpeed"] = 1
+        self._cam.set_controls(controls)
+        self._cfg.af_mode = af_mode
+        self._cfg.lens_position = float(lens_position)
+        return self.get_focus()
 
     # ── Lifecycle ───────────────────────────────────────────────────────
 

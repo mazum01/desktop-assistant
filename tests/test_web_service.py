@@ -53,6 +53,44 @@ def app_client_with_quiet(tmp_path):
 
 # ── Faces API ────────────────────────────────────────────────────────────────
 
+@pytest.mark.parametrize("camera,attribute", [("camera", "_vision_svc"), ("camera2", "_camera2_svc")])
+def test_camera_focus_settings(app_client, camera, attribute):
+    client, _, svc = app_client
+    service = MagicMock()
+    focus = {"supported": True, "af_mode": "manual", "lens_position": 0.,
+             "min_position": 0., "max_position": 15., "current_lens_position": 0.}
+    service.get_focus.return_value = focus
+    service.set_focus.return_value = {**focus, "lens_position": 2.}
+    setattr(svc, attribute, service)
+    path = f"/api/settings/{camera}/focus"
+    assert client.get(path).json() == focus
+    response = client.put(path, json={"af_mode": "manual", "lens_position": 2.})
+    assert response.status_code == 200
+    assert response.json()["lens_position"] == 2.
+    service.set_focus.assert_called_once_with("manual", 2.)
+    for body in [
+        {"af_mode": "bad", "lens_position": 0.},
+        {"af_mode": "manual", "lens_position": -1.},
+        {"af_mode": "manual", "lens_position": "NaN"},
+        {"af_mode": "manual", "lens_position": True},
+        {"af_mode": "manual"},
+    ]:
+        assert client.put(path, json=body).status_code == 422
+    service.set_focus.side_effect = ValueError("outside camera control range")
+    assert client.put(path, json={"af_mode": "manual", "lens_position": 16.}).status_code == 422
+    service.set_focus.side_effect = RuntimeError("actuator failed")
+    assert client.put(path, json={"af_mode": "manual", "lens_position": 0.}).status_code == 503
+    service.get_focus.side_effect = RuntimeError("core unavailable")
+    assert client.get(path).status_code == 503
+
+
+@pytest.mark.parametrize("camera", ["camera", "camera2"])
+def test_camera_focus_unavailable(app_client, camera):
+    client, _, _ = app_client
+    path = f"/api/settings/{camera}/focus"
+    assert client.get(path).status_code == 503
+    assert client.put(path, json={"af_mode": "manual", "lens_position": 0.}).status_code == 503
+
 def test_servo_channel_settings_and_tilt(app_client):
     client, bus, svc = app_client
     motion = MagicMock()
