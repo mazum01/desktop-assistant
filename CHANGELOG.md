@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.79.3] - 2026-10-21
+### Fixed
+- Correct the new body's local tilt tracking direction.
+
 ## [1.79.2] - 2026-10-21
 ### Fixed
 - Synchronize dashboard asset cache keys with the release version so clients
