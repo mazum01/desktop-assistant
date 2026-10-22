@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.79.2] - 2026-10-21
+### Fixed
+- Synchronize dashboard asset cache keys with the release version so clients
+  refresh assets and release consistency checks pass.
+
 ## [1.79.1] - 2026-10-21
 ### Fixed
 - Allow strictly boolean, device-local pan/tilt tracking direction overrides in
