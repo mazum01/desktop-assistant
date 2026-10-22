@@ -22,6 +22,7 @@ constexpr uint16_t COLOR_ERROR = RGB565_RED;
 
 constexpr float MOUTH_WIDTH_SCALE = 1.12f;
 constexpr float MOUTH_HEIGHT_SCALE = 1.15f;
+constexpr float DEFAULT_MOUTH_WIDTH_FRAC = 0.85f / MOUTH_WIDTH_SCALE;
 
 // One redraw per period keeps animation smooth without saturating the
 // SPI bus / burning CPU on a microcontroller shared with BLE handling.
@@ -70,7 +71,8 @@ struct Geometry {
 };
 
 const Geometry &geometry_for(State state) {
-  static const Geometry kNeutral{Shape::kBar, 0.42f, 0.09f, 1.0f, 0.0f, 0.0f, 1000, COLOR_MOUTH};
+  static const Geometry kNeutral{Shape::kSmile, DEFAULT_MOUTH_WIDTH_FRAC, 0.12f, 0.0f, 0.25f,
+                                0.0f, 1000, COLOR_MOUTH};
   static const Geometry kListening{Shape::kBar, 0.38f, 0.14f, 1.0f, 0.0f, 0.15f, 900, COLOR_MOUTH};
   // Speaking previously bounced from 0.22 to 0.77 height every 260ms, which
   // reads as flicker rather than a talking motion at 15fps. Reduced
