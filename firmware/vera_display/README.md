@@ -105,9 +105,10 @@ emotional state (`neutral`, `listening`, `speaking`, `happy`, `sad`,
 `surprised`, `error`) maps to a small geometry/animation parameter set
 (width/height fraction, corner radius, oscillation amplitude and period)
 rather than a bitmap, so expressions are cheap to draw at ~15 fps and easy to
-retune. The default neutral state is a subtle smile spanning 85% of the
-display width. An unrecognized state defaults to the `error` rendering
-(distinct red color) rather than silently freezing on stale content.
+retune. The default neutral state is a thick, rounded bar with a subtle arc,
+spanning 85% of the display width. An unrecognized state defaults to the
+`error` rendering (distinct red color) rather than silently freezing on stale
+content.
 
 `libraries.txt` records the external Arduino library dependencies.
 

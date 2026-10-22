@@ -131,4 +131,6 @@ def test_default_mouth_is_a_slight_smile_at_85_percent_screen_width():
     root = Path(__file__).resolve().parents[1]
     renderer = (root / "firmware/vera_display/mouth_renderer.cpp").read_text()
     assert "DEFAULT_MOUTH_WIDTH_FRAC = 0.85f / MOUTH_WIDTH_SCALE" in renderer
-    assert "kNeutral{Shape::kSmile, DEFAULT_MOUTH_WIDTH_FRAC, 0.12f, 0.0f, 0.25f" in renderer
+    assert "kNeutral{Shape::kSmile, DEFAULT_MOUTH_WIDTH_FRAC, 0.09f, 0.0f, 0.25f" in renderer
+    assert "draw_smile(x, y, w, h, geo.curve_frac, geo.color)" in renderer
+    assert "draw_curve(x, y, w, h, geo.curve_frac, /*bulge_down=*/true" not in renderer

@@ -42,8 +42,7 @@ int16_t g_prev_x = 0, g_prev_y = 0, g_prev_w = 0, g_prev_h = 0;
 bool g_have_prev = false;
 
 // Shape "family" — how the mouth is actually drawn, independent of its
-// animated size. Curve-based shapes use Arduino_GFX::fillArc() to draw a
-// genuine smile/frown arc instead of an abstract rounded rectangle.
+// animated size.
 enum class Shape {
   kBar,     // flat/rounded bar (neutral, listening, error)
   kSmile,   // upward curve, like a smiling mouth (happy)
@@ -71,8 +70,8 @@ struct Geometry {
 };
 
 const Geometry &geometry_for(State state) {
-  static const Geometry kNeutral{Shape::kSmile, DEFAULT_MOUTH_WIDTH_FRAC, 0.12f, 0.0f, 0.25f,
-                                0.0f, 1000, COLOR_MOUTH};
+  static const Geometry kNeutral{Shape::kSmile, DEFAULT_MOUTH_WIDTH_FRAC, 0.09f, 0.0f, 0.25f,
+                                 0.0f, 1000, COLOR_MOUTH};
   static const Geometry kListening{Shape::kBar, 0.38f, 0.14f, 1.0f, 0.0f, 0.15f, 900, COLOR_MOUTH};
   // Speaking previously bounced from 0.22 to 0.77 height every 260ms, which
   // reads as flicker rather than a talking motion at 15fps. Reduced
@@ -130,11 +129,36 @@ void compute_frame_rect(const Geometry &geo, unsigned long elapsed_ms, int16_t *
   *y = static_cast<int16_t>((screen_h - height) / 2.0f);
 }
 
+void draw_smile(int16_t x, int16_t y, int16_t w, int16_t h, float curve_frac, uint16_t color) {
+  int16_t depth = static_cast<int16_t>(h * curve_frac);
+  if (depth < 1) {
+    depth = 1;
+  }
+  int16_t radius = h / 2;
+  int16_t start_y = y - depth / 2;
+
+  for (int16_t column = 0; column < w; ++column) {
+    float position = (static_cast<float>(column) + 0.5f) / static_cast<float>(w);
+    int16_t curve_offset = static_cast<int16_t>(
+        depth * 4.0f * position * (1.0f - position) + 0.5f);
+    int16_t edge_distance = min(column, static_cast<int16_t>(w - 1 - column));
+    int16_t inset = 0;
+    if (edge_distance < radius && radius > 0) {
+      float remaining = static_cast<float>(radius - edge_distance);
+      inset = static_cast<int16_t>(
+          radius - sqrtf(static_cast<float>(radius * radius) - remaining * remaining));
+    }
+    int16_t column_height = h - 2 * inset;
+    if (column_height > 0) {
+      g_gfx->fillRect(x + column, start_y + curve_offset + inset, 1, column_height, color);
+    }
+  }
+}
+
 // Draws a smile/frown as a solid half-moon ("D") shape: a filled ellipse
 // with the far half clipped away by painting over it with the background
 // color, leaving a solid rounded crescent rather than a thin stroke.
-// `bulge_down` true keeps the bottom arc (reads as an upward smile);
-// false keeps the top arc (reads as a downward frown).
+// `bulge_down` selects the lower or upper crescent.
 void draw_curve(int16_t x, int16_t y, int16_t w, int16_t h, float curve_frac, bool bulge_down,
                  uint16_t color) {
   // The "mouth box" height controls the crescent's thickness; make the
@@ -182,7 +206,7 @@ void draw_frame(bool force) {
 
   switch (geo.shape) {
     case Shape::kSmile:
-      draw_curve(x, y, w, h, geo.curve_frac, /*bulge_down=*/true, geo.color);
+      draw_smile(x, y, w, h, geo.curve_frac, geo.color);
       break;
     case Shape::kFrown:
       draw_curve(x, y, w, h, geo.curve_frac, /*bulge_down=*/false, geo.color);
