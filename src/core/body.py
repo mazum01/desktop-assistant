@@ -47,9 +47,14 @@ def load_body_config(config: dict, runtime: dict, config_dir: Path) -> BodyConfi
         resolved.setdefault(section, {}).update(profile[section])
 
     tuning = identity.get("head_tracking", {})
-    if not isinstance(tuning, dict) or tuning.keys() - TUNABLE_FIELDS.keys():
+    direction_fields = {"invert_pan", "invert_tilt"}
+    if not isinstance(tuning, dict) or tuning.keys() - (TUNABLE_FIELDS.keys() | direction_fields):
         raise ValueError(f"Invalid body-local tracking parameters in {identity_path}")
     for key, value in tuning.items():
+        if key in direction_fields:
+            if type(value) is not bool:
+                raise ValueError(f"Invalid body-local tracking parameter {key}={value!r}")
+            continue
         lo, hi = TUNABLE_FIELDS[key]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not lo <= value <= hi:
             raise ValueError(f"Invalid body-local tracking parameter {key}={value!r}")

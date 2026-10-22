@@ -159,6 +159,7 @@ def test_invalid_identity_is_explicit_error(config_dir, identity):
 @pytest.mark.parametrize("tuning", [
     {"controller": "visual_servo"}, {"tracking_gain": float("nan")},
     {"dead_zone_frac": True}, {"tracking_gain": 5}, [],
+    {"invert_tilt": 1}, {"invert_pan": "true"}, {"invert_tilt": None},
 ])
 def test_local_tuning_cannot_override_body_or_accept_invalid_values(config_dir, tuning):
     (config_dir / "body.yaml").write_text(yaml.safe_dump({
@@ -166,6 +167,22 @@ def test_local_tuning_cannot_override_body_or_accept_invalid_values(config_dir, 
     }))
     with pytest.raises(ValueError, match="Invalid body-local tracking"):
         load_body_config({}, {}, config_dir)
+
+
+@pytest.mark.parametrize("invert", [True, False])
+def test_device_local_tilt_direction_preserves_profile_and_runtime(config_dir, invert):
+    (config_dir / "body.yaml").write_text(yaml.safe_dump({
+        "body": "new", "head_tracking": {"invert_tilt": invert},
+    }))
+    runtime = {"body": "new", "servo": {"tilt_min_deg": 75, "tilt_max_deg": 110}}
+    selected = load_body_config({}, runtime, config_dir)
+    tracking = selected.config["head_tracking"]
+    assert tracking["invert_tilt"] is invert
+    assert tracking["invert_pan"] is True
+    assert tracking["controller"] == "visual_servo"
+    assert selected.runtime["servo"] == runtime["servo"]
+    shared = yaml.safe_load((config_dir / "body_profiles.yaml").read_text())
+    assert shared["new"]["head_tracking"]["invert_tilt"] is False
 
 
 def test_saved_tuning_survives_reload_without_changing_shared_config(config_dir):

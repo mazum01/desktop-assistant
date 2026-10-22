@@ -95,7 +95,20 @@ body: original
 ```
 
 Use `body: new` on the new body. The file is git-ignored, survives updates,
-and must remain with its hardware. Missing identity keeps new-body behavior
+and accepts optional boolean direction overrides for the individual mount:
+
+```yaml
+body: new
+head_tracking:
+  invert_tilt: true
+```
+
+`invert_pan` is also supported. Omitted directions retain the shared profile's
+defaults. Restart the core service to apply changes. These directions control
+the uncalibrated tracking model; a measured tracking calibration determines its
+own direction and must be regenerated if the physical mount changes.
+
+The identity file must remain with its hardware. Missing identity keeps new-body behavior
 for backward compatibility and logs a warning; an invalid identity is an
 explicit startup error. Restart `desktop-assistant-core.service` after changing
 identity. No servo probing or hardware guesses are used to select the body.
