@@ -10,7 +10,7 @@
 <link href="/static/favicon-32.png" rel="icon" sizes="32x32" type="image/png"/>
 <link href="/static/favicon-16.png" rel="icon" sizes="16x16" type="image/png"/>
 <link href="/static/favicon-192.png" rel="apple-touch-icon" sizes="192x192"/>
-<link href="/static/style.css?v=1.80.1" rel="stylesheet"/>
+<link href="/static/style.css?v=1.81.0" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -32,7 +32,8 @@
 <button aria-controls="tab-controls" aria-selected="false" class="tab-btn" data-tab="controls" id="nav-controls" onclick="switchTab('controls')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">03-26</span><span>Media &amp; Audio</span></button>
 <button aria-controls="tab-voice" aria-selected="false" class="tab-btn" data-tab="voice" id="nav-voice" onclick="switchTab('voice')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">04-91</span><span>Voice &amp; Behavior</span></button>
 <button aria-controls="tab-smart-home" aria-selected="false" class="tab-btn" data-tab="smart-home" id="nav-smart-home" onclick="switchTab('smart-home')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">05-62</span><span>Smart Home</span></button>
-<button aria-controls="tab-system" aria-selected="false" class="tab-btn" data-tab="system" id="nav-system" onclick="switchTab('system')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">06-18</span><span>System</span></button></nav>
+<button aria-controls="tab-system" aria-selected="false" class="tab-btn" data-tab="system" id="nav-system" onclick="switchTab('system')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">06-18</span><span>System</span></button>
+<button aria-controls="tab-settings" aria-selected="false" class="tab-btn" data-tab="settings" id="nav-settings" onclick="switchTab('settings')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">07-34</span><span>Settings</span></button></nav>
 </div>
 <main id="main-content" tabindex="-1">
 <div class="workspace-heading">
@@ -198,76 +199,21 @@
 </section>
 <section aria-label="Head movement" class="card" id="card-controls" tabindex="-1">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Head movement</h2>
-<div class="controls-grid">
-
-
+<div class="head-movement-sliders">
 <div class="control-group">
-<label>Pan servo  <span id="pan-angle-display">180°</span></label>
+<label for="pan-slider">Pan servo  <span id="pan-angle-display">180°</span></label>
 <div class="row-input">
 <input id="pan-slider" max="360" min="1" type="range" value="180"/>
 </div>
 <span id="pan-command-status" class="qh-status" role="status"></span>
-<div id="tilt-controls" hidden>
-<label>Head tilt (90° level, higher looks up) <span id="tilt-angle-display">90°</span></label>
+</div>
+<div class="control-group" id="tilt-controls" hidden>
+<label for="tilt-slider">Head tilt (90° level, higher looks up) <span id="tilt-angle-display">90°</span></label>
 <div class="row-input">
 <input id="tilt-slider" max="110" min="70" type="range" value="90"/>
 </div>
 <span id="tilt-command-status" class="qh-status" role="status"></span>
-<div class="row-input" style="margin-top:10px;gap:12px;flex-wrap:wrap">
-<label>Tilt min <input id="tilt-travel-min" type="number" min="0" max="179" value="70" style="width:65px"/></label>
-<label>Tilt max <input id="tilt-travel-max" type="number" min="1" max="180" value="110" style="width:65px"/></label>
-<button class="btn btn-primary btn-sm" onclick="saveTiltLimits()">Set tilt limits</button>
-<span id="tilt-limits-status" class="qh-status"></span>
 </div>
-</div>
-<div class="row-input" style="margin-top:6px">
-<label class="qh-toggle" style="margin:0">
-<input id="servo-enabled" onchange="saveServoEnabled(this.checked)" type="checkbox"/>
-<span>Enable servo motion</span>
-</label>
-</div>
-<div class="row-input" style="margin-top:4px">
-<label class="qh-toggle" style="margin:0">
-<input id="face-tracking-enabled" onchange="saveFaceTrackingEnabled(this.checked)" type="checkbox"/>
-<span>Face tracking (servo follows detected face)</span>
-</label>
-</div>
-<div class="row-input" style="margin-top:4px">
-<label class="qh-toggle" style="margin:0">
-<input id="random-motion-enabled" onchange="saveRandomMotionEnabled(this.checked)" type="checkbox"/>
-<span>Random motion (idle gaze when no face)</span>
-</label>
-</div>
-<div class="row-input" style="margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap">
-<label style="font-size:13px;color:var(--text-dim)">Pan travel limits:</label>
-<label style="font-size:13px">
-              Min <input id="servo-travel-min" max="359" min="1" step="1" style="width:65px;margin-left:4px" type="number" value="135"/>°
-            </label>
-<label style="font-size:13px">
-              Max <input id="servo-travel-max" max="360" min="2" step="1" style="width:65px;margin-left:4px" type="number" value="215"/>°
-            </label>
-<button class="btn btn-primary btn-sm" onclick="saveServoLimits()">Set</button>
-<span class="qh-status" id="servo-limits-status"></span>
-</div>
-<div class="row-input" style="margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap">
-<label style="font-size:13px;color:var(--text-dim)">PCA9685 channels:</label>
-<label style="font-size:13px">
-              Pan <input id="servo-pan-channel" max="15" min="0" step="1" style="width:55px;margin-left:4px" type="number" value="15"/>
-            </label>
-<label style="font-size:13px">
-              Tilt <input id="servo-tilt-channel" max="15" min="0" step="1" style="width:55px;margin-left:4px" type="number" value="1"/>
-            </label>
-<button class="btn btn-primary btn-sm" onclick="saveServoChannels()">Set</button>
-<span class="qh-status" id="servo-channels-status"></span>
-</div>
-</div>
-
-
-
-
-
-
-
 </div>
 </section>
 <section aria-label="Scene awareness" class="card" id="card-scene" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>Scene awareness</h2>
@@ -897,6 +843,61 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 <span class="iot-toolbar-title">🏡 Smart Home</span>
 <button class="btn btn-sm" data-iot-action="add" id="iot-add-btn">＋ Add IoT Device</button>
 </div></div>
+<div aria-labelledby="nav-settings" class="tab-pane" data-description="Configure head movement, tracking, travel limits, and servo channels." data-title="Settings" id="tab-settings" role="tabpanel">
+<section aria-label="Head Movement Settings" class="card" id="card-head-movement-settings" tabindex="-1">
+<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Head Movement Settings</h2>
+<div class="control-group">
+<div class="row-input" style="margin-top:6px">
+<label class="qh-toggle" style="margin:0">
+<input id="servo-enabled" onchange="saveServoEnabled(this.checked)" type="checkbox"/>
+<span>Enable servo motion</span>
+</label>
+</div>
+<div class="row-input" style="margin-top:4px">
+<label class="qh-toggle" style="margin:0">
+<input id="face-tracking-enabled" onchange="saveFaceTrackingEnabled(this.checked)" type="checkbox"/>
+<span>Face tracking (servo follows detected face)</span>
+</label>
+</div>
+<div class="row-input" style="margin-top:4px">
+<label class="qh-toggle" style="margin:0">
+<input id="random-motion-enabled" onchange="saveRandomMotionEnabled(this.checked)" type="checkbox"/>
+<span>Random motion (idle gaze when no face)</span>
+</label>
+</div>
+<div class="row-input" style="margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap">
+<label style="font-size:13px;color:var(--text-dim)">Pan travel limits:</label>
+<label style="font-size:13px">
+              Min <input id="servo-travel-min" max="359" min="1" step="1" style="width:65px;margin-left:4px" type="number" value="135"/>°
+            </label>
+<label style="font-size:13px">
+              Max <input id="servo-travel-max" max="360" min="2" step="1" style="width:65px;margin-left:4px" type="number" value="215"/>°
+            </label>
+<button class="btn btn-primary btn-sm" onclick="saveServoLimits()">Set</button>
+<span class="qh-status" id="servo-limits-status"></span>
+</div>
+<div id="tilt-limit-controls" hidden>
+<div class="row-input" style="margin-top:10px;gap:12px;flex-wrap:wrap">
+<label>Tilt min <input id="tilt-travel-min" type="number" min="0" max="179" value="70" style="width:65px"/></label>
+<label>Tilt max <input id="tilt-travel-max" type="number" min="1" max="180" value="110" style="width:65px"/></label>
+<button class="btn btn-primary btn-sm" onclick="saveTiltLimits()">Set tilt limits</button>
+<span id="tilt-limits-status" class="qh-status"></span>
+</div>
+</div>
+<div class="row-input" style="margin-top:10px;align-items:center;gap:12px;flex-wrap:wrap">
+<label style="font-size:13px;color:var(--text-dim)">PCA9685 channels:</label>
+<label style="font-size:13px">
+              Pan <input id="servo-pan-channel" max="15" min="0" step="1" style="width:55px;margin-left:4px" type="number" value="15"/>
+            </label>
+<label style="font-size:13px">
+              Tilt <input id="servo-tilt-channel" max="15" min="0" step="1" style="width:55px;margin-left:4px" type="number" value="1"/>
+            </label>
+<button class="btn btn-primary btn-sm" onclick="saveServoChannels()">Set</button>
+<span class="qh-status" id="servo-channels-status"></span>
+</div>
+</div>
+</section>
+</div>
 <div aria-labelledby="nav-system" class="tab-pane" data-description="Software updates, cooling, audio hardware, diagnostics, and power." data-title="System" id="tab-system" role="tabpanel">
 <section aria-label="Updates" class="card" id="card-updates" tabindex="-1">
 <h2><span class="drag-handle" title="Drag to reorder">⠿</span>Updates</h2>
@@ -1197,7 +1198,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.80.1"></script>
+<script src="/static/app.js?v=1.81.0"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

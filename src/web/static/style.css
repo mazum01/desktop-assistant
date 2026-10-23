@@ -45,6 +45,7 @@ body[data-workspace="controls"], .tab-btn[data-tab="controls"] { --workspace-col
 body[data-workspace="voice"], .tab-btn[data-tab="voice"] { --workspace-color: #c8a9ef; }
 body[data-workspace="smart-home"], .tab-btn[data-tab="smart-home"] { --workspace-color: #df99bc; }
 body[data-workspace="system"], .tab-btn[data-tab="system"] { --workspace-color: #ccbb88; }
+body[data-workspace="settings"], .tab-btn[data-tab="settings"] { --workspace-color: #99cccc; }
 .tab-btn[data-tab="overview"] { --workspace-color: var(--orange); }
 body { --panel-accent: var(--workspace-color); }
 
@@ -202,6 +203,13 @@ main {
   line-height: 1.7;
 }
 #card-telemetry, #card-audio-runtime, #card-camera-settings, #card-audio, #card-xvf, #card-help { grid-column: 1 / -1; }
+#card-controls, #card-head-movement-settings { grid-column: 1 / -1; }
+.head-movement-sliders {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.head-movement-sliders > .control-group { min-width: 0; }
 .workspace-shortcuts { display: grid; gap: 10px; }
 .workspace-shortcut {
   display: flex;

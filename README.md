@@ -43,7 +43,8 @@ safe limits, tuning persistence, and runtime-state migration.
 
 The local dashboard uses LCARS-inspired task workspaces. **Media & Audio**
 combines music, podcasts, volume, mute, and EQ; **Vision & Motion** combines
-cameras and head controls. See the [workspace guide](docs/FEATURES.md#web-control-workspaces)
+cameras and side-by-side head movement sliders. **Settings** holds head movement
+configuration separately. See the [workspace guide](docs/FEATURES.md#web-control-workspaces)
 for the complete organization and keyboard/mobile navigation.
 
 ## Repo Layout

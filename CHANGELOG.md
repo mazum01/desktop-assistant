@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.81.0] - 2026-10-23
+### Added
+- Settings workspace with a Head Movement Settings frame for servo enablement,
+  tracking, idle motion, travel limits, and PCA9685 channels.
+### Changed
+- Make Head movement full width with side-by-side pan and tilt sliders, keeping
+  configuration separate from live movement controls.
+
 ## [1.80.1] - 2026-10-23
 ### Fixed
 - Dashboard pan and tilt sliders now command immediately while moving, without

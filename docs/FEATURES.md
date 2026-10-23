@@ -26,17 +26,22 @@ The title spells out VERA as "Vision-Enabled Reasoning Agent" below the name.
 | Workspace | Controls |
 |-----------|----------|
 | Overview | Telemetry, room status, last spoken text, resources/processes, service health, quick-access links |
-| Vision & Motion | Both camera feeds, snapshots, pan/tracking controls, scene services, tuning, depth, face registry, camera geometry, privacy |
+| Vision & Motion | Both camera feeds, snapshots, full-width Head movement with side-by-side pan/tilt sliders, scene services, tuning, depth, face registry, camera geometry, privacy |
 | Media & Audio | Pandora, podcasts, output volume/mute, voice output level, EQ preset, collapsible custom voice EQ |
 | Voice & Behavior | Speak/record/play clips, microphone input/analyzer, recognition/wake settings, greetings, quiet hours, skills, transcript history |
 | Smart Home | Connected IoT devices and device management |
 | System | Updates, fan settings, collapsible audio hardware and microphone DSP, events, power, help |
+| Settings | Head Movement Settings: servo enablement, face tracking, random idle motion, pan/tilt travel limits, PCA9685 channels |
+
+Head movement sliders command immediately and follow live position updates when
+not being adjusted. Tilt controls and tilt travel settings appear only on bodies
+with tilt hardware. Configuration changes retain their existing save behavior.
 
 Daily playback never requires opening hardware configuration. A direct link from
 Media & Audio opens System's audio setup when device routing needs attention.
 Quick-access links focus and scroll to their destination, revealing advanced
 settings when needed. Tabs support arrow keys, Home/End, visible keyboard focus,
-and a skip-to-workspace link. Narrow displays use a two-row navigation grid and
+and a skip-to-workspace link. Narrow displays use a wrapping navigation grid and
 single-column cards; motion-reduction preferences are respected.
 
 The old Audio tab preference migrates to Media & Audio. Existing per-tab card

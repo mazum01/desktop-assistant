@@ -1786,6 +1786,7 @@ async function loadServoChannels() {
     el("tilt-slider").min = d.tilt_min_deg;
     el("tilt-slider").max = d.tilt_max_deg;
     el("tilt-controls").hidden = !d.tilt_available;
+    el("tilt-limit-controls").hidden = !d.tilt_available;
     el("servo-tilt-channel").disabled = !d.tilt_available;
     el("tilt-slider").value = Math.max(d.tilt_min_deg, Math.min(d.tilt_max_deg, Number(el("tilt-slider").value)));
     el("tilt-angle-display").textContent = `${el("tilt-slider").value}°`;

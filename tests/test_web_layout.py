@@ -191,15 +191,17 @@ def test_decorative_codes_are_sparse_and_hidden_from_assistive_technology(layout
         "podcast-sub-select", "podcast-episode-select", "podcast-progress-bar",
     ]),
     ("perception", [
-        "camera-stream", "camera-stream2", "pan-slider", "servo-enabled",
-        "face-tracking-enabled", "random-motion-enabled", "servo-travel-min",
-        "servo-travel-max", "servo-pan-channel", "servo-tilt-channel",
-        "tilt-slider", "tilt-travel-min", "tilt-travel-max",
+        "camera-stream", "camera-stream2", "pan-slider", "tilt-slider",
         "cam-rotation-slider", "cam2-rotation-slider",
         "cam-capture-resolution-select", "cam2-capture-resolution-select",
         "cam-stream-resolution-select", "cam2-stream-resolution-select",
         "face-table", "privacy-enabled", "object-detection-enabled",
         "room-checking-enabled", "tuning-panel", "depth-mono-enabled",
+    ]),
+    ("settings", [
+        "servo-enabled", "face-tracking-enabled", "random-motion-enabled",
+        "servo-travel-min", "servo-travel-max", "servo-pan-channel",
+        "servo-tilt-channel", "tilt-travel-min", "tilt-travel-max",
     ]),
     ("voice", [
         "say-input", "record-seconds", "record-progress", "audio-input-gain-slider",
@@ -233,12 +235,44 @@ def test_tabs_have_accessible_matching_panels(layout):
     by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
     tabs = [node for node in layout if node["attrs"].get("role") == "tab"]
     panels = [node for node in layout if node["attrs"].get("role") == "tabpanel"]
-    assert len(tabs) == len(panels) == 6
+    assert len(tabs) == len(panels) == 7
     for tab in tabs:
         panel = by_id[tab["attrs"]["aria-controls"]]
         assert panel["attrs"]["aria-labelledby"] == tab["attrs"]["id"]
         assert panel["attrs"]["data-title"]
         assert panel["attrs"]["data-description"]
+
+
+def test_head_movement_sliders_and_configuration_are_separate(layout):
+    by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
+    groups = []
+    for axis in ("pan", "tilt"):
+        slider = by_id[f"{axis}-slider"]
+        group = slider["ancestors"][-2]
+        groups.append(group)
+        assert "control-group" in group["attrs"]["class"].split()
+        assert "head-movement-sliders" in group["ancestors"][-1]["attrs"]["class"].split()
+        assert any(node["attrs"].get("id") == "card-controls" for node in slider["ancestors"])
+    assert groups[0] is not groups[1]
+    settings = by_id["card-head-movement-settings"]
+    assert settings["attrs"]["aria-label"] == "Head Movement Settings"
+    for identity in (
+        "servo-enabled", "face-tracking-enabled", "random-motion-enabled",
+        "servo-travel-min", "servo-travel-max", "servo-pan-channel",
+        "servo-tilt-channel", "tilt-travel-min", "tilt-travel-max",
+    ):
+        assert settings in by_id[identity]["ancestors"]
+    assert "hidden" in by_id["tilt-controls"]["attrs"]
+    assert "hidden" in by_id["tilt-limit-controls"]["attrs"]
+    source = (STATIC / "app.js").read_text()
+    for identity in ("tilt-controls", "tilt-limit-controls"):
+        assert f'el("{identity}").hidden = !d.tilt_available;' in source
+    css = (STATIC / "style.css").read_text()
+    assert "#card-controls, #card-head-movement-settings { grid-column: 1 / -1; }" in css
+    assert re.search(
+        r"\.head-movement-sliders\s*\{[^}]*display:\s*grid;[^}]*"
+        r"grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);", css,
+    )
 
 
 def test_existing_event_handlers_still_resolve(layout):
@@ -274,7 +308,7 @@ def test_navigation_migrates_old_audio_tab_and_supports_keyboard(tmp_path):
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const ids = ['overview', 'perception', 'controls', 'voice', 'smart-home', 'system'];
+const ids = ['overview', 'perception', 'controls', 'voice', 'smart-home', 'system', 'settings'];
 function node(id) {
   const classes = new Set();
   return {id, attrs: {}, dataset: {}, classList: {
@@ -322,8 +356,11 @@ assert.equal(values['vera-active-tab'], 'voice');
 assert.equal(document.body.dataset.workspace, 'voice');
 assert.equal(focused,buttons[3]);
 keydown({key:'End',target:buttons[3],preventDefault(){}});
-assert.equal(values['vera-active-tab'],'system');
-keydown({key:'ArrowDown',target:buttons[5],preventDefault(){}});
+assert.equal(values['vera-active-tab'],'settings');
+assert.equal(document.body.dataset.workspace,'settings');
+assert.equal(buttons[6].attrs['aria-selected'],'true');
+assert.equal(title.textContent,'settings');
+keydown({key:'ArrowDown',target:buttons[6],preventDefault(){}});
 assert.equal(values['vera-active-tab'],'overview');
 assert.equal(document.body.dataset.workspace,'overview');
 keydown({key:'Home',target:buttons[0],preventDefault(){}});
