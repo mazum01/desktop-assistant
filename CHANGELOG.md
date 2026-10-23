@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.79.8] - 2026-10-23
+### Added
+- `scripts/tilt_sweep.py`: standalone tilt servo test that sweeps 80°→100°→80°
+  five times and returns to 90°, driving the PCA9685 directly without any VERA
+  code (`--dry-run` prints the moves; `--reversed` mirrors for a reversed mount).
+
 ## [1.79.7] - 2026-10-22
 ### Fixed
 - Define tilt as 90° level, above 90° up, below 90° down. A reversed tilt mount
