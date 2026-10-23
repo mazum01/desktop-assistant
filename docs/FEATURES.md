@@ -14,13 +14,17 @@ The dashboard uses an original LCARS-inspired visual system: black backgrounds,
 orange/peach action surfaces, readable mixed-case content, and continuous rounded
 elbows. Each workspace has a distinct navigation color; the selected workspace
 colors the main frame and section bars. Section vertical bars are 24px wide
-(20px on mobile), with circular inner arcs; the upper and lower navigation
-rails share a 52px width.
-Sparse number clusters decorate navigation and framing, are hidden from assistive
-technology, and do not represent live readings. Only the title-frame numbers
-refresh when switching workspaces; reselecting the active workspace leaves them
-unchanged. Button and sub-frame numbers stay fixed. No external fonts, templates,
-sounds, or number animations are required.
+(20px on mobile), with circular inner arcs.
+The left sidebar is an LCARS elbow frame: the VERA brand sits above a curved
+frame whose spine follows the selected workspace color, a readout shows a live
+stardate (year and day of year), and square icon buttons each have their own
+spine block, with a white inset bar marking the active workspace. On phones the
+sidebar collapses to a sticky three-column button grid.
+Sparse number clusters decorate the rail readout and framing, are hidden from
+assistive technology, and do not represent live readings. Only the title-frame
+numbers refresh when switching workspaces; reselecting the active workspace
+leaves them unchanged. Labels use the Barlow Condensed web font from Google
+Fonts; no templates, sounds, or number animations are required.
 The title spells out VERA as "Vision-Enabled Reasoning Agent" below the name.
 
 | Workspace | Controls |

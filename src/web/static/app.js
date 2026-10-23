@@ -43,7 +43,23 @@ function openWorkspace(tabId, cardId) {
   target.scrollIntoView({ block: 'start' });
 }
 
+function railStardate(date = new Date()) {
+  const year = date.getFullYear();
+  const day = Math.floor((Date.UTC(year, date.getMonth(), date.getDate()) - Date.UTC(year, 0, 0)) / 86400000);
+  return `${year}.${String(day).padStart(3, '0')}`;
+}
+
+function updateRailStardate() {
+  const stardate = document.getElementById('rail-stardate');
+  if (!stardate) return;
+  const now = new Date();
+  stardate.textContent = railStardate(now);
+  stardate.dateTime = now.toISOString().slice(0, 10);
+}
+
 function initTabs() {
+  updateRailStardate();
+  setInterval(updateRailStardate, 60000);
   const saved = localStorage.getItem(_TAB_KEY) || _DEFAULT_TAB;
   switchTab(saved);
   document.querySelector('.tab-nav').addEventListener('keydown', event => {

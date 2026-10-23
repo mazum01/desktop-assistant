@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.82.0] - 2026-10-23
+### Changed
+- Rebuild the dashboard's left navigation as an LCARS elbow sidebar: VERA brand
+  in the rail, curved frame in the workspace color, live stardate readout,
+  WORKSPACES label, square icon buttons with spine blocks, and a white active
+  indicator. Collapses to a sticky button grid on phones.
+- Use Barlow Condensed (Google Fonts) for rail and button labels.
+
 ## [1.81.0] - 2026-10-23
 ### Added
 - Settings workspace with a Head Movement Settings frame for servo enablement,

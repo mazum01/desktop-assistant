@@ -231,6 +231,34 @@ def test_controls_live_with_their_related_tasks(layout, workspace, controls):
         ), f"{control} is not in {workspace}"
 
 
+def test_sidebar_frames_icon_navigation_like_lcars_elbow(layout):
+    by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
+    tabs = [node for node in layout if node["attrs"].get("role") == "tab"]
+    for tab in tabs:
+        classes = [node["attrs"].get("class", "") for node in tab["ancestors"]]
+        assert "sidebar-frame" in classes and "lcars-sidebar" in classes
+        icons = [node for node in layout if node["tag"] == "svg" and tab in node["ancestors"]]
+        assert len(icons) == 1 and icons[0]["attrs"]["aria-hidden"] == "true"
+    assert by_id["rail-stardate"]["tag"] == "time"
+    nav = next(node for node in layout if node["attrs"].get("role") == "tablist")
+    assert nav["attrs"]["aria-labelledby"] == "rail-workspaces-label"
+    css = (STATIC / "style.css").read_text()
+    assert "border-left-width: var(--lcars-spine-width);" in css
+    assert ".tab-btn.active { box-shadow: inset -6px 0 #fff; }" in css
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for stardate regression")
+def test_rail_stardate_uses_year_and_day_of_year():
+    source = (STATIC / "app.js").read_text().split("// ── Software updates")[0]
+    script = source + r"""
+const assert = require('node:assert/strict');
+assert.equal(railStardate(new Date(2026, 9, 23, 14, 0)), '2026.296');
+assert.equal(railStardate(new Date(2026, 0, 1, 0, 1)), '2026.001');
+assert.equal(railStardate(new Date(2024, 11, 31, 23, 59)), '2024.366');
+"""
+    subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
+
+
 def test_tabs_have_accessible_matching_panels(layout):
     by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
     tabs = [node for node in layout if node["attrs"].get("role") == "tab"]
@@ -298,7 +326,9 @@ def test_asset_cache_keys_match_current_release(layout):
     assets = [node["attrs"].get("src", node["attrs"].get("href", "")) for node in layout]
     assert f"/static/style.css?v={version}" in assets
     assert f"/static/app.js?v={version}" in assets
-    assert not any(url.startswith(("https://", "http://")) for url in assets)
+    external = [url for url in assets if url.startswith(("https://", "http://"))]
+    assert all(url.startswith(("https://fonts.googleapis.com", "https://fonts.gstatic.com"))
+               for url in external)
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for navigation regression")
@@ -336,7 +366,7 @@ const document = {
 };
 const values = {'vera-active-tab':'audio'};
 const localStorage = {getItem:k=>values[k],setItem:(k,v)=>{values[k]=v;}};
-const context = vm.createContext({document, localStorage, window:{scrollTo() {}}});
+const context = vm.createContext({document, localStorage, setInterval() {}, window:{scrollTo() {}}});
 vm.runInContext(fs.readFileSync(process.argv[2],'utf8'), context);
 vm.runInContext('initTabs()', context);
 assert.equal(values['vera-active-tab'], 'controls');

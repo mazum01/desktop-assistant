@@ -10,14 +10,16 @@
 <link href="/static/favicon-32.png" rel="icon" sizes="32x32" type="image/png"/>
 <link href="/static/favicon-16.png" rel="icon" sizes="16x16" type="image/png"/>
 <link href="/static/favicon-192.png" rel="apple-touch-icon" sizes="192x192"/>
-<link href="/static/style.css?v=1.81.0" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="/static/style.css?v=1.82.0" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
 <div class="page-header"><header>
 <div class="header-left">
-<span aria-hidden="true" class="logo">V</span>
-<div><span class="brand-caption">LCARS / LOCAL CONTROL</span>
+<div>
 <h1>VERA</h1>
 <span class="brand-full-name">Vision-Enabled Reasoning Agent</span>
 <span class="subtext" id="version-uptime">connecting…</span>
@@ -26,14 +28,24 @@
 <div class="badge badge-unknown" id="health-badge">⬤ connecting</div>
 <span aria-hidden="true" class="lcars-code frame-code">47-0821 / 1701</span>
 </header>
-<nav aria-label="Workspaces" aria-orientation="vertical" class="tab-nav" role="tablist">
-<button aria-controls="tab-overview" aria-selected="false" class="tab-btn" data-tab="overview" id="nav-overview" onclick="switchTab('overview')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">01-47</span><span>Overview</span></button>
-<button aria-controls="tab-perception" aria-selected="false" class="tab-btn" data-tab="perception" id="nav-perception" onclick="switchTab('perception')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">02-83</span><span>Vision &amp; Motion</span></button>
-<button aria-controls="tab-controls" aria-selected="false" class="tab-btn" data-tab="controls" id="nav-controls" onclick="switchTab('controls')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">03-26</span><span>Media &amp; Audio</span></button>
-<button aria-controls="tab-voice" aria-selected="false" class="tab-btn" data-tab="voice" id="nav-voice" onclick="switchTab('voice')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">04-91</span><span>Voice &amp; Behavior</span></button>
-<button aria-controls="tab-smart-home" aria-selected="false" class="tab-btn" data-tab="smart-home" id="nav-smart-home" onclick="switchTab('smart-home')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">05-62</span><span>Smart Home</span></button>
-<button aria-controls="tab-system" aria-selected="false" class="tab-btn" data-tab="system" id="nav-system" onclick="switchTab('system')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">06-18</span><span>System</span></button>
-<button aria-controls="tab-settings" aria-selected="false" class="tab-btn" data-tab="settings" id="nav-settings" onclick="switchTab('settings')" role="tab" tabindex="-1"><span aria-hidden="true" class="nav-index">07-34</span><span>Settings</span></button></nav>
+<aside aria-label="VERA navigation" class="lcars-sidebar">
+<div class="rail-brand"><span aria-hidden="true" class="logo">V</span><span>VERA<small class="brand-caption">LCARS / LOCAL CONTROL</small></span></div>
+<div class="sidebar-frame">
+<div class="rail-readout">
+<span aria-hidden="true" class="lcars-code rail-numbers"><span>021</span><span>473</span><span>186</span></span>
+<span class="rail-stardate">STARDATE <time id="rail-stardate">—</time></span>
+</div>
+<span class="rail-label" id="rail-workspaces-label">WORKSPACES</span>
+<nav aria-labelledby="rail-workspaces-label" aria-orientation="vertical" class="tab-nav" role="tablist">
+<button aria-controls="tab-overview" aria-selected="false" class="tab-btn" data-tab="overview" id="nav-overview" onclick="switchTab('overview')" role="tab" tabindex="-1"><svg aria-hidden="true" class="nav-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="7" width="7" x="3" y="3"/><rect height="7" width="7" x="14" y="3"/><rect height="7" width="7" x="3" y="14"/><rect height="7" width="7" x="14" y="14"/></svg><span>Overview</span></button>
+<button aria-controls="tab-perception" aria-selected="false" class="tab-btn" data-tab="perception" id="nav-perception" onclick="switchTab('perception')" role="tab" tabindex="-1"><svg aria-hidden="true" class="nav-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Vision &amp; Motion</span></button>
+<button aria-controls="tab-controls" aria-selected="false" class="tab-btn" data-tab="controls" id="nav-controls" onclick="switchTab('controls')" role="tab" tabindex="-1"><svg aria-hidden="true" class="nav-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span>Media &amp; Audio</span></button>
+<button aria-controls="tab-voice" aria-selected="false" class="tab-btn" data-tab="voice" id="nav-voice" onclick="switchTab('voice')" role="tab" tabindex="-1"><svg aria-hidden="true" class="nav-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="12" rx="3" width="6" x="9" y="2"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg><span>Voice &amp; Behavior</span></button>
+<button aria-controls="tab-smart-home" aria-selected="false" class="tab-btn" data-tab="smart-home" id="nav-smart-home" onclick="switchTab('smart-home')" role="tab" tabindex="-1"><svg aria-hidden="true" class="nav-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg><span>Smart Home</span></button>
+<button aria-controls="tab-system" aria-selected="false" class="tab-btn" data-tab="system" id="nav-system" onclick="switchTab('system')" role="tab" tabindex="-1"><svg aria-hidden="true" class="nav-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="14" width="14" x="5" y="5"/><rect height="6" width="6" x="9" y="9"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg><span>System</span></button>
+<button aria-controls="tab-settings" aria-selected="false" class="tab-btn" data-tab="settings" id="nav-settings" onclick="switchTab('settings')" role="tab" tabindex="-1"><svg aria-hidden="true" class="nav-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span>Settings</span></button></nav>
+</div>
+</aside>
 </div>
 <main id="main-content" tabindex="-1">
 <div class="workspace-heading">
@@ -1198,7 +1210,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.81.0"></script>
+<script src="/static/app.js?v=1.82.0"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">
