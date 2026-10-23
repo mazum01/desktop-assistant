@@ -16,9 +16,12 @@ perception.objects
     {"objects": [{"label": str, "class_id": int, "confidence": float,
                   "bbox": [x1, y1, x2, y2]}],
      "count": int,
+     "persons": [same shape as objects; person detections only],
      "backend": "hailo"|"sim",
      "frame_w": int, "frame_h": int,
      "ts": float}
+    ``objects`` omits "person" boxes while a face is visible so the overlay does
+    not double-label one subject; ``persons`` always carries them for tracking.
 
 object.enabled_changed
     {"enabled": bool}
@@ -253,12 +256,8 @@ class ObjectService(Service):
                 log.exception("object detection failed")
                 continue
 
-            # If any faces are currently detected, suppress "person" labels to
-            # avoid double-labelling the same subject.
-            if detections and self.bus is not None:
-                faces_payload = self.bus.last("perception.faces")
-                if faces_payload and faces_payload.get("faces"):
-                    detections = [d for d in detections if d.label != "person"]
+            faces_payload = self.bus.last("perception.faces") if self.bus is not None else None
+            hide_persons = bool(faces_payload and faces_payload.get("faces"))
 
             # Cap to max_objects (detections are already sorted by confidence).
             if len(detections) > self._cfg.max_objects:
@@ -269,25 +268,30 @@ class ObjectService(Service):
             src_h, src_w = frame.shape[:2]
             self.bus.publish(
                 "perception.objects",
-                {
-                    "objects": [
-                        {
-                            "label":      d.label,
-                            "class_id":   d.class_id,
-                            "confidence": d.confidence,
-                            "bbox":       d.bbox,
-                        }
-                        for d in held_detections
-                    ],
-                    "count":    len(held_detections),
-                    "backend":  self._detector.backend,
-                    "frame_w":  src_w,
-                    "frame_h":  src_h,
-                    "ts":       time.time(),
-                },
+                self._objects_payload(held_detections, hide_persons, src_w, src_h),
             )
 
     # ── Internal ───────────────────────────────────────────────────────
+
+    def _objects_payload(self, detections, hide_persons: bool, frame_w: int, frame_h: int) -> dict:
+        def describe(d) -> dict:
+            return {
+                "label":      d.label,
+                "class_id":   d.class_id,
+                "confidence": d.confidence,
+                "bbox":       d.bbox,
+            }
+
+        shown = [d for d in detections if not (hide_persons and d.label == "person")]
+        return {
+            "objects": [describe(d) for d in shown],
+            "count":   len(shown),
+            "persons": [describe(d) for d in detections if d.label == "person"],
+            "backend": self._detector.backend,
+            "frame_w": frame_w,
+            "frame_h": frame_h,
+            "ts":      time.time(),
+        }
 
     @staticmethod
     def _iou(box_a, box_b) -> float:

@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.79.10] - 2026-10-23
+### Fixed
+- Person seek no longer requires face tracking: with face tracking off the head
+  still pans and tilts toward a detected person on both bodies.
+- Object detection now publishes a `persons` list on `perception.objects` that
+  is not hidden while a face is visible, so person seek keeps working then; the
+  overlay's `objects` list still hides person boxes beside a face.
+
 ## [1.79.9] - 2026-10-23
 ### Changed
 - Person seek now also tilts toward the detected person's vertical position

@@ -288,11 +288,11 @@ def test_on_objects_ignored_when_person_seek_disabled():
     assert svc._person_cx is None
 
 
-def test_on_objects_ignored_when_face_tracking_disabled():
+def test_on_objects_accepted_when_face_tracking_disabled():
     svc, _ = make_tracking_svc(face_tracking_enabled=False)
     payload = make_obj_payload([(100, 0, 300, 400, 0.9)])
     svc._on_objects(None, payload)
-    assert svc._person_cx is None
+    assert svc._person_cx == pytest.approx(200.0)
 
 
 # ---------------------------------------------------------------------------
@@ -474,6 +474,45 @@ def test_person_seek_tilt_stops_and_resets_when_person_is_lost():
     assert published(bus, "motion.tilt_to") == []
     svc._on_objects(None, make_obj_payload([]))
     assert svc._person_cy is None
+
+
+def test_person_seek_pans_and_tilts_with_face_tracking_off():
+    svc, bus = make_tracking_svc(face_tracking_enabled=False)
+    svc.on_start()
+    enable_tilt(svc)
+    bus.publish.reset_mock()
+    svc._on_objects(None, make_obj_payload([(100, 300, 300, 460, 0.9)]))
+    assert svc._person_cx is not None
+    svc._idle_tick(time.monotonic(), None)
+    assert len(published(bus, "motion.pan_to")) == 1
+    (tilt,) = published(bus, "motion.tilt_to")
+    assert tilt["angle"] < 90
+
+
+def test_person_seek_uses_unhidden_persons_list_when_overlay_hides_them():
+    svc, _ = make_tracking_svc(face_tracking_enabled=False)
+    payload = make_obj_payload([])
+    payload["persons"] = make_obj_payload([(100, 100, 300, 300, 0.9)])["objects"]
+    svc._on_objects(None, payload)
+    assert svc._person_cx == pytest.approx(200.0)
+
+
+def test_toggling_face_tracking_does_not_cancel_person_seek():
+    svc, bus = make_person_seek_svc()
+    svc._on_objects(None, make_obj_payload([(100, 300, 300, 460, 0.9)]))
+    svc._on_set_face_tracking(None, {"enabled": False})
+    assert svc._person_cx is not None
+    bus.publish.reset_mock()
+    svc._idle_tick(time.monotonic(), None)
+    assert len(published(bus, "motion.pan_to")) == 1
+
+
+def test_legacy_person_seek_follows_person_with_face_tracking_off():
+    svc, bus = make_legacy_svc(face_tracking_enabled=False, random_motion_enabled=False)
+    svc._on_objects(None, make_obj_payload([(500, 100, 600, 300, 0.9)]))
+    svc._legacy_tick(time.monotonic(), 0.05)
+    (pan,) = published(bus, "motion.pan_to")
+    assert pan["override_quiet"] is True
 
 
 def test_face_present_suppresses_person_seek_tilt():

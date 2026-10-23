@@ -9,9 +9,10 @@ fits repeated small probes and must pass live centering before persistence.
 **Person seek** — when object detection is enabled and a ``person`` bounding
 box appears on ``perception.objects`` but no face has been acquired yet, the
 tracker uses the person's horizontal centre as a soft seek target.  This lets
-the head pan toward the person so SCRFD can pick up their face.  Once a face
-locks on, face tracking takes over immediately; person seek is inactive while
-a face is tracked.
+the head pan (and tilt, where available) toward the person so SCRFD can pick up
+their face.  Once a face locks on, face tracking takes over immediately; person
+seek is inactive while a face is tracked.  Person seek is independent of the
+face-tracking switch: with face tracking off the head still follows the person.
 
 The original body uses the legacy Kalman/minimum-jerk ``HeadTracker`` for
 pan-only face tracking. The new body uses fresh-frame visual servoing;
@@ -20,7 +21,7 @@ its legacy parameters control idle/person-seek motion only.
 Topics subscribed
 -----------------
 perception.faces    ``{faces: [{centroid, confidence, …}], …}``
-perception.objects  ``{objects: [{label, bbox:[x1,y1,x2,y2], …}], frame_w, …}``
+perception.objects  ``{objects: [...], persons: [{label, bbox:[x1,y1,x2,y2], …}], frame_w, frame_h, …}``
 motion.position     Last commanded angles, not measured shaft feedback
 tracking.start_autotune / cancel_autotune   Explicit calibration controls
 tracking.set_face_tracking   ``{"enabled": bool}``
@@ -402,16 +403,18 @@ class TrackingService(Service):
 
     def _on_objects(self, _topic, payload) -> None:
         """Update person-seek hint from object detection."""
-        if not self._person_seek_enabled or not self._face_tracking_enabled:
+        if not self._person_seek_enabled:
             return
         if not isinstance(payload, dict):
             return
-        objects = payload.get("objects") or []
+        # "persons" keeps person boxes the overlay hides while a face is visible.
+        candidates = payload["persons"] if isinstance(payload.get("persons"), list) \
+            else payload.get("objects") or []
         frame_w = payload.get("frame_w", 0)
         if not frame_w:
             return
         # Find the highest-confidence "person" detection.
-        persons = [o for o in objects if o.get("label") == "person"]
+        persons = [o for o in candidates if o.get("label") == "person"]
         if not persons:
             with self._lock:
                 self._person_cx = None
@@ -527,7 +530,7 @@ class TrackingService(Service):
             )
             person = (
                 self._person_cx
-                if self._face_tracking_enabled and self._person_seek_enabled
+                if self._person_seek_enabled
                 and now - self._person_cx_ts < _PERSON_SEEK_STALE_S else None
             )
             target_cx = face if face is not None else person
@@ -655,7 +658,7 @@ class TrackingService(Service):
         person = person_cy = None
         with self._lock:
             tilt_tracker = self._tilt_tracker
-            if (self._face_tracking_enabled and self._person_seek_enabled
+            if (self._person_seek_enabled
                     and now - self._person_cx_ts < _PERSON_SEEK_STALE_S):
                 person, person_cy = self._person_cx, self._person_cy
         if person is None and self._tilt_person_tracking and tilt_tracker is not None:

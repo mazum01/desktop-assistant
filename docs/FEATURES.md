@@ -173,9 +173,11 @@ Corrections still wait for an image
 captured after motion and settling; camera/inference latency therefore adds to
 response time. A saved empirical model can require a longer settling interval.
 
-When no face is detected and person seek is enabled, a detected person's
+When person seek is enabled and no face is being followed, a detected person's
 bounding-box centre drives pan and, where tilt hardware is available, tilt, one
-correction per detection. A visible or locked face always takes priority.
+correction per detection. A tracked face always takes priority. Person seek is
+independent of the face-tracking switch: with face tracking off the head follows
+the person even while a face is visible.
 
 ### Automatic tracking calibration
 

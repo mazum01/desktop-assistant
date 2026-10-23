@@ -133,7 +133,9 @@ class _FakeDet:
 def _make_svc(hold_seconds=2.0):
     bus = MessageBus()
     vis = _DummyVision()
-    return ObjectService(bus=bus, vision_service=vis, config=ObjectConfig(hold_seconds=hold_seconds))
+    svc = ObjectService(bus=bus, vision_service=vis, config=ObjectConfig(hold_seconds=hold_seconds))
+    svc._detector = type("Detector", (), {"backend": "sim"})()
+    return svc
 
 
 def test_hold_keeps_briefly_missed_detection():
@@ -184,3 +186,25 @@ def test_hold_disabled_clears_state():
     svc._held = {1: {"det": _FakeDet("chair", 0.9, [0, 0, 10, 10]), "last_seen": 100.0}}
     svc._on_set_enabled("object.set_enabled", {"enabled": False})
     assert svc._held == {}
+
+
+def test_objects_payload_hides_person_overlay_but_keeps_tracking_persons():
+    svc = _make_svc()
+    detections = [
+        _FakeDet("person", 0.9, [10, 20, 110, 220]),
+        _FakeDet("cup", 0.8, [0, 0, 20, 20]),
+    ]
+    payload = svc._objects_payload(detections, hide_persons=True, frame_w=640, frame_h=480)
+    assert [o["label"] for o in payload["objects"]] == ["cup"]
+    assert payload["count"] == 1
+    assert [p["label"] for p in payload["persons"]] == ["person"]
+    assert payload["persons"][0]["bbox"] == [10, 20, 110, 220]
+    assert (payload["frame_w"], payload["frame_h"]) == (640, 480)
+
+
+def test_objects_payload_shows_persons_when_no_face_is_visible():
+    svc = _make_svc()
+    detections = [_FakeDet("person", 0.9, [10, 20, 110, 220])]
+    payload = svc._objects_payload(detections, hide_persons=False, frame_w=640, frame_h=480)
+    assert [o["label"] for o in payload["objects"]] == ["person"]
+    assert [p["label"] for p in payload["persons"]] == ["person"]
