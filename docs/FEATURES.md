@@ -202,6 +202,12 @@ labeled. Face/object image dimensions are accounted for, and stale or differentl
 rotated face observations do not suppress person labels. The association freshness
 window is `object_detection.face_label_max_age_s` (one second by default).
 
+Dashboard pan and tilt sliders send commands immediately as they move; no Go
+button is needed. Each axis keeps only the latest pending input while a command
+is in flight. Both sliders follow VERA's reported positions, including tracking
+movement, except while being adjusted or sending a command. Command errors
+appear beside the relevant slider. Tilt controls remain hidden on pan-only bodies.
+
 ### Automatic tracking calibration
 
 On the new body, use **Calibrate visual tracking** in the tracking-tuning panel.

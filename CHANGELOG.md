@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.80.1] - 2026-10-23
+### Fixed
+- Dashboard pan and tilt sliders now command immediately while moving, without
+  Go buttons. Both follow VERA position updates when not being adjusted.
+- Serialize commands per axis, retaining the latest input during a pending
+  request, and display command failures instead of silently ignoring them.
+
 ## [1.80.0] - 2026-10-23
 ### Changed
 - Tracking now explicitly requires enabled, ready servos. Face tracking prefers

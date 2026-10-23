@@ -53,8 +53,123 @@ def test_ids_remain_unique(layout):
 
 def test_servo_handlers_are_not_shadowed_by_duplicate_declarations():
     source = (STATIC / "app.js").read_text()
-    for name in ("loadServoChannels", "saveServoChannels", "saveTiltLimits", "doTilt"):
+    for name in ("loadServoChannels", "saveServoChannels", "saveTiltLimits", "_sendServoSlider"):
         assert len(re.findall(r"async function " + name + r"\(", source)) == 1
+
+
+def test_servo_sliders_do_not_require_go_buttons(layout):
+    assert not any(
+        node["attrs"].get("onclick") in {"doPan()", "doTilt()"} for node in layout
+    )
+    for axis in ("pan", "tilt"):
+        status = next(node for node in layout if node["attrs"].get("id") == f"{axis}-command-status")
+        assert status["attrs"]["role"] == "status"
+    source = (STATIC / "app.js").read_text()
+    assert '_updateServoSlider("pan", motion.angle)' in source
+    assert '_updateServoSlider("tilt", motion.tilt_angle)' in source
+    assert "_initServoSliders();" in source
+    assert "function doPan(" not in source
+    assert "function doTilt(" not in source
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for servo slider regression")
+def test_servo_sliders_command_immediately_and_follow_position_updates(tmp_path):
+    script = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(process.argv[2], 'utf8');
+const elements = {};
+for (const axis of ['pan', 'tilt']) {
+  for (const suffix of ['slider', 'angle-display', 'command-status']) {
+    elements[`${axis}-${suffix}`] = {
+      value: '90', textContent: '', style: {}, listeners: {},
+      addEventListener(event, fn) { this.listeners[event] = fn; },
+      setPointerCapture(id) { this.pointerId = id; },
+    };
+  }
+}
+const requests = [];
+const context = vm.createContext({
+  el: id => elements[id],
+  servoRequest: (path, method, body) => new Promise((resolve, reject) => {
+    requests.push({path, method, angle: body.angle, resolve, reject});
+  }),
+});
+vm.runInContext(source.slice(source.indexOf('const _servoSliders ='),
+  source.indexOf('function connectWS()')), context);
+const flush = () => new Promise(resolve => setImmediate(resolve));
+async function run() {
+  context._initServoSliders();
+  for (const axis of ['pan', 'tilt']) {
+    const slider = elements[`${axis}-slider`];
+    const display = elements[`${axis}-angle-display`];
+    const status = elements[`${axis}-command-status`];
+    context._updateServoSlider(axis, 92.3);
+    assert.equal(slider.value, 92);
+    assert.equal(display.textContent, '92°');
+    slider.listeners.pointerdown({pointerId: 7});
+    assert.equal(slider.pointerId, 7);
+    slider.value = '95';
+    const start = requests.length;
+    slider.oninput();
+    assert.equal(requests.length, start + 1); // No debounce/timer.
+    assert.equal(requests[start].path, `/api/${axis}`);
+    assert.equal(requests[start].method, 'POST');
+    assert.equal(requests[start].angle, 95);
+    context._updateServoSlider(axis, 85);
+    assert.equal(slider.value, '95'); // Telemetry must not fight the drag.
+    slider.value = '96'; slider.oninput();
+    slider.value = '97'; slider.oninput();
+    assert.equal(requests.length, start + 1); // No concurrent commands per axis.
+    requests[start].resolve({ok: true}); await flush();
+    assert.equal(requests.length, start + 2);
+    assert.equal(requests[start + 1].angle, 97); // Intermediate position coalesced.
+    slider.listeners.pointerup();
+    context._updateServoSlider(axis, 88);
+    assert.equal(slider.value, '97'); // Still waiting for the final request.
+    requests[start + 1].resolve({ok: true}); await flush();
+    context._updateServoSlider(axis, 94);
+    assert.equal(slider.value, 94);
+    assert.equal(display.textContent, '94°');
+    for (const angle of [null, undefined, NaN, Infinity]) context._updateServoSlider(axis, angle);
+    assert.equal(slider.value, 94); // No tilt reading on pan-only hardware.
+    for (const release of ['change', 'pointercancel', 'lostpointercapture', 'blur']) {
+      slider.listeners.pointerdown({pointerId: 8});
+      slider.listeners[release]();
+      context._updateServoSlider(axis, 91);
+      assert.equal(slider.value, 91);
+    }
+    slider.value = '93'; slider.oninput(); // Keyboard input without pointerdown.
+    slider.listeners.change();
+    requests.at(-1).reject(new Error('Servo offline')); await flush();
+    assert.equal(status.textContent, 'Servo offline');
+    assert.equal(status.style.color, 'var(--red)');
+    context._updateServoSlider(axis, 90);
+    assert.equal(slider.value, 90); // Failure does not lock out telemetry.
+    slider.value = '92'; slider.oninput();
+    requests.at(-1).resolve({ok: true}); await flush();
+    slider.listeners.change();
+    assert.equal(status.textContent, '');
+  }
+  // Pan and tilt have independent command queues and drag state.
+  elements['pan-slider'].value = '100'; elements['pan-slider'].oninput();
+  context._updateServoSlider('tilt', 89);
+  assert.equal(elements['tilt-slider'].value, 89);
+  elements['tilt-slider'].value = '95'; elements['tilt-slider'].oninput();
+  assert.equal(requests.at(-2).path, '/api/pan');
+  assert.equal(requests.at(-1).path, '/api/tilt');
+  requests.at(-2).resolve({ok: true}); requests.at(-1).resolve({ok: true});
+  await flush();
+}
+run().catch(error => {console.error(error); process.exitCode = 1;});
+"""
+    runner = tmp_path / "servo-sliders.cjs"
+    runner.write_text(script)
+    subprocess.run(
+        ["node", str(runner), str(STATIC / "app.js")],
+        check=True, capture_output=True, text=True,
+    )
 
 
 def test_decorative_codes_are_sparse_and_hidden_from_assistive_technology(layout):

@@ -247,35 +247,60 @@ function authUrl(path) {
 let ws = null;
 let wsRetryMs = 1000;
 
-// ── Pan slider state ──────────────────────────────────────────────
-// True while the user is dragging the pan slider — auto-updates from
-// the WebSocket are suppressed during this window so they don't fight
-// the user's input.
-let _isDragging = false;
-let _panDebounceTimer = null;
+// ── Live servo sliders ────────────────────────────────────────────
+const _servoSliders = {
+  pan: { dragging: false, sending: false, pending: null },
+  tilt: { dragging: false, sending: false, pending: null },
+};
 
-function _onPanSliderInput() {
-  const angle = parseFloat(document.getElementById("pan-slider").value);
-  document.getElementById("pan-angle-display").textContent = angle + "°";
-  // Debounce: send the pan command 80 ms after the user stops moving.
-  clearTimeout(_panDebounceTimer);
-  _panDebounceTimer = setTimeout(() => {
-    fetch("/api/pan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ angle }),
-    }).catch(() => {});
-  }, 80);
+async function _sendServoSlider(axis) {
+  const state = _servoSliders[axis];
+  if (state.sending) return;
+  state.sending = true;
+  const status = el(`${axis}-command-status`);
+  try {
+    // Keep only the latest input while a request is in flight.
+    while (state.pending !== null) {
+      const angle = state.pending;
+      state.pending = null;
+      await servoRequest(`/api/${axis}`, "POST", { angle });
+      status.textContent = "";
+    }
+  } catch (e) {
+    state.pending = null;
+    status.textContent = e.message;
+    status.style.color = "var(--red)";
+  } finally {
+    state.sending = false;
+  }
 }
 
-// Called once the DOM is ready (see bottom of file).
-function _initPanSlider() {
-  const slider = document.getElementById("pan-slider");
-  if (!slider) return;
-  slider.oninput = _onPanSliderInput;
-  slider.addEventListener("pointerdown",   () => { _isDragging = true; });
-  slider.addEventListener("pointerup",     () => { _isDragging = false; });
-  slider.addEventListener("pointercancel", () => { _isDragging = false; });
+function _updateServoSlider(axis, angle) {
+  const state = _servoSliders[axis];
+  if (!Number.isFinite(angle) || state.dragging || state.sending) return;
+  const slider = el(`${axis}-slider`);
+  slider.value = Math.round(angle);
+  el(`${axis}-angle-display`).textContent = `${slider.value}°`;
+}
+
+function _initServoSliders() {
+  for (const axis of ["pan", "tilt"]) {
+    const slider = el(`${axis}-slider`);
+    const state = _servoSliders[axis];
+    slider.oninput = () => {
+      state.dragging = true;
+      el(`${axis}-angle-display`).textContent = `${slider.value}°`;
+      state.pending = Number(slider.value);
+      _sendServoSlider(axis);
+    };
+    slider.addEventListener("pointerdown", (event) => {
+      state.dragging = true;
+      slider.setPointerCapture(event.pointerId);
+    });
+    for (const event of ["change", "pointerup", "pointercancel", "lostpointercapture", "blur"]) {
+      slider.addEventListener(event, () => { state.dragging = false; });
+    }
+  }
 }
 
 
@@ -367,13 +392,8 @@ function updateDashboard(data) {
     el("stat-servo").textContent = motion.tilt_angle == null
       ? `${num(motion.angle, 1)}°`
       : `Pan ${num(motion.angle, 1)}° / Tilt ${num(motion.tilt_angle, 1)}°`;
-    if (!_isDragging) {
-      const slider = el("pan-slider");
-      if (slider) {
-        slider.value = Math.round(motion.angle);
-        el("pan-angle-display").textContent = Math.round(motion.angle) + "°";
-      }
-    }
+    _updateServoSlider("pan", motion.angle);
+    _updateServoSlider("tilt", motion.tilt_angle);
   }
 
   const audio = last["audio.level"];
@@ -1817,17 +1837,6 @@ async function saveTiltLimits() {
   }
 }
 
-async function doTilt() {
-  const status = el("tilt-limits-status");
-  try {
-    await servoRequest("/api/tilt", "POST", { angle: Number(el("tilt-slider").value) });
-    status.textContent = "Tilt command sent";
-  } catch (e) {
-    status.textContent = e.message;
-    status.style.color = "var(--red)";
-  }
-}
-
 async function saveServoEnabled(enabled) {
   try {
     await fetch("/api/settings/servo", {
@@ -2493,15 +2502,6 @@ async function doPlaybackClip() {
       status.style.color = "var(--red)";
     }
   }
-}
-
-async function doPan() {
-  const angle = parseFloat(el("pan-slider").value);
-  await fetch("/api/pan", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ angle }),
-  });
 }
 
 async function doVersion() {
@@ -3212,7 +3212,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeLightbox();
   });
-  _initPanSlider();
+  _initServoSliders();
   loadFaces();
   loadQuietHours();
   loadFanControlPoints();
