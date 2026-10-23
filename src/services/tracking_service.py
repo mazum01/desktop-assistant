@@ -120,6 +120,8 @@ class TrackingService(Service):
         # Person-seek state: pixel x-centre from latest "person" detection
         self._person_cx: Optional[float] = None
         self._person_cx_ts: float = 0.0
+        self._person_cy: Optional[float] = None
+        self._tilt_person_tracking = False
         self._lock = threading.Lock()
         self._unsubs: list = []
         self._visual_cfg = VisualServoConfig(**(visual_config or {}))
@@ -340,6 +342,7 @@ class TrackingService(Service):
         if not new_state:
             with self._lock:
                 self._person_cx = None
+                self._person_cy = None
                 self._person_cx_ts = 0.0
         self.bus.publish("tracking.person_seek_changed", {"enabled": new_state})
 
@@ -412,6 +415,7 @@ class TrackingService(Service):
         if not persons:
             with self._lock:
                 self._person_cx = None
+                self._person_cy = None
                 self._person_cx_ts = 0.0
             return
         best = max(persons, key=lambda o: o.get("confidence", 0.0))
@@ -419,8 +423,14 @@ class TrackingService(Service):
         if not bbox or len(bbox) < 4:
             return
         cx = (bbox[0] + bbox[2]) / 2.0
+        frame_h = payload.get("frame_h", 0)
+        cy = (
+            (bbox[1] + bbox[3]) / 2.0 * self._tracker_cfg.frame_height / frame_h
+            if frame_h else None
+        )
         with self._lock:
             self._person_cx = cx * self._tracker_cfg.frame_width / frame_w
+            self._person_cy = cy
             self._person_cx_ts = time.monotonic()
 
     def _on_position(self, _topic, payload) -> None:
@@ -642,10 +652,16 @@ class TrackingService(Service):
                 or observation is not None or self._tracker is None
                 or self._calibration_requested or now - self._face_ts < _FACE_STALE_S):
             return
-        person = None
-        if (self._face_tracking_enabled and self._person_seek_enabled
-                and now - self._person_cx_ts < _PERSON_SEEK_STALE_S):
-            person = self._person_cx
+        person = person_cy = None
+        with self._lock:
+            tilt_tracker = self._tilt_tracker
+            if (self._face_tracking_enabled and self._person_seek_enabled
+                    and now - self._person_cx_ts < _PERSON_SEEK_STALE_S):
+                person, person_cy = self._person_cx, self._person_cy
+        if person is None and self._tilt_person_tracking and tilt_tracker is not None:
+            # Drop the tilt filter state so the next person starts from a clean estimate.
+            tilt_tracker.update(None, _UPDATE_INTERVAL, self._current_tilt_angle)
+            self._tilt_person_tracking = False
         if person is None and not self._random_motion_enabled:
             return
         # Legacy person seek is rate-limited to one correction per detection.
@@ -664,6 +680,14 @@ class TrackingService(Service):
         self.bus.publish("motion.pan_to", {
             "angle": target, "move_time_ms": 500, "override_quiet": person is not None,
         })
+        if person is not None and person_cy is not None and tilt_tracker is not None:
+            tilt_target = tilt_tracker.update(
+                person_cy, _UPDATE_INTERVAL, self._current_tilt_angle,
+            )
+            self._tilt_person_tracking = True
+            self.bus.publish("motion.tilt_to", {
+                "angle": round(tilt_target, 2), "move_time_ms": 500, "override_quiet": True,
+            })
 
     def _on_start_calibration(self, _topic, _payload):
         if self._controller == "legacy":

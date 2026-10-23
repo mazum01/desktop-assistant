@@ -411,6 +411,79 @@ def test_person_seek_scales_to_tracking_frame():
     assert svc._person_cx == 600
 
 
+def make_person_seek_svc(tilt=True):
+    svc, bus = make_tracking_svc()
+    svc.on_start()
+    if tilt:
+        enable_tilt(svc)
+    bus.publish.reset_mock()
+    return svc, bus
+
+
+def published(bus, topic):
+    return [c.args[1] for c in bus.publish.call_args_list if c.args[0] == topic]
+
+
+@pytest.mark.parametrize("y1,y2,expected", [(300, 460, "down"), (20, 180, "up")])
+def test_person_seek_tilts_toward_person_in_logical_up_convention(y1, y2, expected):
+    svc, bus = make_person_seek_svc()
+    svc._on_objects(None, make_obj_payload([(100, y1, 300, y2, 0.9)]))
+    svc._idle_tick(time.monotonic(), None)
+    assert len(published(bus, "motion.pan_to")) == 1
+    (tilt,) = published(bus, "motion.tilt_to")
+    assert tilt["override_quiet"] is True
+    assert (tilt["angle"] < 90) if expected == "down" else (tilt["angle"] > 90)
+    assert 70 <= tilt["angle"] <= 110
+
+
+def test_person_seek_tilt_is_one_command_per_detection():
+    svc, bus = make_person_seek_svc()
+    svc._on_objects(None, make_obj_payload([(100, 300, 300, 460, 0.9)]))
+    svc._idle_tick(time.monotonic(), None)
+    svc._idle_tick(time.monotonic(), None)
+    assert len(published(bus, "motion.tilt_to")) == 1
+
+
+def test_person_seek_does_not_tilt_without_tilt_hardware():
+    svc, bus = make_person_seek_svc(tilt=False)
+    svc._on_objects(None, make_obj_payload([(100, 300, 300, 460, 0.9)]))
+    svc._idle_tick(time.monotonic(), None)
+    assert len(published(bus, "motion.pan_to")) == 1
+    assert published(bus, "motion.tilt_to") == []
+
+
+def test_person_seek_pans_only_when_detection_has_no_frame_height():
+    svc, bus = make_person_seek_svc()
+    payload = make_obj_payload([(100, 300, 300, 460, 0.9)])
+    del payload["frame_h"]
+    svc._on_objects(None, payload)
+    svc._idle_tick(time.monotonic(), None)
+    assert len(published(bus, "motion.pan_to")) == 1
+    assert published(bus, "motion.tilt_to") == []
+
+
+def test_person_seek_tilt_stops_and_resets_when_person_is_lost():
+    svc, bus = make_person_seek_svc()
+    svc._on_objects(None, make_obj_payload([(100, 300, 300, 460, 0.9)]))
+    svc._idle_tick(time.monotonic(), None)
+    assert svc._tilt_person_tracking is True
+    svc._person_cx_ts -= 3
+    bus.publish.reset_mock()
+    svc._idle_tick(time.monotonic(), None)
+    assert svc._tilt_person_tracking is False
+    assert published(bus, "motion.tilt_to") == []
+    svc._on_objects(None, make_obj_payload([]))
+    assert svc._person_cy is None
+
+
+def test_face_present_suppresses_person_seek_tilt():
+    svc, bus = make_person_seek_svc()
+    svc._on_objects(None, make_obj_payload([(100, 300, 300, 460, 0.9)]))
+    svc._faces_present = True
+    svc._idle_tick(time.monotonic(), None)
+    assert published(bus, "motion.tilt_to") == []
+
+
 @pytest.mark.parametrize("offset", [-10, 10])
 @pytest.mark.parametrize("invert", [False, True])
 def test_tilt_centers_vertically_in_logical_up_convention(offset, invert):

@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.79.9] - 2026-10-23
+### Changed
+- Person seek now also tilts toward the detected person's vertical position
+  when tilt hardware is available, using the same one-correction-per-detection
+  rate as pan; face tracking still takes priority and pan-only bodies are unchanged.
+- Correct the documented visual-servo speed limits (5°, 30°/s, 90°/s²).
+
 ## [1.79.8] - 2026-10-23
 ### Added
 - `scripts/tilt_sweep.py`: standalone tilt servo test that sweeps 80°→100°→80°
