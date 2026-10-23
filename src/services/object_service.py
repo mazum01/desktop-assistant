@@ -16,12 +16,13 @@ perception.objects
     {"objects": [{"label": str, "class_id": int, "confidence": float,
                   "bbox": [x1, y1, x2, y2]}],
      "count": int,
-     "persons": [same shape as objects; person detections only],
+     "persons": [same shape as objects; fresh confirmed person detections only],
      "backend": "hailo"|"sim",
-     "frame_w": int, "frame_h": int,
+     "frame_w": int, "frame_h": int, "rotation_deg": int, "captured_mono": float,
      "ts": float}
-    ``objects`` omits "person" boxes while a face is visible so the overlay does
-    not double-label one subject; ``persons`` always carries them for tracking.
+    ``objects`` omits only the smallest person box containing each fresh face's
+    centre, to avoid double-labeling that subject. ``persons`` retains unhidden
+    current detections for tracking, excluding held overlay boxes.
 
 object.enabled_changed
     {"enabled": bool}
@@ -41,6 +42,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import queue
 import threading
 import time
@@ -70,6 +72,7 @@ class ObjectConfig:
     iou_threshold: float = 0.50
     open_vocab_threshold: float = 0.55
     hold_seconds: float = 2.0   # keep a missed detection visible this long before dropping it
+    face_label_max_age_s: float = 1.0
 
 
 class ObjectService(Service):
@@ -149,6 +152,7 @@ class ObjectService(Service):
             self._cfg.max_fps,
             self._enabled,
         )
+        self.bus.publish("object.enabled_changed", {"enabled": self._enabled})
 
     def on_stop(self) -> None:
         for unsub in self._unsubs:
@@ -242,7 +246,15 @@ class ObjectService(Service):
                 continue
             self._last_detect_ts = now
 
-            frame = self._get_frame()
+            captured_at, rotation = now, 0
+            frame = None
+            observation = getattr(self._vision_svc, "latest_observation", None)
+            if callable(observation):
+                snapshot = observation()
+                if isinstance(snapshot, tuple) and len(snapshot) == 3:
+                    frame, captured_at, rotation = snapshot
+            if frame is None:
+                frame = self._get_frame()
             if frame is None:
                 continue
 
@@ -255,25 +267,32 @@ class ObjectService(Service):
             except Exception:
                 log.exception("object detection failed")
                 continue
+            if not self._enabled:
+                continue
 
             faces_payload = self.bus.last("perception.faces") if self.bus is not None else None
-            hide_persons = bool(faces_payload and faces_payload.get("faces"))
-
-            # Cap to max_objects (detections are already sorted by confidence).
-            if len(detections) > self._cfg.max_objects:
-                detections = detections[:self._cfg.max_objects]
 
             stable_detections = self._apply_temporal_filter(detections)
-            held_detections = self._apply_hold(stable_detections, now)
+            # Overlay limits must not exclude a larger person from tracking.
+            held_detections = self._apply_hold(
+                stable_detections[:self._cfg.max_objects], now,
+            )
             src_h, src_w = frame.shape[:2]
             self.bus.publish(
                 "perception.objects",
-                self._objects_payload(held_detections, hide_persons, src_w, src_h),
+                self._objects_payload(
+                    held_detections, faces_payload, src_w, src_h,
+                    persons=[d for d in stable_detections if d.label == "person"],
+                    captured_mono=captured_at, rotation_deg=rotation,
+                ),
             )
 
     # ── Internal ───────────────────────────────────────────────────────
 
-    def _objects_payload(self, detections, hide_persons: bool, frame_w: int, frame_h: int) -> dict:
+    def _objects_payload(
+        self, detections, faces_payload, frame_w: int, frame_h: int,
+        *, persons=None, captured_mono=None, rotation_deg=0,
+    ) -> dict:
         def describe(d) -> dict:
             return {
                 "label":      d.label,
@@ -282,15 +301,45 @@ class ObjectService(Service):
                 "bbox":       d.bbox,
             }
 
-        shown = [d for d in detections if not (hide_persons and d.label == "person")]
+        hidden = set()
+        if isinstance(faces_payload, dict):
+            stamp = faces_payload.get("captured_mono")
+            if (isinstance(stamp, (int, float))
+                    and 0 <= time.monotonic() - stamp <= self._cfg.face_label_max_age_s
+                    and faces_payload.get("rotation_deg", 0) == rotation_deg):
+                width, height = faces_payload.get("frame_w"), faces_payload.get("frame_h")
+                if width and height:
+                    for face in faces_payload.get("faces", []):
+                        center = face.get("centroid")
+                        if (not isinstance(center, (list, tuple)) or len(center) != 2
+                                or not all(isinstance(v, (int, float)) and math.isfinite(v)
+                                           for v in center)):
+                            log.warning("Cannot associate invalid face centroid %r", center)
+                            continue
+                        x, y = center[0] * frame_w / width, center[1] * frame_h / height
+                        matches = [
+                            i for i, d in enumerate(detections) if d.label == "person"
+                            and d.bbox[0] <= x <= d.bbox[2] and d.bbox[1] <= y <= d.bbox[3]
+                        ]
+                        if matches:
+                            hidden.add(min(matches, key=lambda i: (
+                                (detections[i].bbox[2] - detections[i].bbox[0])
+                                * (detections[i].bbox[3] - detections[i].bbox[1])
+                            )))
+        shown = [d for i, d in enumerate(detections) if i not in hidden]
+        tracking_persons = persons if persons is not None else [
+            d for d in detections if d.label == "person"
+        ]
         return {
             "objects": [describe(d) for d in shown],
             "count":   len(shown),
-            "persons": [describe(d) for d in detections if d.label == "person"],
+            "persons": [describe(d) for d in tracking_persons],
             "backend": self._detector.backend,
             "frame_w": frame_w,
             "frame_h": frame_h,
             "ts":      time.time(),
+            "captured_mono": time.monotonic() if captured_mono is None else captured_mono,
+            "rotation_deg": rotation_deg,
         }
 
     @staticmethod

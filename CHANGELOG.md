@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.80.0] - 2026-10-23
+### Changed
+- Tracking now explicitly requires enabled, ready servos. Face tracking prefers
+  recognized people, then the largest face; person seek independently requires
+  object detection and prefers the largest person, with a 15% switching margin.
+- After losing a tracked face, hold for one second before following a fresh
+  person detection. Random idle motion remains an independent option.
+- Hide only the person label associated with each displayed face, choosing the
+  smallest containing person box; other people remain labeled, even when face
+  tracking is disabled.
+### Fixed
+- Person seek uses fresh detections rather than held overlay boxes, clears its
+  target when detection is disabled, and advances pan/tilt trajectories at the
+  detection rate with bounded smoothstep moves instead of tiny 50 ms steps.
+
 ## [1.79.10] - 2026-10-23
 ### Fixed
 - Person seek no longer requires face tracking: with face tracking off the head

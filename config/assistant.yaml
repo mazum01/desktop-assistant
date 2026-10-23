@@ -100,6 +100,8 @@ head_tracking:
     max_age_s: 1.0
     acquire_frames: 3
     association_radius: 0.12
+    face_handoff_s: 1.0
+    person_switch_margin: 0.15
     stop_error: 0.02
     restart_error: 0.035
     gain: 0.5
@@ -149,6 +151,7 @@ notifications:
 object_detection:
   conf_threshold: 0.4
   enabled: true
+  face_label_max_age_s: 1.0
   hold_seconds: 2.0
   iou_threshold: 0.5
   max_fps: 1.5

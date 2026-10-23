@@ -22,7 +22,8 @@ def test_lock_requires_distinct_consistent_frames():
     assert lock.select([face()], 640, 480, 2, 2) is None
     assert lock.select([face()], 640, 480, 3, 3) is not None
     assert lock.select([face(600, identity="other")], 640, 480, 3.1, 3.1) is None
-    assert lock.identity == "one"
+    assert lock.identity == "other"
+    assert lock.hits == 1
 
 
 def test_lock_does_not_switch_to_higher_confidence_face():
@@ -32,6 +33,25 @@ def test_lock_does_not_switch_to_higher_confidence_face():
     selected = lock.select([face(330), face(600, identity="two", confidence=1)],
                            640, 480, 1.3, 1.3)
     assert selected[0]["face_id"] == "one"
+
+
+def test_lock_prefers_recognized_face_then_largest_not_confidence():
+    lock = FaceLock(VisualServoConfig())
+    guest = {**face(450, identity="guest"), "bbox": [350, 140, 550, 340], "name": "Guest 1"}
+    small_known = {**face(100, identity="known1"), "name": "Ada"}
+    large_known = {**face(250, identity="known2"), "name": "Grace",
+                   "bbox": [210, 200, 290, 280], "confidence": 0.6}
+    for stamp in (1, 1.1, 1.2):
+        selected = lock.select([guest, small_known, large_known], 640, 480, stamp, stamp)
+    assert selected[0]["face_id"] == "known2"
+
+
+def test_lock_chooses_largest_guest_when_no_recognized_face():
+    lock = FaceLock(VisualServoConfig())
+    large = {**face(450, identity="guest2"), "bbox": [350, 140, 550, 340], "name": "Guest 2"}
+    for stamp in (1, 1.1, 1.2):
+        selected = lock.select([face(), large], 640, 480, stamp, stamp)
+    assert selected[0]["face_id"] == "guest2"
 
 
 def test_suspect_multi_face_and_stale_results_hold():

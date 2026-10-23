@@ -21,6 +21,8 @@ def make_tracking_svc(**kwargs) -> tuple[TrackingService, MagicMock]:
     bus.last.return_value = None
     kwargs.setdefault("config", HeadTrackerConfig(frame_width=640, frame_height=480))
     svc = TrackingService(bus=bus, **kwargs)
+    svc._motion_settings = {"servo_enabled": True, "hardware_ready": True}
+    svc._object_detection_enabled = True
     return svc, bus
 
 
@@ -96,8 +98,8 @@ def make_legacy_svc(**kwargs):
 def test_legacy_accepts_one_face_without_visual_lock_or_capture_timestamp():
     svc, bus = make_legacy_svc(random_motion_enabled=False)
     svc._on_faces(None, {"faces": [
-        {"centroid": [100, 200], "confidence": 0.6},
-        {"centroid": [500, 200], "confidence": 0.9},
+        {"centroid": [100, 200], "bbox": [80, 180, 120, 220], "confidence": 0.9},
+        {"centroid": [500, 200], "bbox": [450, 150, 550, 250], "confidence": 0.6},
     ]})
     assert svc._current_face_cx == 500
     assert svc._observation is None
@@ -258,11 +260,11 @@ def test_on_objects_sets_person_cx():
     assert svc._person_cx_ts > 0.0
 
 
-def test_on_objects_picks_highest_confidence():
+def test_on_objects_picks_largest_person_not_highest_confidence():
     svc, _ = make_tracking_svc()
     payload = make_obj_payload([
-        (0, 0, 100, 200, 0.5),   # cx=50
-        (200, 0, 400, 200, 0.9), # cx=300  ← should win
+        (0, 0, 100, 200, 0.9),   # cx=50
+        (200, 0, 400, 200, 0.5), # cx=300, largest wins
     ])
     svc._on_objects(None, payload)
     assert svc._person_cx == pytest.approx(300.0)
@@ -367,6 +369,7 @@ def test_face_overrides_person_seek():
 
 def enable_tilt(svc, mn=70, mx=110):
     svc._on_motion_settings(None, {
+        "servo_enabled": True, "hardware_ready": True,
         "tilt_available": True, "tilt_min_deg": mn, "tilt_max_deg": mx,
     })
 
@@ -412,7 +415,7 @@ def test_person_seek_scales_to_tracking_frame():
 
 
 def make_person_seek_svc(tilt=True):
-    svc, bus = make_tracking_svc()
+    svc, bus = make_tracking_svc(random_motion_enabled=False)
     svc.on_start()
     if tilt:
         enable_tilt(svc)
@@ -515,12 +518,214 @@ def test_legacy_person_seek_follows_person_with_face_tracking_off():
     assert pan["override_quiet"] is True
 
 
-def test_face_present_suppresses_person_seek_tilt():
+def test_recently_tracked_face_suppresses_person_seek_tilt():
     svc, bus = make_person_seek_svc()
     svc._on_objects(None, make_obj_payload([(100, 300, 300, 460, 0.9)]))
     svc._faces_present = True
+    svc._face_ts = time.monotonic()
     svc._idle_tick(time.monotonic(), None)
     assert published(bus, "motion.tilt_to") == []
+
+
+@pytest.mark.parametrize("controller", ["legacy", "visual_servo"])
+@pytest.mark.parametrize("gate", ["servo_enabled", "hardware_ready"])
+def test_all_tracking_and_idle_paths_require_motion_ready(controller, gate):
+    svc, bus = (make_legacy_svc(random_motion_enabled=True) if controller == "legacy"
+                else make_person_seek_svc())
+    feed_face(svc)
+    svc._on_objects(None, make_obj_payload([(100, 300, 300, 460, 0.9)]))
+    svc._motion_settings[gate] = False
+    bus.publish.reset_mock()
+    if controller == "legacy":
+        svc._legacy_tick(time.monotonic(), 0.05)
+    else:
+        svc._visual_tick(time.monotonic())
+    assert published(bus, "motion.pan_to") == []
+    assert published(bus, "motion.tilt_to") == []
+    svc._face_ts = -float("inf")
+    svc._idle_tick(time.monotonic(), None)
+    assert published(bus, "motion.pan_to") == []
+
+
+@pytest.mark.parametrize("controller", ["legacy", "visual_servo"])
+def test_object_disable_clears_person_and_requires_new_detection(controller):
+    svc, bus = (make_legacy_svc(face_tracking_enabled=False, random_motion_enabled=False)
+                if controller == "legacy" else make_person_seek_svc())
+    payload = make_obj_payload([(100, 300, 300, 460, 0.9)])
+    svc._on_objects(None, payload)
+    svc._on_object_enabled(None, {"enabled": False})
+    assert svc._person_cx is None
+    svc._on_objects(None, payload)
+    assert svc._person_cx is None
+    svc._on_object_enabled(None, {"enabled": True})
+    bus.publish.reset_mock()
+    svc._legacy_tick(time.monotonic(), 0.05) if controller == "legacy" \
+        else svc._idle_tick(time.monotonic(), None)
+    assert published(bus, "motion.pan_to") == []
+    svc._on_objects(None, payload)
+    svc._legacy_tick(time.monotonic(), 0.05) if controller == "legacy" \
+        else svc._idle_tick(time.monotonic(), None)
+    assert len(published(bus, "motion.pan_to")) == 1
+
+
+def test_tracking_initializes_object_gate_from_retained_state():
+    svc, bus = make_tracking_svc()
+    bus.last.side_effect = lambda topic: {"enabled": False} if topic == "object.enabled_changed" else None
+    svc.on_start()
+    assert svc._object_detection_enabled is False
+    assert "object.enabled_changed" in [c.args[0] for c in bus.subscribe.call_args_list]
+
+
+def test_person_selection_keeps_incumbent_until_challenger_is_15_percent_larger():
+    svc, _ = make_tracking_svc()
+    svc._on_objects(None, make_obj_payload([
+        (50, 0, 150, 200, 0.6), (400, 0, 490, 200, 0.9),
+    ]))
+    assert svc._person_cx == 100
+    svc._on_objects(None, make_obj_payload([
+        (400, 0, 510, 200, 0.9), (50, 0, 150, 200, 0.6),
+    ]))
+    assert svc._person_cx == 100
+    svc._on_objects(None, make_obj_payload([
+        (400, 0, 520, 200, 0.9), (50, 0, 150, 200, 0.6),
+    ]))
+    assert svc._person_cx == 460
+
+
+@pytest.mark.parametrize("controller", ["legacy", "visual_servo"])
+def test_person_handoff_after_one_second_not_just_any_visible_face(controller):
+    svc, bus = (make_legacy_svc(random_motion_enabled=False) if controller == "legacy"
+                else make_person_seek_svc())
+    svc._face_ts = 100.0
+    svc._current_face_cx = None
+    svc._observation = None
+    svc._faces_present = True  # An unacquired face must not block handoff indefinitely.
+    with patch("src.services.tracking_service.time.monotonic", return_value=100.9):
+        svc._on_objects(None, make_obj_payload([(100, 300, 300, 460, 0.9)]))
+    bus.publish.reset_mock()
+    if controller == "legacy":
+        svc._legacy_tick(100.99, 0.05)
+        assert published(bus, "motion.pan_to") == []
+        svc._legacy_tick(101.01, 0.05)
+    else:
+        svc._idle_tick(100.99, None)
+        assert published(bus, "motion.pan_to") == []
+        svc._idle_tick(101.01, None)
+        assert len(published(bus, "motion.tilt_to")) == 1
+    assert len(published(bus, "motion.pan_to")) == 1
+
+
+def test_stale_face_observation_does_not_block_visual_person_handoff():
+    svc, bus = make_person_seek_svc()
+    svc._current_servo_angle = 175
+    svc._current_tilt_angle = 90
+    svc._face_ts = 100.0
+    svc._observation = (np.array([0.2, 0.2]), 100.0, 100.0, 1)
+    with patch("src.services.tracking_service.time.monotonic", return_value=101.1):
+        svc._on_objects(None, make_obj_payload([(100, 300, 300, 460, 0.9)]))
+        svc._visual_tick(101.1)
+    assert len(published(bus, "motion.pan_to")) == 1
+    assert len(published(bus, "motion.tilt_to")) == 1
+
+
+def test_stale_person_capture_is_not_refreshed_by_new_payload():
+    svc, bus = make_person_seek_svc()
+    payload = make_obj_payload([(100, 300, 300, 460, 0.9)])
+    payload["captured_mono"] = time.monotonic() - 3
+    svc._on_objects(None, payload)
+    svc._idle_tick(time.monotonic(), None)
+    assert published(bus, "motion.pan_to") == []
+
+
+def test_random_idle_is_independent_of_person_and_face_toggles():
+    svc, bus = make_person_seek_svc()
+    svc._on_set_face_tracking(None, {"enabled": False})
+    svc._on_set_person_seek(None, {"enabled": False})
+    svc._on_object_enabled(None, {"enabled": False})
+    bus.publish.reset_mock()
+    svc._idle_tick(time.monotonic(), None)
+    assert published(bus, "motion.pan_to") == []
+    svc._on_set_random_motion(None, {"enabled": True})
+    svc._idle_tick(time.monotonic(), None)
+    assert len(published(bus, "motion.pan_to")) == 1
+    assert published(bus, "motion.tilt_to") == []
+
+
+def test_person_centroid_correction_advances_trajectory_not_one_tiny_frame():
+    svc, bus = make_tracking_svc(
+        config=HeadTrackerConfig(
+            frame_width=640, frame_height=480, servo_min=70, servo_max=110,
+            servo_center=90, invert_pan=True, saccade_amplitude_deg=0,
+        ), face_tracking_enabled=False,
+    )
+    svc.on_start()
+    enable_tilt(svc)
+    svc._current_servo_angle = svc._current_tilt_angle = 90
+    bus.publish.reset_mock()
+    svc._on_objects(None, make_obj_payload([(400, 20, 600, 180, 0.9)]))
+    svc._idle_tick(time.monotonic(), None)
+    (pan,), (tilt,) = published(bus, "motion.pan_to"), published(bus, "motion.tilt_to")
+    assert 70 <= pan["angle"] < 89.5
+    assert 90.5 < tilt["angle"] <= 110
+    for command in (pan, tilt):
+        distance = abs(command["angle"] - 90)
+        duration = command["move_time_ms"] / 1000
+        assert distance <= svc._visual_cfg.max_step_deg
+        assert 1.875 * distance / duration <= svc._visual_cfg.max_speed_deg_s
+        assert 5.78 * distance / duration ** 2 <= svc._visual_cfg.max_accel_deg_s2 + 1e-9
+        assert command["profile"] == "smoothstep"
+
+
+def test_person_commands_wait_for_motion_and_settling():
+    svc, bus = make_person_seek_svc()
+    payload = make_obj_payload([(100, 300, 300, 460, 0.9)])
+    with patch("src.services.tracking_service.time.monotonic", return_value=100):
+        svc._on_objects(None, payload)
+        svc._idle_tick(100, None)
+    bus.publish.reset_mock()
+    with patch("src.services.tracking_service.time.monotonic", return_value=100.1):
+        svc._on_objects(None, payload)
+        svc._idle_tick(100.1, None)
+    assert published(bus, "motion.pan_to") == []
+    svc._idle_tick(svc._person_ready_at, None)
+    assert len(published(bus, "motion.pan_to")) == 1
+
+
+def test_person_centroid_converges_on_both_axes_with_repeated_fresh_detections():
+    cfg = HeadTrackerConfig(
+        frame_width=640, frame_height=480, servo_min=70, servo_max=110,
+        servo_center=90, invert_pan=True, dead_zone_frac=0.02, saccade_amplitude_deg=0,
+    )
+    svc, bus = make_tracking_svc(config=cfg, face_tracking_enabled=False)
+    svc.on_start()
+    enable_tilt(svc)
+    positions = np.array([90.0, 90.0])
+    desired = np.array([82.0, 96.0])
+    vfov = np.degrees(2 * np.arctan(np.tan(np.radians(cfg.fov_degrees) / 2) * 480 / 640))
+    for step in range(60):
+        now = 100 + step * 0.8
+        svc._current_servo_angle, svc._current_tilt_angle = positions
+        error = (positions - desired) / [cfg.fov_degrees, vfov]
+        cx, cy = 320 + error[0] * 640, 240 + error[1] * 480
+        bus.publish.reset_mock()
+        with patch("src.services.tracking_service.time.monotonic", return_value=now):
+            svc._on_objects(None, make_obj_payload([(cx - 50, cy - 80, cx + 50, cy + 80, 0.9)]))
+            svc._idle_tick(now, None)
+        for axis, topic in enumerate(("motion.pan_to", "motion.tilt_to")):
+            for command in published(bus, topic):
+                assert 70 <= command["angle"] <= 110
+                assert abs(command["angle"] - positions[axis]) <= 5 + 1e-9
+                positions[axis] = command["angle"]
+    assert np.max(np.abs((positions - desired) / [cfg.fov_degrees, vfov])) <= 0.02
+
+
+def test_legacy_face_priority_prefers_recognized_person_over_larger_guest():
+    svc, _ = make_legacy_svc()
+    svc._on_faces(None, {"faces": [
+        {"centroid": [100, 200], "bbox": [80, 180, 120, 220], "name": "Ada"},
+        {"centroid": [500, 200], "bbox": [400, 100, 600, 300], "name": "Guest 1"},
+    ]})
+    assert svc._current_face_cx == 100
 
 
 @pytest.mark.parametrize("offset", [-10, 10])

@@ -225,6 +225,7 @@ def main() -> int:
         iou_threshold=float(_obj_cfg_raw.get("iou_threshold", 0.50)),
         open_vocab_threshold=float(_obj_cfg_raw.get("open_vocab_threshold", 0.55)),
         hold_seconds=float(_obj_cfg_raw.get("hold_seconds", 2.0)),
+        face_label_max_age_s=float(_obj_cfg_raw.get("face_label_max_age_s", 1.0)),
     )
 
     _room_cfg = _cfg.get("room_detection", {})

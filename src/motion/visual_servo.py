@@ -29,6 +29,8 @@ class VisualServoConfig:
     calibration_timeout_s: float = 20.0
     validation_timeout_s: float = 90.0
     calibration_path: str = "config/tracking_calibration.json"
+    face_handoff_s: float = 1.0
+    person_switch_margin: float = 0.15
 
     def __post_init__(self):
         numeric = [v for v in asdict(self).values() if isinstance(v, (int, float))]
@@ -45,6 +47,17 @@ class VisualServoConfig:
         if (type(self.acquire_frames) is not int or self.acquire_frames < 2
                 or type(self.calibration_samples) is not int or self.calibration_samples < 3):
             raise ValueError("Acquisition requires >=2 frames; calibration requires >=3")
+        if self.person_switch_margin > 1:
+            raise ValueError("Person switch margin must be at most 1")
+
+
+def face_priority(face: dict) -> tuple[bool, float]:
+    """Prefer named people over guests, then the largest face box."""
+    name = face.get("name")
+    recognized = isinstance(name, str) and bool(name) and not name.startswith("Guest")
+    box = face.get("bbox", [0, 0, 0, 0])
+    area = max(0, box[2] - box[0]) * max(0, box[3] - box[1])
+    return recognized, area
 
 
 class FaceLock:
@@ -93,20 +106,21 @@ class FaceLock:
             f.get("confidence") == 1 and not f.get("face_id") for f, _ in candidates
         ):
             return None
-        if self.center is None:
-            if len(candidates) != 1:
-                return None
-            face, center = candidates[0]
-        else:
-            matches = [
-                (f, p) for f, p in candidates
-                if np.linalg.norm(p - self.center) <= self.cfg.association_radius
-                and not (self.identity and f.get("face_id") and f["face_id"] != self.identity)
-            ]
-            if not matches:
-                self.hits = 0
-                return None
-            face, center = min(matches, key=lambda item: np.linalg.norm(item[1] - self.center))
+        if not candidates:
+            self.hits = 0
+            return None
+        face, center = max(candidates, key=lambda item: (
+            *face_priority(item[0]),
+            -float(np.linalg.norm(item[1] - self.center)) if self.center is not None else 0,
+        ))
+        same_target = (
+            self.center is not None
+            and np.linalg.norm(center - self.center) <= self.cfg.association_radius
+            and not (self.identity and face.get("face_id") and face["face_id"] != self.identity)
+        )
+        if not same_target:
+            self.hits = 0
+            self.identity = None
         self.center = center
         self.identity = face.get("face_id") or self.identity
         self.last_seen = now
@@ -242,11 +256,14 @@ class VisualController:
             return None
         # Quintic smoothstep has peak velocity 1.875*d/T and acceleration
         # <5.78*d/T^2. MotionService executes this profile at 50 Hz.
-        duration = max(
-            model.settle_s, self.cfg.settle_s,
-            1.875 * distance / self.cfg.max_speed_deg_s,
-            math.sqrt(5.78 * distance / self.cfg.max_accel_deg_s2),
-        )
+        duration = self.move_duration(distance, model.settle_s)
         self.ready_at = now + duration + model.settle_s
         self.state = "correcting"
         return target, duration
+
+    def move_duration(self, distance: float, settle_s: float = 0.0) -> float:
+        return max(
+            settle_s, self.cfg.settle_s,
+            1.875 * distance / self.cfg.max_speed_deg_s,
+            math.sqrt(5.78 * distance / self.cfg.max_accel_deg_s2),
+        )

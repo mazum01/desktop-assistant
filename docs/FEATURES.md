@@ -125,10 +125,12 @@ The versioned `config/body_profiles.yaml` overrides the corresponding
 
 Both profiles enforce safe 500-2500 microsecond pulses; the original profile
 does **not** restore the old unsafe 10-2950 microsecond calibration.
-Legacy tracking selects the highest-confidence face without the visual
-controller's multi-frame acquisition gate, feeds the existing Kalman/minimum-
+Both controllers prefer recognized people, then the largest face bounding box.
+Legacy tracking does not require the visual controller's multi-frame
+acquisition gate, feeds the existing Kalman/minimum-
 jerk controller at 20 Hz, and falls back to fresh person detections or optional
-idle motion. Stale faces are discarded after two seconds. Face/person tracking
+idle motion. After the last tracked face disappears, the head holds for one
+second before person seek or idle motion can take over. Face/person tracking
 still works during quiet hours; random idle motion does not override silence.
 
 Runtime servo limits/channels are reused when the saved `body` and profile
@@ -175,9 +177,30 @@ response time. A saved empirical model can require a longer settling interval.
 
 When person seek is enabled and no face is being followed, a detected person's
 bounding-box centre drives pan and, where tilt hardware is available, tilt, one
-correction per detection. A tracked face always takes priority. Person seek is
+correction per detection after the preceding move and settling have completed.
+On the new body these smoothstep moves share the visual controller's step,
+speed, and acceleration limits. A tracked face always takes priority. Person seek is
 independent of the face-tracking switch: with face tracking off the head follows
-the person even while a face is visible.
+the person even while a face is visible. All automatic movement requires enabled,
+ready servos. Person seek additionally requires enabled object detection and its
+own toggle; disabling detection clears its target. Face tracking requires its
+own toggle, but does not require object detection.
+
+The largest detected person is preferred, regardless of detection confidence.
+An existing target is retained until a challenger is more than 15% larger,
+reducing rapid switching between similarly sized people. Only fresh, confirmed
+detections are used for tracking; held overlay boxes do not refresh targets.
+The defaults are configurable through
+`head_tracking.visual_servo.person_switch_margin` and `face_handoff_s`.
+If no eligible target exists, random idle movement uses its independent toggle;
+otherwise the head holds position.
+
+Displaying a face label hides only its associated person box, regardless of the
+face-tracking toggle. A person is associated when its box contains the face
+centre; the smallest containing box wins when boxes overlap. Other people stay
+labeled. Face/object image dimensions are accounted for, and stale or differently
+rotated face observations do not suppress person labels. The association freshness
+window is `object_detection.face_label_max_age_s` (one second by default).
 
 ### Automatic tracking calibration
 

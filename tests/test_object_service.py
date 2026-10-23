@@ -194,7 +194,9 @@ def test_objects_payload_hides_person_overlay_but_keeps_tracking_persons():
         _FakeDet("person", 0.9, [10, 20, 110, 220]),
         _FakeDet("cup", 0.8, [0, 0, 20, 20]),
     ]
-    payload = svc._objects_payload(detections, hide_persons=True, frame_w=640, frame_h=480)
+    faces = {"faces": [{"centroid": [60, 50]}], "frame_w": 640, "frame_h": 480,
+             "captured_mono": time.monotonic()}
+    payload = svc._objects_payload(detections, faces, frame_w=640, frame_h=480)
     assert [o["label"] for o in payload["objects"]] == ["cup"]
     assert payload["count"] == 1
     assert [p["label"] for p in payload["persons"]] == ["person"]
@@ -205,6 +207,44 @@ def test_objects_payload_hides_person_overlay_but_keeps_tracking_persons():
 def test_objects_payload_shows_persons_when_no_face_is_visible():
     svc = _make_svc()
     detections = [_FakeDet("person", 0.9, [10, 20, 110, 220])]
-    payload = svc._objects_payload(detections, hide_persons=False, frame_w=640, frame_h=480)
+    payload = svc._objects_payload(detections, None, frame_w=640, frame_h=480)
     assert [o["label"] for o in payload["objects"]] == ["person"]
     assert [p["label"] for p in payload["persons"]] == ["person"]
+
+
+def test_face_label_hides_only_smallest_containing_person_with_scaled_geometry():
+    svc = _make_svc()
+    detections = [
+        _FakeDet("person", 0.9, [0, 0, 300, 400]),
+        _FakeDet("person", 0.8, [50, 40, 150, 240]),
+        _FakeDet("person", 0.7, [400, 0, 600, 400]),
+    ]
+    faces = {"faces": [{"centroid": [50, 40]}, {"centroid": [250, 25]}],
+             "frame_w": 320, "frame_h": 240, "captured_mono": time.monotonic()}
+    payload = svc._objects_payload(detections, faces, 640, 480)
+    assert [o["bbox"] for o in payload["objects"]] == [[0, 0, 300, 400]]
+    assert len(payload["persons"]) == 3
+
+
+@pytest.mark.parametrize("metadata", [
+    {"captured_mono": 0},
+    {"rotation_deg": 180},
+    {"frame_w": 0},
+    {"faces": [{"centroid": [500, 450]}]},
+])
+def test_unmatched_or_stale_faces_do_not_hide_people(metadata):
+    svc = _make_svc()
+    faces = {"faces": [{"centroid": [60, 50]}], "frame_w": 640, "frame_h": 480,
+             "captured_mono": time.monotonic(), **metadata}
+    detections = [_FakeDet("person", 0.9, [10, 20, 110, 220])]
+    assert svc._objects_payload(detections, faces, 640, 480)["count"] == 1
+
+
+def test_held_person_overlay_does_not_refresh_tracking_observation():
+    svc = _make_svc()
+    detections = [_FakeDet("person", 0.9, [10, 20, 110, 220])]
+    payload = svc._objects_payload(detections, None, 640, 480, persons=[],
+                                   captured_mono=123)
+    assert payload["count"] == 1
+    assert payload["persons"] == []
+    assert payload["captured_mono"] == 123
