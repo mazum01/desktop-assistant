@@ -171,12 +171,15 @@ def test_step_response_is_faster_with_delayed_three_hz_feedback(tilt):
 
 def test_response_tuning_shortens_pause_with_gentler_acceleration():
     cfg = VisualServoConfig()
+    assert cfg.max_step_deg == 5
+    assert cfg.max_speed_deg_s == 30
+    assert cfg.max_accel_deg_s2 == 90
     controller = VisualController(cfg)
     plant = PlantModel([[1 / 70], [0]], cfg.settle_s, 0, {})
     target, duration = controller.correction([0.2, 0], [90], [[70, 110]], 1, 1, plant)
-    assert abs(target[0] - 90) == pytest.approx(3.5)
+    assert abs(target[0] - 90) == pytest.approx(5)
     assert controller.ready_at - (1 + duration) == pytest.approx(0.1)
-    assert 5.78 * abs(target[0] - 90) / duration**2 <= 50 + 1e-9
+    assert 5.78 * abs(target[0] - 90) / duration**2 <= cfg.max_accel_deg_s2 + 1e-9
     assert controller.correction([0.2, 0], target, [[70, 110]],
                                  1 + duration, controller.ready_at, plant) is None
 

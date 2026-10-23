@@ -546,6 +546,10 @@ class TrackingService(Service):
             "frame": [self._tracker_cfg.frame_width, self._tracker_cfg.frame_height],
             "rotation": self._rotation,
             "servo": {k: self._motion_settings.get(k) for k in keys},
+            "direction": {
+                "invert_pan": self._tracker_cfg.invert_pan,
+                "invert_tilt": self._tracker_cfg.invert_tilt,
+            },
         }
 
     def _calibration_path(self):

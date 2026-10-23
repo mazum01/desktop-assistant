@@ -38,6 +38,28 @@ def test_person_seek_disabled_via_ctor():
     assert svc.person_seek_enabled is False
 
 
+def test_tilt_direction_change_invalidates_saved_visual_calibration(tmp_path):
+    svc, _ = make_tracking_svc(
+        visual_config={"calibration_path": str(tmp_path / "model.json")},
+    )
+    svc._motion_settings = {
+        "tilt_available": True,
+        "tilt_min_deg": 70,
+        "tilt_max_deg": 110,
+    }
+    old_signature = svc._signature()
+    PlantModel(
+        [[-0.01, 0.0], [0.0, 0.01]], 0.6, 0.0, old_signature,
+    ).save(svc._calibration_path())
+
+    svc._model()
+    svc._tracker_cfg.invert_tilt = True
+    model = svc._model()
+
+    assert model.matrix()[1, 1] > 0
+    assert svc._plant is None
+
+
 def make_legacy_svc(**kwargs):
     kwargs.setdefault("config", HeadTrackerConfig(
         frame_width=640, frame_height=480, servo_min=135, servo_max=215,

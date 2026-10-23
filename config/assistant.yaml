@@ -103,9 +103,9 @@ head_tracking:
     stop_error: 0.02
     restart_error: 0.035
     gain: 0.5
-    max_step_deg: 3.5
-    max_speed_deg_s: 20.0
-    max_accel_deg_s2: 50.0
+    max_step_deg: 5.0
+    max_speed_deg_s: 30.0
+    max_accel_deg_s2: 90.0
     settle_s: 0.1
     calibration_step_deg: 2.0
     calibration_samples: 4

@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.79.6] - 2026-10-22
+### Fixed
+- Invalidate visual-servo calibration when pan or tilt direction changes.
+### Changed
+- Increase visual-servo speed, step, and acceleration limits for more responsive tracking.
+
 ## [1.79.5] - 2026-10-21
 ### Changed
 - Shape the default display smile as a thick, rounded bar with a subtle arc.

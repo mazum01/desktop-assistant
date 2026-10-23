@@ -20,9 +20,9 @@ class VisualServoConfig:
     stop_error: float = 0.02
     restart_error: float = 0.035
     gain: float = 0.5
-    max_step_deg: float = 3.5
-    max_speed_deg_s: float = 20.0
-    max_accel_deg_s2: float = 50.0
+    max_step_deg: float = 5.0
+    max_speed_deg_s: float = 30.0
+    max_accel_deg_s2: float = 90.0
     settle_s: float = 0.1
     calibration_step_deg: float = 2.0
     calibration_samples: int = 4
