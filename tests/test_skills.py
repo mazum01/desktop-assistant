@@ -205,8 +205,8 @@ def test_motion_control(text, expected_angle):
     ("look left", "motion.pan_to", 70),
     ("look right", "motion.pan_to", 110),
     ("face center", "motion.pan_to", 90),
-    ("look up", "motion.tilt_to", 70),
-    ("tilt down", "motion.tilt_to", 110),
+    ("look up", "motion.tilt_to", 110),
+    ("tilt down", "motion.tilt_to", 70),
 ])
 def test_motion_control_uses_live_axis_limits(text, topic, angle):
     bus = make_bus()

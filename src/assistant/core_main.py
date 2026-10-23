@@ -496,6 +496,7 @@ def main() -> int:
         pan_channel=_pan_channel, tilt_channel=_tilt_channel,
         range_deg=_servo_range, tilt_min_deg=_tilt_min, tilt_max_deg=_tilt_max,
         tilt_enabled=bool(_servo_cfg.get("tilt_enabled", False)),
+        tilt_reversed=_tracker_cfg.invert_tilt,
     )
 
     # Second camera (optional — gracefully absent if not configured or detected)

@@ -49,14 +49,36 @@ def test_tilt_direction_change_invalidates_saved_visual_calibration(tmp_path):
     }
     old_signature = svc._signature()
     PlantModel(
-        [[-0.01, 0.0], [0.0, 0.01]], 0.6, 0.0, old_signature,
+        [[-0.01, 0.0], [0.0, -0.02]], 0.6, 0.0, old_signature,
     ).save(svc._calibration_path())
 
-    svc._model()
+    assert svc._model().matrix()[1, 1] == -0.02
+    assert svc._plant is not None
     svc._tracker_cfg.invert_tilt = True
     model = svc._model()
 
     assert model.matrix()[1, 1] > 0
+    assert svc._plant is None
+
+
+@pytest.mark.parametrize("invert", [False, True])
+def test_uncalibrated_tilt_model_assumes_up_moves_face_down(invert):
+    svc, _ = make_tracking_svc(config=HeadTrackerConfig(
+        frame_width=640, frame_height=480, invert_tilt=invert,
+    ))
+    svc._motion_settings = {"tilt_available": True, "tilt_min_deg": 70, "tilt_max_deg": 110}
+    assert svc._model().matrix()[1, 1] > 0
+
+
+def test_calibration_from_before_tilt_convention_is_discarded(tmp_path):
+    svc, _ = make_tracking_svc(
+        visual_config={"calibration_path": str(tmp_path / "model.json")},
+    )
+    svc._motion_settings = {"tilt_available": True, "tilt_min_deg": 70, "tilt_max_deg": 110}
+    legacy = svc._signature()
+    del legacy["tilt_convention"]
+    PlantModel([[-0.01, 0.0], [0.0, -0.02]], 0.6, 0.0, legacy).save(svc._calibration_path())
+    assert svc._model().matrix()[1, 1] > 0
     assert svc._plant is None
 
 
@@ -391,7 +413,7 @@ def test_person_seek_scales_to_tracking_frame():
 
 @pytest.mark.parametrize("offset", [-10, 10])
 @pytest.mark.parametrize("invert", [False, True])
-def test_tilt_centers_vertically_with_mount_direction(offset, invert):
+def test_tilt_centers_vertically_in_logical_up_convention(offset, invert):
     cfg = HeadTrackerConfig(
         frame_width=1920, frame_height=1080, tracking_gain=0.28,
         dead_zone_frac=0.02, invert_tilt=invert,
@@ -402,7 +424,9 @@ def test_tilt_centers_vertically_with_mount_direction(offset, invert):
     assert tracker._cfg.servo_min == 70
     assert tracker._cfg.servo_max == 110
     position = 90.0
-    direction = -1 if invert else 1
+    # A higher tilt angle looks up, so a fixed face moves down in the image.
+    # Mount reversal is applied at the servo and must not change this.
+    direction = -1
     for _ in range(300):
         error = offset - direction * (position - 90)
         cy = 540 + error / tracker._cfg.fov_degrees * 1080

@@ -104,9 +104,11 @@ head_tracking:
 ```
 
 `invert_pan` is also supported. Omitted directions retain the shared profile's
-defaults. Restart the core service to apply changes. These directions control
-the uncalibrated tracking model; a measured tracking calibration determines its
-own direction and must be regenerated if the physical mount changes.
+defaults. Restart the core service to apply changes. `invert_tilt: true`
+declares a reversed tilt servo mount: the tilt output is mirrored at the servo
+so tilt angles always mean 90° level, above 90° up, below 90° down. `invert_pan`
+controls the uncalibrated pan model. A measured tracking calibration records its
+own direction and is discarded automatically when either direction changes.
 
 The identity file must remain with its hardware. Missing identity keeps new-body behavior
 for backward compatibility and logs a warning; an invalid identity is an
@@ -156,8 +158,9 @@ within both the configured tilt travel limits and 20 degrees either side of
 their midpoint; tilt holds position when the face is lost or tracking is off.
 Set `servo.tilt_enabled: true` in the selected body profile only on hardware with a connected tilt servo
 (the default when omitted is false). PWM hardware cannot detect whether a
-servo is physically plugged in. `head_tracking.invert_pan` and `invert_tilt`
-allow for reversed mounts in the uncalibrated model. Active centering settings
+servo is physically plugged in. `head_tracking.invert_pan` allows for a reversed
+pan mount in the uncalibrated model and `invert_tilt` reverses the tilt servo
+output (see above). Active centering settings
 live under `head_tracking.visual_servo`; legacy tuning sliders/presets affect
 idle/person-seek motion, not the face controller. Decorative saccades and speech
 offsets do not perturb active centering.

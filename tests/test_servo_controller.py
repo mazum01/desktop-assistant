@@ -26,6 +26,17 @@ def test_direct_180_degree_mapping(angle, expected):
     assert servo.position == expected
 
 
+@pytest.mark.parametrize("angle,written", [(70, 110), (90, 90), (110, 70), (100, 80)])
+def test_reversed_mount_mirrors_shaft_but_keeps_logical_angles(angle, written):
+    kit = make_kit()
+    servo = ServoController(ServoConfig(
+        channel=0, range_deg=180, soft_min_deg=70, soft_max_deg=110, reverse=True,
+    ), kit=kit, initialize_hardware=False)
+    servo._write(angle)
+    assert kit.servo[0].angle == written
+    assert servo.position == angle
+
+
 def test_axis_channels_share_one_kit_without_touching_other_channels():
     kit = make_kit()
     pan = make_servo(0, kit)

@@ -36,7 +36,8 @@ class MotionControlSkill(Skill):
         if match.group(0).endswith(("up", "down")):
             if settings.get("tilt_available") is False:
                 return "Head tilt is not available on this body."
-            angle = settings.get("tilt_min_deg", 70) if "up" in lower else settings.get("tilt_max_deg", 110)
+            # Tilt convention: 90 is level, above 90 looks up, below 90 looks down.
+            angle = settings.get("tilt_max_deg", 110) if "up" in lower else settings.get("tilt_min_deg", 70)
             bus.publish("motion.tilt_to", {"angle": angle})
             return "Looking up." if "up" in lower else "Looking down."
         if "left" in lower:

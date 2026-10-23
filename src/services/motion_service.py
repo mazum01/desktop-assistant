@@ -70,7 +70,8 @@ class MotionService(Service):
                  tilt_min_deg: float = 70.0,
                  tilt_max_deg: float = 110.0,
                  tilt_controller=None,
-                 tilt_enabled: bool = False) -> None:
+                 tilt_enabled: bool = False,
+                 tilt_reversed: bool = False) -> None:
         super().__init__(bus=bus)
         self._controller = controller
         self._quiet_hours = quiet_hours
@@ -85,6 +86,7 @@ class MotionService(Service):
         self._tilt_min = tilt_min_deg
         self._tilt_max = tilt_max_deg
         self._tilt_controller = tilt_controller
+        self._tilt_reversed = bool(tilt_reversed)
         self._tilt_enabled = tilt_enabled or tilt_controller is not None
         self._tilt_target = None
         self._tilt_speed = 90.0
@@ -121,6 +123,7 @@ class MotionService(Service):
             "soft_min_deg": self._soft_min, "soft_max_deg": self._soft_max,
             "pan_channel": self._pan_channel, "tilt_channel": self._tilt_channel,
             "tilt_min_deg": self._tilt_min, "tilt_max_deg": self._tilt_max,
+            "tilt_reversed": self._tilt_reversed,
             "range_deg": self._range_deg,
             "pulse_min_us": self._pulse_min_us, "pulse_max_us": self._pulse_max_us,
             "hardware_ready": self.hardware_ready,
@@ -195,6 +198,7 @@ class MotionService(Service):
                 channel=self._tilt_channel, range_deg=180,
                 soft_min_deg=self._tilt_min, soft_max_deg=self._tilt_max,
                 pulse_min_us=self._pulse_min_us, pulse_max_us=self._pulse_max_us,
+                reverse=self._tilt_reversed,
             ), kit=self._controller._kit, initialize_hardware=False)
         self._unsubs.append(self.bus.subscribe("motion.pan_to",      self._on_pan_to))
         self._unsubs.append(self.bus.subscribe("motion.tilt_to", self._on_tilt_to))

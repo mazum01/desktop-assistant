@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.79.7] - 2026-10-22
+### Fixed
+- Define tilt as 90° level, above 90° up, below 90° down. A reversed tilt mount
+  (`head_tracking.invert_tilt: true`) is now mirrored at the servo output, so
+  commands, limits, reported position, and face tracking share that convention.
+- Voice "look up"/"look down" now drive the matching tilt direction.
+- Visual tracking assumes the logical convention and discards calibrations saved
+  before it, which recorded a mount-dependent tilt sign.
+
 ## [1.79.6] - 2026-10-22
 ### Fixed
 - Invalidate visual-servo calibration when pan or tilt direction changes.

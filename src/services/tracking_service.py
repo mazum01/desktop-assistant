@@ -309,7 +309,7 @@ class TrackingService(Service):
                 servo_min=max(mn, center - _TILT_MAX_OFFSET_DEG),
                 servo_max=min(mx, center + _TILT_MAX_OFFSET_DEG),
                 servo_center=center,
-                invert_pan=self._tracker_cfg.invert_tilt,
+                invert_pan=True,
                 saccade_amplitude_deg=0,
             )
             initial = self._current_tilt_angle
@@ -546,6 +546,7 @@ class TrackingService(Service):
             "frame": [self._tracker_cfg.frame_width, self._tracker_cfg.frame_height],
             "rotation": self._rotation,
             "servo": {k: self._motion_settings.get(k) for k in keys},
+            "tilt_convention": 2,
             "direction": {
                 "invert_pan": self._tracker_cfg.invert_pan,
                 "invert_tilt": self._tracker_cfg.invert_tilt,
@@ -572,14 +573,15 @@ class TrackingService(Service):
             return self._plant
         cfg = self._tracker_cfg
         # Normalized image displacement per commanded degree; empirical
-        # calibration replaces this approximation, including the mount sign.
+        # calibration replaces this approximation. Tilt angles are logical (above
+        # 90 looks up), so a higher angle moves a fixed target down in the image.
         pan = (1 if cfg.invert_pan else -1) / cfg.fov_degrees
         matrix = [[pan], [0.0]]
         if self._motion_settings.get("tilt_available"):
             vfov = math.degrees(2 * math.atan(
                 math.tan(math.radians(cfg.fov_degrees) / 2) * cfg.frame_height / cfg.frame_width
             ))
-            matrix = [[pan, 0.0], [0.0, (1 if cfg.invert_tilt else -1) / vfov]]
+            matrix = [[pan, 0.0], [0.0, 1 / vfov]]
         return PlantModel(matrix, self._visual_cfg.settle_s, 0, signature)
 
     def _positions_and_limits(self):

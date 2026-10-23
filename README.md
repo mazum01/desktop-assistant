@@ -109,6 +109,12 @@ assignments and travel limits persist locally in `config/runtime_state.yaml`.
 `range_deg: 180` uses direct angular mapping; omitted/360 retains the legacy
 geared pan mapping. Tilt always uses 180° direct mapping.
 
+Tilt angles always follow one convention: **90° is level, above 90° looks up,
+below 90° looks down**. If a device's tilt servo is mounted the other way, set
+`head_tracking.invert_tilt: true` in that device's ignored `config/body.yaml`
+and restart the core; the servo output is mirrored internally, so commands,
+limits, `motion.position`, and face tracking keep the convention above.
+
 Software version is separate from hardware identity. Keep each device's camera
 settings, display BLE address, Hailo models/drivers, and calibration on that
 device. An application update is not permission to flash its display or replace

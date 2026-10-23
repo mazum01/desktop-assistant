@@ -71,6 +71,9 @@ class ServoConfig:
     soft_min_deg: float = _LOGICAL_MIN
     soft_max_deg: float = _LOGICAL_MAX
     range_deg: float = _LOGICAL_MAX
+    # Mirror the written shaft angle for a reversed mount; logical angles,
+    # limits and reported positions keep the caller's convention.
+    reverse: bool = False
 
     def __post_init__(self) -> None:
         if type(self.channel) is not int or not 0 <= self.channel <= 15:
@@ -253,6 +256,8 @@ class ServoController:
         kit_angle = (self.logical_to_kit_angle(logical_deg)
                      if self._cfg.range_deg == 360
                      else logical_deg * 180.0 / self._cfg.range_deg)
+        if self._cfg.reverse:
+            kit_angle = 180.0 - kit_angle
         if self._kit is not None:
             self._kit.servo[self._cfg.channel].angle = kit_angle
         else:
