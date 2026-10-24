@@ -191,13 +191,13 @@ def test_step_response_is_faster_with_delayed_three_hz_feedback(tilt):
 
 def test_response_tuning_shortens_pause_with_gentler_acceleration():
     cfg = VisualServoConfig()
-    assert cfg.max_step_deg == 5
-    assert cfg.max_speed_deg_s == 30
-    assert cfg.max_accel_deg_s2 == 90
+    assert cfg.max_step_deg == 10
+    assert cfg.max_speed_deg_s == 80
+    assert cfg.max_accel_deg_s2 == 300
     controller = VisualController(cfg)
     plant = PlantModel([[1 / 70], [0]], cfg.settle_s, 0, {})
     target, duration = controller.correction([0.2, 0], [90], [[70, 110]], 1, 1, plant)
-    assert abs(target[0] - 90) == pytest.approx(5)
+    assert abs(target[0] - 90) == pytest.approx(10)
     assert controller.ready_at - (1 + duration) == pytest.approx(0.1)
     assert 5.78 * abs(target[0] - 90) / duration**2 <= cfg.max_accel_deg_s2 + 1e-9
     assert controller.correction([0.2, 0], target, [[70, 110]],
@@ -241,9 +241,16 @@ def test_inconsistent_moving_target_calibration_rejected():
 
 
 @pytest.mark.parametrize("kwargs", [
-    {"max_age_s": float("nan")}, {"gain": 2}, {"max_step_deg": 10},
-    {"stop_error": 0.1}, {"acquire_frames": 1}, {"max_speed_deg_s": 100},
+    {"max_age_s": float("nan")}, {"gain": 2}, {"max_step_deg": 11},
+    {"stop_error": 0.1}, {"acquire_frames": 1}, {"max_speed_deg_s": 121},
 ])
 def test_bad_configuration_rejected(kwargs):
     with pytest.raises(ValueError):
         VisualServoConfig(**kwargs)
+
+
+def test_config_rejects_values_beyond_safety_bounds():
+    for kwargs in ({"gain": 0.9}, {"max_step_deg": 11}, {"max_speed_deg_s": 121},
+                   {"max_accel_deg_s2": 361}):
+        with pytest.raises(ValueError, match="bounds"):
+            VisualServoConfig(**kwargs)

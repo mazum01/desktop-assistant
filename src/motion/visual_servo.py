@@ -19,10 +19,10 @@ class VisualServoConfig:
     association_radius: float = 0.12
     stop_error: float = 0.02
     restart_error: float = 0.035
-    gain: float = 0.5
-    max_step_deg: float = 5.0
-    max_speed_deg_s: float = 30.0
-    max_accel_deg_s2: float = 90.0
+    gain: float = 0.8
+    max_step_deg: float = 10.0
+    max_speed_deg_s: float = 80.0
+    max_accel_deg_s2: float = 300.0
     settle_s: float = 0.1
     calibration_step_deg: float = 2.0
     calibration_samples: int = 4
@@ -38,9 +38,9 @@ class VisualServoConfig:
             raise ValueError("Visual servo settings must be finite and positive")
         if not self.stop_error < self.restart_error < self.association_radius < 0.5:
             raise ValueError("Require stop < restart < association radius < 0.5")
-        if not 0 < self.gain <= 0.5 or self.max_step_deg > 5:
+        if not 0 < self.gain <= 0.8 or self.max_step_deg > 10:
             raise ValueError("Visual servo gain/step exceeds conservative safety bounds")
-        if self.max_speed_deg_s > 30 or self.max_accel_deg_s2 > 90:
+        if self.max_speed_deg_s > 120 or self.max_accel_deg_s2 > 360:
             raise ValueError("Visual servo speed/acceleration exceeds safety bounds")
         if not 0 < self.calibration_step_deg <= 3:
             raise ValueError("Calibration steps must be within 0-3 degrees")

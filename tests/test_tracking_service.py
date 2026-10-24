@@ -714,7 +714,7 @@ def test_person_centroid_converges_on_both_axes_with_repeated_fresh_detections()
         for axis, topic in enumerate(("motion.pan_to", "motion.tilt_to")):
             for command in published(bus, topic):
                 assert 70 <= command["angle"] <= 110
-                assert abs(command["angle"] - positions[axis]) <= 5 + 1e-9
+                assert abs(command["angle"] - positions[axis]) <= svc._visual_cfg.max_step_deg + 1e-9
                 positions[axis] = command["angle"]
     assert np.max(np.abs((positions - desired) / [cfg.fov_degrees, vfov])) <= 0.02
 

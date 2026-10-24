@@ -91,7 +91,7 @@ face_recognition:
   greeting_cooldown_min: 30
   guest_intro_delay_min: 2.0
   match_threshold: 0.6
-  max_fps: 3.0
+  max_fps: 7.0
   min_absence_s: 30
   min_face_px: 80
 head_tracking:
@@ -104,10 +104,10 @@ head_tracking:
     person_switch_margin: 0.15
     stop_error: 0.02
     restart_error: 0.035
-    gain: 0.5
-    max_step_deg: 5.0
-    max_speed_deg_s: 30.0
-    max_accel_deg_s2: 90.0
+    gain: 0.8
+    max_step_deg: 10.0
+    max_speed_deg_s: 80.0
+    max_accel_deg_s2: 300.0
     settle_s: 0.1
     calibration_step_deg: 2.0
     calibration_samples: 4

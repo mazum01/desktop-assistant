@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.83.3] - 2026-10-24
+### Changed
+- Increased head-tracking responsiveness again: visual-servo defaults are now
+  gain 0.8, max step 10°, max speed 80°/s, and max acceleration 300°/s².
+  Face detection remains at 7 fps and tilt travel limits are unchanged.
+
+## [1.83.2] - 2026-10-24
+### Changed
+- Head tracking responds faster. Face detection runs up to 7 times per second
+  (was 3), so the head waits less for a fresh frame after each move. Tracking
+  moves now use gain 0.7 (was 0.5), up to 8° per correction (was 5°), 60°/s
+  (was 30°/s) and 240°/s² acceleration (was 90°/s²). The controller's safety
+  caps rise to gain 0.8, 10° per step, 120°/s and 360°/s², still within VERA's
+  general 120°/s motion limit. Tilt travel is unchanged.
+
 ## [1.83.1] - 2026-10-24
 ### Fixed
 - Dashboard camera feeds no longer stutter or lag. The web process fetched
