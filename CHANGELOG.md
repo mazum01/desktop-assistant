@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.83.0] - 2026-10-24
+### Changed
+- Each camera now asks the Pi 5 ISP for a second, detector-sized output
+  (640×360 for 1080p) alongside the full frame. The face and object detectors
+  letterbox this small frame directly, and both dashboard streams encode it,
+  instead of shrinking every 1080p frame with OpenCV on the CPU. Box
+  coordinates and recognition crops still use the full-resolution frame. If
+  the camera rejects the extra stream, or its size doesn't match, VERA falls
+  back to software resizing.
+
 ## [1.82.1] - 2026-10-24
 ### Changed
 - Apply 180° camera rotation with the sensor's horizontal/vertical flip instead

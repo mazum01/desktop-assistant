@@ -102,3 +102,41 @@ class TestRawCameraServiceTick:
         # Should not raise
         svc.run_tick()
         assert svc.latest_jpeg() is None
+
+
+class _SmallFrameCamera:
+    hardware_ready = True
+    is_ready = True
+    hw_rotation_deg = 0
+
+    def __init__(self):
+        self.frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.small = np.full((360, 640, 3), 200, dtype=np.uint8)
+
+    def capture_frames(self):
+        return self.frame, self.small, 1.0
+
+
+def test_tick_streams_isp_small_frame_without_resizing():
+    svc, _ = _make_service()
+    svc._camera = _SmallFrameCamera()
+    svc._stream_width, svc._stream_height = 640, 360
+    with patch("src.services.raw_camera_service.cv2.resize") as resize:
+        svc.run_tick()
+    resize.assert_not_called()
+    assert svc.latest_frame() is svc._camera.frame
+    import cv2
+    decoded = cv2.imdecode(np.frombuffer(svc.latest_jpeg(), np.uint8), cv2.IMREAD_COLOR)
+    assert decoded.shape == (360, 640, 3)
+    assert abs(int(decoded.mean()) - 200) <= 2
+
+
+def test_tick_resizes_when_stream_size_differs_from_small_frame():
+    svc, _ = _make_service()
+    svc._camera = _SmallFrameCamera()
+    svc._stream_width, svc._stream_height = 320, 180
+    svc.run_tick()
+    import cv2
+    decoded = cv2.imdecode(np.frombuffer(svc.latest_jpeg(), np.uint8), cv2.IMREAD_COLOR)
+    assert decoded.shape == (180, 320, 3)
+    assert decoded.mean() < 5

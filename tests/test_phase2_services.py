@@ -97,6 +97,26 @@ def test_vision_service_skips_rotation_applied_by_sensor():
     assert not frame.flags.writeable
 
 
+class _SmallFrameCamera(_FlippedCamera):
+    def capture_frames(self):
+        frame, ts = self.capture_observation()
+        small = np.zeros((360, 640, 3), np.uint8)
+        small.flags.writeable = False
+        self.small = small
+        return frame, small, ts
+
+
+def test_vision_service_exposes_isp_small_frame_for_detectors():
+    from src.vision.camera import CameraConfig
+    fake = _SmallFrameCamera()
+    svc = VisionService(bus=MessageBus(), camera=fake,
+                        camera_config=CameraConfig(rotation_deg=180))
+    svc.run_tick()
+    frame, small, ts, rot = svc.latest_detection_observation()
+    assert frame is fake.last and small is fake.small
+    assert not small.flags.writeable
+
+
 def test_vision_service_capture_still_topic():
     bus = MessageBus()
     fake = _FakeCamera()

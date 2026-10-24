@@ -1,6 +1,8 @@
 """
 Tests for ObjectDetector (sim mode — no Hailo device required).
 """
+from unittest.mock import patch
+
 import numpy as np
 import pytest
 
@@ -51,6 +53,24 @@ def test_letterbox_square_unchanged(sim_detector):
     frame = np.ones((640, 640, 3), dtype=np.uint8) * 128
     lb = sim_detector._letterbox(frame)
     assert lb.shape == (640, 640, 3)
+
+
+def test_letterbox_uses_matching_small_frame(sim_detector):
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    small = np.zeros((360, 640, 3), dtype=np.uint8)
+    small[..., 0] = 10  # BGR blue; letterbox output is RGB
+    with patch("cv2.resize") as resize:
+        lb = sim_detector._letterbox(frame, small)
+    resize.assert_not_called()
+    assert (lb[140:500, :, 2] == 10).all() and (lb[140:500, :, 0] == 0).all()
+    assert not lb[:140].any() and not lb[500:].any()
+
+
+def test_letterbox_ignores_mismatched_small_frame(sim_detector):
+    frame = np.full((1080, 1920, 3), 50, dtype=np.uint8)
+    small = np.zeros((320, 640, 3), dtype=np.uint8)
+    lb = sim_detector._letterbox(frame, small)
+    assert (lb[140:500] == 50).all()
 
 
 def test_decode_empty_output(sim_detector):

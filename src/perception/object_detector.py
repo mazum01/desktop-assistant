@@ -365,9 +365,13 @@ class ObjectDetector:
     def backend(self) -> str:
         return self._backend
 
-    def detect(self, frame: np.ndarray) -> List[Detection]:
+    def detect(self, frame: np.ndarray, small: Optional[np.ndarray] = None) -> List[Detection]:
         """
-        Run object detection on *frame* (H×W×3 uint8 RGB).
+        Run object detection on *frame* (H×W×3 uint8 BGR).
+
+        *small* is an optional copy of *frame* already scaled to the letterbox
+        content size (e.g. by the camera ISP); it replaces the resize when its
+        size matches exactly. Boxes are always in *frame* coordinates.
 
         Returns a list of :class:`Detection` objects sorted by confidence
         descending. Returns an empty list in sim mode or on error.
@@ -379,7 +383,7 @@ class ObjectDetector:
 
         src_h, src_w = frame.shape[:2]
         try:
-            inp = self._letterbox(frame)
+            inp = self._letterbox(frame, small)
             hef_outputs = self._engine.infer({"input_layer1": inp})
             if self._onchip_nms:
                 return self._decode_nms(hef_outputs, src_w, src_h)
@@ -511,7 +515,7 @@ class ObjectDetector:
 
     # ── Internal ───────────────────────────────────────────────────────
 
-    def _letterbox(self, frame: np.ndarray) -> np.ndarray:
+    def _letterbox(self, frame: np.ndarray, small: Optional[np.ndarray] = None) -> np.ndarray:
         """Resize *frame* (BGR) to 640×640 with letterboxing into the preallocated buffer.
 
         Geometry (scale, padding) is cached after the first call; ``buf.fill(0)``
@@ -529,8 +533,11 @@ class ObjectDetector:
             self._lb_pad_left = (_TARGET_SIZE - self._lb_new_w) // 2
             self._lb_src_shape = (src_h, src_w)
             self._letterbox_buf.fill(0)  # re-zero only on geometry change
-        resized = cv2.resize(frame, (self._lb_new_w, self._lb_new_h),
-                             interpolation=cv2.INTER_LINEAR)
+        if small is not None and small.shape[:2] == (self._lb_new_h, self._lb_new_w):
+            resized = small
+        else:
+            resized = cv2.resize(frame, (self._lb_new_w, self._lb_new_h),
+                                 interpolation=cv2.INTER_LINEAR)
         pt, pl = self._lb_pad_top, self._lb_pad_left
         # Copy as RGB (model expects RGB; camera delivers BGR)
         self._letterbox_buf[pt:pt + self._lb_new_h, pl:pl + self._lb_new_w] = resized[:, :, ::-1]

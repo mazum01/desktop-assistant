@@ -149,7 +149,7 @@ class FaceDetector:
 
     # ── Public API ─────────────────────────────────────────────────────
 
-    def detect(self, frame: np.ndarray) -> List[FaceDetection]:
+    def detect(self, frame: np.ndarray, small: Optional[np.ndarray] = None) -> List[FaceDetection]:
         """
         Detect faces in *frame*.
 
@@ -158,6 +158,9 @@ class FaceDetector:
         frame : np.ndarray
             H×W×3 uint8 image (RGB or BGR — both work; colour accuracy
             doesn't affect detection significantly for SCRFD/Haar).
+        small : np.ndarray, optional
+            *frame* already scaled to the letterbox size (e.g. by the camera
+            ISP). Used instead of resizing when its size matches exactly.
 
         Returns
         -------
@@ -166,7 +169,7 @@ class FaceDetector:
             Bounding-box coordinates are in original frame pixel space.
         """
         if self._backend == "hailo":
-            return self._detect_hailo(frame)
+            return self._detect_hailo(frame, small)
         if self._backend == "cpu":
             return self._detect_haar(frame)
         log.debug("[sim] FaceDetector.detect() — returning empty list")
@@ -185,9 +188,9 @@ class FaceDetector:
 
     # ── Hailo path ─────────────────────────────────────────────────────
 
-    def _detect_hailo(self, frame: np.ndarray) -> List[FaceDetection]:
+    def _detect_hailo(self, frame: np.ndarray, small: Optional[np.ndarray] = None) -> List[FaceDetection]:
         h_orig, w_orig = frame.shape[:2]
-        blob, scale_x, scale_y, pad_x, pad_y = self._preprocess(frame, self._letterbox_buf)
+        blob, scale_x, scale_y, pad_x, pad_y = self._preprocess(frame, self._letterbox_buf, small)
 
         outputs = self._engine.infer({"input_layer1": blob})
         if not outputs:
@@ -244,6 +247,7 @@ class FaceDetector:
     def _preprocess(
         frame: np.ndarray,
         buf: Optional[np.ndarray] = None,
+        small: Optional[np.ndarray] = None,
     ) -> tuple[np.ndarray, float, float, float, float]:
         """
         Letterbox-resize frame to 640×640 uint8.
@@ -255,6 +259,9 @@ class FaceDetector:
         buf : np.ndarray, optional
             Reusable (640, 640, 3) uint8 buffer. When provided, avoids a
             per-frame allocation. Pad regions are zeroed in-place.
+        small : np.ndarray, optional
+            *frame* pre-scaled to the letterbox content size; skips the resize
+            when its shape matches. Geometry is always derived from *frame*.
 
         Returns
         -------
@@ -267,7 +274,10 @@ class FaceDetector:
         h, w = frame.shape[:2]
         scale = min(_INPUT_SIZE / w, _INPUT_SIZE / h)
         new_w, new_h = int(w * scale), int(h * scale)
-        resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        if small is not None and small.shape[:2] == (new_h, new_w):
+            resized = small
+        else:
+            resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
         if buf is None:
             blob = np.zeros((_INPUT_SIZE, _INPUT_SIZE, 3), dtype=np.uint8)
         else:

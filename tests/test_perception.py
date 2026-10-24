@@ -183,6 +183,20 @@ class TestFaceDetector:
         blob, sx, sy, px, py = FaceDetector._preprocess(frame)
         assert blob.shape == (640, 640, 3)
 
+    def test_preprocess_uses_matching_small_frame(self):
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        small = np.full((360, 640, 3), 9, dtype=np.uint8)
+        with patch("src.perception.face_detector.cv2.resize") as resize:
+            blob, sx, sy, px, py = FaceDetector._preprocess(frame, None, small)
+        resize.assert_not_called()
+        assert (sx, sy, px, py) == (1 / 3, 1 / 3, 0, 140)
+        assert (blob[140:500] == 9).all() and not blob[:140].any()
+
+    def test_preprocess_ignores_mismatched_small_frame(self):
+        frame = np.full((1080, 1920, 3), 4, dtype=np.uint8)
+        blob, *_ = FaceDetector._preprocess(frame, None, np.zeros((100, 100, 3), np.uint8))
+        assert (blob[140:500] == 4).all()
+
     def test_cpu_fallback_initialises(self):
         """FaceDetector should find the OpenCV Haar cascade and use CPU backend."""
         with patch("src.perception.face_detector.FaceDetector._find_hef", return_value=None):

@@ -288,9 +288,14 @@ class PerceptionService(Service):
 
             captured_at = time.monotonic()
             rotation = 0
-            frame = None
+            frame = small = None
+            detection_obs = getattr(type(self._vision_svc), "latest_detection_observation", None)
             observation = getattr(self._vision_svc, "latest_observation", None)
-            if callable(observation):
+            if callable(detection_obs):
+                snapshot = self._vision_svc.latest_detection_observation()
+                if isinstance(snapshot, tuple) and len(snapshot) == 4:
+                    frame, small, captured_at, rotation = snapshot
+            elif callable(observation):
                 snapshot = observation()
                 if isinstance(snapshot, tuple) and len(snapshot) == 3:
                     frame, captured_at, rotation = snapshot
@@ -300,7 +305,8 @@ class PerceptionService(Service):
                 continue
 
             try:
-                faces = self._detector.detect(frame)
+                faces = (self._detector.detect(frame, small=small) if small is not None
+                      else self._detector.detect(frame))
             except Exception:
                 log.exception("face detection failed")
                 self.bus.publish("perception.error", {"reason": "detect_failed"})

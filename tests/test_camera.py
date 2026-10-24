@@ -170,6 +170,67 @@ class TestCameraSensorRotation:
         cam.close()
 
 
+class TestCameraIspSmallFrame:
+    def test_detector_input_size(self):
+        from src.vision.camera import detector_input_size
+        assert detector_input_size(1920, 1080) == (640, 360)
+        assert detector_input_size(1280, 720) == (640, 360)
+        assert detector_input_size(640, 480) is None
+        assert detector_input_size(0, 0) is None
+
+    def _start(self, cam):
+        def deliver():
+            cam._latest_array = np.zeros((2, 2, 3), dtype=np.uint8)
+        with patch.object(cam, "_capture_loop", side_effect=deliver), \
+                patch("src.vision.camera.time.sleep"):
+            cam.start()
+
+    def test_requests_lores_stream_sized_for_detectors(self):
+        cam = Camera(CameraConfig(width=1920, height=1080, rotation_deg=180))
+        cam._sim = False
+        cam._cam = MagicMock()
+        self._start(cam)
+        kwargs = cam._cam.create_video_configuration.call_args.kwargs
+        assert kwargs["lores"] == {"size": (640, 360), "format": "RGB888"}
+        assert cam.small_size == (640, 360)
+        assert cam.hw_rotation_deg == 180
+        cam.close()
+
+    def test_lores_failure_keeps_sensor_flip(self):
+        cam = Camera(CameraConfig(width=1920, height=1080, rotation_deg=180))
+        cam._sim = False
+        cam._cam = MagicMock()
+        cam._cam.configure.side_effect = [RuntimeError("no lores"), None]
+        self._start(cam)
+        last = cam._cam.create_video_configuration.call_args.kwargs
+        assert "lores" not in last and "transform" in last
+        assert cam.small_size is None and cam.hw_rotation_deg == 180
+        cam.close()
+
+    def test_capture_loop_stores_matched_read_only_pair(self):
+        cam = Camera(CameraConfig(width=1920, height=1080))
+        cam._sim = False
+        cam._running = True
+        cam._small_size = (640, 360)
+        main = np.zeros((1080, 1920, 3), np.uint8)
+        small = np.zeros((360, 640, 3), np.uint8)
+        cam._cam = MagicMock()
+
+        def capture_arrays(names):
+            assert names == ["main", "lores"]
+            calls.append(1)
+            if len(calls) > 1:
+                cam._running = False
+            return [main, small], {}
+        calls = []
+        cam._cam.capture_arrays.side_effect = capture_arrays
+        cam._capture_loop()
+        cam._running = True
+        frame, got_small, _ = cam.capture_frames()
+        assert frame is main and got_small is small
+        assert not frame.flags.writeable and not got_small.flags.writeable
+
+
 class TestCameraLifecycle:
     def test_manual_infinity_applied_on_start(self):
         cam = Camera(CameraConfig(af_mode="manual", lens_position=0.))

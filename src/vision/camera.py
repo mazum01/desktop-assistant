@@ -36,6 +36,29 @@ except ImportError:
     _Transform = None
 
 
+# Square input edge of the Hailo detection models (SCRFD, YOLO).
+DETECTOR_INPUT_SIZE = 640
+
+
+def detector_input_size(width: int, height: int) -> Optional[tuple]:
+    """Return the (w, h) a 640×640 letterbox resizes a *width*×*height* frame to.
+
+    Matches the truncation used by the detectors so a frame of exactly this
+    size can be pasted into the letterbox without another resize. Returns None
+    when the frame is not larger than the model input or the size is odd
+    (the ISP needs even dimensions).
+    """
+    if width <= 0 or height <= 0:
+        return None
+    scale = min(DETECTOR_INPUT_SIZE / width, DETECTOR_INPUT_SIZE / height)
+    if scale >= 1.0:
+        return None
+    w, h = int(width * scale), int(height * scale)
+    if w % 2 or h % 2:
+        return None
+    return (w, h)
+
+
 def _hw_rotation_for(deg: int) -> int:
     """Return the part of *deg* the sensor can apply for free (0 or 180)."""
     return 180 if deg % 360 == 180 else 0
@@ -101,6 +124,9 @@ class Camera:
 
         # Background capture thread state
         self._latest_array: Optional[np.ndarray] = None
+        # Detector-sized copy of each frame scaled by the ISP ("lores" stream).
+        self._latest_small: Optional[np.ndarray] = None
+        self._small_size: Optional[tuple] = None
         self._frame_lock = threading.Lock()
         self._capture_thread: Optional[threading.Thread] = None
         self._diag_logged = False  # log first-frame pixel info once
@@ -158,6 +184,11 @@ class Camera:
     @property
     def resolution(self) -> tuple:
         return (self._cfg.width, self._cfg.height)
+
+    @property
+    def small_size(self) -> Optional[tuple]:
+        """(w, h) of the ISP-scaled detector frame, or None when unavailable."""
+        return self._small_size
 
     @property
     def hw_rotation_deg(self) -> int:
@@ -311,23 +342,39 @@ class Camera:
                     break
             time.sleep(0.01)
         log.info(
-            "Camera %d started: %dx%d @ %dfps",
+            "Camera %d started: %dx%d @ %dfps (sensor rotation %d°, ISP small frame %s)",
             self._cfg.index, self._cfg.width, self._cfg.height, self._cfg.framerate,
+            self._hw_rotation_deg, self._small_size,
         )
 
     def _configure_with_rotation(self, factory, kwargs: dict) -> None:
-        """Configure the camera, using the sensor flip for 180° when available."""
-        want = _hw_rotation_for(self._cfg.rotation_deg)
-        if want and _Transform is not None:
+        """Configure the camera, preferring the sensor flip and an ISP-scaled
+        detector stream, and falling back to software for whichever fails."""
+        flip = _hw_rotation_for(self._cfg.rotation_deg) if _Transform is not None else 0
+        small = detector_input_size(self._cfg.width, self._cfg.height)
+        attempts = [(f, sm) for f in ((flip, 0) if flip else (0,))
+                    for sm in ((small, None) if small else (None,))]
+        last_exc: Optional[Exception] = None
+        for f, sm in attempts:
+            extra: dict = {}
+            if f:
+                extra["transform"] = _Transform(hflip=1, vflip=1)
+            if sm:
+                extra["lores"] = {"size": sm, "format": self._cfg.stream_format}
             try:
-                self._cam.configure(factory(transform=_Transform(hflip=1, vflip=1), **kwargs))
-                self._hw_rotation_deg = want
-                return
+                self._cam.configure(factory(**extra, **kwargs))
             except Exception as exc:
-                log.warning("Camera %d: sensor flip unavailable (%s); rotating in software",
-                            self._cfg.index, exc)
-        self._cam.configure(factory(**kwargs))
-        self._hw_rotation_deg = 0
+                last_exc = exc
+                log.warning("Camera %d: configure with flip=%s small=%s failed (%s)",
+                            self._cfg.index, bool(f), sm, exc)
+                continue
+            self._hw_rotation_deg = f
+            self._small_size = sm
+            if (flip and not f) or (small and not sm):
+                log.warning("Camera %d: using software fallback (sensor flip=%s, ISP small frame=%s)",
+                            self._cfg.index, bool(f), sm)
+            return
+        raise last_exc  # type: ignore[misc]
 
     def _on_frame_metadata(self, request) -> None:
         """picamera2 pre_callback: extract LensPosition and AfState from every ISP request.
@@ -359,7 +406,12 @@ class Camera:
         """
         while self._running:
             try:
-                arr = self._cam.capture_array("main")
+                small = None
+                if self._small_size:
+                    (arr, small), _ = self._cam.capture_arrays(["main", "lores"])
+                    small.flags.writeable = False
+                else:
+                    arr = self._cam.capture_array("main")
                 if not self._running:
                     break
 
@@ -376,6 +428,7 @@ class Camera:
                 arr.flags.writeable = False
                 with self._frame_lock:
                     self._latest_array = arr
+                    self._latest_small = small
                     self._latest_frame_monotonic = time.monotonic()
             except Exception:
                 if not self._running:
@@ -396,6 +449,7 @@ class Camera:
             self._capture_thread = None
         with self._frame_lock:
             self._latest_array = None
+            self._latest_small = None
         log.info("Camera %d stopped", self._cfg.index)
 
     def set_resolution(self, width: int, height: int) -> None:
@@ -472,6 +526,21 @@ class Camera:
             if self._latest_array is None:
                 raise RuntimeError("Camera has no frame")
             return self._latest_array, self._latest_frame_monotonic
+
+    def capture_frames(self):
+        """Return (frame, small, availability time) from the same ISP request.
+
+        *small* is the ISP-scaled detector frame of size :attr:`small_size`, or
+        None when the camera is not producing one. Both are shared read-only.
+        """
+        if self._sim:
+            return self.capture_frame(), None, time.monotonic()
+        if not self._running:
+            raise RuntimeError("Camera.start() must be called before capture")
+        with self._frame_lock:
+            if self._latest_array is None:
+                raise RuntimeError("Camera has no frame")
+            return self._latest_array, self._latest_small, self._latest_frame_monotonic
 
     def capture_still(self, path: str) -> None:
         """

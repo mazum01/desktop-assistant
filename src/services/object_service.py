@@ -247,9 +247,14 @@ class ObjectService(Service):
             self._last_detect_ts = now
 
             captured_at, rotation = now, 0
-            frame = None
+            frame = small = None
+            detection_obs = getattr(type(self._vision_svc), "latest_detection_observation", None)
             observation = getattr(self._vision_svc, "latest_observation", None)
-            if callable(observation):
+            if callable(detection_obs):
+                snapshot = self._vision_svc.latest_detection_observation()
+                if isinstance(snapshot, tuple) and len(snapshot) == 4:
+                    frame, small, captured_at, rotation = snapshot
+            elif callable(observation):
                 snapshot = observation()
                 if isinstance(snapshot, tuple) and len(snapshot) == 3:
                     frame, captured_at, rotation = snapshot
@@ -263,7 +268,8 @@ class ObjectService(Service):
                 continue
 
             try:
-                detections = self._detector.detect(frame)
+                detections = (self._detector.detect(frame, small=small) if small is not None
+                      else self._detector.detect(frame))
             except Exception:
                 log.exception("object detection failed")
                 continue

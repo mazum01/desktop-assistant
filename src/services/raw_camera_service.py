@@ -135,7 +135,11 @@ class RawCameraService(Service):
             return
 
         try:
-            frame = self._camera.capture_frame()
+            capture = getattr(type(self._camera), "capture_frames", None)
+            if callable(capture):
+                frame, small, _ = self._camera.capture_frames()
+            else:
+                frame, small = self._camera.capture_frame(), None
         except Exception:
             log.exception("RawCameraService: capture_frame failed")
             return
@@ -148,6 +152,8 @@ class RawCameraService(Service):
         if residual:
             frame = _rotate_frame(frame, residual)
             frame.flags.writeable = False
+            if small is not None:
+                small = _rotate_frame(small, residual)
 
         # Always store the full capture-resolution frame so /api/snapshot2
         # returns the highest quality image regardless of stream settings.
@@ -164,7 +170,10 @@ class RawCameraService(Service):
             if th > sh:
                 th = sh
                 tw = round(sh * ar)
-            stream_frame = cv2.resize(frame, (tw, th), interpolation=cv2.INTER_LINEAR)
+            if small is not None and small.shape[1] == tw and small.shape[0] == th:
+                stream_frame = small  # already scaled by the ISP
+            else:
+                stream_frame = cv2.resize(frame, (tw, th), interpolation=cv2.INTER_LINEAR)
 
         quality = self._cam_cfg.jpeg_quality
         ok, buf = cv2.imencode(".jpg", stream_frame, [cv2.IMWRITE_JPEG_QUALITY, quality])

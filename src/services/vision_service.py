@@ -164,6 +164,15 @@ _FACE_COLORS = [
 ]
 
 
+def _capture_frames(camera):
+    """Return (frame, small, time), using the camera's ISP small frame if it has one."""
+    capture = getattr(type(camera), "capture_frames", None)
+    if callable(capture):
+        return camera.capture_frames()
+    frame, captured_at = camera.capture_observation()
+    return frame, None, captured_at
+
+
 def _rotate_frame(frame: np.ndarray, degrees: int) -> np.ndarray:
     """Rotate *frame* by *degrees* clockwise.
 
@@ -946,6 +955,7 @@ class VisionService(Service):
         self._camera = camera
         self._camera_config = camera_config
         self._latest: Optional[np.ndarray] = None
+        self._latest_small: Optional[np.ndarray] = None
         self._latest_observation_time: float = 0.0
         self._latest_observation_rotation: int = 0
         self._latest_jpeg: Optional[bytes] = None
@@ -1091,7 +1101,7 @@ class VisionService(Service):
         if not getattr(self._camera, "is_ready", True):
             return
         try:
-            frame, captured_at = self._camera.capture_observation()
+            frame, small, captured_at = _capture_frames(self._camera)
         except Exception:
             log.exception("capture_frame failed")
             self.bus.publish("vision.error", {"reason": "capture_failed"})
@@ -1105,10 +1115,14 @@ class VisionService(Service):
         if residual:
             frame = _rotate_frame(frame, residual)
             frame.flags.writeable = False
+            if small is not None:
+                small = _rotate_frame(small, residual)
+                small.flags.writeable = False
 
         # Store clean frame for detection consumers and bump the frame index.
         with self._lock:
             self._latest = frame
+            self._latest_small = small
             self._latest_observation_time = captured_at
             self._latest_observation_rotation = rot
             self._index += 1
@@ -1135,7 +1149,8 @@ class VisionService(Service):
             privacy_state = dict(self._privacy_state)
         try:
             self._encode_queue.put_nowait(
-                (frame, faces, objects, face_depths, servo_angle, servo_min, servo_max, idx, privacy_state)
+                (frame, small, faces, objects, face_depths, servo_angle, servo_min, servo_max,
+                 idx, privacy_state)
             )
         except queue.Full:
             pass  # encoder is behind — drop this frame silently
@@ -1149,8 +1164,8 @@ class VisionService(Service):
         the MJPEG stream simply delivers the most recent encoded frame.
 
         If stream_width / stream_height are configured and smaller than the
-        capture resolution, the frame is resized first (no frame.copy() needed —
-        cv2.resize creates a new array).  Detection bbox coordinates are scaled
+        capture resolution, the frame is resized first, or the ISP-scaled small
+        frame is used directly when it already has the stream size.  Detection bbox coordinates are scaled
         accordingly so overlays still align with the resized stream frame.
         Hailo inference continues to receive full-resolution frames.
         """
@@ -1159,7 +1174,8 @@ class VisionService(Service):
                 item = self._encode_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
-            frame, faces, objects, face_depths, servo_angle, servo_min, servo_max, idx, privacy_state = item
+            (frame, small, faces, objects, face_depths, servo_angle, servo_min, servo_max,
+             idx, privacy_state) = item
             # Re-read stream dims each frame so GUI/CLI changes take effect immediately.
             sw, sh = self._stream_width, self._stream_height
 
@@ -1173,9 +1189,12 @@ class VisionService(Service):
                 if th > sh:
                     th = sh
                     tw = round(sh * ar)
-                # Resize first: creates a new array, no copy() needed.
                 # Scale detection coordinates to match the display resolution.
-                display = cv2.resize(frame, (tw, th), interpolation=cv2.INTER_LINEAR)
+                if small is not None and small.shape[1] == tw and small.shape[0] == th:
+                    # The ISP already produced this size; copy (it is shared) and skip resize.
+                    display = small.copy()
+                else:
+                    display = cv2.resize(frame, (tw, th), interpolation=cv2.INTER_LINEAR)
                 sx, sy = tw / fw, th / fh
                 scaled_faces = _scale_bboxes(faces, sx, sy)
                 scaled_objects = _scale_bboxes(objects, sx, sy)
@@ -1228,6 +1247,16 @@ class VisionService(Service):
         """Return the shared read-only frame and its acquisition metadata atomically."""
         with self._lock:
             return self._latest, self._latest_observation_time, self._latest_observation_rotation
+
+    def latest_detection_observation(self):
+        """Return (frame, small, time, rotation) atomically for detectors.
+
+        *small* is the ISP-scaled copy sized for the 640×640 model letterbox,
+        or None; both arrays are shared and read-only.
+        """
+        with self._lock:
+            return (self._latest, self._latest_small,
+                    self._latest_observation_time, self._latest_observation_rotation)
 
     def latest_jpeg(self) -> Optional[bytes]:
         """Return the most recent pre-encoded JPEG (with overlays). Used by WebService."""
