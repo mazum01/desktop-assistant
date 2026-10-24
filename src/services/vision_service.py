@@ -1097,11 +1097,14 @@ class VisionService(Service):
             self.bus.publish("vision.error", {"reason": "capture_failed"})
             return
 
-        # Apply software rotation so detection receives the correctly-oriented frame.
+        # Rotate only what the sensor did not already apply in hardware.
         with self._rotation_lock:
             rot = self._rotation_deg
-        if rot:
-            frame = _rotate_frame(frame, rot)
+        hw_rot = getattr(self._camera, "hw_rotation_deg", 0)
+        residual = (rot - (hw_rot if isinstance(hw_rot, int) else 0)) % 360
+        if residual:
+            frame = _rotate_frame(frame, residual)
+            frame.flags.writeable = False
 
         # Store clean frame for detection consumers and bump the frame index.
         with self._lock:
@@ -1214,15 +1217,17 @@ class VisionService(Service):
     # ── Public accessors ───────────────────────────────────────────────
 
     def latest_frame(self) -> Optional[np.ndarray]:
-        """Return the most recent raw frame (BGR, no overlay). Used by detection services."""
+        """Return the most recent raw frame (BGR, no overlay). Used by detection services.
+
+        The array is shared and read-only; callers must copy before modifying.
+        """
         with self._lock:
-            return None if self._latest is None else self._latest.copy()
+            return self._latest
 
     def latest_observation(self):
-        """Copy the frame and its acquisition metadata under the same lock."""
+        """Return the shared read-only frame and its acquisition metadata atomically."""
         with self._lock:
-            frame = None if self._latest is None else self._latest.copy()
-            return frame, self._latest_observation_time, self._latest_observation_rotation
+            return self._latest, self._latest_observation_time, self._latest_observation_rotation
 
     def latest_jpeg(self) -> Optional[bytes]:
         """Return the most recent pre-encoded JPEG (with overlays). Used by WebService."""
@@ -1282,6 +1287,12 @@ class VisionService(Service):
         deg = int(payload["rotation_deg"]) % 360
         with self._rotation_lock:
             self._rotation_deg = deg
+        set_hw = getattr(self._camera, "set_rotation", None)
+        if callable(set_hw):
+            try:
+                set_hw(deg)
+            except Exception:
+                log.exception("camera.set_rotation failed; rotating in software")
         log.info("Camera rotation set to %d°", deg)
         self.bus.publish("camera.rotation_changed", {"rotation_deg": deg})
 

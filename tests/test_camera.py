@@ -35,8 +35,9 @@ class _FakePicamera2:
     def global_camera_info():
         return [{"Num": 0, "Model": "imx708_wide"}]
 
-    def create_video_configuration(self, main=None, controls=None, buffer_count=None):
-        return {"type": "video", "main": main, "controls": controls}
+    def create_video_configuration(self, main=None, controls=None, buffer_count=None,
+                                   transform=None):
+        return {"type": "video", "main": main, "controls": controls, "transform": transform}
 
     def create_still_configuration(self):
         return {"type": "still"}
@@ -73,19 +74,20 @@ from src.vision.camera import Camera, CameraConfig  # noqa: E402
 # ---------------------------------------------------------------------------
 
 class TestCameraConfig:
-    def test_observation_preserves_availability_timestamp_with_frame_copy(self):
+    def test_observation_shares_read_only_frame_with_availability_timestamp(self):
         import threading
         cam = Camera.__new__(Camera)
         cam._sim = False
         cam._running = True
         cam._frame_lock = threading.Lock()
         cam._latest_array = np.zeros((10, 20, 3), dtype=np.uint8)
+        cam._latest_array.flags.writeable = False
         cam._latest_frame_monotonic = 123.0
         frame, stamp = cam.capture_observation()
         assert stamp == 123.0
-        assert frame.shape == (10, 20, 3)
-        frame[:] = 1
-        assert not cam._latest_array.any()
+        assert frame is cam._latest_array
+        with pytest.raises(ValueError):
+            frame[:] = 1
 
     def test_defaults(self):
         cfg = CameraConfig()
@@ -112,6 +114,60 @@ class TestCameraHardwareReady:
         # index 99 won't be found in the stub's camera list
         cam = Camera(CameraConfig(index=99))
         assert cam.hardware_ready is False
+
+
+class TestCameraSensorRotation:
+    def _camera(self, rotation_deg):
+        cam = Camera(CameraConfig(rotation_deg=rotation_deg))
+        cam._sim = False
+        cam._cam = MagicMock()
+        return cam
+
+    @staticmethod
+    def _patched(cam):
+        def deliver():
+            cam._latest_array = np.zeros((2, 2, 3), dtype=np.uint8)
+        return patch.object(cam, "_capture_loop", side_effect=deliver)
+
+    def _start(self, cam):
+        with self._patched(cam), patch("src.vision.camera.time.sleep"):
+            cam.start()
+
+    def test_half_turn_uses_sensor_flip(self):
+        cam = self._camera(180)
+        self._start(cam)
+        transform = cam._cam.create_video_configuration.call_args.kwargs["transform"]
+        assert transform.hflip and transform.vflip
+        assert cam.hw_rotation_deg == 180
+        cam.close()
+
+    @pytest.mark.parametrize("deg", [0, 90, 270, 45])
+    def test_other_angles_stay_in_software(self, deg):
+        cam = self._camera(deg)
+        self._start(cam)
+        assert "transform" not in cam._cam.create_video_configuration.call_args.kwargs
+        assert cam.hw_rotation_deg == 0
+        cam.close()
+
+    def test_flip_failure_falls_back_to_software(self):
+        cam = self._camera(180)
+        cam._cam.configure.side_effect = [RuntimeError("no flip"), None]
+        self._start(cam)
+        assert cam.hw_rotation_deg == 0
+        assert cam.is_running
+        cam.close()
+
+    def test_set_rotation_reconfigures_only_when_flip_changes(self):
+        cam = self._camera(0)
+        self._start(cam)
+        with self._patched(cam), patch("src.vision.camera.time.sleep"):
+            cam.set_rotation(90)
+            assert cam._cam.configure.call_count == 1
+            cam.set_rotation(180)
+        assert cam._cam.configure.call_count == 2
+        assert cam.hw_rotation_deg == 180
+        assert cam.config.rotation_deg == 180
+        cam.close()
 
 
 class TestCameraLifecycle:

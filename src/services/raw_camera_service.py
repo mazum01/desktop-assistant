@@ -131,6 +131,8 @@ class RawCameraService(Service):
     def run_tick(self) -> None:
         if self._camera is None:
             return
+        if not getattr(self._camera, "is_ready", True):
+            return
 
         try:
             frame = self._camera.capture_frame()
@@ -141,8 +143,11 @@ class RawCameraService(Service):
         with self._lock:
             rot = self._rotation_deg
 
-        if rot:
-            frame = _rotate_frame(frame, rot)
+        hw_rot = getattr(self._camera, "hw_rotation_deg", 0)
+        residual = (rot - (hw_rot if isinstance(hw_rot, int) else 0)) % 360
+        if residual:
+            frame = _rotate_frame(frame, residual)
+            frame.flags.writeable = False
 
         # Always store the full capture-resolution frame so /api/snapshot2
         # returns the highest quality image regardless of stream settings.
@@ -179,7 +184,7 @@ class RawCameraService(Service):
             return self._latest_jpeg
 
     def latest_frame(self) -> Optional["np.ndarray"]:
-        """Return the most recent raw BGR frame, or None if unavailable."""
+        """Return the most recent raw BGR frame (shared, read-only), or None."""
         with self._lock:
             return self._latest_frame
 
@@ -222,6 +227,12 @@ class RawCameraService(Service):
         deg = int(payload["rotation_deg"]) % 360
         with self._lock:
             self._rotation_deg = deg
+        set_hw = getattr(self._camera, "set_rotation", None)
+        if callable(set_hw):
+            try:
+                set_hw(deg)
+            except Exception:
+                log.exception("RawCameraService: camera.set_rotation failed; rotating in software")
         if self.bus:
             self.bus.publish("camera2.rotation_changed", {"rotation_deg": deg})
         log.info("RawCameraService: rotation set to %d°", deg)

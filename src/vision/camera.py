@@ -30,6 +30,16 @@ except ImportError:
     _PICAMERA2_AVAILABLE = False
     log.warning("picamera2 not available — camera running in simulation mode")
 
+try:
+    from libcamera import Transform as _Transform
+except ImportError:
+    _Transform = None
+
+
+def _hw_rotation_for(deg: int) -> int:
+    """Return the part of *deg* the sensor can apply for free (0 or 180)."""
+    return 180 if deg % 360 == 180 else 0
+
 
 # Autofocus mode → libcamera AfMode integer
 _AF_MODE_MAP = {
@@ -47,7 +57,8 @@ class CameraConfig:
     height: int = 480
     framerate: int = 30
     stream_format: str = "RGB888"   # libcamera/PiSP delivers BGR bytes with this label; no conversion needed
-    # Software rotation applied after capture. 0–359 degrees.
+    # Requested rotation, 0–359 degrees. 180° is applied by the sensor
+    # (horizontal + vertical flip); services rotate the remainder in software.
     # Multiples of 90 are lossless (cv2.rotate); other angles keep the same
     # canvas size via cv2.warpAffine (corners are slightly cropped).
     rotation_deg: int = 0
@@ -85,6 +96,8 @@ class Camera:
         self._cam: Optional[object] = None
         self._running = False
         self._sim = False
+        # Rotation the sensor is currently applying (0 or 180).
+        self._hw_rotation_deg = 0
 
         # Background capture thread state
         self._latest_array: Optional[np.ndarray] = None
@@ -145,6 +158,23 @@ class Camera:
     @property
     def resolution(self) -> tuple:
         return (self._cfg.width, self._cfg.height)
+
+    @property
+    def hw_rotation_deg(self) -> int:
+        """Rotation already applied by the sensor to delivered frames."""
+        return self._hw_rotation_deg
+
+    def set_rotation(self, deg: int) -> None:
+        """Record the requested rotation; reconfigure the sensor flip if it changes."""
+        deg = int(deg) % 360
+        self._cfg.rotation_deg = deg
+        if self._sim or self._cam is None:
+            return
+        if _hw_rotation_for(deg) == self._hw_rotation_deg or not self._running:
+            return
+        self.stop()
+        self.start()
+        log.info("Camera %d sensor rotation set to %d°", self._cfg.index, self._hw_rotation_deg)
 
     @property
     def current_lens_position(self) -> Optional[float]:
@@ -245,7 +275,7 @@ class Camera:
             # Manual / off: lock to the specified dioptre value
             controls["LensPosition"] = float(self._cfg.lens_position)
 
-        video_cfg = self._cam.create_video_configuration(
+        video_kwargs = dict(
             main={
                 "size": (self._cfg.width, self._cfg.height),
                 "format": self._cfg.stream_format,
@@ -253,7 +283,7 @@ class Camera:
             buffer_count=6,  # more ISP pipeline headroom → lower capture latency
             controls=controls,
         )
-        self._cam.configure(video_cfg)
+        self._configure_with_rotation(self._cam.create_video_configuration, video_kwargs)
         # Install a pre-callback to extract ISP metadata (including LensPosition)
         # on every frame.  This runs on picamera2's internal thread and is safe
         # to call concurrently with capture_array().
@@ -284,6 +314,20 @@ class Camera:
             "Camera %d started: %dx%d @ %dfps",
             self._cfg.index, self._cfg.width, self._cfg.height, self._cfg.framerate,
         )
+
+    def _configure_with_rotation(self, factory, kwargs: dict) -> None:
+        """Configure the camera, using the sensor flip for 180° when available."""
+        want = _hw_rotation_for(self._cfg.rotation_deg)
+        if want and _Transform is not None:
+            try:
+                self._cam.configure(factory(transform=_Transform(hflip=1, vflip=1), **kwargs))
+                self._hw_rotation_deg = want
+                return
+            except Exception as exc:
+                log.warning("Camera %d: sensor flip unavailable (%s); rotating in software",
+                            self._cfg.index, exc)
+        self._cam.configure(factory(**kwargs))
+        self._hw_rotation_deg = 0
 
     def _on_frame_metadata(self, request) -> None:
         """picamera2 pre_callback: extract LensPosition and AfState from every ISP request.
@@ -327,6 +371,9 @@ class Camera:
                     )
                     self._diag_logged = True
 
+                # capture_array() already returns a private copy of the DMA
+                # buffer; freezing it lets consumers share it without copying.
+                arr.flags.writeable = False
                 with self._frame_lock:
                     self._latest_array = arr
                     self._latest_frame_monotonic = time.monotonic()
@@ -387,10 +434,8 @@ class Camera:
         """
         Return the latest captured frame as a numpy array (H×W×3, uint8, BGR).
 
-        Acquires the frame lock briefly to copy the latest DMA buffer to heap
-        memory. The DMA→heap copy (≈28ms due to page-fault warmup) happens here
-        so that only one thread reads from DMA memory at a time, avoiding the
-        cache-contention latency caused by concurrent DMA reads.
+        The frame is the capture thread's heap copy of the DMA buffer, shared
+        read-only between callers; copy it before modifying.
         In sim mode returns a synthetic test frame.
         Raises RuntimeError if the camera has not been started.
         """
@@ -412,10 +457,13 @@ class Camera:
         with self._frame_lock:
             if self._latest_array is None:
                 raise RuntimeError("Camera.start() must be called before capture_frame()")
-            return self._latest_array.copy()
+            return self._latest_array
 
     def capture_observation(self):
-        """Return an atomic frame/availability-time snapshot, not shaft feedback."""
+        """Return an atomic frame/availability-time snapshot, not shaft feedback.
+
+        The frame is shared and read-only; copy it before modifying.
+        """
         if self._sim:
             return self.capture_frame(), time.monotonic()
         if not self._running:
@@ -423,7 +471,7 @@ class Camera:
         with self._frame_lock:
             if self._latest_array is None:
                 raise RuntimeError("Camera has no frame")
-            return self._latest_array.copy(), self._latest_frame_monotonic
+            return self._latest_array, self._latest_frame_monotonic
 
     def capture_still(self, path: str) -> None:
         """

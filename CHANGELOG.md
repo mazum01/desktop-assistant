@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.82.1] - 2026-10-24
+### Changed
+- Apply 180° camera rotation with the sensor's horizontal/vertical flip instead
+  of rotating every 1080p frame in software; other angles still rotate in
+  software, which is also the fallback if the flip is unavailable. Changing
+  rotation to or from 180° briefly restarts that camera.
+- Share captured frames read-only between the encoder, detectors, stereo and
+  snapshots instead of copying them for each consumer, reducing VERA core CPU.
+- Give the title header the LCARS left bar and bottom-left sweep with a rounded
+  end cap, matching the sidebar frame.
+### Fixed
+- Bring `config/deployment.json` back in step with `VERSION` so release
+  validation passes (v1.81.0 and v1.82.0 missed the manifest bump).
+
 ## [1.82.0] - 2026-10-23
 ### Changed
 - Rebuild the dashboard's left navigation as an LCARS elbow sidebar: VERA brand

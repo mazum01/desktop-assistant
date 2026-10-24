@@ -20,6 +20,8 @@ frame whose spine follows the selected workspace color, a readout shows a live
 stardate (year and day of year), and square icon buttons each have their own
 spine block, with a white inset bar marking the active workspace. On phones the
 sidebar collapses to a sticky three-column button grid.
+The title header uses the same frame language: a workspace-colored left bar
+sweeps into the bottom band, which ends in a rounded cap.
 Sparse number clusters decorate the rail readout and framing, are hidden from
 assistive technology, and do not represent live readings. Only the title-frame
 numbers refresh when switching workspaces; reselecting the active workspace

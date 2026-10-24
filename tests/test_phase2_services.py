@@ -65,6 +65,38 @@ def test_vision_service_latest_frame_accessor():
     assert frame.shape == (4, 4, 3)
 
 
+class _FlippedCamera(_FakeCamera):
+    hw_rotation_deg = 180
+
+    def __init__(self):
+        super().__init__()
+        self.rotations = []
+
+    def capture_frame(self):
+        frame = np.arange(2 * 3 * 3, dtype=np.uint8).reshape(2, 3, 3)
+        frame.flags.writeable = False
+        self.last = frame
+        return frame
+
+    def set_rotation(self, deg):
+        self.rotations.append(deg)
+
+
+def test_vision_service_skips_rotation_applied_by_sensor():
+    from src.vision.camera import CameraConfig
+    fake = _FlippedCamera()
+    svc = VisionService(bus=MessageBus(), camera=fake,
+                        camera_config=CameraConfig(rotation_deg=180))
+    svc.run_tick()
+    assert svc.latest_frame() is fake.last
+    svc._on_set_rotation("camera.set_rotation", {"rotation_deg": 90})
+    assert fake.rotations == [90]
+    svc.run_tick()
+    frame = svc.latest_frame()
+    assert frame.shape == (3, 2, 3)
+    assert not frame.flags.writeable
+
+
 def test_vision_service_capture_still_topic():
     bus = MessageBus()
     fake = _FakeCamera()
