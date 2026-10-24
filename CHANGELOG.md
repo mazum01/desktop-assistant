@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.83.1] - 2026-10-24
+### Fixed
+- Dashboard camera feeds no longer stutter or lag. The web process fetched
+  each new JPEG from core on the same thread that handles every other core
+  event (about 136 per second), so frames bunched up and were dropped, with
+  pauses of up to 0.7 s. Each camera now fetches on its own thread, and bursts
+  collapse into a single fetch. The streams now match the camera rate (about
+  14 and 11.5 fps) without long pauses.
+
 ## [1.83.0] - 2026-10-24
 ### Changed
 - Each camera now asks the Pi 5 ISP for a second, detector-sized output

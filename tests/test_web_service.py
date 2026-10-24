@@ -1411,3 +1411,37 @@ def test_servo_channels_put_reports_rejected_channels(app_client_with_motion):
     r = client.put("/api/settings/servo/channels", json={"pan_channel": 16, "tilt_channel": 1})
     assert r.status_code == 422
     assert "0 to 15" in r.json()["detail"]
+
+
+def test_frame_events_do_not_block_bus_thread_on_slow_fetch():
+    import threading
+    bus = MessageBus()
+    vision = MagicMock()
+    release = threading.Event()
+    calls = []
+
+    def slow_jpeg():
+        calls.append(1)
+        release.wait(2.0)
+        return b"\xff\xd8jpeg"
+
+    vision.latest_jpeg.side_effect = slow_jpeg
+    svc = WebService(bus=bus, port=18098, registry=_mock_registry(), vision_service=vision)
+    svc.bus.subscribe("vision.jpeg_ready", svc._on_frame)
+    try:
+        t0 = time.monotonic()
+        for _ in range(5):
+            bus.publish("vision.jpeg_ready", {})
+        assert time.monotonic() - t0 < 0.5
+        deadline = time.time() + 2.0
+        while not calls and time.time() < deadline:
+            time.sleep(0.01)
+        release.set()
+        deadline = time.time() + 2.0
+        while svc._latest_frame is None and time.time() < deadline:
+            time.sleep(0.01)
+        time.sleep(0.1)
+        assert svc._latest_frame == b"\xff\xd8jpeg"
+        assert len(calls) <= 2  # burst coalesced into at most one follow-up fetch
+    finally:
+        svc._frame1_fetcher.stop()

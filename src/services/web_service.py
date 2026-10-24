@@ -112,6 +112,50 @@ from starlette.requests import Request
 
 log = logging.getLogger(__name__)
 
+
+class _LatestFrameFetcher:
+    """Runs a camera's JPEG fetch on its own thread, coalescing requests.
+
+    Frame-ready events arrive on the single bus SUB thread that also delivers
+    every other core topic; doing the blocking `latest_jpeg()` RPC there made
+    frames bunch up and drop. `request()` only sets a flag, and a burst of
+    requests during one fetch collapses into a single follow-up fetch.
+    """
+
+    def __init__(self, name: str, fetch) -> None:
+        self._name = name
+        self._fetch = fetch
+        self._wake = threading.Event()
+        self._stopped = False
+        self._thread: Optional[threading.Thread] = None
+        self._lock = threading.Lock()
+
+    def request(self) -> None:
+        if self._stopped:
+            return
+        if self._thread is None:
+            with self._lock:
+                if self._thread is None:
+                    self._thread = threading.Thread(
+                        target=self._run, name=self._name, daemon=True)
+                    self._thread.start()
+        self._wake.set()
+
+    def stop(self) -> None:
+        self._stopped = True
+        self._wake.set()
+
+    def _run(self) -> None:
+        while True:
+            self._wake.wait()
+            if self._stopped:
+                return
+            self._wake.clear()
+            try:
+                self._fetch()
+            except Exception:
+                log.exception("%s fetch failed", self._name)
+
 _STATIC_DIR = Path(__file__).parent.parent / "web" / "static"
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _THERMAL_CONFIG_PATH = _PROJECT_ROOT / "config" / "thermal.yaml"
@@ -850,6 +894,8 @@ class WebService:
         # FPS counters — incremented by _on_frame callbacks, sampled in _build_status_snapshot
         self._cam1_frame_count: int = 0
         self._cam2_frame_count: int = 0
+        self._frame1_fetcher = _LatestFrameFetcher("web-cam1-frames", self._fetch_frame)
+        self._frame2_fetcher = _LatestFrameFetcher("web-cam2-frames", self._fetch_frame2)
         self._fps_tick_time: float = time.monotonic()
         # CPU/memory history — 60 samples (≈ 60 s at 1 Hz)
         self._cpu_history: collections.deque = collections.deque(maxlen=60)
@@ -870,6 +916,8 @@ class WebService:
             except Exception as exc:
                 log.warning("FaceRegistry unavailable in WebService: %s", exc)
 
+        self._frame1_fetcher = _LatestFrameFetcher("web-cam1-frames", self._fetch_frame)
+        self._frame2_fetcher = _LatestFrameFetcher("web-cam2-frames", self._fetch_frame2)
         # Subscribe to camera frames — cam1 uses jpeg_ready (set by encoder thread)
         # so the MJPEG stream doesn't block waiting for JPEG to be encoded.
         self._unsubs.append(
@@ -955,6 +1003,8 @@ class WebService:
             except Exception:
                 pass
         self._unsubs.clear()
+        self._frame1_fetcher.stop()
+        self._frame2_fetcher.stop()
         if self._loop and self._server:
             self._loop.call_soon_threadsafe(self._server.should_exit.__setattr__, 'value', True)
         if self._registry:
@@ -985,13 +1035,17 @@ class WebService:
         return bool(is_configured())
 
     def _on_frame(self, _topic, payload) -> None:
+        self._frame1_fetcher.request()
+
+    def _on_frame2(self, _topic, payload) -> None:
+        self._frame2_fetcher.request()
+
+    def _fetch_frame(self) -> None:
         """Read the pre-encoded JPEG from VisionService and wake the MJPEG generator.
 
-        `latest_jpeg()` is a blocking RPC round trip to `core` when
-        `self._vision_svc` is a `VisionServiceProxy` (Phase 3) — bounded to
-        ~500ms by the proxy's own timeout so a slow/unreachable `core`
-        can't wedge this bus-subscriber thread indefinitely, at the cost of
-        occasionally dropping a preview frame under that failure mode.
+        Runs on the camera's fetcher thread. `latest_jpeg()` is a blocking
+        RPC round trip to `core` when `self._vision_svc` is a
+        `VisionServiceProxy`, bounded to ~500ms by the proxy's own timeout.
         """
         if self._vision_svc is None:
             return
@@ -1002,10 +1056,10 @@ class WebService:
             if self._loop is not None and self._frame_event is not None:
                 self._loop.call_soon_threadsafe(self._frame_event.set)
 
-    def _on_frame2(self, _topic, payload) -> None:
+    def _fetch_frame2(self) -> None:
         """Read JPEG from RawCameraService (second camera) and wake /stream2 generator.
 
-        Same bounded-blocking-RPC caveat as `_on_frame` applies here.
+        Same bounded-blocking-RPC caveat as `_fetch_frame` applies here.
         """
         if not self._camera2_configured():
             return
