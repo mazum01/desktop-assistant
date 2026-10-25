@@ -36,6 +36,13 @@ new:
     invert_pan: true
     invert_tilt: false
     dead_zone_frac: 0.02
+    # Head starts a small chin lift before the first speech after cooldown_s of
+    # silence; audio waits lead_s for it.
+    pre_speech:
+      lead_s: 0.25
+      lift_deg: 2.0
+      relax_s: 0.6
+      cooldown_s: 60.0   # quiet time before the gesture can repeat
     gaze:
       servo_lag_s: 0.06
       max_predict_s: 0.4
@@ -45,7 +52,10 @@ new:
       lost_s: 1.0
       saccade_min_deg: 8.0
       saccade_gain: 0.9
-      fixation_release_deg: 3.0
+      settle_pan_deg: 3.0
+      settle_tilt_deg: 2.0
+      release_pan_deg: 6.0
+      release_tilt_deg: 4.0
       pursuit_settle_s: 0.25
       pursuit_confidence: 2.0
       fixation_dwell_s: 0.3

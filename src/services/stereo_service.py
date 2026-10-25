@@ -5,6 +5,9 @@ template matching between the cam1 frame and cam2 frame to compute the
 horizontal disparity.  The resulting stereo depth replaces or supplements
 the face-size depth already embedded in the ``perception.faces`` payload.
 
+Matching runs on a dedicated worker thread holding only the newest face
+result, so it never delays the perception thread (and head tracking).
+
 Published topics
 ----------------
 vision.face_depth
@@ -75,6 +78,11 @@ class StereoService(Service):
         self._unsubs: list = []
         self._focal_px: Optional[float] = None
         self._matcher: Optional[StereoFaceMatcher] = None
+        self._pending: Optional[dict] = None
+        self._pending_lock = threading.Lock()
+        self._wake = threading.Event()
+        self._stop_evt = threading.Event()
+        self._worker: Optional[threading.Thread] = None
 
     # ── Lifecycle ────────────────────────────────────────────────────────
 
@@ -87,6 +95,11 @@ class StereoService(Service):
             min_depth_m=self._cfg.min_depth_m,
             max_depth_m=self._cfg.max_depth_m,
         )
+        self._stop_evt.clear()
+        self._worker = threading.Thread(
+            target=self._worker_loop, name="stereo-depth", daemon=True,
+        )
+        self._worker.start()
         self._unsubs.append(
             self.bus.subscribe("perception.faces", self._on_faces)
         )
@@ -103,6 +116,11 @@ class StereoService(Service):
             except Exception:
                 pass
         self._unsubs.clear()
+        self._stop_evt.set()
+        self._wake.set()
+        if self._worker is not None:
+            self._worker.join(timeout=2.0)
+            self._worker = None
 
     @property
     def hardware_ready(self) -> bool:
@@ -114,6 +132,27 @@ class StereoService(Service):
     # ── Event handler ────────────────────────────────────────────────────
 
     def _on_faces(self, _topic, payload: dict) -> None:
+        """Hand the newest face result to the worker; never block the publisher."""
+        if not isinstance(payload, dict) or not payload.get("faces"):
+            return
+        with self._pending_lock:
+            self._pending = payload
+        self._wake.set()
+
+    def _worker_loop(self) -> None:
+        while not self._stop_evt.is_set():
+            self._wake.wait(timeout=0.5)
+            self._wake.clear()
+            with self._pending_lock:
+                payload, self._pending = self._pending, None
+            if payload is None or self._stop_evt.is_set():
+                continue
+            try:
+                self._estimate(payload)
+            except Exception:
+                log.exception("stereo depth update failed")
+
+    def _estimate(self, payload: dict) -> None:
         faces = payload.get("faces", [])
         if not faces or self._focal_px is None:
             return

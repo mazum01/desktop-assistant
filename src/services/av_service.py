@@ -20,6 +20,7 @@ Topics subscribed:
     av.play_recording     {"path": str?}           — play latest or specified WAV
 
 Topics published:
+    av.speaking_started   {"text": str, "ts": float, "lead_s": float} — audio starts lead_s later (lead only after a quiet cooldown)
     av.spoke              {"text": str}
     av.chimed             {}
     av.version_announced  {"version": str}
@@ -34,6 +35,7 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import logging
+import math
 import queue
 import threading
 import time
@@ -66,8 +68,20 @@ class AVService(Service):
         audio_input=None,
         announcer=None,
         announce_on_start: bool = True,
+        pre_speech_lead_s: float = 0.0,
+        pre_speech_cooldown_s: float = 60.0,
     ) -> None:
         super().__init__(bus=bus)
+        # Speech onset waits this long after av.speaking_started so the head
+        # can begin moving first, as people do.
+        # Only the first utterance after cooldown_s of silence gets the lead,
+        # so the gesture opens a conversation rather than repeating per sentence.
+        self._pre_speech_lead_s = max(0.0, min(1.0, float(pre_speech_lead_s)))
+        cooldown = float(pre_speech_cooldown_s)
+        if not math.isfinite(cooldown) or not 0.0 <= cooldown <= 3600.0:
+            raise ValueError("pre_speech cooldown must be 0-3600 seconds")
+        self._pre_speech_cooldown_s = cooldown
+        self._last_speech_end: float | None = None
         self._audio = audio_output
         self._tts = tts
         self._mic = audio_input
@@ -564,10 +578,18 @@ class AVService(Service):
 
     # ── Worker bodies ──────────────────────────────────────────────────
 
+    def _announce_speech(self, text: str) -> None:
+        last = self._last_speech_end
+        quiet = last is None or time.monotonic() - last >= self._pre_speech_cooldown_s
+        lead = self._pre_speech_lead_s if quiet else 0.0
+        self.bus.publish("av.speaking_started", {"text": text, "ts": time.time(), "lead_s": lead})
+        if lead > 0:
+            time.sleep(lead)
+
     def _do_say(self, text: str, request_id: str | None = None) -> None:
         """Synchronous say — used as fallback when TTS has no render() method."""
         try:
-            self.bus.publish("av.speaking_started", {"text": text, "ts": time.time()})
+            self._announce_speech(text)
             self._tts.say(text, output=self._audio)
             payload = {"text": text, "ts": time.time()}
             if request_id is not None:
@@ -576,13 +598,15 @@ class AVService(Service):
             self.bus.publish("av.spoke", payload)
         except Exception:
             log.exception("say(%r) failed", text)
+        finally:
+            self._last_speech_end = time.monotonic()
 
     def _do_play_samples(
         self, samples, sr: int, text: str, request_id: str | None = None
     ) -> None:
         """Audio worker: play pre-synthesized samples (synthesis already done)."""
         try:
-            self.bus.publish("av.speaking_started", {"text": text, "ts": time.time()})
+            self._announce_speech(text)
             if self._audio is not None:
                 self._audio.play(samples, sample_rate=sr)
             payload = {"text": text, "ts": time.time()}
@@ -592,6 +616,8 @@ class AVService(Service):
             self.bus.publish("av.spoke", payload)
         except Exception:
             log.exception("play_samples(%r) failed", text)
+        finally:
+            self._last_speech_end = time.monotonic()
 
     def _apply_tts_output_gain(self, samples):
         """Apply configured TTS gain before output-stage processing."""

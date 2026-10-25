@@ -301,3 +301,50 @@ def test_quality_gate_inactive_below_min_frames(reg):
 
     accepted = reg.add_embedding_if_needed(face_id, garbage)
     assert accepted, "Quality gate must not reject before minimum frame count is reached"
+
+
+# ── Batched sightings ───────────────────────────────────────────────────────
+
+def test_update_seen_batches_writes_but_reads_stay_exact(reg):
+    face_id, _ = reg.register(_rng_emb(1))
+    before = reg.get_face(face_id)["seen_count"]
+    commits = []
+    original = reg._conn
+    class _Spy:
+        def __getattr__(self, name):
+            return getattr(original, name)
+        def commit(self):
+            commits.append(1)
+            original.commit()
+    reg._conn = _Spy()
+    for _ in range(5):
+        reg.update_seen(face_id)
+    assert commits == []
+    assert reg.get_face(face_id)["seen_count"] == before + 5
+    assert len(commits) == 1
+
+
+def test_update_seen_flushes_when_interval_elapses(reg, monkeypatch):
+    import src.perception.face_registry as fr
+    face_id, _ = reg.register(_rng_emb(1))
+    before = reg.get_face(face_id)["seen_count"]
+    reg._seen_flushed -= fr._SEEN_FLUSH_S
+    reg.update_seen(face_id)
+    assert reg._pending_seen == {}
+    row = reg._conn.execute("SELECT seen_count FROM faces WHERE id = ?", (face_id,)).fetchone()
+    assert row["seen_count"] == before + 1
+
+
+def test_close_flushes_pending_sightings(tmp_path):
+    db = tmp_path / "faces.db"
+    r = FaceRegistry(db_path=db, thumbs_dir=tmp_path / "t")
+    face_id, _ = r.register(_rng_emb(3))
+    before = r.get_face(face_id)["seen_count"]
+    r.update_seen(face_id)
+    r.update_seen(face_id)
+    r.close()
+    r2 = FaceRegistry(db_path=db, thumbs_dir=tmp_path / "t")
+    try:
+        assert r2.get_face(face_id)["seen_count"] == before + 2
+    finally:
+        r2.close()

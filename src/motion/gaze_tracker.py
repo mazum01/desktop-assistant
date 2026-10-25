@@ -15,8 +15,11 @@ Motion mimics human head/gaze behaviour:
 * **Smooth pursuit** — when the Kalman filter sees the target moving, moves
   aim where the target will be on arrival and finish at the target's velocity,
   so the head glides along instead of stopping and starting.
-* **Fixation hold** — once on target the head rests until the target leaves a
-  small dead-band, rather than chasing detector jitter.
+* **Fixation hold** — once on target the head rests until the target leaves an
+  elliptical release zone, rather than chasing detector jitter.
+* **Coordinated axes** — pan and tilt replan together with one shared
+  duration, so diagonal shifts travel in a straight line instead of a
+  staircase.
 """
 
 from __future__ import annotations
@@ -55,8 +58,13 @@ class GazeConfig:
     # saccade_gain of the distance; smaller errors use pursuit/corrections.
     saccade_min_deg: float = 8.0
     saccade_gain: float = 0.9
-    # Once settled, the target must drift this far before the head moves again.
-    fixation_release_deg: float = 3.0
+    # Elliptical zones (pan, tilt half-axes in degrees). Corrections stop once
+    # the error is inside the settle zone; after fixation locks, the target
+    # must leave the larger release zone before the head moves again.
+    settle_pan_deg: float = 3.0
+    settle_tilt_deg: float = 2.0
+    release_pan_deg: float = 6.0
+    release_tilt_deg: float = 4.0
     # Pursuit is blocked for this long after a saccade lands.
     pursuit_settle_s: float = 0.25
     # Pursuit needs |velocity| above this many filter standard deviations.
@@ -87,8 +95,9 @@ class GazeConfig:
             raise ValueError("saccade_min_deg must be within 2-45 degrees")
         if not 0.5 <= self.saccade_gain <= 1.0:
             raise ValueError("saccade_gain must be within 0.5-1.0")
-        if not 0 <= self.fixation_release_deg <= 15:
-            raise ValueError("fixation_release_deg must be within 0-15 degrees")
+        if not (0.5 <= self.settle_pan_deg <= self.release_pan_deg <= 20
+                and 0.5 <= self.settle_tilt_deg <= self.release_tilt_deg <= 20):
+            raise ValueError("Require 0.5 <= settle <= release <= 20 degrees per axis")
         if not 0 <= self.pursuit_settle_s <= 2:
             raise ValueError("pursuit_settle_s must be within 0-2 seconds")
         if not 0 <= self.pursuit_confidence <= 5:
@@ -146,19 +155,28 @@ class AngleHistory:
         return abs(after[0] - before[0]) / span, tilt
 
 
+def _zones(name: str, cfg: HeadTrackerConfig, gaze: GazeConfig) -> tuple[float, float]:
+    """Return (settle, release) half-axes in degrees for an axis."""
+    if name == "tilt":
+        return gaze.settle_tilt_deg, gaze.release_tilt_deg
+    settle = max(gaze.settle_pan_deg, cfg.dead_zone_frac * cfg.fov_degrees)
+    return settle, max(settle, gaze.release_pan_deg)
+
+
 class _GazeAxis:
-    def __init__(self, position: float):
+    def __init__(self, position: float, name: str = "pan"):
+        self.name = name
         self.kalman = FaceKalman()
         self.planner = MinJerkPlanner()
         self.pos = float(position)
         self.vel = 0.0
+        self.acc = 0.0
         self.last_stamp: Optional[float] = None
         self.desired: Optional[float] = None
         self.pursuing = False
         self.fixated = False
         self.goal: Optional[float] = None
         self.settle_s = 0.0
-        self.dwell_s = 0.0
         self.planner.plan(self.pos, 0.0, self.pos, 0.02)
         self.planner.step(1.0)
 
@@ -203,74 +221,32 @@ class _GazeAxis:
         # A settled fixation only breaks into pursuit once the error is clear.
         # Ignore velocity that is not clearly above the filter's own uncertainty.
         threshold = max(threshold, gaze.pursuit_confidence * (self.kalman.velocity_std or 0.0))
+        release = _zones(self.name, cfg, gaze)[1]
         self.pursuing = (abs(velocity) >= threshold and self.settle_s <= 0.0
-                         and (not self.fixated or error > gaze.fixation_release_deg))
+                         and (not self.fixated or error > release))
         if not self.pursuing:
             velocity = 0.0
         horizon = min(max(0.0, now - self.last_stamp + cfg.lookahead_s), gaze.max_predict_s)
         return self.kalman.position + velocity * horizon, velocity
 
-    def _duration(self, distance: float, cfg: HeadTrackerConfig) -> float:
-        duration = min(cfg.move_base_s + cfg.move_scale_s_per_deg * distance, cfg.move_max_s)
-        # Minimum-jerk peak speed is 1.875·d/T; stretch long moves to stay under the cap.
-        return max(duration, 1.875 * distance / max(cfg.max_speed_deg_s, 1.0))
-
-    def step(self, dt: float, estimate: Optional[tuple[float, float]], lo: float,
-             hi: float, cfg: HeadTrackerConfig, gaze: GazeConfig) -> float:
-        self.settle_s = max(0.0, self.settle_s - dt)
-        if estimate is not None:
-            desired, velocity = estimate
-            desired = min(max(desired, lo), hi)
-            if desired in (lo, hi):
-                velocity = 0.0
-            self.desired = desired
-            error = desired - self.pos
-            if (abs(error) > gaze.saccade_min_deg and desired not in (lo, hi)
-                    and not self.pursuing):
-                # Large re-fixations deliberately land short, like human
-                # saccades; a small corrective move follows if still needed.
-                # While pursuing, large errors get a velocity-matched catch-up.
-                final, velocity, saccade = self.pos + gaze.saccade_gain * error, 0.0, True
-            else:
-                duration = self._duration(abs(error), cfg)
-                final, saccade = desired + velocity * duration, False
-            final = min(max(final, lo), hi)
-            if self.planner.done:
-                # Fixation hold: once settled, wait for a clearly larger error.
-                dead_zone = cfg.dead_zone_frac * cfg.fov_degrees
-                hold = max(dead_zone, gaze.fixation_release_deg) if self.fixated else dead_zone
-                replan = abs(error) > hold or self.pursuing
-                if replan:
-                    self.dwell_s = 0.0
-                else:
-                    # Lock fixation only after the estimate has stayed centred.
-                    self.dwell_s += dt
-                    self.fixated = self.fixated or self.dwell_s >= gaze.fixation_dwell_s
-            else:
-                drift = (abs(desired - self.goal) if self.goal is not None
-                         else abs(final - self.planner.target))
-                replan = drift > cfg.replan_threshold_deg
-            if replan:
-                end_velocity = 0.0 if final in (lo, hi) else velocity
-                move_s = self._duration(abs(final - self.pos), cfg)
-                self.planner.plan(self.pos, self.vel, final, move_s, end_velocity)
-                if saccade:
-                    self.settle_s = move_s + gaze.pursuit_settle_s
-                self.fixated = False
-                self.goal = desired if saccade else None
+    def advance(self, dt: float, lo: float, hi: float, cfg: HeadTrackerConfig) -> float:
         pos, vel = self.planner.step(dt)
+        acc = self.planner.acc
         limit = cfg.max_speed_deg_s * dt
-        pos = self.pos + max(-limit, min(limit, pos - self.pos))
+        if abs(pos - self.pos) > limit:
+            pos, acc = self.pos + math.copysign(limit, pos - self.pos), 0.0
         clamped = min(max(pos, lo), hi)
-        self.vel = 0.0 if clamped != pos else vel
-        self.pos = clamped
+        if clamped != pos:
+            vel = acc = 0.0
+        self.pos, self.vel, self.acc = clamped, vel, acc
         return self.pos
 
     def stop(self) -> None:
         """Decelerate smoothly to rest from the current velocity."""
         self.forget()
         decel_s = max(0.15, abs(self.vel) / 150.0)
-        self.planner.plan(self.pos, self.vel, self.pos + self.vel * decel_s * 0.5, decel_s)
+        self.planner.plan(self.pos, self.vel, self.pos + self.vel * decel_s * 0.5, decel_s,
+                          a0=self.acc)
         self.desired = None
 
 
@@ -282,6 +258,7 @@ class GazeTracker:
         self.gaze = gaze or GazeConfig()
         self.axes: dict[str, _GazeAxis] = {}
         self.source: Optional[str] = None
+        self.dwell_s = 0.0
 
     @property
     def active(self) -> bool:
@@ -300,10 +277,10 @@ class GazeTracker:
         if self.source == source:
             return
         if self.source is None and not self.moving:
-            self.axes = {name: _GazeAxis(pos) for name, pos in positions.items()}
+            self.axes = {name: _GazeAxis(pos, name) for name, pos in positions.items()}
         else:
             for name, pos in positions.items():
-                self.axes.setdefault(name, _GazeAxis(pos))
+                self.axes.setdefault(name, _GazeAxis(pos, name))
             for name in list(self.axes):
                 if name not in positions:
                     del self.axes[name]
@@ -319,16 +296,89 @@ class GazeTracker:
                 speed = (head_speeds or {}).get(name, 0.0)
                 axis.observe(bearing, stamp, self.cfg, self.gaze, speed)
 
+    def _duration(self, distance: float) -> float:
+        cfg = self.cfg
+        duration = min(cfg.move_base_s + cfg.move_scale_s_per_deg * distance, cfg.move_max_s)
+        # Minimum-jerk peak speed is 1.875·d/T; stretch long moves to stay under the cap.
+        return max(duration, 1.875 * distance / max(cfg.max_speed_deg_s, 1.0))
+
     def step(self, now: float, dt: float, limits: dict[str, tuple[float, float]]) -> dict[str, float]:
-        targets = {}
+        bounds = {name: limits.get(name, (-math.inf, math.inf)) for name in self.axes}
+        proposals: dict[str, tuple[float, float]] = {}
         for name, axis in self.axes.items():
-            lo, hi = limits.get(name, (-math.inf, math.inf))
-            estimate = None
-            if (self.source is not None and axis.last_stamp is not None
-                    and now - axis.last_stamp <= self.gaze.lost_s):
-                estimate = axis.estimate(now, self.cfg, self.gaze)
-            targets[name] = axis.step(dt, estimate, lo, hi, self.cfg, self.gaze)
-        return targets
+            axis.settle_s = max(0.0, axis.settle_s - dt)
+            if (self.source is None or axis.last_stamp is None
+                    or now - axis.last_stamp > self.gaze.lost_s):
+                continue
+            estimate = axis.estimate(now, self.cfg, self.gaze)
+            if estimate is None:
+                continue
+            lo, hi = bounds[name]
+            desired, velocity = estimate
+            desired = min(max(desired, lo), hi)
+            if desired in (lo, hi):
+                velocity = 0.0
+            axis.desired = desired
+            proposals[name] = (desired, velocity)
+        if proposals:
+            self._coordinate(proposals, bounds, dt)
+        return {name: axis.advance(dt, *bounds[name], self.cfg)
+                for name, axis in self.axes.items()}
+
+    def _coordinate(self, proposals: dict[str, tuple[float, float]],
+                    bounds: dict[str, tuple[float, float]], dt: float) -> None:
+        """Decide jointly whether to move, then plan every axis with one duration."""
+        cfg, gaze = self.cfg, self.gaze
+        axes = {name: self.axes[name] for name in proposals}
+        errors = {name: proposals[name][0] - axis.pos for name, axis in axes.items()}
+        pursuing = any(axis.pursuing for axis in axes.values())
+        at_limit = any(proposals[n][0] in bounds[n] for n in axes)
+        distance = math.hypot(*errors.values())
+        # Large re-fixations deliberately land short, like human saccades; a
+        # small corrective move follows if still needed. While pursuing, large
+        # errors get a velocity-matched catch-up instead.
+        saccade = distance > gaze.saccade_min_deg and not pursuing and not at_limit
+        finals, velocities = {}, {}
+        for name, axis in axes.items():
+            desired, velocity = proposals[name]
+            if saccade:
+                final, velocity = axis.pos + gaze.saccade_gain * errors[name], 0.0
+            else:
+                final = desired + velocity * self._duration(abs(errors[name]))
+            lo, hi = bounds[name]
+            finals[name] = min(max(final, lo), hi)
+            velocities[name] = 0.0 if finals[name] in (lo, hi) else velocity
+
+        if all(axis.planner.done for axis in axes.values()):
+            fixated = all(axis.fixated for axis in axes.values())
+            zone = 1 if fixated else 0
+            outside = math.sqrt(sum((errors[n] / _zones(n, cfg, gaze)[zone]) ** 2
+                                    for n in axes)) > 1.0
+            replan = outside or pursuing
+            if replan:
+                self.dwell_s = 0.0
+            else:
+                # Lock fixation only after the estimate has stayed centred.
+                self.dwell_s += dt
+                if self.dwell_s >= gaze.fixation_dwell_s:
+                    for axis in axes.values():
+                        axis.fixated = True
+        else:
+            drift = max(abs(proposals[n][0] - axis.goal) if axis.goal is not None
+                        else abs(finals[n] - axis.planner.target)
+                        for n, axis in axes.items())
+            replan = drift > cfg.replan_threshold_deg
+        if not replan:
+            return
+        move_s = self._duration(math.hypot(*(finals[n] - a.pos for n, a in axes.items())))
+        for name, axis in axes.items():
+            axis.planner.plan(axis.pos, axis.vel, finals[name], move_s, velocities[name],
+                              a0=axis.acc)
+            if saccade:
+                axis.settle_s = move_s + gaze.pursuit_settle_s
+            axis.fixated = False
+            axis.goal = proposals[name][0] if saccade else None
+        self.dwell_s = 0.0
 
     def release(self) -> None:
         """Lose the target and coast to a natural stop."""

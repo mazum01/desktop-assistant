@@ -89,7 +89,8 @@ def test_converges_without_overshoot_despite_latency_and_stale_frames(stale_repe
     out = simulate(lambda _t: 115.0, 3.0, stale_repeats=stale_repeats)
     positions = [p for _, p, _ in out]
     assert max(positions) <= 115.0 + 0.5
-    assert abs(positions[-1] - 115.0) <= 2.0 + 0.5
+    # Residual error inside the settle zone is deliberately left alone.
+    assert abs(positions[-1] - 115.0) <= GazeConfig().settle_pan_deg
 
 
 def test_motion_is_smooth_and_speed_limited():
@@ -169,7 +170,7 @@ def test_targets_respect_limits():
     {"servo_lag_s": -1}, {"max_predict_s": 0}, {"pursuit_min_deg_s": 70},
     {"max_pursuit_deg_s": 500}, {"reacquire_jump_deg": 0}, {"lost_s": math.nan},
     {"lost_s": True}, {"saccade_min_deg": 1}, {"saccade_gain": 1.2},
-    {"fixation_release_deg": -1}, {"pursuit_settle_s": 3},
+    {"settle_pan_deg": 7}, {"release_tilt_deg": 1}, {"pursuit_settle_s": 3},
     {"pursuit_confidence": 6}, {"fixation_dwell_s": -0.1},
 ])
 def test_invalid_gaze_config_rejected(bad):
@@ -204,21 +205,21 @@ def test_settled_fixation_ignores_small_drift_but_follows_larger_moves():
     limits = {"pan": (40.0, 140.0)}
     t = 0.0
     for _ in range(40):
-        tracker.observe({"pan": 92.5}, t)
+        tracker.observe({"pan": 95.0}, t)
         tracker.step(t, DT, limits)
         t += DT
     settled = tracker.axes["pan"].pos
     assert tracker.axes["pan"].fixated
     for _ in range(40):
-        tracker.observe({"pan": settled + 2.0}, t)
+        tracker.observe({"pan": settled + 4.5}, t)
         pos = tracker.step(t, DT, limits)["pan"]
         t += DT
     assert pos == pytest.approx(settled)
     for _ in range(40):
-        tracker.observe({"pan": settled + 5.0}, t)
+        tracker.observe({"pan": settled + 7.0}, t)
         pos = tracker.step(t, DT, limits)["pan"]
         t += DT
-    assert pos == pytest.approx(settled + 5.0, abs=1.5)
+    assert pos == pytest.approx(settled + 7.0, abs=1.5)
 
 
 def test_pursuit_waits_for_saccade_to_settle():
@@ -245,3 +246,50 @@ def test_uncertain_velocity_does_not_start_pursuit():
     axis.kalman._P[1, 1] = 1.0
     axis.estimate(0.0, make_cfg(), GazeConfig())
     assert axis.pursuing
+
+
+def test_planner_preserves_acceleration_across_replans():
+    planner = MinJerkPlanner()
+    planner.plan(0.0, 0.0, 10.0, 0.5)
+    for _ in range(3):
+        pos, vel = planner.step(DT)
+    acc = planner.acc
+    assert acc > 10.0
+    planner.plan(pos, vel, 12.0, 0.5, a0=acc)
+    assert planner.acc == pytest.approx(acc)
+    before = planner.acc
+    planner.step(1e-4)
+    assert planner.acc == pytest.approx(before, rel=0.01)
+    planner.step(1.0)
+    assert planner.acc == pytest.approx(0.0, abs=1e-6)
+
+
+def diagonal_path(pan_target, tilt_target):
+    tracker = GazeTracker(make_cfg(fov_degrees=72.0, vertical_fov_degrees=49.0))
+    tracker.engage("face", {"pan": 90.0, "tilt": 90.0})
+    limits = {"pan": (40.0, 140.0), "tilt": (60.0, 120.0)}
+    path = []
+    for i in range(60):
+        t = i * DT
+        tracker.observe({"pan": pan_target, "tilt": tilt_target}, t)
+        out = tracker.step(t, DT, limits)
+        path.append((out["pan"], out["tilt"]))
+    return tracker, path
+
+
+def test_diagonal_shift_moves_both_axes_in_a_straight_line():
+    _, path = diagonal_path(110.0, 96.0)
+    moving = [(p - 90.0, q - 90.0) for p, q in path if abs(p - 90.0) > 0.5]
+    assert moving
+    # Shared timing keeps tilt/pan progress proportional along the move.
+    for dp, dq in moving:
+        assert dq / dp == pytest.approx(6.0 / 20.0, abs=0.03)
+
+
+def test_elliptical_zone_combines_axes():
+    # Each axis alone is inside the settle zone, but the combination is not.
+    tracker, path = diagonal_path(92.5, 91.8)
+    assert path[-1][0] == pytest.approx(92.5, abs=0.3)
+    assert path[-1][1] == pytest.approx(91.8, abs=0.3)
+    tracker, path = diagonal_path(91.5, 91.0)
+    assert path[-1] == (90.0, 90.0)

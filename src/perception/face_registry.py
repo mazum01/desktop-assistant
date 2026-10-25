@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -40,6 +41,7 @@ log = logging.getLogger(__name__)
 _DEFAULT_DB = Path.home() / ".local" / "share" / "desktop-assistant" / "faces.db"
 _DEFAULT_THUMBS = Path.home() / ".local" / "share" / "desktop-assistant" / "thumbs"
 _MATCH_THRESHOLD = 0.60      # cosine similarity ≥ this → confirmed same person (raised from 0.50)
+_SEEN_FLUSH_S = 2.0          # max delay before batched sightings reach the database
 _TENTATIVE_LOW   = 0.40      # cosine similarity ≥ this → tentative match (avoid Guest creation)
 _MATCH_MARGIN    = 0.10      # winning identity must lead runner-up by at least this
 _GUEST_MERGE_MIN = 0.75      # auto-merge new Guest if existing Guest scores ≥ this
@@ -75,6 +77,11 @@ class FaceRegistry:
         self._threshold = match_threshold
         self._conn = sqlite3.connect(str(path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # Per-frame sightings are batched so the detection thread does not
+        # commit to SQLite on every frame: {face_id: (count, last_seen)}.
+        self._seen_lock = threading.Lock()
+        self._pending_seen: dict[str, tuple[int, float]] = {}
+        self._seen_flushed = time.monotonic()
         self._ensure_schema()
         self._thumbs_dir = Path(thumbs_dir) if thumbs_dir else _DEFAULT_THUMBS
         self._thumbs_dir.mkdir(parents=True, exist_ok=True)
@@ -529,10 +536,28 @@ class FaceRegistry:
         return False
 
     def update_seen(self, face_id: str) -> None:
-        """Bump last_seen and seen_count for an existing identity."""
-        self._conn.execute(
-            "UPDATE faces SET last_seen = ?, seen_count = seen_count + 1 WHERE id = ?",
-            (time.time(), face_id),
+        """Bump last_seen and seen_count for an existing identity.
+
+        Writes are batched and flushed at most every ``_SEEN_FLUSH_S`` seconds
+        (and before any read that reports them), so counts stay exact.
+        """
+        with self._seen_lock:
+            count, _ = self._pending_seen.get(face_id, (0, 0.0))
+            self._pending_seen[face_id] = (count + 1, time.time())
+            due = time.monotonic() - self._seen_flushed >= _SEEN_FLUSH_S
+        if due:
+            self.flush_seen()
+
+    def flush_seen(self) -> None:
+        """Write batched sightings from ``update_seen`` to the database."""
+        with self._seen_lock:
+            pending, self._pending_seen = self._pending_seen, {}
+            self._seen_flushed = time.monotonic()
+        if not pending:
+            return
+        self._conn.executemany(
+            "UPDATE faces SET last_seen = ?, seen_count = seen_count + ? WHERE id = ?",
+            [(ts, count, fid) for fid, (count, ts) in pending.items()],
         )
         self._conn.commit()
 
@@ -597,6 +622,7 @@ class FaceRegistry:
 
     def get_face(self, face_id: str) -> Optional[dict]:
         """Return a dict with all face metadata, or None."""
+        self.flush_seen()
         row = self._conn.execute(
             "SELECT * FROM faces WHERE id = ?", (face_id,)
         ).fetchone()
@@ -604,6 +630,7 @@ class FaceRegistry:
 
     def list_faces(self) -> list[dict]:
         """Return all known faces sorted by last_seen descending."""
+        self.flush_seen()
         rows = self._conn.execute(
             "SELECT id, name, first_seen, last_seen, last_greeted, seen_count "
             "FROM faces ORDER BY last_seen DESC"
@@ -612,6 +639,7 @@ class FaceRegistry:
 
     def list_named_faces(self) -> list[dict]:
         """Return only faces with a real name (not 'Guest N'), sorted by last_seen desc."""
+        self.flush_seen()
         rows = self._conn.execute(
             "SELECT id, name, first_seen, last_seen, last_greeted, seen_count "
             "FROM faces WHERE name NOT LIKE 'Guest %' ORDER BY last_seen DESC"
@@ -850,6 +878,7 @@ class FaceRegistry:
 
     def get_current_face_id(self) -> Optional[str]:
         """Return the most recently seen face_id (useful for CLI name assignment)."""
+        self.flush_seen()
         row = self._conn.execute(
             "SELECT id FROM faces ORDER BY last_seen DESC LIMIT 1"
         ).fetchone()
@@ -996,6 +1025,10 @@ class FaceRegistry:
                 pass
 
     def close(self) -> None:
+        try:
+            self.flush_seen()
+        except Exception:
+            log.debug("FaceRegistry: final seen flush failed", exc_info=True)
         try:
             self._conn.close()
         except Exception:

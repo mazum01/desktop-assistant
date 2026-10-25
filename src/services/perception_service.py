@@ -111,6 +111,7 @@ class PerceptionService(Service):
         self._registry = registry
         self._cfg = config or PerceptionConfig()
         self._min_interval = 1.0 / max(self._cfg.max_fps, 0.1)
+        self._last_captured_at: Optional[float] = None
         self._last_detect_ts: float = 0.0
         self._unsubs: list = []
         self._pos_cache: list = []
@@ -222,11 +223,10 @@ class PerceptionService(Service):
         # Skip detection on sim frames to avoid false positives from placeholder graphics.
         if self._vision_svc is not None and not self._vision_svc.hardware_ready:
             return
-        # Avoid waking the worker when we're still inside the configured
-        # detection interval; this trims queue churn at high camera FPS.
-        if time.monotonic() - self._last_detect_ts < self._min_interval * 0.9:
-            return
-        # Non-blocking put; drop the signal if the worker is still busy with the previous frame.
+        # Non-blocking put; the size-1 queue coalesces signals while the
+        # worker is busy, and the worker paces itself to max_fps.  Frames that
+        # arrive mid-pass must not be discarded here, or every pass would wait
+        # an extra camera frame and cap detection at about half the camera rate.
         try:
             self._frame_queue.put_nowait(True)
         except queue.Full:
@@ -281,10 +281,9 @@ class PerceptionService(Service):
             except queue.Empty:
                 continue
 
-            now = time.monotonic()
-            if now - self._last_detect_ts < self._min_interval:
-                continue
-            self._last_detect_ts = now
+            remaining = self._min_interval - (time.monotonic() - self._last_detect_ts)
+            if remaining > 0 and self._stop_evt.wait(remaining):
+                break
 
             captured_at = time.monotonic()
             rotation = 0
@@ -303,6 +302,10 @@ class PerceptionService(Service):
                 frame = self._get_frame()
             if frame is None:
                 continue
+            if captured_at == self._last_captured_at:
+                continue  # already processed this frame; wait for the next
+            self._last_captured_at = captured_at
+            self._last_detect_ts = time.monotonic()
 
             try:
                 faces = (self._detector.detect(frame, small=small) if small is not None

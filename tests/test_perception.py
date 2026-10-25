@@ -326,3 +326,67 @@ class TestPerceptionService:
             mock_det.detect.assert_not_called()
         finally:
             svc.stop()
+
+
+class _Vision:
+    """Vision stub exposing detection observations with explicit capture stamps."""
+
+    hardware_ready = True
+
+    def __init__(self):
+        self.captured = 1.0
+
+    def latest_detection_observation(self):
+        return np.zeros((480, 640, 3), dtype=np.uint8), None, self.captured, 0
+
+
+def _paced_svc(bus, max_fps, detect_s):
+    det = MagicMock()
+    det.backend = "sim"
+    det.detect.side_effect = lambda *a, **k: time.sleep(detect_s) or []
+    vis = _Vision()
+    svc = PerceptionService(bus=bus, vision_service=vis, detector=det,
+                            config=PerceptionConfig(max_fps=max_fps))
+    return svc, det, vis
+
+
+class TestPerceptionPacing:
+    def test_frame_arriving_mid_pass_is_processed_next(self):
+        bus = MessageBus()
+        svc, det, vis = _paced_svc(bus, max_fps=10, detect_s=0.06)
+        svc.start()
+        try:
+            bus.publish("vision.frame_ready", {"index": 1})
+            time.sleep(0.03)
+            vis.captured = 2.0
+            bus.publish("vision.frame_ready", {"index": 2})
+            time.sleep(0.3)
+            assert det.detect.call_count == 2
+        finally:
+            svc.stop()
+
+    def test_same_frame_is_not_detected_twice(self):
+        bus = MessageBus()
+        svc, det, _ = _paced_svc(bus, max_fps=1000, detect_s=0.0)
+        svc.start()
+        try:
+            for i in range(3):
+                bus.publish("vision.frame_ready", {"index": i})
+                time.sleep(0.03)
+            assert det.detect.call_count == 1
+        finally:
+            svc.stop()
+
+    def test_detection_rate_is_capped_by_max_fps(self):
+        bus = MessageBus()
+        svc, det, vis = _paced_svc(bus, max_fps=5, detect_s=0.0)
+        svc.start()
+        try:
+            for i in range(10):
+                vis.captured = 10.0 + i
+                bus.publish("vision.frame_ready", {"index": i})
+                time.sleep(0.04)
+            time.sleep(0.05)
+            assert 2 <= det.detect.call_count <= 3
+        finally:
+            svc.stop()

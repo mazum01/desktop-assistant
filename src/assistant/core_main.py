@@ -180,6 +180,10 @@ def main() -> int:
 
     _ht_cfg_raw = _cfg.get("head_tracking", {})
     _speaking_motion_cfg = _ht_cfg_raw.get("speaking_motion", {})
+    # Pre-speech head lift only applies to the gaze controller, which renders it.
+    _pre_speech_cfg = (_ht_cfg_raw.get("pre_speech", {})
+                       if _ht_cfg_raw.get("controller") == "gaze"
+                       and _speaking_motion_cfg.get("enabled", True) else {})
     _tracker_cfg = HeadTrackerConfig(
         servo_min=_soft_min_deg, servo_max=_soft_max_deg,
         servo_center=(_soft_min_deg + _soft_max_deg) / 2,
@@ -411,7 +415,9 @@ def main() -> int:
         from src.audio.respeaker_flex import ReSpeakerFlexLED
         _led = ReSpeakerFlexLED(bus=bus, enabled=True)
 
-    av = AVService(bus=bus, audio_output=_audio_out)
+    av = AVService(bus=bus, audio_output=_audio_out,
+                   pre_speech_lead_s=float(_pre_speech_cfg.get("lead_s", 0.0)),
+                   pre_speech_cooldown_s=float(_pre_speech_cfg.get("cooldown_s", 60.0)))
     _display_enabled = bool(_display_cfg_raw.get("enabled", True))
     display_svc = (
         DisplayService(
@@ -657,6 +663,8 @@ def main() -> int:
         body=_body.name,
         params_path=_body.identity_path,
         gaze_config=_ht_cfg_raw.get("gaze", {}),
+        pre_speech_lift_deg=float(_pre_speech_cfg.get("lift_deg", 0.0)),
+        pre_speech_relax_s=float(_pre_speech_cfg.get("relax_s", 0.6)),
     )
     services.append(tracking_svc)
 

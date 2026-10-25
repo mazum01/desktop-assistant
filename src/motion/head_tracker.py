@@ -47,26 +47,30 @@ log = logging.getLogger(__name__)
 class _MinJerkPlanner:
     """5th-order minimum-jerk trajectory planner.
 
-    Plans a smooth move from (x0, v0) to (xf, vf) in time T; vf defaults to
-    rest, and a non-zero vf lets pursuit hand off without stopping.
+    Plans a smooth move from (x0, v0, a0) to (xf, vf) in time T; vf defaults
+    to rest, and a non-zero vf lets pursuit hand off without stopping.
     Replanning mid-trajectory preserves momentum: the new polynomial starts
-    from the current (position, velocity) so there is no discontinuity.
+    from the current position, velocity and (optionally) acceleration, so
+    there is no discontinuity.
 
-    Boundary conditions: x(0)=x0, v(0)=v0, a(0)=0, x(T)=xf, v(T)=vf, a(T)=0
-    Polynomial form: x(t) = x0 + v0·t + c3·t³ + c4·t⁴ + c5·t⁵
+    Boundary conditions: x(0)=x0, v(0)=v0, a(0)=a0, x(T)=xf, v(T)=vf, a(T)=0
+    Polynomial form: x(t) = x0 + v0·t + a0·t²/2 + c3·t³ + c4·t⁴ + c5·t⁵
     """
 
     def __init__(self) -> None:
-        self._x0 = self._v0 = self._xf = 0.0
+        self._x0 = self._v0 = self._a0 = self._xf = 0.0
         self._c3 = self._c4 = self._c5 = 0.0
         self._T: float = 1.0
         self._t: float = 0.0
+        self.acc: float = 0.0
 
-    def plan(self, x0: float, v0: float, xf: float, T: float, vf: float = 0.0) -> None:
-        """Compute coefficients for the move (x0, v0) → (xf, vf) in T seconds."""
+    def plan(self, x0: float, v0: float, xf: float, T: float, vf: float = 0.0,
+             a0: float = 0.0) -> None:
+        """Compute coefficients for the move (x0, v0, a0) → (xf, vf) in T seconds."""
         T = max(T, 0.02)
-        self._x0, self._v0, self._xf = float(x0), float(v0), float(xf)
+        self._x0, self._v0, self._a0, self._xf = float(x0), float(v0), float(a0), float(xf)
         self._T, self._t = T, 0.0
+        self.acc = self._a0
 
         dx = xf - x0
         T2, T3, T4, T5 = T ** 2, T ** 3, T ** 4, T ** 5
@@ -75,7 +79,7 @@ class _MinJerkPlanner:
             [3*T2,  4*T3,   5*T4 ],
             [6*T,   12*T2,  20*T3],
         ])
-        b = np.array([dx - v0 * T, vf - v0, 0.0])
+        b = np.array([dx - v0 * T - a0 * T2 / 2, vf - v0 - a0 * T, -a0])
         try:
             c3, c4, c5 = np.linalg.solve(A, b)
         except np.linalg.LinAlgError:
@@ -86,10 +90,12 @@ class _MinJerkPlanner:
         """Advance by *dt* seconds; return (position, velocity) on the curve."""
         self._t = min(self._t + dt, self._T)
         t = self._t
-        pos = (self._x0 + self._v0 * t
+        pos = (self._x0 + self._v0 * t + self._a0 * t ** 2 / 2
                + self._c3 * t ** 3 + self._c4 * t ** 4 + self._c5 * t ** 5)
-        vel = (self._v0
+        vel = (self._v0 + self._a0 * t
                + 3 * self._c3 * t ** 2 + 4 * self._c4 * t ** 3 + 5 * self._c5 * t ** 4)
+        self.acc = float(self._a0 + 6 * self._c3 * t + 12 * self._c4 * t ** 2
+                         + 20 * self._c5 * t ** 3)
         return float(pos), float(vel)
 
     @property

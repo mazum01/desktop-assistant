@@ -4,6 +4,40 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.85.0] - 2026-10-25
+### Added
+- Pre-speech head gesture. With `head_tracking.pre_speech` configured (new
+  body), `av.speaking_started` carries `lead_s` and audio starts 0.25 s later.
+  During that lead the tracking service lifts the head ~2 degrees with a small
+  sway timed to speech onset, then relaxes over 0.6 s. Applied only while
+  tracking and kept within tilt limits. It plays only on the first utterance
+  after `cooldown_s` (default 60 s) of silence, measured from the end of the
+  last speech. Follow-up sentences get no lift and no added audio delay.
+- Detection telemetry on `tracking.debug`: achieved `detect_hz` and
+  capture-to-arrival `detect_latency_ms` over the last 2 seconds.
+### Changed
+- Gaze pan and tilt are coordinated: one shared minimum-jerk duration from the
+  combined angular distance, so diagonal glances are straight lines.
+- Fixation uses elliptical zones with hysteresis: it settles inside 3 x 2
+  degrees (pan x tilt) and moves again only beyond 6 x 4 degrees.
+  `fixation_release_deg` is replaced by `settle_pan_deg`, `settle_tilt_deg`,
+  `release_pan_deg`, and `release_tilt_deg`.
+- Minimum-jerk replans keep the current acceleration as well as position and
+  velocity, so mid-move corrections have no jolt.
+- Stereo face depth runs on its own worker thread, holding only the newest
+  result. Before, it ran inside the `perception.faces` publish and delayed every
+  detection by ~20 ms.
+- Face sightings (`seen_count`/`last_seen`) are batched and written at most
+  every 2 seconds, and flushed before reads and on close, so counts stay exact.
+  Before, there was one SQLite commit per face per frame on the detection thread.
+### Fixed
+- Face detection ran at ~5 Hz instead of the configured 7. Frames arriving
+  during a detection pass were discarded, so each pass waited an extra camera
+  frame. The worker now waits out the remaining interval, takes the newest
+  frame, and skips frames it already processed. Measured: 4.9 to 6.8 Hz, and
+  capture-to-arrival latency from 170 to 148 ms, with no CPU increase. Simulated
+  pursuit error roughly halves.
+
 ## [1.84.1] - 2026-10-25
 ### Fixed
 - Gaze tracking overshot on large motions and twitched near center. Root cause:

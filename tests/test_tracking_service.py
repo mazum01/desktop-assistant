@@ -1002,3 +1002,53 @@ def test_gaze_loop_routes_to_gaze_tick():
 def test_unknown_controller_rejected():
     with pytest.raises(ValueError):
         make_tracking_svc(controller="bogus")
+
+
+def test_gaze_speech_gesture_lifts_before_onset_then_sways_smoothly():
+    svc, _ = make_gaze_svc(pre_speech_lift_deg=2.0, pre_speech_relax_s=0.6,
+                           speaking_motion_amplitude_deg=1.5, speaking_motion_freq_hz=2.5)
+    svc._on_speaking_started(None, {"text": "hi", "lead_s": 0.25})
+    cue = svc._speech_cue
+    pan, tilt = svc._speech_gesture(cue + 0.125)
+    assert pan == 0.0 and 0.5 < tilt < 1.5
+    assert svc._speech_gesture(cue + 0.25) == pytest.approx((0.0, 2.0))
+    samples = [svc._speech_gesture(cue + 0.25 + i * 0.01) for i in range(150)]
+    assert samples[-1][1] == pytest.approx(0.0)
+    assert max(abs(p) for p, _ in samples) > 1.0
+    assert max(abs(b[0] - a[0]) for a, b in zip(samples, samples[1:])) < 0.3
+    svc._speech_end = cue + 1.0
+    assert svc._speech_gesture(cue + 1.0 + 0.31) == (0.0, 0.0)
+
+
+def test_gaze_speech_gesture_applies_tilt_offset_within_limits():
+    svc, bus = make_gaze_svc(pre_speech_lift_deg=2.0)
+    svc._on_speaking_started(None, {"lead_s": 0.25})
+    svc._publish_gaze({"pan": 90.0, "tilt": 109.0}, svc._speech_onset, tracking=True,
+                      bounds={"pan": (70.0, 110.0), "tilt": (70.0, 110.0)})
+    assert published(bus, "motion.tilt_to")[-1]["angle"] == pytest.approx(110.0)
+    svc._publish_gaze({"pan": 90.0, "tilt": 95.0}, svc._speech_onset, tracking=False)
+    assert published(bus, "motion.tilt_to")[-1]["angle"] == pytest.approx(95.0)
+
+
+def test_speech_gesture_rejects_bad_settings_and_bad_lead():
+    with pytest.raises(ValueError):
+        make_gaze_svc(pre_speech_lift_deg=9.0)
+    svc, _ = make_gaze_svc(pre_speech_lift_deg=2.0)
+    svc._on_speaking_started(None, {"lead_s": "nan"})
+    assert svc._speech_onset == svc._speech_cue
+    assert svc._speech_gesture(svc._speech_cue + 0.01)[1] == 0.0
+
+
+def test_gaze_debug_reports_detection_rate_and_latency():
+    svc, bus = make_gaze_svc()
+    now = time.monotonic()
+    for i in range(11):
+        svc._detections.append((now - 1.0 + i * 0.1, 0.08))
+    svc._detections.append((now - 10.0, 5.0))
+    stats = svc._detection_stats(now)
+    assert stats["detect_hz"] == pytest.approx(10.0)
+    assert stats["detect_latency_ms"] == pytest.approx(80.0)
+    svc._on_faces(None, {"faces": [], "captured_mono": time.monotonic() - 0.05})
+    assert svc._detections[-1][1] == pytest.approx(0.05, abs=0.02)
+    svc._on_faces(None, {"faces": [], "captured_mono": True})
+    assert len(svc._detections) == 13

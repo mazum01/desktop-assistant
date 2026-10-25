@@ -175,7 +175,11 @@ stop-and-go corrections:
 * **Minimum-jerk motion.** Re-fixations follow a bell-shaped velocity profile
   whose duration grows with distance (`move_base_s` + `move_scale_s_per_deg`,
   capped by `move_max_s` and `max_speed_deg_s`). Replans start from the current
-  position and velocity, so direction changes are seamless.
+  position, velocity, and acceleration, so direction changes stay smooth with no
+  jolt.
+* **Coordinated pan and tilt.** Both axes share one move duration based on the
+  combined angular distance, so diagonal glances travel in a straight line and
+  arrive together instead of tracing an L.
 * **Undershooting saccades.** Re-fixations larger than `saccade_min_deg`
   deliberately land at `saccade_gain` (90%) of the distance, as human saccades
   do, and a small correction follows if needed. Large moves therefore never
@@ -187,10 +191,19 @@ stop-and-go corrections:
   alongside a walking person. Large errors during pursuit get a velocity-matched
   catch-up move. Pursuit is blocked for `pursuit_settle_s` after a saccade,
   while the velocity estimate is still disturbed by the head's own motion.
-* **Fixation hold.** After the target has stayed inside the `dead_zone_frac`
-  band for `fixation_dwell_s`, the fixation locks. The head then rests until the
-  target drifts more than `fixation_release_deg`, instead of chasing detector
-  jitter.
+* **Fixation hold with elliptical zones.** After the target has stayed inside
+  the settle ellipse (`settle_pan_deg` 3 x `settle_tilt_deg` 2 degrees) for
+  `fixation_dwell_s`, the fixation locks on both axes. The head then rests until
+  the target leaves the wider release ellipse (`release_pan_deg` 6 x
+  `release_tilt_deg` 4 degrees), instead of chasing detector jitter. The gap
+  between the two zones is hysteresis.
+* **Pre-speech gesture.** When `head_tracking.pre_speech` is configured, speech
+  audio starts `lead_s` (0.25 s) after `av.speaking_started`. During that lead
+  the head lifts slightly (`lift_deg`, 2 degrees) with a small sway timed to the
+  first syllable, then relaxes over `relax_s`, as people do just before talking.
+  The gesture is applied only while tracking and stays within the tilt limits.
+  It plays only on the first utterance after `cooldown_s` (60 s) of silence.
+  Follow-up sentences start without the lead or the lift.
 * **Measured field of view.** Image offsets convert to degrees using the
   camera's real field of view. The new body's IMX708 standard lens measures
   about 72 degrees horizontal and 49 degrees vertical (`fov_degrees`,
@@ -202,6 +215,12 @@ degrees of its midpoint). Faces take priority; fresh person detections drive the
 same controller when no face has been seen for one second. When the target is
 lost the filter coasts for up to `max_predict_s`, then the head decelerates to a
 natural stop before idle motion may resume. Speaking nods are added on top.
+The Kalman filter is the high-rate estimator: it predicts at the 20 Hz control
+rate and is corrected whenever a detection arrives (about 7 Hz). The
+`/ws/tracking-debug` stream reports the achieved `detect_hz` and capture-to-arrival
+`detect_latency_ms`. Stereo face depth runs on its own worker thread so it never
+delays detections, and the detection worker processes frames that arrive
+mid-pass instead of skipping one camera frame per pass.
 The dashboard sliders/presets (Kalman noise, lookahead, dead zone, replan
 threshold, move timing, speed) tune this controller live; `tracking_gain` only
 affects idle motion. Controller-specific settings live in

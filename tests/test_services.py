@@ -345,6 +345,41 @@ def _make_av(bus, announce_on_start=False):
     return svc, audio, tts, announcer
 
 
+def test_av_service_announces_speech_lead_before_audio():
+    bus = MessageBus()
+    svc, audio, _tts, _ = _make_av(bus)
+    svc._pre_speech_lead_s = 0.2
+    events = []
+    bus.subscribe("av.speaking_started", lambda t, p: events.append(("cue", time.monotonic(), p)))
+    audio.play.side_effect = lambda *a, **k: events.append(("play", time.monotonic(), None))
+    svc._do_play_samples(np.zeros(10, dtype=np.float32), 22050, "hi")
+    (cue, t0, payload), (play, t1, _) = events
+    assert (cue, play) == ("cue", "play")
+    assert payload["lead_s"] == pytest.approx(0.2)
+    assert t1 - t0 >= 0.19
+
+
+def test_av_service_speech_lead_only_after_quiet_cooldown():
+    bus = MessageBus()
+    svc, _audio, _tts, _ = _make_av(bus)
+    svc._pre_speech_lead_s = 0.01
+    svc._pre_speech_cooldown_s = 60.0
+    leads = []
+    bus.subscribe("av.speaking_started", lambda t, p: leads.append(p["lead_s"]))
+    samples = np.zeros(10, dtype=np.float32)
+    svc._do_play_samples(samples, 22050, "hello")
+    svc._do_play_samples(samples, 22050, "how are you")
+    svc._last_speech_end -= 61.0
+    svc._do_play_samples(samples, 22050, "welcome back")
+    assert leads == [pytest.approx(0.01), 0.0, pytest.approx(0.01)]
+
+
+def test_av_service_rejects_bad_pre_speech_cooldown():
+    for bad in (-1.0, float("nan"), 4000.0):
+        with pytest.raises(ValueError):
+            AVService(bus=MessageBus(), pre_speech_cooldown_s=bad)
+
+
 def test_av_service_say_routes_to_tts():
     bus = MessageBus()
     svc, audio, tts, _ = _make_av(bus)

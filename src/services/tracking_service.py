@@ -37,7 +37,7 @@ tracking.set_person_seek     ``{"enabled": bool}``
 tracking.save_params         ``{}``  — persist current config to assistant.yaml
 tracking.apply_preset        ``{"preset": str}``  — apply a named HeadTracker preset
 tracking.reset_params        ``{}``  — reset to "default" preset
-av.speaking_started ``{"text": str, "ts": float}``
+av.speaking_started ``{"text": str, "ts": float, "lead_s": float}``
 av.spoke            ``{"text": str, "ts": float}``
 
 Topics published
@@ -57,6 +57,7 @@ import logging
 import math
 import threading
 import time
+from collections import deque
 from dataclasses import replace
 from pathlib import Path
 from typing import Optional
@@ -74,6 +75,7 @@ log = logging.getLogger(__name__)
 
 _UPDATE_HZ = 20
 _UPDATE_INTERVAL = 1.0 / _UPDATE_HZ
+_SWAY_FADE_S = 0.3
 
 # Maximum age (seconds) of a person detection hint before it is discarded.
 # At 2 fps object detection this equals ~4 missed frames.
@@ -102,6 +104,8 @@ class TrackingService(Service):
         body: str = "new",
         params_path: Optional[Path] = None,
         gaze_config: Optional[dict] = None,
+        pre_speech_lift_deg: float = 0.0,
+        pre_speech_relax_s: float = 0.6,
     ) -> None:
         super().__init__(bus=bus)
         if controller not in ("legacy", "visual_servo", "gaze"):
@@ -119,6 +123,18 @@ class TrackingService(Service):
         self._speaking_motion_amplitude = speaking_motion_amplitude_deg
         self._speaking_motion_freq = speaking_motion_freq_hz
         self._speaking_until: float = 0.0  # monotonic timestamp; >now means DA is speaking
+        # Gaze-controller speech gesture: a small chin lift that starts when
+        # speech is announced and peaks at audio onset, then a sway that fades
+        # in at onset and out after speech ends.
+        if not 0.0 <= pre_speech_lift_deg <= 5.0 or not 0.1 <= pre_speech_relax_s <= 3.0:
+            raise ValueError("pre_speech lift must be 0-5 degrees and relax 0.1-3 s")
+        self._pre_speech_lift = float(pre_speech_lift_deg)
+        self._pre_speech_relax = float(pre_speech_relax_s)
+        self._speech_cue: Optional[float] = None
+        self._speech_onset: Optional[float] = None
+        self._speech_end: Optional[float] = None
+        # (arrival, capture-to-arrival latency) of recent perception results.
+        self._detections: deque = deque(maxlen=64)
         self._tracker: Optional[HeadTracker] = None
         self._current_face_cx: Optional[float] = None
         self._current_face_cy: Optional[float] = None
@@ -399,6 +415,11 @@ class TrackingService(Service):
             return
         faces = payload.get("faces") or []
         self._faces_present = bool(faces)
+        arrived = time.monotonic()
+        captured = payload.get("captured_mono")
+        if (isinstance(captured, (int, float)) and not isinstance(captured, bool)
+                and math.isfinite(captured)):
+            self._detections.append((arrived, arrived - captured))
         width, height = payload.get("frame_w"), payload.get("frame_h")
         if (isinstance(width, int) and isinstance(height, int)
                 and width > 0 and height > 0
@@ -526,13 +547,50 @@ class TrackingService(Service):
                     time.monotonic(), self._current_servo_angle, self._current_tilt_angle,
                 )
 
-    def _on_speaking_started(self, _topic, _payload) -> None:
+    def _on_speaking_started(self, _topic, payload) -> None:
         """Mark the head as 'speaking' until av.spoke arrives (max 60 s safety cap)."""
-        self._speaking_until = time.monotonic() + 60.0
+        now = time.monotonic()
+        lead = payload.get("lead_s", 0.0) if isinstance(payload, dict) else 0.0
+        try:
+            lead = min(max(float(lead), 0.0), 1.0)
+        except (TypeError, ValueError):
+            lead = 0.0
+        if not math.isfinite(lead):
+            lead = 0.0
+        self._speech_cue, self._speech_onset, self._speech_end = now, now + lead, None
+        self._speaking_until = now + 60.0
 
     def _on_spoke(self, _topic, _payload) -> None:
         """Clear the speaking window as soon as TTS finishes."""
         self._speaking_until = 0.0
+        if self._speech_onset is not None and self._speech_end is None:
+            self._speech_end = max(time.monotonic(), self._speech_onset)
+
+    def _speech_gesture(self, now: float) -> tuple[float, float]:
+        """Return (pan, tilt) offsets for the gaze controller's speech gesture."""
+        cue, onset = self._speech_cue, self._speech_onset
+        if not self._speaking_motion_enabled or cue is None or onset is None or now < cue:
+            return 0.0, 0.0
+
+        def smooth(x: float) -> float:
+            x = min(max(x, 0.0), 1.0)
+            return x * x * x * (10 - 15 * x + 6 * x * x)
+
+        tilt = 0.0
+        if self._pre_speech_lift > 0 and onset - cue >= 0.05:
+            if now < onset:
+                tilt = self._pre_speech_lift * smooth((now - cue) / (onset - cue))
+            else:
+                tilt = self._pre_speech_lift * (1 - smooth((now - onset) / self._pre_speech_relax))
+        pan = 0.0
+        end = min(self._speech_end if self._speech_end is not None else math.inf, onset + 60.0)
+        if now >= onset and now < end + _SWAY_FADE_S:
+            envelope = smooth((now - onset) / _SWAY_FADE_S)
+            if now > end:
+                envelope *= 1 - smooth((now - end) / _SWAY_FADE_S)
+            pan = (self._speaking_motion_amplitude * envelope
+                   * math.sin(2 * math.pi * self._speaking_motion_freq * (now - onset)))
+        return pan, tilt
 
     def _on_save_params(self, _topic, _payload) -> None:
         """Persist tuning to the selected body's local identity file."""
@@ -667,7 +725,8 @@ class TrackingService(Service):
         if source is None:
             self._gaze.release()
             if self._gaze.moving:
-                self._publish_gaze(self._gaze.step(now, dt, bounds), now, tracking=False)
+                self._publish_gaze(self._gaze.step(now, dt, bounds), now, tracking=False,
+                                   bounds=bounds)
                 return
             self._gaze_sent.clear()
             self._idle_tick(now, observation)
@@ -686,15 +745,17 @@ class TrackingService(Service):
             if tilt_at is not None and math.isfinite(point[1]):
                 bearings["tilt"] = tilt_at + tilt_off
             self._gaze.observe(bearings, stamp)
-        self._publish_gaze(self._gaze.step(now, dt, bounds), now, tracking=True)
+        self._publish_gaze(self._gaze.step(now, dt, bounds), now, tracking=True, bounds=bounds)
 
-    def _publish_gaze(self, targets: dict, now: float, tracking: bool) -> None:
+    def _publish_gaze(self, targets: dict, now: float, tracking: bool,
+                      bounds: Optional[dict] = None) -> None:
         targets = dict(targets)
-        if (tracking and "pan" in targets and self._speaking_motion_enabled
-                and now < self._speaking_until):
-            lo, hi = self._tracker_cfg.servo_min, self._tracker_cfg.servo_max
-            targets["pan"] = max(lo, min(hi, targets["pan"] + self._speaking_motion_amplitude
-                                         * math.sin(2 * math.pi * self._speaking_motion_freq * now)))
+        if tracking:
+            offsets = dict(zip(("pan", "tilt"), self._speech_gesture(now)))
+            for axis, offset in offsets.items():
+                if axis in targets and offset:
+                    lo, hi = (bounds or {}).get(axis, (-math.inf, math.inf))
+                    targets[axis] = max(lo, min(hi, targets[axis] + offset))
         for axis, angle in targets.items():
             if abs(angle - self._gaze_sent.get(axis, math.inf)) < 0.01:
                 continue
@@ -706,7 +767,18 @@ class TrackingService(Service):
         self.bus.publish("tracking.debug", {
             **self._gaze.debug_state(), "body": self._body, "controller": self._controller,
             "face_raw": self._current_face_cx, "face_smoothed": self._current_face_cx,
+            **self._detection_stats(now),
         })
+
+    def _detection_stats(self, now: float, window_s: float = 2.0) -> dict:
+        recent = [d for d in list(self._detections) if now - d[0] <= window_s]
+        if len(recent) < 2:
+            return {"detect_hz": 0.0, "detect_latency_ms": None}
+        span = recent[-1][0] - recent[0][0]
+        return {
+            "detect_hz": round((len(recent) - 1) / span, 1) if span > 0 else 0.0,
+            "detect_latency_ms": round(1000 * sum(d[1] for d in recent) / len(recent), 1),
+        }
 
     def _signature(self):
         keys = ("pan_channel", "tilt_channel", "range_deg", "soft_min_deg",
