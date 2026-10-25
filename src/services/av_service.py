@@ -20,7 +20,7 @@ Topics subscribed:
     av.play_recording     {"path": str?}           — play latest or specified WAV
 
 Topics published:
-    av.speaking_started   {"text": str, "ts": float, "lead_s": float} — audio starts lead_s later (lead only after a quiet cooldown)
+    av.speaking_started   {"text": str, "ts": float, "lead_s": float, "opening": bool} — audio starts lead_s later; opening is True only for the first utterance after a quiet cooldown
     av.spoke              {"text": str}
     av.chimed             {}
     av.version_announced  {"version": str}
@@ -582,7 +582,9 @@ class AVService(Service):
         last = self._last_speech_end
         quiet = last is None or time.monotonic() - last >= self._pre_speech_cooldown_s
         lead = self._pre_speech_lead_s if quiet else 0.0
-        self.bus.publish("av.speaking_started", {"text": text, "ts": time.time(), "lead_s": lead})
+        self.bus.publish("av.speaking_started", {
+            "text": text, "ts": time.time(), "lead_s": lead, "opening": quiet,
+        })
         if lead > 0:
             time.sleep(lead)
 

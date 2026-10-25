@@ -364,14 +364,16 @@ def test_av_service_speech_lead_only_after_quiet_cooldown():
     svc, _audio, _tts, _ = _make_av(bus)
     svc._pre_speech_lead_s = 0.01
     svc._pre_speech_cooldown_s = 60.0
-    leads = []
-    bus.subscribe("av.speaking_started", lambda t, p: leads.append(p["lead_s"]))
+    leads, openings = [], []
+    bus.subscribe("av.speaking_started",
+                  lambda t, p: (leads.append(p["lead_s"]), openings.append(p["opening"])))
     samples = np.zeros(10, dtype=np.float32)
     svc._do_play_samples(samples, 22050, "hello")
     svc._do_play_samples(samples, 22050, "how are you")
     svc._last_speech_end -= 61.0
     svc._do_play_samples(samples, 22050, "welcome back")
     assert leads == [pytest.approx(0.01), 0.0, pytest.approx(0.01)]
+    assert openings == [True, False, True]
 
 
 def test_av_service_rejects_bad_pre_speech_cooldown():

@@ -984,6 +984,19 @@ class VisionService(Service):
         if camera_config is not None:
             self._stream_width = int(getattr(camera_config, "stream_width", 0))
             self._stream_height = int(getattr(camera_config, "stream_height", 0))
+        scale = float(getattr(camera_config, "overlay_scale", 1.0) or 1.0)
+        quality = int(getattr(camera_config, "stream_jpeg_quality", 80) or 80)
+        if not math.isfinite(scale) or not 1.0 <= scale <= 3.0:
+            raise ValueError("camera overlay_scale must be between 1 and 3")
+        if not 40 <= quality <= 100:
+            raise ValueError("camera stream_jpeg_quality must be between 40 and 100")
+        self._overlay_scale = scale
+        self._jpeg_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
+        # Below 2x, 4:2:0 chroma blocks are wider than thin overlay strokes and
+        # smear their color; at 2x+ a chroma block maps to one source pixel.
+        if scale < 2.0 and hasattr(cv2, "IMWRITE_JPEG_SAMPLING_FACTOR"):
+            self._jpeg_params += [cv2.IMWRITE_JPEG_SAMPLING_FACTOR,
+                                  cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444]
         # Background JPEG encoder — decouples copy+draw+encode from capture tick
         self._encode_queue: queue.Queue = queue.Queue(maxsize=1)
         self._encoder_running: bool = False
@@ -1167,6 +1180,8 @@ class VisionService(Service):
         capture resolution, the frame is resized first, or the ISP-scaled small
         frame is used directly when it already has the stream size.  Detection bbox coordinates are scaled
         accordingly so overlays still align with the resized stream frame.
+        The stream frame is then upscaled by ``overlay_scale`` before overlays
+        are drawn, so text and reticles stay crisp when the browser enlarges it.
         Hailo inference continues to receive full-resolution frames.
         """
         while self._encoder_running:
@@ -1203,13 +1218,23 @@ class VisionService(Service):
                 scaled_faces, scaled_objects = faces, objects
                 sx, sy = 1.0, 1.0
 
+            k = self._overlay_scale
+            if k > 1.0:
+                dh, dw = display.shape[:2]
+                up_w, up_h = round(dw * k), round(dh * k)
+                display = cv2.resize(display, (up_w, up_h), interpolation=cv2.INTER_LINEAR)
+                kx, ky = up_w / dw, up_h / dh
+                scaled_faces = _scale_bboxes(scaled_faces, kx, ky)
+                scaled_objects = _scale_bboxes(scaled_objects, kx, ky)
+                sx, sy = sx * kx, sy * ky
+
             _draw_overlays(display, scaled_faces, scaled_objects, face_depths)
             if privacy_state:
                 _draw_privacy_overlay(display, privacy_state, sx, sy)
             if servo_angle is not None:
                 _draw_servo_overlay(display, servo_angle, servo_min, servo_max)
 
-            ok, buf = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            ok, buf = cv2.imencode(".jpg", display, self._jpeg_params)
             with self._lock:
                 self._latest_jpeg = bytes(buf) if ok else None
 

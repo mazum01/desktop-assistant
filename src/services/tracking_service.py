@@ -37,7 +37,7 @@ tracking.set_person_seek     ``{"enabled": bool}``
 tracking.save_params         ``{}``  — persist current config to assistant.yaml
 tracking.apply_preset        ``{"preset": str}``  — apply a named HeadTracker preset
 tracking.reset_params        ``{}``  — reset to "default" preset
-av.speaking_started ``{"text": str, "ts": float, "lead_s": float}``
+av.speaking_started ``{"text": str, "ts": float, "lead_s": float, "opening": bool}``
 av.spoke            ``{"text": str, "ts": float}``
 
 Topics published
@@ -106,6 +106,7 @@ class TrackingService(Service):
         gaze_config: Optional[dict] = None,
         pre_speech_lift_deg: float = 0.0,
         pre_speech_relax_s: float = 0.6,
+        pre_speech_sway_s: float = 1.5,
     ) -> None:
         super().__init__(bus=bus)
         if controller not in ("legacy", "visual_servo", "gaze"):
@@ -124,12 +125,16 @@ class TrackingService(Service):
         self._speaking_motion_freq = speaking_motion_freq_hz
         self._speaking_until: float = 0.0  # monotonic timestamp; >now means DA is speaking
         # Gaze-controller speech gesture: a small chin lift that starts when
-        # speech is announced and peaks at audio onset, then a sway that fades
-        # in at onset and out after speech ends.
+        # speech is announced and peaks at audio onset, then a brief sway that
+        # fades in at onset and out after sway_s (or when speech ends). Only the
+        # opening utterance after a quiet cooldown gets it (see AVService).
         if not 0.0 <= pre_speech_lift_deg <= 5.0 or not 0.1 <= pre_speech_relax_s <= 3.0:
             raise ValueError("pre_speech lift must be 0-5 degrees and relax 0.1-3 s")
+        if not 0.0 <= pre_speech_sway_s <= 10.0:
+            raise ValueError("pre_speech sway must be 0-10 s")
         self._pre_speech_lift = float(pre_speech_lift_deg)
         self._pre_speech_relax = float(pre_speech_relax_s)
+        self._pre_speech_sway = float(pre_speech_sway_s)
         self._speech_cue: Optional[float] = None
         self._speech_onset: Optional[float] = None
         self._speech_end: Optional[float] = None
@@ -548,7 +553,13 @@ class TrackingService(Service):
                 )
 
     def _on_speaking_started(self, _topic, payload) -> None:
-        """Mark the head as 'speaking' until av.spoke arrives (max 60 s safety cap)."""
+        """Start the speech gesture, but only for an opening utterance.
+
+        Follow-up sentences (``opening`` False) leave any gesture already in
+        progress to finish naturally instead of re-triggering it.
+        """
+        if isinstance(payload, dict) and payload.get("opening", True) is False:
+            return
         now = time.monotonic()
         lead = payload.get("lead_s", 0.0) if isinstance(payload, dict) else 0.0
         try:
@@ -558,7 +569,7 @@ class TrackingService(Service):
         if not math.isfinite(lead):
             lead = 0.0
         self._speech_cue, self._speech_onset, self._speech_end = now, now + lead, None
-        self._speaking_until = now + 60.0
+        self._speaking_until = now + lead + self._pre_speech_sway
 
     def _on_spoke(self, _topic, _payload) -> None:
         """Clear the speaking window as soon as TTS finishes."""
@@ -583,7 +594,8 @@ class TrackingService(Service):
             else:
                 tilt = self._pre_speech_lift * (1 - smooth((now - onset) / self._pre_speech_relax))
         pan = 0.0
-        end = min(self._speech_end if self._speech_end is not None else math.inf, onset + 60.0)
+        end = min(self._speech_end if self._speech_end is not None else math.inf,
+                  onset + self._pre_speech_sway)
         if now >= onset and now < end + _SWAY_FADE_S:
             envelope = smooth((now - onset) / _SWAY_FADE_S)
             if now > end:

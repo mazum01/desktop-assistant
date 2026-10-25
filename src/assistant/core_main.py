@@ -168,6 +168,8 @@ def main() -> int:
         lens_position=float(_rt.get("camera", {}).get("lens_position", _cam_cfg_raw.get("lens_position", 0.0))),
         stream_width=_cam_stream_width,
         stream_height=_cam_stream_height,
+        overlay_scale=float(_cam_cfg_raw.get("overlay_scale", 2.0)),
+        stream_jpeg_quality=int(_cam_cfg_raw.get("stream_jpeg_quality", 80)),
     )
 
     def _tracking_frame_width(cam_w: int, cam_h: int, rot_deg: int) -> int:
@@ -665,6 +667,7 @@ def main() -> int:
         gaze_config=_ht_cfg_raw.get("gaze", {}),
         pre_speech_lift_deg=float(_pre_speech_cfg.get("lift_deg", 0.0)),
         pre_speech_relax_s=float(_pre_speech_cfg.get("relax_s", 0.6)),
+        pre_speech_sway_s=float(_pre_speech_cfg.get("sway_s", 1.5)),
     )
     services.append(tracking_svc)
 

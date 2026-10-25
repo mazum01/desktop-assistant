@@ -43,6 +43,7 @@ new:
       lift_deg: 2.0
       relax_s: 0.6
       cooldown_s: 60.0   # quiet time before the gesture can repeat
+      sway_s: 1.5        # brief sway after onset; none on follow-up sentences
     gaze:
       servo_lag_s: 0.06
       max_predict_s: 0.4

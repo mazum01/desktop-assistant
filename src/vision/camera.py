@@ -97,6 +97,13 @@ class CameraConfig:
     # decouple encode cost from capture resolution and reduce GIL pressure.
     stream_width: int = 0
     stream_height: int = 0
+    # Overlays (names, reticles, heading dial) are drawn on the stream frame
+    # upscaled by this factor so they stay crisp when the browser enlarges the
+    # feed. 1 disables it; the camera image itself gains no detail.
+    overlay_scale: float = 2.0
+    # MJPEG quality for the annotated stream. Below overlay_scale 2 it is
+    # encoded without chroma subsampling so thin colored strokes stay clean.
+    stream_jpeg_quality: int = 80
 
 
 class Camera:

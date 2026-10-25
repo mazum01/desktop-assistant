@@ -1030,9 +1030,43 @@ def test_gaze_speech_gesture_applies_tilt_offset_within_limits():
     assert published(bus, "motion.tilt_to")[-1]["angle"] == pytest.approx(95.0)
 
 
+def test_gaze_speech_gesture_only_for_opening_utterance():
+    svc, _ = make_gaze_svc(pre_speech_lift_deg=2.0, speaking_motion_amplitude_deg=1.5)
+    svc._on_speaking_started(None, {"lead_s": 0.25, "opening": True})
+    cue = svc._speech_cue
+    svc._on_spoke(None, {})
+    svc._speech_end = cue + 0.5
+    # A follow-up sentence must not restart the lift or the sway.
+    svc._on_speaking_started(None, {"lead_s": 0.0, "opening": False})
+    assert svc._speech_cue == cue
+    assert svc._speech_gesture(cue + 5.0) == (0.0, 0.0)
+    assert svc._speaking_until == 0.0
+
+
+def test_gaze_speech_sway_stops_after_sway_window_even_while_speaking():
+    svc, _ = make_gaze_svc(pre_speech_lift_deg=2.0, pre_speech_sway_s=1.0,
+                           speaking_motion_amplitude_deg=1.5, speaking_motion_freq_hz=2.5)
+    svc._on_speaking_started(None, {"lead_s": 0.25, "opening": True})
+    onset = svc._speech_onset
+    assert svc._speech_end is None  # still speaking
+    assert any(abs(svc._speech_gesture(onset + 0.5 + i * 0.05)[0]) > 0.5 for i in range(8))
+    assert svc._speech_gesture(onset + 1.0 + 0.31) == (0.0, 0.0)
+    assert svc._speaking_until == pytest.approx(svc._speech_cue + 0.25 + 1.0)
+
+
+def test_legacy_sway_window_only_on_opening_utterance():
+    svc, _ = make_gaze_svc(pre_speech_sway_s=1.5)
+    svc._on_speaking_started(None, {"lead_s": 0.0, "opening": False})
+    assert svc._speaking_until == 0.0
+    svc._on_speaking_started(None, {"lead_s": 0.0})  # legacy payload counts as opening
+    assert svc._speaking_until > time.monotonic()
+
+
 def test_speech_gesture_rejects_bad_settings_and_bad_lead():
     with pytest.raises(ValueError):
         make_gaze_svc(pre_speech_lift_deg=9.0)
+    with pytest.raises(ValueError):
+        make_gaze_svc(pre_speech_sway_s=-1.0)
     svc, _ = make_gaze_svc(pre_speech_lift_deg=2.0)
     svc._on_speaking_started(None, {"lead_s": "nan"})
     assert svc._speech_onset == svc._speech_cue

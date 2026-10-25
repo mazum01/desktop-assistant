@@ -4,6 +4,28 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.85.2] - 2026-10-25
+### Fixed
+- The speaking head motion still twitched on every sentence. The 1.85.0
+  cooldown only suppressed the pre-speech lift; the 2.5 Hz speaking sway still
+  ran for the whole of every utterance (and in the idle and legacy paths too).
+  `av.speaking_started` now carries `opening` (True only for the first
+  utterance after `cooldown_s` of silence). The tracking service starts the
+  lift and sway only for opening utterances, and the sway lasts at most the new
+  `pre_speech.sway_s` (default 1.5 s) instead of the whole utterance.
+
+## [1.85.1] - 2026-10-25
+### Changed
+- Sharper web stream overlays. Face names, distance and confidence text, face
+  reticles, object boxes, and the heading dial were drawn on the 640x360 stream
+  frame, JPEG-encoded at quality 70 with chroma subsampling, then enlarged by the
+  browser, which left them fuzzy. The stream frame is now upscaled by the new
+  `camera.overlay_scale` (default 2, so 1280x720) before overlays are drawn, and
+  encoded at the new `camera.stream_jpeg_quality` (default 80). Below an overlay
+  scale of 2 it is encoded without chroma subsampling. Encoder cost is about
+  18 ms per frame (was 6 ms) and about 70 KB per frame (was 22 KB). Set
+  `overlay_scale: 1` for the old behavior.
+
 ## [1.85.0] - 2026-10-25
 ### Added
 - Pre-speech head gesture. With `head_tracking.pre_speech` configured (new

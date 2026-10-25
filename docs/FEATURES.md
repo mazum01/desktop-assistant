@@ -96,6 +96,18 @@ Modes are `continuous`, `auto` (single scan), `manual`, and the legacy `off` ali
 Invalid values return HTTP 422; unavailable hardware, RPC failures, and persistence
 errors return HTTP 503 rather than reporting success.
 
+### Stream overlay sharpness
+
+The main camera feed's overlays (face names, distance and confidence, reticles,
+object boxes, and the heading dial) are drawn on the stream frame after it is
+upscaled by `camera.overlay_scale` (default 2, so a 640x360 stream becomes
+1280x720). The overlays then render at full resolution and stay crisp when the
+browser enlarges the feed. The camera image itself gains no detail. The stream
+is encoded at `camera.stream_jpeg_quality` (default 80). Below an overlay scale
+of 2, chroma subsampling is disabled so thin colored strokes are not smeared. At
+the defaults the encoder takes about 18 ms per frame (6 ms at scale 1) and
+about 70 KB per frame. Set `overlay_scale: 1` to restore the old, lighter stream.
+
 ### Body profiles
 
 The machine-local `config/body.yaml` selects the body independently of software
@@ -199,11 +211,13 @@ stop-and-go corrections:
   between the two zones is hysteresis.
 * **Pre-speech gesture.** When `head_tracking.pre_speech` is configured, speech
   audio starts `lead_s` (0.25 s) after `av.speaking_started`. During that lead
-  the head lifts slightly (`lift_deg`, 2 degrees) with a small sway timed to the
-  first syllable, then relaxes over `relax_s`, as people do just before talking.
-  The gesture is applied only while tracking and stays within the tilt limits.
-  It plays only on the first utterance after `cooldown_s` (60 s) of silence.
-  Follow-up sentences start without the lead or the lift.
+  the head lifts slightly (`lift_deg`, 2 degrees), then relaxes over `relax_s`,
+  with a brief sway (`sway_s`, 1.5 s) timed to the first syllable, as people do
+  just before talking. The gesture is applied only while tracking and stays
+  within the tilt limits. It plays only on the opening utterance after
+  `cooldown_s` (60 s) of silence (`av.speaking_started` carries
+  `opening: true`). Follow-up sentences get no lead, lift, or sway, in any
+  tracking mode.
 * **Measured field of view.** Image offsets convert to degrees using the
   camera's real field of view. The new body's IMX708 standard lens measures
   about 72 degrees horizontal and 49 degrees vertical (`fov_degrees`,
