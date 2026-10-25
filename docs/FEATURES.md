@@ -132,7 +132,10 @@ The versioned `config/body_profiles.yaml` overrides the corresponding
 | Body | Tracker | Pan hardware | Tilt |
 |------|---------|--------------|------|
 | `original` | Legacy Kalman/minimum-jerk | PCA9685 channel 15, geared logical 1-360 degrees, soft limits 135-215 degrees, non-inverted pan | Disabled |
-| `new` | Fresh-frame visual servo | PCA9685 channel 1, direct-drive 0-180 degrees, soft limits 70-110 degrees, inverted pan | Channel 0, limits 70-110 degrees |
+| `new` | Person-like gaze (Kalman bearing + minimum-jerk) | PCA9685 channel 1, direct-drive 0-180 degrees, soft limits 70-110 degrees, inverted pan | Channel 0, limits 70-110 degrees |
+
+`head_tracking.controller` may be `legacy`, `gaze`, or `visual_servo`; the
+profile chooses it, not the local identity file.
 
 Both profiles enforce safe 500-2500 microsecond pulses; the original profile
 does **not** restore the old unsafe 10-2950 microsecond calibration.
@@ -152,10 +155,45 @@ preserve enable switches, tracking toggles, and camera settings.
 Subsequent runtime saves include body identity. Dashboard tuning saves to the
 local identity file's `head_tracking` section, not the shared body profiles.
 The tuning panel and `tracking.get_status` / `tracking.get_tunable_params` RPCs
-report the selected body/controller. Visual calibration is unavailable on the
-original body.
+report the selected body/controller. Visual calibration is only used by the
+`visual_servo` controller.
 
-### New-body visual tracking
+### New-body gaze tracking (default)
+
+The `gaze` controller aims for smooth, person-like head motion rather than
+stop-and-go corrections:
+
+* **World-frame Kalman filter.** Each fresh, locked face (or person) detection
+  becomes an absolute bearing: the measured head angle at capture time
+  (interpolated from `motion.position`, minus `servo_lag_s`) plus the target's
+  angular offset in the image. A constant-velocity Kalman filter smooths that
+  bearing per axis. Because the bearing does not depend on where the head has
+  moved since, a late or repeated frame cannot compound into overshoot.
+* **Saccadic suppression.** Frames captured while the head is moving much faster
+  than the target are ignored, as people do during a quick glance, and the
+  measurement noise grows with head speed (`timing_uncertainty_s`).
+* **Minimum-jerk motion.** Re-fixations follow a bell-shaped velocity profile
+  whose duration grows with distance (`move_base_s` + `move_scale_s_per_deg`,
+  capped by `move_max_s` and `max_speed_deg_s`). Replans start from the current
+  position and velocity, so direction changes are seamless.
+* **Smooth pursuit.** When the filtered target speed exceeds
+  `pursuit_min_deg_s`, moves aim where the target will be on arrival and end
+  at its velocity (up to `max_pursuit_deg_s`), so the head glides alongside a
+  walking person.
+* **Fixation hold.** Once on target the head rests until the target leaves the
+  `dead_zone_frac` band, instead of chasing detector jitter.
+
+Setpoints stream to MotionService at 20 Hz on pan and tilt (tilt within ±20
+degrees of its midpoint). Faces take priority; fresh person detections drive the
+same controller when no face has been seen for one second. When the target is
+lost the filter coasts for up to `max_predict_s`, then the head decelerates to a
+natural stop before idle motion may resume. Speaking nods are added on top.
+The dashboard sliders/presets (Kalman noise, lookahead, dead zone, replan
+threshold, move timing, speed) tune this controller live; `tracking_gain` only
+affects idle motion. Controller-specific settings live in
+`config/body_profiles.yaml` under `new.head_tracking.gaze`.
+
+### Visual-servo tracking (optional)
 
 Face centering uses timestamped, actual-size detection frames. A visual controller
 locks onto one spatially/identity-consistent face over several fresh frames.

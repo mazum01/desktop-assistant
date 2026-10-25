@@ -34,7 +34,7 @@ def select_body(config_dir, name, runtime=None):
 
 @pytest.mark.parametrize("body,channel,angle_range,limits,tilt,controller,invert", [
     ("original", 15, 360, (135, 215), False, "legacy", False),
-    ("new", 1, 180, (70, 110), True, "visual_servo", True),
+    ("new", 1, 180, (70, 110), True, "gaze", True),
 ])
 def test_body_selects_matching_hardware_and_controller(
     config_dir, body, channel, angle_range, limits, tilt, controller, invert,
@@ -133,7 +133,7 @@ def test_switching_to_new_body_discards_original_geometry(config_dir):
 def test_missing_identity_keeps_new_body_behavior_with_explicit_warning(config_dir, caplog):
     selected = load_body_config({}, {}, config_dir)
     assert selected.name == "new"
-    assert selected.config["head_tracking"]["controller"] == "visual_servo"
+    assert selected.config["head_tracking"]["controller"] == "gaze"
     assert selected.config["servo"]["pan_channel"] == 1
     assert "using new body for backward compatibility" in caplog.text
 
@@ -179,7 +179,7 @@ def test_device_local_tilt_direction_preserves_profile_and_runtime(config_dir, i
     tracking = selected.config["head_tracking"]
     assert tracking["invert_tilt"] is invert
     assert tracking["invert_pan"] is True
-    assert tracking["controller"] == "visual_servo"
+    assert tracking["controller"] == "gaze"
     assert selected.runtime["servo"] == runtime["servo"]
     shared = yaml.safe_load((config_dir / "body_profiles.yaml").read_text())
     assert shared["new"]["head_tracking"]["invert_tilt"] is False

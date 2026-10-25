@@ -3969,16 +3969,19 @@ async function loadTrackingParams() {
     const data = await r.json();
     _trackingRanges = data.ranges || {};
     const legacy = data.controller === "legacy";
+    const visual = data.controller === "visual_servo";
     const description = el("tracking-controller-description");
     if (description) {
       description.textContent = legacy
         ? "Original body: legacy Kalman/minimum-jerk pan tracking. Sliders and presets tune face tracking and idle motion. Visual plant calibration is not used."
-        : "New body: fresh-frame visual pan/tilt tracking. Sliders tune legacy idle/person-seek motion only. For calibration, keep one face still and visible; small announced moves need travel margin on both axes. Cancel holds position.";
+        : visual
+        ? "New body: fresh-frame visual pan/tilt tracking. Sliders tune legacy idle/person-seek motion only. For calibration, keep one face still and visible; small announced moves need travel margin on both axes. Cancel holds position."
+        : "New body: person-like gaze tracking. A Kalman filter smooths where the face (or person) is in the room and the head follows with minimum-jerk pan/tilt moves, smooth pursuit, and a fixation dead-band. Sliders and presets tune face tracking; tracking gain affects idle motion only. Visual plant calibration is not used.";
     }
     const calibrate = el("autotune-start-btn");
     if (calibrate) {
-      calibrate.disabled = legacy;
-      calibrate.title = legacy ? "Visual calibration is only available on the new body" : "";
+      calibrate.disabled = !visual;
+      calibrate.title = visual ? "" : "Visual calibration is only used by the visual servo controller";
     }
     _buildTrackingSliders(data.params || {}, _trackingRanges);
   } catch (e) {

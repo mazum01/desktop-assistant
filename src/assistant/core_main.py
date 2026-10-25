@@ -655,6 +655,7 @@ def main() -> int:
         controller=_ht_cfg_raw["controller"],
         body=_body.name,
         params_path=_body.identity_path,
+        gaze_config=_ht_cfg_raw.get("gaze", {}),
     )
     services.append(tracking_svc)
 

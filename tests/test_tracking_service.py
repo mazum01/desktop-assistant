@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 import threading
 from unittest.mock import MagicMock, call, patch
@@ -894,3 +895,110 @@ def test_calibration_failure_preserves_previous_model_and_releases_motion(tmp_pa
     assert svc._calibration is None
     assert path.read_text() == "previous model"
     assert call("motion.calibration_lock", {"enabled": False}) in bus.publish.call_args_list
+
+
+# ---------------------------------------------------------------------------
+# Gaze controller (person-like Kalman bearing tracking)
+# ---------------------------------------------------------------------------
+
+def make_gaze_svc(tilt=True, **kwargs):
+    kwargs.setdefault("random_motion_enabled", False)
+    svc, bus = make_tracking_svc(
+        controller="gaze",
+        config=HeadTrackerConfig(frame_width=640, frame_height=480, max_speed_deg_s=120,
+                                 servo_min=70, servo_max=110, servo_center=90),
+        **kwargs,
+    )
+    svc.on_start()
+    if tilt:
+        enable_tilt(svc)
+    svc._on_position(None, {"angle": 90.0, "tilt_angle": 90.0 if tilt else None})
+    bus.publish.reset_mock()
+    return svc, bus
+
+
+def gaze_ticks(svc, n=10):
+    for _ in range(n):
+        svc._gaze_tick(time.monotonic(), 0.05)
+
+
+def test_gaze_centers_face_on_pan_and_tilt_with_smooth_streamed_moves():
+    svc, bus = make_gaze_svc()
+    feed_face(svc, x=380, y=160)
+    gaze_ticks(svc, 20)
+    pans = [p["angle"] for p in published(bus, "motion.pan_to")]
+    tilts = [p["angle"] for p in published(bus, "motion.tilt_to")]
+    assert pans and tilts
+    assert all(p["source"] == "gaze_tracking" and p["move_time_ms"] == pytest.approx(100)
+               for p in published(bus, "motion.pan_to"))
+    assert pans == sorted(pans) and pans[-1] > 95
+    assert tilts == sorted(tilts) and tilts[-1] > 92
+    assert max(pans) < 110 and max(tilts) < 110
+    assert np.max(np.abs(np.diff([90.0] + pans))) <= 120 * 0.05 + 1e-6
+
+
+def test_gaze_repeated_frame_does_not_compound_target():
+    svc, _ = make_gaze_svc(tilt=False)
+    feed_face(svc, x=400, y=240)
+    gaze_ticks(svc, 60)
+    settled = svc._gaze.axes["pan"].pos
+    stamp = svc._observation[1]
+    for _ in range(60):
+        svc._observation = (svc._observation[0], stamp, time.monotonic(), 1)
+        svc._gaze_tick(time.monotonic(), 0.05)
+    assert svc._gaze.axes["pan"].pos == pytest.approx(settled, abs=0.5)
+    expected = 90 + math.degrees(math.atan(2 * (80 / 640) * math.tan(math.radians(50))))
+    assert settled == pytest.approx(expected, abs=2.5)
+
+
+def test_gaze_follows_person_when_no_face_and_face_takes_priority():
+    svc, bus = make_gaze_svc(tilt=False)
+    svc._on_objects(None, make_obj_payload([(40, 100, 160, 400, 0.9)]))
+    gaze_ticks(svc, 5)
+    assert svc._gaze.source == "person"
+    assert published(bus, "motion.pan_to")[-1]["angle"] < 90
+    feed_face(svc, x=480, y=240)
+    gaze_ticks(svc, 1)
+    assert svc._gaze.source == "face"
+
+
+def test_gaze_requires_motion_ready_and_halts():
+    svc, bus = make_gaze_svc()
+    feed_face(svc)
+    svc._motion_settings["hardware_ready"] = False
+    gaze_ticks(svc, 5)
+    assert published(bus, "motion.pan_to") == []
+    assert published(bus, "motion.tilt_to") == []
+    assert not svc._gaze.active
+
+
+def test_gaze_releases_and_coasts_when_face_tracking_disabled():
+    svc, bus = make_gaze_svc(tilt=False)
+    feed_face(svc, x=500, y=240)
+    gaze_ticks(svc, 4)
+    svc._on_set_face_tracking(None, {"enabled": False})
+    gaze_ticks(svc, 30)
+    assert not svc._gaze.active and not svc._gaze.moving
+
+
+def test_gaze_rejects_visual_calibration_and_reports_controller():
+    svc, bus = make_gaze_svc()
+    svc._on_start_calibration(None, {})
+    assert not svc._calibration_requested
+    assert published(bus, "tracking.autotune_done")[-1]["ok"] is False
+    params = svc.get_tunable_params()
+    assert params["controller"] == "gaze"
+    assert "gaze" in params["controller_description"].lower()
+
+
+def test_gaze_loop_routes_to_gaze_tick():
+    svc, _ = make_gaze_svc()
+    with patch.object(svc, "_gaze_tick") as gaze, patch.object(svc, "_visual_tick") as visual:
+        run_one_tick(svc)
+    gaze.assert_called_once()
+    visual.assert_not_called()
+
+
+def test_unknown_controller_rejected():
+    with pytest.raises(ValueError):
+        make_tracking_svc(controller="bogus")

@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.84.0] - 2026-10-25
+### Added
+- Person-like `gaze` head-tracking controller, now the new body's default. The
+  Kalman filter and minimum-jerk motion are back, but the filter now tracks the
+  target's absolute bearing (head angle at frame capture + image offset). Stale
+  or repeated frames can no longer compound into overshoot. Adds bell-shaped
+  re-fixations scaled to distance, smooth pursuit that matches a moving
+  person's velocity, a fixation dead-band, saccadic suppression during fast
+  head moves, and pan + tilt support. Person seek uses the same controller.
+  Settings live under `new.head_tracking.gaze` in `config/body_profiles.yaml`.
+### Changed
+- The minimum-jerk planner accepts a terminal velocity for continuous pursuit.
+- Visual plant calibration is only offered for the `visual_servo` controller.
+  The dashboard describes the active controller.
+
 ## [1.83.3] - 2026-10-24
 ### Changed
 - Increased head-tracking responsiveness again: visual-servo defaults are now

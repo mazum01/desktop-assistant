@@ -14,9 +14,15 @@ their face.  Once a face locks on, face tracking takes over immediately; person
 seek is inactive while a face is tracked.  Person seek is independent of the
 face-tracking switch: with face tracking off the head still follows the person.
 
-The original body uses the legacy Kalman/minimum-jerk ``HeadTracker`` for
-pan-only face tracking. The new body uses fresh-frame visual servoing;
-its legacy parameters control idle/person-seek motion only.
+Controllers (selected per body in ``config/body_profiles.yaml``):
+
+* ``legacy`` — Kalman/minimum-jerk ``HeadTracker`` for pan-only face tracking
+  (original body).
+* ``gaze`` — person-like pan/tilt following (new body): Kalman-filtered
+  absolute target bearings drive continuous minimum-jerk motion with smooth
+  pursuit and a fixation dead-band. Faces take priority over person seek.
+* ``visual_servo`` — one bounded correction per fresh, post-settling frame,
+  with optional plant calibration.
 
 Topics subscribed
 -----------------
@@ -57,6 +63,7 @@ from typing import Optional
 
 from src.core.bus import MessageBus
 from src.core.service import Service
+from src.motion.gaze_tracker import AngleHistory, GazeConfig, GazeTracker, image_offsets
 from src.motion.head_tracker import PRESETS, TUNABLE_FIELDS, HeadTracker, HeadTrackerConfig
 from src.motion.visual_servo import (
     FaceLock, PlantModel, VisualController, VisualServoConfig, face_priority, identify_plant,
@@ -94,9 +101,10 @@ class TrackingService(Service):
         controller: str = "visual_servo",
         body: str = "new",
         params_path: Optional[Path] = None,
+        gaze_config: Optional[dict] = None,
     ) -> None:
         super().__init__(bus=bus)
-        if controller not in ("legacy", "visual_servo"):
+        if controller not in ("legacy", "visual_servo", "gaze"):
             raise ValueError(f"Unknown tracking controller: {controller!r}")
         self._controller = controller
         self._body = body
@@ -141,6 +149,9 @@ class TrackingService(Service):
         self._calibration_requested = False
         self._cancel_calibration = False
         self._faces_present = False
+        self._gaze = GazeTracker(self._tracker_cfg, GazeConfig(**(gaze_config or {})))
+        self._angle_history = AngleHistory()
+        self._gaze_sent: dict[str, float] = {}
 
     @property
     def face_tracking_enabled(self) -> bool:
@@ -196,11 +207,13 @@ class TrackingService(Service):
             "presets": list(PRESETS.keys()),
             "body": self._body,
             "controller": self._controller,
-            "controller_description": (
-                "Legacy Kalman/minimum-jerk pan tracking"
-                if self._controller == "legacy" else
-                "Fresh-frame visual servo; legacy parameters apply to idle motion"
-            ),
+            "controller_description": {
+                "legacy": "Legacy Kalman/minimum-jerk pan tracking",
+                "gaze": ("Person-like gaze: Kalman-filtered target bearing with "
+                         "minimum-jerk pan/tilt motion and smooth pursuit; "
+                         "tracking_gain applies to idle motion only"),
+            }.get(self._controller,
+                  "Fresh-frame visual servo; legacy parameters apply to idle motion"),
             "calibrated": self._plant is not None,
         }
 
@@ -513,6 +526,9 @@ class TrackingService(Service):
                 self._current_servo_angle = float(payload["angle"])
                 tilt = payload.get("tilt_angle")
                 self._current_tilt_angle = float(tilt) if tilt is not None else None
+                self._angle_history.add(
+                    time.monotonic(), self._current_servo_angle, self._current_tilt_angle,
+                )
 
     def _on_speaking_started(self, _topic, _payload) -> None:
         """Mark the head as 'speaking' until av.spoke arrives (max 60 s safety cap)."""
@@ -579,6 +595,8 @@ class TrackingService(Service):
             try:
                 if self._controller == "legacy":
                     self._legacy_tick(now, max(0.001, now - last_t))
+                elif self._controller == "gaze":
+                    self._gaze_tick(now, min(0.2, max(0.001, now - last_t)))
                 else:
                     self._visual_tick(now)
             except (ValueError, OSError, KeyError, TypeError):
@@ -624,6 +642,74 @@ class TrackingService(Service):
         })
         self.bus.publish("tracking.debug", {
             **debug, "body": self._body, "controller": self._controller,
+        })
+
+    def _gaze_tick(self, now: float, dt: float) -> None:
+        if not self._motion_ready():
+            self._gaze.halt()
+            self._gaze_sent.clear()
+            return
+        cfg = self._tracker_cfg
+        with self._lock:
+            positions, limits = self._positions_and_limits()
+            observation = self._observation if self._face_tracking_enabled else None
+            if observation is not None and now - observation[1] > self._visual_cfg.max_age_s:
+                observation = None
+            face_active = self._face_in_priority(now)
+            person = None
+            if (not face_active and self._person_seek_enabled
+                    and self._object_detection_enabled and self._person_cx is not None
+                    and now - self._person_cx_ts < _PERSON_SEEK_STALE_S):
+                py = (self._person_cy / cfg.frame_height - 0.5
+                      if self._person_cy is not None else math.nan)
+                person = ((self._person_cx / cfg.frame_width - 0.5, py), self._person_cx_ts)
+        if positions is None:
+            return
+        names = ("pan", "tilt")[:len(positions)]
+        bounds = {n: (float(lo), float(hi)) for n, (lo, hi) in zip(names, limits)}
+        source = "face" if face_active else "person" if person is not None else None
+        if source is None:
+            self._gaze.release()
+            if self._gaze.moving:
+                self._publish_gaze(self._gaze.step(now, dt, bounds), now, tracking=False)
+                return
+            self._gaze_sent.clear()
+            self._idle_tick(now, observation)
+            return
+        self._gaze.engage(source, {n: float(p) for n, p in zip(names, positions)})
+        sample = (observation[0], observation[1]) if source == "face" and observation else person
+        if sample is not None and sample[1] > self._gaze.last_stamp():
+            point, stamp = sample
+            with self._lock:
+                head = self._angle_history.at(stamp - self._gaze.gaze.servo_lag_s)
+            pan_at, tilt_at = head if head is not None else (positions[0], None)
+            if tilt_at is None and len(positions) > 1:
+                tilt_at = positions[1]
+            pan_off, tilt_off = image_offsets(point, cfg)
+            bearings = {"pan": pan_at + pan_off}
+            if tilt_at is not None and math.isfinite(point[1]):
+                bearings["tilt"] = tilt_at + tilt_off
+            self._gaze.observe(bearings, stamp)
+        self._publish_gaze(self._gaze.step(now, dt, bounds), now, tracking=True)
+
+    def _publish_gaze(self, targets: dict, now: float, tracking: bool) -> None:
+        targets = dict(targets)
+        if (tracking and "pan" in targets and self._speaking_motion_enabled
+                and now < self._speaking_until):
+            lo, hi = self._tracker_cfg.servo_min, self._tracker_cfg.servo_max
+            targets["pan"] = max(lo, min(hi, targets["pan"] + self._speaking_motion_amplitude
+                                         * math.sin(2 * math.pi * self._speaking_motion_freq * now)))
+        for axis, angle in targets.items():
+            if abs(angle - self._gaze_sent.get(axis, math.inf)) < 0.01:
+                continue
+            self._gaze_sent[axis] = angle
+            self.bus.publish(f"motion.{axis}_to", {
+                "angle": round(float(angle), 2), "move_time_ms": _UPDATE_INTERVAL * 2000,
+                "override_quiet": True, "source": "gaze_tracking",
+            })
+        self.bus.publish("tracking.debug", {
+            **self._gaze.debug_state(), "body": self._body, "controller": self._controller,
+            "face_raw": self._current_face_cx, "face_smoothed": self._current_face_cx,
         })
 
     def _signature(self):
@@ -783,8 +869,8 @@ class TrackingService(Service):
         self._person_ready_at = now + duration + self._visual_cfg.settle_s
 
     def _on_start_calibration(self, _topic, _payload):
-        if self._controller == "legacy":
-            message = "Visual plant calibration is only available on the new body"
+        if self._controller != "visual_servo":
+            message = "Visual plant calibration is only used by the visual_servo controller"
             log.warning(message)
             self.bus.publish("tracking.autotune_done", {
                 "ok": False, "error": message, "reason": message,

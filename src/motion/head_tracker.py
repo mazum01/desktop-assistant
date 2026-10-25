@@ -47,11 +47,12 @@ log = logging.getLogger(__name__)
 class _MinJerkPlanner:
     """5th-order minimum-jerk trajectory planner.
 
-    Plans a smooth point-to-point move from (x0, v0) to (xf, 0) in time T.
+    Plans a smooth move from (x0, v0) to (xf, vf) in time T; vf defaults to
+    rest, and a non-zero vf lets pursuit hand off without stopping.
     Replanning mid-trajectory preserves momentum: the new polynomial starts
     from the current (position, velocity) so there is no discontinuity.
 
-    Boundary conditions: x(0)=x0, v(0)=v0, a(0)=0, x(T)=xf, v(T)=0, a(T)=0
+    Boundary conditions: x(0)=x0, v(0)=v0, a(0)=0, x(T)=xf, v(T)=vf, a(T)=0
     Polynomial form: x(t) = x0 + v0·t + c3·t³ + c4·t⁴ + c5·t⁵
     """
 
@@ -61,8 +62,8 @@ class _MinJerkPlanner:
         self._T: float = 1.0
         self._t: float = 0.0
 
-    def plan(self, x0: float, v0: float, xf: float, T: float) -> None:
-        """Compute coefficients for the move (x0, v0) → (xf, 0) in T seconds."""
+    def plan(self, x0: float, v0: float, xf: float, T: float, vf: float = 0.0) -> None:
+        """Compute coefficients for the move (x0, v0) → (xf, vf) in T seconds."""
         T = max(T, 0.02)
         self._x0, self._v0, self._xf = float(x0), float(v0), float(xf)
         self._T, self._t = T, 0.0
@@ -74,7 +75,7 @@ class _MinJerkPlanner:
             [3*T2,  4*T3,   5*T4 ],
             [6*T,   12*T2,  20*T3],
         ])
-        b = np.array([dx - v0 * T, -v0, 0.0])
+        b = np.array([dx - v0 * T, vf - v0, 0.0])
         try:
             c3, c4, c5 = np.linalg.solve(A, b)
         except np.linalg.LinAlgError:
@@ -98,6 +99,9 @@ class _MinJerkPlanner:
     @property
     def target(self) -> float:
         return self._xf
+
+
+MinJerkPlanner = _MinJerkPlanner
 
 
 # ── Config ───────────────────────────────────────────────────────────────────

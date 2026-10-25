@@ -27,7 +27,14 @@ new:
     tilt_min_deg: 70
     tilt_max_deg: 110
   head_tracking:
-    controller: visual_servo
+    controller: gaze
     invert_pan: true
     invert_tilt: false
     dead_zone_frac: 0.02
+    gaze:
+      servo_lag_s: 0.06
+      max_predict_s: 0.4
+      pursuit_min_deg_s: 3.0
+      max_pursuit_deg_s: 60.0
+      reacquire_jump_deg: 15.0
+      lost_s: 1.0

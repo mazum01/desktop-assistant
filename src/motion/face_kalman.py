@@ -54,6 +54,14 @@ class FaceKalman:
     def initialised(self) -> bool:
         return self._x is not None
 
+    @property
+    def position(self) -> float | None:
+        return None if self._x is None else float(self._x[0])
+
+    @property
+    def velocity(self) -> float | None:
+        return None if self._x is None else float(self._x[1])
+
     # ── Live-tuning setters ───────────────────────────────────────────────
 
     @property
