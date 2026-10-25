@@ -62,6 +62,10 @@ class FaceKalman:
     def velocity(self) -> float | None:
         return None if self._x is None else float(self._x[1])
 
+    @property
+    def velocity_std(self) -> float | None:
+        return None if self._P is None else float(np.sqrt(max(self._P[1, 1], 0.0)))
+
     # ── Live-tuning setters ───────────────────────────────────────────────
 
     @property

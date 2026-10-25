@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-1208 7495.9,-1208 7495.9,4 -4,4"/>
 <text text-anchor="start" x="3458.45" y="-1188.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="3644.95" y="-1177" font-family="Helvetica,sans-Serif" font-size="10.00">v1.84.0 — Person&#45;like gaze head tracking</text>
+<text text-anchor="start" x="3644.95" y="-1177" font-family="Helvetica,sans-Serif" font-size="10.00">v1.84.1 — Person&#45;like gaze head tracking</text>
 <g id="clust1" class="cluster">
 <title>cluster_updater</title>
 <path fill="#e4f4e4" stroke="black" d="M5925.4,-729.5C5925.4,-729.5 6832.4,-729.5 6832.4,-729.5 6838.4,-729.5 6844.4,-735.5 6844.4,-741.5 6844.4,-741.5 6844.4,-1150 6844.4,-1150 6844.4,-1156 6838.4,-1162 6832.4,-1162 6832.4,-1162 5925.4,-1162 5925.4,-1162 5919.4,-1162 5913.4,-1156 5913.4,-1150 5913.4,-1150 5913.4,-741.5 5913.4,-741.5 5913.4,-735.5 5919.4,-729.5 5925.4,-729.5"/>

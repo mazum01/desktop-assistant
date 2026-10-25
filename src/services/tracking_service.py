@@ -185,12 +185,8 @@ class TrackingService(Service):
     def _update_tilt_geometry(self) -> None:
         if self._tilt_tracker is not None:
             cfg = self._tracker_cfg
-            vertical_fov = math.degrees(2 * math.atan(
-                math.tan(math.radians(cfg.fov_degrees) / 2)
-                * cfg.frame_height / cfg.frame_width
-            ))
             self._tilt_tracker._cfg.frame_width = cfg.frame_height
-            self._tilt_tracker._cfg.fov_degrees = vertical_fov
+            self._tilt_tracker._cfg.fov_degrees = cfg.vertical_fov()
 
     # ── Tunable params API (called by web_service.py) ────────────────────
 
@@ -752,10 +748,7 @@ class TrackingService(Service):
         pan = (1 if cfg.invert_pan else -1) / cfg.fov_degrees
         matrix = [[pan], [0.0]]
         if self._motion_settings.get("tilt_available"):
-            vfov = math.degrees(2 * math.atan(
-                math.tan(math.radians(cfg.fov_degrees) / 2) * cfg.frame_height / cfg.frame_width
-            ))
-            matrix = [[pan, 0.0], [0.0, 1 / vfov]]
+            matrix = [[pan, 0.0], [0.0, 1 / cfg.vertical_fov()]]
         return PlantModel(matrix, self._visual_cfg.settle_s, 0, signature)
 
     def _positions_and_limits(self):

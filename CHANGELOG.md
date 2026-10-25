@@ -4,6 +4,27 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.84.1] - 2026-10-25
+### Fixed
+- Gaze tracking overshot on large motions and twitched near center. Root cause:
+  the new body's camera (IMX708 standard lens) has a measured ~72 degree
+  horizontal / ~49 degree vertical field of view, not the assumed 100 degrees,
+  so every image offset was ~1.6x too large. The new body profile now sets
+  `fov_degrees: 72` and a new `vertical_fov_degrees: 49` (also used by the tilt
+  tracker and the visual-servo plant model; 0 keeps the aspect-ratio
+  derivation). Face-distance estimates on the new body use the
+  corrected focal length too.
+### Changed
+- The gaze controller moves more like a person. Large re-fixations land at 90%
+  and then correct. Pursuit has hysteresis, needs a statistically significant
+  velocity, and is blocked briefly after a saccade. Large errors during pursuit
+  get a velocity-matched catch-up. A settled fixation holds until the target
+  drifts more than 3 degrees. New `gaze` settings: `saccade_min_deg`,
+  `saccade_gain`, `fixation_release_deg`, `fixation_dwell_s`,
+  `pursuit_settle_s`, `pursuit_confidence`. `FaceKalman` exposes `velocity_std`.
+- Dashboard asset cache keys now match the release, so browsers pick up the
+  1.84 controller UI text.
+
 ## [1.84.0] - 2026-10-25
 ### Added
 - Person-like `gaze` head-tracking controller, now the new body's default. The

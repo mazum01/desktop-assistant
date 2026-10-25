@@ -13,7 +13,7 @@ original:
     controller: legacy
     invert_pan: false
     invert_tilt: false
-    dead_zone_frac: 0.06
+    dead_zone_frac: 0.08
 new:
   servo:
     pan_channel: 1
@@ -28,6 +28,11 @@ new:
     tilt_max_deg: 110
   head_tracking:
     controller: gaze
+    # Measured on the IMX708 standard lens at 1920x1080 (pan/tilt sweep with
+    # image phase correlation). The 100° default made image offsets ~1.6x too
+    # large, which caused overshoot and fixation jitter.
+    fov_degrees: 72.0
+    vertical_fov_degrees: 49.0
     invert_pan: true
     invert_tilt: false
     dead_zone_frac: 0.02
@@ -38,3 +43,9 @@ new:
       max_pursuit_deg_s: 60.0
       reacquire_jump_deg: 15.0
       lost_s: 1.0
+      saccade_min_deg: 8.0
+      saccade_gain: 0.9
+      fixation_release_deg: 3.0
+      pursuit_settle_s: 0.25
+      pursuit_confidence: 2.0
+      fixation_dwell_s: 0.3

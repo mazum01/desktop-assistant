@@ -186,6 +186,7 @@ def main() -> int:
         frame_width=_tracking_frame_width(_cam_width, _cam_height, _camera_rotation_deg),
         frame_height=_tracking_frame_width(_cam_height, _cam_width, _camera_rotation_deg),
         fov_degrees=float(_ht_cfg_raw.get("fov_degrees", 100.0)),
+        vertical_fov_degrees=float(_ht_cfg_raw.get("vertical_fov_degrees", 0.0)),
         dead_zone_frac=float(_ht_cfg_raw.get("dead_zone_frac", 0.06)),
         tracking_gain=float(_ht_cfg_raw.get("tracking_gain", 0.92)),
         max_speed_deg_s=float(_ht_cfg_raw.get("max_speed_deg_s", 250.0)),

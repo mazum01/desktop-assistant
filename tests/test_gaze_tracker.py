@@ -168,8 +168,80 @@ def test_targets_respect_limits():
 @pytest.mark.parametrize("bad", [
     {"servo_lag_s": -1}, {"max_predict_s": 0}, {"pursuit_min_deg_s": 70},
     {"max_pursuit_deg_s": 500}, {"reacquire_jump_deg": 0}, {"lost_s": math.nan},
-    {"lost_s": True},
+    {"lost_s": True}, {"saccade_min_deg": 1}, {"saccade_gain": 1.2},
+    {"fixation_release_deg": -1}, {"pursuit_settle_s": 3},
+    {"pursuit_confidence": 6}, {"fixation_dwell_s": -0.1},
 ])
 def test_invalid_gaze_config_rejected(bad):
     with pytest.raises(ValueError):
         GazeConfig(**bad)
+
+
+def test_vertical_fov_override_drives_tilt_offsets():
+    derived = make_cfg(fov_degrees=72.0)
+    measured = make_cfg(fov_degrees=72.0, vertical_fov_degrees=49.0)
+    assert derived.vertical_fov() == pytest.approx(
+        math.degrees(2 * math.atan(math.tan(math.radians(36.0)) * 480 / 640)))
+    assert measured.vertical_fov() == 49.0
+    assert image_offsets((0.0, -0.5), measured)[1] == pytest.approx(24.5)
+    assert image_offsets((0.5, 0.0), measured)[0] == pytest.approx(36.0)
+
+
+def test_large_refixation_lands_short_then_corrects():
+    tracker = GazeTracker(make_cfg())
+    tracker.engage("face", {"pan": 90.0})
+    tracker.observe({"pan": 120.0}, 0.0)
+    tracker.step(0.0, DT, {"pan": (40.0, 140.0)})
+    axis = tracker.axes["pan"]
+    assert axis.planner.target == pytest.approx(90.0 + 0.9 * 30.0, abs=0.5)
+    out = simulate(lambda _t: 120.0, 3.0)
+    assert max(p for _, p, _ in out) <= 120.5
+
+
+def test_settled_fixation_ignores_small_drift_but_follows_larger_moves():
+    tracker = GazeTracker(make_cfg(fov_degrees=72.0))
+    tracker.engage("face", {"pan": 90.0})
+    limits = {"pan": (40.0, 140.0)}
+    t = 0.0
+    for _ in range(40):
+        tracker.observe({"pan": 92.5}, t)
+        tracker.step(t, DT, limits)
+        t += DT
+    settled = tracker.axes["pan"].pos
+    assert tracker.axes["pan"].fixated
+    for _ in range(40):
+        tracker.observe({"pan": settled + 2.0}, t)
+        pos = tracker.step(t, DT, limits)["pan"]
+        t += DT
+    assert pos == pytest.approx(settled)
+    for _ in range(40):
+        tracker.observe({"pan": settled + 5.0}, t)
+        pos = tracker.step(t, DT, limits)["pan"]
+        t += DT
+    assert pos == pytest.approx(settled + 5.0, abs=1.5)
+
+
+def test_pursuit_waits_for_saccade_to_settle():
+    tracker = GazeTracker(make_cfg())
+    tracker.engage("face", {"pan": 90.0})
+    tracker.observe({"pan": 120.0}, 0.0)
+    tracker.step(0.0, DT, {"pan": (40.0, 140.0)})
+    axis = tracker.axes["pan"]
+    assert axis.settle_s > GazeConfig().pursuit_settle_s
+    axis.kalman._x[1] = 20.0
+    assert tracker.axes["pan"].estimate(DT, make_cfg(), GazeConfig()) is not None
+    assert not axis.pursuing
+
+
+def test_uncertain_velocity_does_not_start_pursuit():
+    tracker = GazeTracker(make_cfg())
+    tracker.engage("face", {"pan": 90.0})
+    axis = tracker.axes["pan"]
+    tracker.observe({"pan": 91.0}, 0.0)
+    axis.kalman._x[1] = 6.0
+    axis.kalman._P[1, 1] = 16.0
+    axis.estimate(0.0, make_cfg(), GazeConfig())
+    assert not axis.pursuing
+    axis.kalman._P[1, 1] = 1.0
+    axis.estimate(0.0, make_cfg(), GazeConfig())
+    assert axis.pursuing

@@ -176,12 +176,26 @@ stop-and-go corrections:
   whose duration grows with distance (`move_base_s` + `move_scale_s_per_deg`,
   capped by `move_max_s` and `max_speed_deg_s`). Replans start from the current
   position and velocity, so direction changes are seamless.
+* **Undershooting saccades.** Re-fixations larger than `saccade_min_deg`
+  deliberately land at `saccade_gain` (90%) of the distance, as human saccades
+  do, and a small correction follows if needed. Large moves therefore never
+  swing past the face.
 * **Smooth pursuit.** When the filtered target speed exceeds
-  `pursuit_min_deg_s`, moves aim where the target will be on arrival and end
-  at its velocity (up to `max_pursuit_deg_s`), so the head glides alongside a
-  walking person.
-* **Fixation hold.** Once on target the head rests until the target leaves the
-  `dead_zone_frac` band, instead of chasing detector jitter.
+  `pursuit_min_deg_s` and `pursuit_confidence` standard deviations of the
+  filter's velocity uncertainty, moves aim where the target will be on arrival
+  and end at its velocity (up to `max_pursuit_deg_s`), so the head glides
+  alongside a walking person. Large errors during pursuit get a velocity-matched
+  catch-up move. Pursuit is blocked for `pursuit_settle_s` after a saccade,
+  while the velocity estimate is still disturbed by the head's own motion.
+* **Fixation hold.** After the target has stayed inside the `dead_zone_frac`
+  band for `fixation_dwell_s`, the fixation locks. The head then rests until the
+  target drifts more than `fixation_release_deg`, instead of chasing detector
+  jitter.
+* **Measured field of view.** Image offsets convert to degrees using the
+  camera's real field of view. The new body's IMX708 standard lens measures
+  about 72 degrees horizontal and 49 degrees vertical (`fov_degrees`,
+  `vertical_fov_degrees`). The old 100-degree assumption overstated every offset
+  by about 1.6x, which caused overshoot and twitching near center.
 
 Setpoints stream to MotionService at 20 Hz on pan and tilt (tilt within ±20
 degrees of its midpoint). Faces take priority; fresh person detections drive the

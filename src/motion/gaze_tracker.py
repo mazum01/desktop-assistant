@@ -51,6 +51,18 @@ class GazeConfig:
     # Saccadic suppression: ignore frames captured while the head moves faster
     # than this and faster than the target itself (fast re-fixation blur).
     saccade_suppress_deg_s: float = 25.0
+    # Errors above this are a re-fixation (no velocity matching) that lands at
+    # saccade_gain of the distance; smaller errors use pursuit/corrections.
+    saccade_min_deg: float = 8.0
+    saccade_gain: float = 0.9
+    # Once settled, the target must drift this far before the head moves again.
+    fixation_release_deg: float = 3.0
+    # Pursuit is blocked for this long after a saccade lands.
+    pursuit_settle_s: float = 0.25
+    # Pursuit needs |velocity| above this many filter standard deviations.
+    pursuit_confidence: float = 2.0
+    # Error must stay inside the dead zone this long before fixation locks.
+    fixation_dwell_s: float = 0.3
 
     def __post_init__(self):
         values = asdict(self)
@@ -71,6 +83,18 @@ class GazeConfig:
             raise ValueError("timing_uncertainty_s must be within 0-0.5 s")
         if not 5 <= self.saccade_suppress_deg_s <= 200:
             raise ValueError("saccade_suppress_deg_s must be within 5-200 deg/s")
+        if not 2 <= self.saccade_min_deg <= 45:
+            raise ValueError("saccade_min_deg must be within 2-45 degrees")
+        if not 0.5 <= self.saccade_gain <= 1.0:
+            raise ValueError("saccade_gain must be within 0.5-1.0")
+        if not 0 <= self.fixation_release_deg <= 15:
+            raise ValueError("fixation_release_deg must be within 0-15 degrees")
+        if not 0 <= self.pursuit_settle_s <= 2:
+            raise ValueError("pursuit_settle_s must be within 0-2 seconds")
+        if not 0 <= self.pursuit_confidence <= 5:
+            raise ValueError("pursuit_confidence must be within 0-5")
+        if not 0 <= self.fixation_dwell_s <= 3:
+            raise ValueError("fixation_dwell_s must be within 0-3 seconds")
 
 
 def image_offsets(point, cfg: HeadTrackerConfig) -> tuple[float, float]:
@@ -80,11 +104,10 @@ def image_offsets(point, cfg: HeadTrackerConfig) -> tuple[float, float]:
     logical convention where a higher angle looks up.
     """
     half = math.tan(math.radians(cfg.fov_degrees) / 2)
+    vertical_half = math.tan(math.radians(cfg.vertical_fov()) / 2)
     direction = -1.0 if cfg.invert_pan else 1.0
     pan = direction * math.degrees(math.atan(2 * float(point[0]) * half))
-    tilt = math.degrees(math.atan(
-        -2 * float(point[1]) * half * cfg.frame_height / cfg.frame_width
-    ))
+    tilt = math.degrees(math.atan(-2 * float(point[1]) * vertical_half))
     return pan, tilt
 
 
@@ -131,12 +154,19 @@ class _GazeAxis:
         self.vel = 0.0
         self.last_stamp: Optional[float] = None
         self.desired: Optional[float] = None
+        self.pursuing = False
+        self.fixated = False
+        self.goal: Optional[float] = None
+        self.settle_s = 0.0
+        self.dwell_s = 0.0
         self.planner.plan(self.pos, 0.0, self.pos, 0.02)
         self.planner.step(1.0)
 
     def forget(self) -> None:
         self.kalman.reset()
         self.last_stamp = None
+        self.pursuing = False
+        self.fixated = False
 
     def observe(self, bearing: float, stamp: float, cfg: HeadTrackerConfig,
                 gaze: GazeConfig, head_speed: float = 0.0) -> None:
@@ -165,7 +195,17 @@ class _GazeAxis:
             return None
         velocity = max(-gaze.max_pursuit_deg_s,
                        min(gaze.max_pursuit_deg_s, self.kalman.velocity))
-        if abs(velocity) < gaze.pursuit_min_deg_s:
+        # Pursuit hysteresis: start above pursuit_min, keep going down to half.
+        threshold = gaze.pursuit_min_deg_s * (0.5 if self.pursuing else 1.0)
+        error = abs(self.kalman.position - self.pos)
+        # Right after a saccade the velocity estimate is polluted by the head's
+        # own motion, so pursuit may not engage until it has settled.
+        # A settled fixation only breaks into pursuit once the error is clear.
+        # Ignore velocity that is not clearly above the filter's own uncertainty.
+        threshold = max(threshold, gaze.pursuit_confidence * (self.kalman.velocity_std or 0.0))
+        self.pursuing = (abs(velocity) >= threshold and self.settle_s <= 0.0
+                         and (not self.fixated or error > gaze.fixation_release_deg))
+        if not self.pursuing:
             velocity = 0.0
         horizon = min(max(0.0, now - self.last_stamp + cfg.lookahead_s), gaze.max_predict_s)
         return self.kalman.position + velocity * horizon, velocity
@@ -177,24 +217,47 @@ class _GazeAxis:
 
     def step(self, dt: float, estimate: Optional[tuple[float, float]], lo: float,
              hi: float, cfg: HeadTrackerConfig, gaze: GazeConfig) -> float:
+        self.settle_s = max(0.0, self.settle_s - dt)
         if estimate is not None:
             desired, velocity = estimate
             desired = min(max(desired, lo), hi)
             if desired in (lo, hi):
                 velocity = 0.0
             self.desired = desired
-            dead_zone = cfg.dead_zone_frac * cfg.fov_degrees
-            duration = self._duration(abs(desired - self.pos), cfg)
-            final = min(max(desired + velocity * duration, lo), hi)
-            if self.planner.done:
-                replan = (abs(desired - self.pos) > dead_zone
-                          or abs(self.vel) > gaze.pursuit_min_deg_s)
+            error = desired - self.pos
+            if (abs(error) > gaze.saccade_min_deg and desired not in (lo, hi)
+                    and not self.pursuing):
+                # Large re-fixations deliberately land short, like human
+                # saccades; a small corrective move follows if still needed.
+                # While pursuing, large errors get a velocity-matched catch-up.
+                final, velocity, saccade = self.pos + gaze.saccade_gain * error, 0.0, True
             else:
-                replan = abs(final - self.planner.target) > cfg.replan_threshold_deg
+                duration = self._duration(abs(error), cfg)
+                final, saccade = desired + velocity * duration, False
+            final = min(max(final, lo), hi)
+            if self.planner.done:
+                # Fixation hold: once settled, wait for a clearly larger error.
+                dead_zone = cfg.dead_zone_frac * cfg.fov_degrees
+                hold = max(dead_zone, gaze.fixation_release_deg) if self.fixated else dead_zone
+                replan = abs(error) > hold or self.pursuing
+                if replan:
+                    self.dwell_s = 0.0
+                else:
+                    # Lock fixation only after the estimate has stayed centred.
+                    self.dwell_s += dt
+                    self.fixated = self.fixated or self.dwell_s >= gaze.fixation_dwell_s
+            else:
+                drift = (abs(desired - self.goal) if self.goal is not None
+                         else abs(final - self.planner.target))
+                replan = drift > cfg.replan_threshold_deg
             if replan:
                 end_velocity = 0.0 if final in (lo, hi) else velocity
-                self.planner.plan(self.pos, self.vel, final,
-                                  self._duration(abs(final - self.pos), cfg), end_velocity)
+                move_s = self._duration(abs(final - self.pos), cfg)
+                self.planner.plan(self.pos, self.vel, final, move_s, end_velocity)
+                if saccade:
+                    self.settle_s = move_s + gaze.pursuit_settle_s
+                self.fixated = False
+                self.goal = desired if saccade else None
         pos, vel = self.planner.step(dt)
         limit = cfg.max_speed_deg_s * dt
         pos = self.pos + max(-limit, min(limit, pos - self.pos))

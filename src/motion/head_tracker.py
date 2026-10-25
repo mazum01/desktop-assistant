@@ -112,6 +112,8 @@ class HeadTrackerConfig:
     frame_width: int = 1280
     frame_height: int = 720
     fov_degrees: float = 100.0
+    # Measured vertical FOV; 0 derives it from fov_degrees and the aspect ratio.
+    vertical_fov_degrees: float = 0.0
 
     # Dead zone — fraction of frame width ignored before tracking activates
     dead_zone_frac: float = 0.06
@@ -151,6 +153,14 @@ class HeadTrackerConfig:
     servo_max: float = 360.0
     servo_center: float = 180.0
 
+
+    def vertical_fov(self) -> float:
+        if self.vertical_fov_degrees > 0:
+            return self.vertical_fov_degrees
+        return math.degrees(2 * math.atan(
+            math.tan(math.radians(self.fov_degrees) / 2)
+            * self.frame_height / self.frame_width
+        ))
 
 # Whitelist of HeadTrackerConfig fields that may be tuned live from the web UI
 TUNABLE_FIELDS: dict[str, tuple[float, float]] = {
