@@ -25,6 +25,7 @@ head, and temperature-controlled cooling.
 - [Process Isolation Proposal](docs/architecture/PROCESS_ISOLATION_PROPOSAL.md)
 - [Clean Raspberry Pi OS Installation (VERA3)](docs/VERA3_SETUP.md)
 - [Automatic releases and device updates](docs/UPDATES.md)
+- [Matter controller, Google Home, and audio mute bridge](docs/MATTER.md)
 - [TODO](docs/TODO.md)
 
 ## Body selection

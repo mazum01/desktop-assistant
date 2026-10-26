@@ -265,13 +265,17 @@ class MusicService(Service):
     def muted(self) -> bool:
         """Return True when the default sink is muted."""
         try:
-            sink_id = _get_sink_id()
-            out = subprocess.check_output(
-                ["wpctl", "get-volume", sink_id], text=True
-            )
-            return "[MUTED]" in out
+            return self.get_muted()
         except Exception:
             return False
+
+    def get_muted(self) -> bool:
+        """Read mute state without converting an unavailable sink to unmuted."""
+        sink_id = _get_sink_id()
+        out = subprocess.check_output(["wpctl", "get-volume", sink_id], text=True)
+        if not out.startswith("Volume:"):
+            raise RuntimeError("Invalid wpctl mute state")
+        return "[MUTED]" in out
 
     def set_volume(self, level: int) -> None:
         """Set system volume to level (0–100)."""
@@ -315,6 +319,7 @@ class MusicService(Service):
             )
         except Exception:
             log.exception("set_muted(%s) failed", muted)
+            raise
 
     @property
     def eq_preset(self) -> str:

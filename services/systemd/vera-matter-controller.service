@@ -1,0 +1,16 @@
+[Unit]
+Description=VERA Matter controller and local management dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/vera-matter/service.env
+ExecStart=/usr/bin/env node ${VERA_MATTER_SOURCE}/node_modules/matter-server/dist/esm/bin.js --storage-path ${VERA_MATTER_STATE}/controller --listen-address 127.0.0.1 --default-fabric-label VERA
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

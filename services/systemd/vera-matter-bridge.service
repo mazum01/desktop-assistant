@@ -1,0 +1,16 @@
+[Unit]
+Description=VERA Matter audio mute bridge
+After=network-online.target desktop-assistant-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/vera-matter/service.env
+ExecStart=/usr/bin/env node ${VERA_MATTER_SOURCE}/bridge.mjs ${VERA_MATTER_CONFIG}
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

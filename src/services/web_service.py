@@ -95,6 +95,7 @@ import io
 import json
 import logging
 import re
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -2197,14 +2198,26 @@ class WebService:
         @app.get("/api/audio/mute")
         def api_audio_mute_get():
             if not self._music_svc:
-                return {"muted": False}
-            return {"muted": bool(self._music_svc.muted)}
+                raise HTTPException(503, "music service unavailable")
+            try:
+                return {"muted": self._music_svc.get_muted()}
+            except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
+                log.warning("Cannot read audio mute state: %s", exc)
+                raise HTTPException(503, str(exc)) from exc
 
         @app.put("/api/audio/mute")
         def api_audio_mute_set(body: _AudioMuteBody):
-            if self._music_svc:
+            if not self._music_svc:
+                raise HTTPException(503, "music service unavailable")
+            try:
                 self._music_svc.set_muted(bool(body.muted))
-            return {"ok": True, "muted": bool(body.muted)}
+                actual = self._music_svc.get_muted()
+                if actual != body.muted:
+                    raise RuntimeError("Audio sink did not apply requested mute state")
+            except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
+                log.warning("Cannot set audio mute state: %s", exc)
+                raise HTTPException(503, str(exc)) from exc
+            return {"ok": True, "muted": actual}
 
         @app.post("/api/audio/repeat")
         async def api_audio_repeat():

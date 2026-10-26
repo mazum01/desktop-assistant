@@ -153,7 +153,7 @@ def build_node(
     integrations_client = IPCClient(integrations_rep)
 
     core_proxies = build_web_proxies(core_rep)
-    music_proxy = MusicServiceProxy(media_client)
+    music_proxy = MusicServiceProxy(media_client, mute_timeout_ms=web_cfg.get("mute_rpc_timeout_ms"))
     podcast_proxy = PodcastServiceProxy(media_client)
     iot_registry_proxy = IoTRegistryProxy(integrations_client)
     skills_proxy = SkillsServiceProxy(integrations_client)

@@ -139,7 +139,7 @@ def build_node(
 
     def _rpc_music_set_muted(msg):
         music.set_muted(bool(msg.get("muted", False)))
-        return {"ok": True, "muted": music.muted}
+        return {"ok": True, "muted": music.get_muted()}
 
     def _rpc_music_set_eq_preset(msg):
         preset = msg.get("preset")
@@ -153,6 +153,7 @@ def build_node(
         return {"ok": True, "eq_preset": music.eq_preset}
 
     node.register_rpc("music.get_state", _rpc_music_get_state)
+    node.register_rpc("music.get_muted", lambda _msg: {"ok": True, "muted": music.get_muted()})
     node.register_rpc("music.set_volume", _rpc_music_set_volume)
     node.register_rpc("music.set_muted", _rpc_music_set_muted)
     node.register_rpc("music.set_eq_preset", _rpc_music_set_eq_preset)

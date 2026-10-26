@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.86.0] - 2026-10-25
+### Added
+- Optional, independently supervised Matter controller with a loopback-only
+  management dashboard and persistent fabric storage on VERA.
+- Matter bridge exposing VERA output audio mute as an on/off device, including
+  bidirectional state synchronization and explicit backend error reporting.
+- Pinned Node.js Matter dependencies, user-service installer, adapter tests,
+  and setup instructions for native multi-admin sharing of Tapo P316M outlets
+  with Google Home. No Thread radio is needed for Matter-over-Wi-Fi.
+### Fixed
+- Audio mute API now uses a strict media-state RPC, confirms the actual sink
+  state after writes, and returns HTTP 503 on backend failures instead of
+  telling external controllers that an unavailable sink is unmuted.
+
 ## [1.85.2] - 2026-10-25
 ### Fixed
 - The speaking head motion still twitched on every sentence. The 1.85.0

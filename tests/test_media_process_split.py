@@ -130,6 +130,31 @@ def test_music_set_volume_rpc_updates_state(media_node, monkeypatch):
 
     proxy.set_muted(True)
     assert proxy.muted is True
+    assert proxy.get_muted() is True
+
+
+def test_strict_mute_proxy_surfaces_backend_failure():
+    client = MagicMock()
+    client.call.return_value = {"ok": False, "error": "media unavailable"}
+    proxy = MusicServiceProxy(client)
+    with pytest.raises(RuntimeError, match="media unavailable"):
+        proxy.get_muted()
+    with pytest.raises(RuntimeError, match="media unavailable"):
+        proxy.set_muted(True)
+    client.call.return_value = {"ok": True, "muted": "false"}
+    with pytest.raises(RuntimeError, match="invalid mute state"):
+        proxy.get_muted()
+
+
+def test_strict_mute_proxy_uses_configured_timeout():
+    client = MagicMock()
+    client.call.return_value = {"ok": True, "muted": True}
+    proxy = MusicServiceProxy(client, mute_timeout_ms=5000)
+    assert proxy.get_muted() is True
+    client.call.assert_called_with({"cmd": "music.get_muted"}, timeout_ms=5000)
+    proxy.set_muted(True)
+    client.call.assert_called_with(
+        {"cmd": "music.set_muted", "muted": True}, timeout_ms=5000)
 
 
 def test_music_eq_preset_rpcs(media_node):

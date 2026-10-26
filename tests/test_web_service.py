@@ -533,6 +533,9 @@ def test_audio_mute_get_and_set(app_client):
     class _FakeMusic:
         muted = False
 
+        def get_muted(self):
+            return self.muted
+
         def set_muted(self, muted: bool):
             self.muted = bool(muted)
 
@@ -547,6 +550,18 @@ def test_audio_mute_get_and_set(app_client):
     assert r2.json()["muted"] is True
     assert svc._music_svc.muted is True
 
+
+def test_audio_mute_unavailable_and_failed_backend(app_client):
+    client, _, svc = app_client
+    assert client.get("/api/audio/mute").status_code == 503
+    assert client.put("/api/audio/mute", json={"muted": True}).status_code == 503
+    svc._music_svc = MagicMock()
+    svc._music_svc.get_muted.side_effect = RuntimeError("media unavailable")
+    assert client.get("/api/audio/mute").status_code == 503
+    assert client.put("/api/audio/mute", json={"muted": True}).status_code == 503
+    svc._music_svc.get_muted.side_effect = None
+    svc._music_svc.get_muted.return_value = False
+    assert client.put("/api/audio/mute", json={"muted": True}).status_code == 503
 
 
 

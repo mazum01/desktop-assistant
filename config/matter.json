@@ -1,0 +1,9 @@
+{
+  "bridgeId": "vera-audio-bridge",
+  "bridgeName": "VERA",
+  "muteName": "VERA Audio Mute",
+  "matterPort": 5541,
+  "audioMuteUrl": "http://127.0.0.1:8080/api/audio/mute",
+  "pollIntervalMs": 5000,
+  "requestTimeoutMs": 15000
+}

@@ -63,8 +63,9 @@ class MusicServiceProxy:
 
     name = "music"
 
-    def __init__(self, client: IPCClient) -> None:
+    def __init__(self, client: IPCClient, mute_timeout_ms: int | None = None) -> None:
         self._client = client
+        self._mute_timeout_ms = mute_timeout_ms
 
     def _call(self, cmd: str, **payload) -> dict:
         return self._client.call({"cmd": cmd, **payload})
@@ -93,6 +94,13 @@ class MusicServiceProxy:
     def muted(self) -> bool:
         return _unwrap(self._call("music.get_state"), "muted", False)
 
+    def get_muted(self) -> bool:
+        reply = _raise_on_error(self._client.call(
+            {"cmd": "music.get_muted"}, timeout_ms=self._mute_timeout_ms))
+        if not isinstance(reply.get("muted"), bool):
+            raise RuntimeError("Media service returned invalid mute state")
+        return reply["muted"]
+
     @property
     def eq_preset(self) -> str:
         return _unwrap(self._call("music.get_state"), "eq_preset", "flat")
@@ -101,7 +109,9 @@ class MusicServiceProxy:
         self._call("music.set_volume", level=level)
 
     def set_muted(self, muted: bool) -> None:
-        self._call("music.set_muted", muted=bool(muted))
+        _raise_on_error(self._client.call(
+            {"cmd": "music.set_muted", "muted": bool(muted)},
+            timeout_ms=self._mute_timeout_ms))
 
     def set_eq_preset(self, preset: str) -> None:
         self._call("music.set_eq_preset", preset=preset)
