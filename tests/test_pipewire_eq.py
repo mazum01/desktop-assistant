@@ -24,6 +24,13 @@ def test_build_config_structure():
     assert f"eq_band_{len(bands)}" in cfg
 
 
+def test_build_config_monitor_tracks_sink_volume():
+    # The spectrum tap reads the sink monitor; without this the bars ignore
+    # the user's volume and mute.
+    cfg = _build_config(PRESET_BANDS["flat"])
+    capture = cfg.split("capture.props", 1)[1].split("playback.props", 1)[0]
+    assert "monitor.channel-volumes = true" in capture
+
 def test_build_config_links():
     bands = PRESET_BANDS["flat"]
     cfg = _build_config(bands, makeup_db=0.0)

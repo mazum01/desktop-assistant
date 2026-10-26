@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.89.4] - 2026-10-26
+### Fixed
+- The mouth-display spectrum analyzer now scales with the actual output volume
+  (and drops to zero when muted), like a real analyzer. The analyzer taps the
+  DA Equalizer sink's monitor, which PipeWire delivers *before* the sink volume
+  by default, so the bars looked identical at every volume. The EQ filter-chain
+  sink now sets `monitor.channel-volumes = true`, so the monitor is post-volume
+  (verified: volume 0.5 → monitor level ÷8, matching PipeWire's cubic volume).
+
 ## [1.89.3] - 2026-10-26
 ### Changed
 - Removed the LCARS image frame (and its TheLCARS.com credit) from all camera

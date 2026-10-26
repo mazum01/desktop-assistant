@@ -214,6 +214,8 @@ context.modules = [
             capture.props = {{
                 node.name   = "effect_input.da_eq"
                 media.class = Audio/Sink
+                # Post-volume monitor so the spectrum tap tracks output level.
+                monitor.channel-volumes = true
             }}
             playback.props = {{
                 node.name   = "effect_output.da_eq"
