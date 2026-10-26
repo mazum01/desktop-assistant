@@ -454,6 +454,19 @@ def main() -> int:
     # visualization is enabled, so it's skipped entirely otherwise rather
     # than holding a PipeWire monitor capture nobody consumes.
     _spectrum_cfg_raw = _cfg.get("playback_spectrum", {}) or {}
+
+    def _av_sync_config(raw: dict):
+        from src.audio.av_sync import AvSyncConfig
+        d = AvSyncConfig()
+        return AvSyncConfig(
+            enabled=bool(raw.get("enabled", d.enabled)),
+            lead_ms=float(raw.get("lead_ms", d.lead_ms)),
+            render_ms=float(raw.get("render_ms", d.render_ms)),
+            ack_outbound_fraction=float(raw.get("ack_outbound_fraction", d.ack_outbound_fraction)),
+            extra_output_ms=float(raw.get("extra_output_ms", d.extra_output_ms)),
+            max_delay_ms=float(raw.get("max_delay_ms", d.max_delay_ms)),
+            min_change_ms=float(raw.get("min_change_ms", d.min_change_ms)),
+        )
     _spectrum_svc = None
     if (
         display_svc is not None
@@ -471,6 +484,7 @@ def main() -> int:
                 fps=float(_display_cfg_raw.get("spectrum_max_fps", 12.0)),
                 floor_db=float(_spectrum_cfg_raw.get("floor_db", -70.0)),
                 ceiling_db=float(_spectrum_cfg_raw.get("ceiling_db", -10.0)),
+                av_sync=_av_sync_config(_spectrum_cfg_raw.get("av_sync", {}) or {}),
             ),
         )
 

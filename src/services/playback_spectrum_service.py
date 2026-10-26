@@ -6,11 +6,13 @@ reflects room noise rather than what VERA is actually playing. Music is played
 by pianobar and podcasts by their own player -- both stream directly into
 PipeWire, so the host process never sees those samples at all.
 
-This service taps the **playback** signal instead, by capturing the EQ sink's
-monitor (``pw-record --property stream.capture.sink=true``). That yields
-exactly the post-EQ stereo mix heading to the speaker, regardless of which
-process produced it, so one code path covers music, podcasts, and anything
-else routed through the filter chain.
+This service taps the **playback** signal instead, by capturing the DA EQ
+sink's monitor (``pw-record --property stream.capture.sink=true``). That is
+the full mix every player sends to the speaker, regardless of which process
+produced it, so one code path covers music, podcasts, and anything else
+routed through the filter chain. It is tapped *before* the filter-chain's
+A/V sync delay stage, so the bars can be put in step with the (delayed)
+sound -- see :mod:`src.audio.av_sync`, driven from this service.
 
 Captured audio is windowed, FFT'd, and folded into a small number of
 logarithmically-spaced bands (music energy is roughly log-distributed, so
@@ -29,15 +31,17 @@ from __future__ import annotations
 import logging
 import math
 import os
+import select
 import shutil
 import subprocess
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 
+from src.audio.av_sync import AvSyncCalibrator, AvSyncConfig
 from src.core.service import Service
 
 log = logging.getLogger(__name__)
@@ -75,6 +79,7 @@ class PlaybackSpectrumConfig:
     decay: float = 0.18
     min_hz: float = 50.0
     max_hz: float = 14000.0
+    av_sync: AvSyncConfig = field(default_factory=AvSyncConfig)
 
 
 class PlaybackSpectrumService(Service):
@@ -91,6 +96,7 @@ class PlaybackSpectrumService(Service):
         self._active = threading.Event()
         self._levels = np.zeros(max(1, int(self._cfg.bands)), dtype=np.float64)
         self._edges: Optional[np.ndarray] = None
+        self._av_sync = AvSyncCalibrator(self._cfg.av_sync, self._hardware_sink_name)
 
     # ── Lifecycle ───────────────────────────────────────────────────────
 
@@ -105,6 +111,10 @@ class PlaybackSpectrumService(Service):
 
         self.bus.subscribe("music.state_changed", self._on_music_state)
         self.bus.subscribe("podcast.playback", self._on_podcast_state)
+        if self._cfg.av_sync.enabled:
+            self.bus.subscribe("display.spectrum_latency",
+                               self._av_sync.on_latency_report)
+            self._av_sync.start()
 
         self._stop.clear()
         self._cap_thread = threading.Thread(
@@ -116,6 +126,7 @@ class PlaybackSpectrumService(Service):
         self._stop.set()
         self._active.clear()
         self._kill_proc()
+        self._av_sync.stop()
         t = self._cap_thread
         if t is not None:
             t.join(timeout=3.0)
@@ -157,20 +168,29 @@ class PlaybackSpectrumService(Service):
     def _resolve_sink_name(self) -> Optional[str]:
         """Return the sink node whose monitor ports carry the playback mix.
 
-        Prefers the configured name; otherwise picks the ALSA output the EQ
-        filter-chain feeds, so the tap follows the real signal path instead of
-        assuming a fixed device name.
+        Prefers the configured name, then the DA EQ sink (whose monitor is
+        upstream of the A/V sync delay), then the hardware output.
         """
         if self._cfg.sink_name:
             return self._cfg.sink_name
+        ports = self._output_ports()
+        if "effect_input.da_eq:monitor_FL" in ports:
+            return "effect_input.da_eq"
+        return self._hardware_sink_name(ports)
+
+    @staticmethod
+    def _output_ports() -> list:
         try:
             out = subprocess.run(
                 ["pw-link", "-o"], capture_output=True, text=True, timeout=4.0
             ).stdout
         except Exception:
-            return None
-        for line in out.splitlines():
-            name = line.strip()
+            return []
+        return [line.strip() for line in out.splitlines()]
+
+    def _hardware_sink_name(self, ports: Optional[list] = None) -> Optional[str]:
+        """Return the ALSA output node the EQ filter-chain feeds."""
+        for name in (self._output_ports() if ports is None else ports):
             if name.startswith("alsa_output.") and ":monitor_FL" in name:
                 return name.split(":", 1)[0]
         return None
@@ -283,11 +303,7 @@ class PlaybackSpectrumService(Service):
                     continue
                 self._levels[:] = 0.0
 
-            proc = self._proc
-            try:
-                raw = proc.stdout.read(nbytes) if proc.stdout else b""
-            except Exception:
-                raw = b""
+            raw = self._read_block(self._proc, nbytes)
 
             if not raw or len(raw) < nbytes:
                 # Stream ended (sink restarted / playback stopped).
@@ -309,6 +325,36 @@ class PlaybackSpectrumService(Service):
                 )
 
         self._kill_proc()
+
+    @staticmethod
+    def _read_block(proc: subprocess.Popen, nbytes: int, timeout: float = 2.0) -> bytes:
+        """Read exactly *nbytes* from pw-record, or return short on stall.
+
+        The tap's ports vanish when the EQ filter-chain is rebuilt (e.g. on
+        an EQ preset change). pw-record then stops being scheduled and a
+        plain blocking read would hang forever with frozen bars; a short
+        result makes the loop respawn and relink the capture instead.
+        """
+        stream = proc.stdout
+        if stream is None:
+            return b""
+        fd = stream.fileno()
+        buf = bytearray()
+        while len(buf) < nbytes:
+            try:
+                ready, _, _ = select.select([fd], [], [], timeout)
+            except (OSError, ValueError):
+                break
+            if not ready:
+                break
+            try:
+                chunk = os.read(fd, nbytes - len(buf))
+            except OSError:
+                break
+            if not chunk:
+                break
+            buf.extend(chunk)
+        return bytes(buf)
 
     # ── Analysis ────────────────────────────────────────────────────────
 

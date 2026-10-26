@@ -52,6 +52,18 @@ _CONF_FILE = _CONF_DIR / "da-eq.conf"
 # sounding louder.
 MAKEUP_GAIN_DB: float = 3.0
 
+# Audio/visual sync delay stage, appended to the end of the chain.
+#
+# The mouth display's spectrum bars necessarily trail the audio they describe
+# (FFT window + BLE transport + render). The only way to put them in sync --
+# or ahead -- is to delay the *audio*: the spectrum is tapped from the EQ
+# sink's monitor (pre-delay) while the speaker hears the post-delay signal.
+# The delay starts at 0 and is set live by ``src.audio.av_sync`` from measured
+# display latency, via ``set_sync_delay()`` (no filter-chain restart needed).
+SYNC_DELAY_NODE = "sync_delay"
+SYNC_DELAY_CONTROL = "Delay (s)"
+SYNC_DELAY_MAX_S: float = 0.5
+
 # Matches the DA EQ sink's node row in `wpctl status`, e.g.
 #   " |  *   41. effect_input.da_eq    [Audio/Sink]"
 # Anchored to the "NN. effect_input.da_eq" pair so port rows and the
@@ -168,6 +180,16 @@ def _build_config(bands: list, makeup_db: Optional[float] = None) -> str:
         links_lines.append(
             '                    { output = "makeup:Out"  input = "ceiling:In" }'
         )
+
+    last = "ceiling" if makeup_db else f"eq_band_{len(bands)}"
+    nodes_lines.append(
+        f"                    {{ type = builtin  name = {SYNC_DELAY_NODE}  label = delay"
+        f'  config = {{ "max-delay" = {SYNC_DELAY_MAX_S:.2f} }}'
+        f'  control = {{ "{SYNC_DELAY_CONTROL}" = 0.0 }} }}'
+    )
+    links_lines.append(
+        f'                    {{ output = "{last}:Out"  input = "{SYNC_DELAY_NODE}:In" }}'
+    )
 
     nodes_str = "\n".join(nodes_lines)
     links_str = "\n".join(links_lines)
@@ -435,6 +457,43 @@ def config_matches(bands: list) -> bool:
         return current.strip() == _build_config(band_tuples).strip()
     except Exception:
         return False
+
+
+def has_sync_delay() -> bool:
+    """True if the on-disk filter-chain config includes the A/V sync delay."""
+    try:
+        return SYNC_DELAY_NODE in _CONF_FILE.read_text()
+    except Exception:
+        return False
+
+
+def set_sync_delay(seconds: float) -> bool:
+    """Set the live A/V sync delay on the running EQ filter-chain.
+
+    Applied as a Props update on the EQ sink node, so it takes effect
+    immediately without restarting the filter-chain.
+    """
+    if not has_sync_delay():
+        return False
+    sink_id = _get_eq_sink_id()
+    if not sink_id:
+        return False
+    value = max(0.0, min(float(seconds), SYNC_DELAY_MAX_S))
+    param = (f'{{ params = [ "{SYNC_DELAY_NODE}:{SYNC_DELAY_CONTROL}" '
+             f'{value:.4f} ] }}')
+    try:
+        r = subprocess.run(
+            ["pw-cli", "set-param", str(sink_id), "Props", param],
+            timeout=4, capture_output=True, text=True,
+        )
+    except Exception as exc:
+        log.warning("pipewire_eq: set sync delay failed: %s", exc)
+        return False
+    if r.returncode != 0:
+        log.warning("pipewire_eq: set sync delay failed: %s",
+                    (r.stderr or r.stdout).strip())
+        return False
+    return True
 
 
 def get_active_sink_id() -> Optional[str]:

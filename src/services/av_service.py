@@ -558,11 +558,23 @@ class AVService(Service):
                 log.info("AVService: filter-chain EQ config differs from saved "
                          "custom curve — re-applying %d band(s)", len(bands))
                 pipewire_eq.apply_custom_bands(bands)
+            elif pipewire_eq.is_configured() and not pipewire_eq.has_sync_delay():
+                preset = self._persisted_eq_preset()
+                if preset in pipewire_eq.PRESET_BANDS:
+                    log.info("AVService: upgrading filter-chain EQ with A/V "
+                             "sync delay stage (preset %s)", preset)
+                    pipewire_eq.apply_preset(preset)
 
             if pipewire_eq.is_active() and self._audio is not None:
                 self._audio.set_eq_preset("flat")
         except Exception as exc:
             log.warning("AVService: PipeWire EQ restore failed: %s", exc)
+
+    def _persisted_eq_preset(self) -> str:
+        try:
+            return _EQ_STATE_FILE.read_text().strip()
+        except Exception:
+            return ""
 
     def _persisted_custom_eq_bands(self) -> list:
         """Return the saved custom EQ bands, or [] when 'custom' isn't active."""

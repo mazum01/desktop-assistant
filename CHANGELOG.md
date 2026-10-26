@@ -4,6 +4,32 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.88.0] - 2026-10-26
+### Added
+- Auto-calibrated audio/visual sync for the mouth-display spectrum bars. The
+  DA EQ filter-chain gains a trailing `sync_delay` stage (PipeWire builtin
+  `delay`, max 0.5 s) and the spectrum is now tapped from the EQ sink's
+  monitor, upstream of that delay. New `src/audio/av_sync.py` turns
+  `display.spectrum_latency` reports (audio→send + BLE write + half the
+  write→ack round trip + 20 ms render) minus PipeWire's reported speaker
+  latency (live driver quantum + sink port latency, ~59 ms) into the delay,
+  applied live with `pw-cli set-param` — no filter-chain restart. Measured on
+  hardware: display lag 116 ms, output latency 59 ms → 57 ms delay, verified
+  by cross-correlating the tap against the speaker feed (57.1 ms). Tunable via
+  `playback_spectrum.av_sync` (`lead_ms`, `render_ms`, `extra_output_ms`,
+  `max_delay_ms`) in `config/assistant.yaml`.
+### Changed
+- All audio through the EQ (music, podcasts, TTS) is delayed by the
+  calibrated amount (~60 ms) so it lands in step with the bars.
+- Spectrum bars are computed pre-volume, so they no longer shrink with the
+  volume setting.
+- Existing named-preset EQ configs are regenerated once at startup to add the
+  delay stage (custom curves already regenerate on config mismatch).
+### Fixed
+- Spectrum capture no longer hangs with frozen bars when the EQ filter-chain
+  is rebuilt (e.g. on an EQ change): stalled reads time out and the tap is
+  re-linked.
+
 ## [1.87.5] - 2026-10-26
 ### Added
 - Spectrum display latency measurement: `DisplayService` timestamps each

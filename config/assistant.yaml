@@ -179,6 +179,16 @@ privacy:
   require_person: true
   resume_text: Are you decent?
   threshold: 0.7
+playback_spectrum:
+  # Audio/visual sync for the mouth-display spectrum bars. The EQ filter-chain
+  # delays the speaker audio so the sound lands in step with the bars; the
+  # delay is auto-calibrated from measured display latency.
+  av_sync:
+    enabled: true
+    lead_ms: 0            # bars ahead of the sound (ms); 0 = exactly in sync
+    render_ms: 20         # firmware ack -> bars drawn (avg of 40 ms redraw)
+    extra_output_ms: 0    # trim for DAC/USB delay PipeWire can't report
+    max_delay_ms: 400
 quiet_hours:
   enabled: true
   end: 06:00

@@ -226,3 +226,36 @@ def test_link_monitor_treats_existing_link_as_success(monkeypatch):
         lambda *a, **k: MagicMock(returncode=1, stderr="link already exists"),
     )
     assert _svc()._link_monitor(_HW, "veraeqviz1") is True
+
+
+# ── A/V sync tap / stall recovery ───────────────────────────────────────────
+
+def test_resolve_prefers_pre_delay_eq_tap(monkeypatch):
+    from src.services.playback_spectrum_service import (
+        PlaybackSpectrumConfig, PlaybackSpectrumService,
+    )
+    from src.audio.av_sync import AvSyncConfig
+
+    svc = PlaybackSpectrumService(bus=None, config=PlaybackSpectrumConfig(
+        av_sync=AvSyncConfig(enabled=False)))
+    ports = ["alsa_output.usb-X.analog-stereo:monitor_FL",
+             "effect_input.da_eq:monitor_FL"]
+    monkeypatch.setattr(svc, "_output_ports", lambda: ports)
+    assert svc._resolve_sink_name() == "effect_input.da_eq"
+    assert svc._hardware_sink_name() == "alsa_output.usb-X.analog-stereo"
+    monkeypatch.setattr(svc, "_output_ports", lambda: ports[:1])
+    assert svc._resolve_sink_name() == "alsa_output.usb-X.analog-stereo"
+
+
+def test_read_block_returns_short_when_capture_stalls():
+    import subprocess
+    from src.services.playback_spectrum_service import PlaybackSpectrumService
+
+    proc = subprocess.Popen(
+        ["sh", "-c", "printf abcd; sleep 5"], stdout=subprocess.PIPE)
+    try:
+        data = PlaybackSpectrumService._read_block(proc, 100, timeout=0.3)
+    finally:
+        proc.kill()
+        proc.wait()
+    assert data == b"abcd"

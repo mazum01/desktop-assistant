@@ -27,9 +27,9 @@ def test_build_config_structure():
 def test_build_config_links():
     bands = PRESET_BANDS["flat"]
     cfg = _build_config(bands, makeup_db=0.0)
-    # Should have N-1 links for N bands
+    # N-1 band links + 1 link into the A/V sync delay stage
     link_count = cfg.count("output =")
-    assert link_count == len(bands) - 1
+    assert link_count == len(bands)
 
 
 def test_build_config_makeup_stage_chained_after_eq():
@@ -48,8 +48,8 @@ def test_build_config_makeup_stage_chained_after_eq():
     assert '"Gain" = 1.9953' in cfg
     assert f'{{ output = "eq_band_{last}:Out"  input = "makeup:In" }}' in cfg
     assert '{ output = "makeup:Out"  input = "ceiling:In" }' in cfg
-    # N-1 band links + 2 makeup links
-    assert cfg.count("output =") == len(bands) + 1
+    # N-1 band links + 2 makeup links + 1 sync-delay link
+    assert cfg.count("output =") == len(bands) + 2
 
 
 def test_build_config_no_makeup_when_zero():
@@ -223,3 +223,35 @@ def test_ensure_default_gives_up_after_max_retries(monkeypatch, tmp_path):
 
     assert calls["n"] == 50
     assert _pweq.is_active() is False
+
+
+def test_build_config_sync_delay_is_last_stage():
+    bands = PRESET_BANDS["flat"]
+    with_makeup = _build_config(bands, makeup_db=3.0)
+    assert 'name = sync_delay  label = delay' in with_makeup
+    assert '"max-delay" = 0.50' in with_makeup
+    assert '"Delay (s)" = 0.0' in with_makeup
+    assert '{ output = "ceiling:Out"  input = "sync_delay:In" }' in with_makeup
+    bare = _build_config(bands, makeup_db=0.0)
+    assert f'{{ output = "eq_band_{len(bands)}:Out"  input = "sync_delay:In" }}' in bare
+
+
+def test_set_sync_delay_clamps_and_targets_eq_sink(monkeypatch):
+    from unittest.mock import MagicMock
+    import src.audio.pipewire_eq as eq
+
+    monkeypatch.setattr(eq, "has_sync_delay", lambda: True)
+    monkeypatch.setattr(eq, "_get_eq_sink_id", lambda: "109")
+    run = MagicMock(return_value=MagicMock(returncode=0, stderr="", stdout=""))
+    monkeypatch.setattr(eq.subprocess, "run", run)
+    assert eq.set_sync_delay(9.0) is True
+    args = run.call_args.args[0]
+    assert args[:4] == ["pw-cli", "set-param", "109", "Props"]
+    assert '"sync_delay:Delay (s)" 0.5000' in args[4]
+
+
+def test_set_sync_delay_noop_without_stage(monkeypatch):
+    import src.audio.pipewire_eq as eq
+
+    monkeypatch.setattr(eq, "has_sync_delay", lambda: False)
+    assert eq.set_sync_delay(0.1) is False
