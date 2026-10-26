@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.88.2] - 2026-10-26
+### Changed
+- Backlog (`docs/TODO.md`): added mouth-display items (presence-aware resting
+  mouth, SD-card video playback with transcoding and speaker audio, live camera
+  feed) and a new "Web UI & Home Automation" section (Matter device re-tool,
+  web UI frame rationalization). No code changes.
+
 ## [1.88.1] - 2026-10-26
 ### Fixed
 - EQ filter-chain makeup gain was never applied: the builtin `linear` node was

@@ -180,6 +180,26 @@ VERA through the established BLE GATT path.
   display/head without TTS or external forwarding. Keep disabled by default,
   avoid private/non-owner prompts, isolate OpenClaw schema integration, and
   validate the full prompt/completion/error sequence on real hardware.
+- [ ] **Presence-aware resting mouth** — show a very small frown while no
+  person is visible, transition to today's very small smile once a face is
+  seen, and after the face is lost wait a configurable cooldown before easing
+  back to a flat, neutral mouth (then the small frown). Drive from the face
+  detection/tracking bus events; keep timings in `config/`, and make sure
+  speaking/listening/emotion states still take priority over the resting face.
+- [ ] **Video playback from the display SD card** — load video files onto the
+  ESP32-C6's microSD card and play them on the 172×320 panel. Host-side
+  transcoding will likely be needed (e.g. ffmpeg to MJPEG / JPEG frame
+  sequence at panel resolution and a frame rate the C6 can decode). Define the
+  upload path (BLE is too slow for bulk files — evaluate USB serial or Wi-Fi),
+  plus play/stop/list commands in `DisplayService` and the CLI. Evaluate the
+  audio side: the board has no audio output, so extract the soundtrack and play
+  it through VERA's speakers in sync with the frames (reuse the A/V sync
+  measurements from v1.88.0).
+- [ ] **Live camera feed on the mouth display** — stream VERA's camera video
+  to the mouth display. Downscale/crop on the Pi and send compressed frames;
+  BLE throughput (~tens of KB/s) likely limits this to a low frame rate, so
+  evaluate Wi-Fi streaming on the C6. Add an explicit on/off control, respect
+  privacy mode, and return to the mouth renderer when stopped.
 
 ## Audio
 - [x] reSpeaker mic capture — RESOLVED in v1.41.0 via `src/audio/pw_input.py`
@@ -198,6 +218,18 @@ VERA through the established BLE GATT path.
   Fixed by converting those routes to sync `def` (FastAPI then runs them in a
   threadpool) and restarting the media service. Verified: slider writes land
   exactly (75/35/65 -> 0.75/0.35/0.65) with zero errors.
+
+## Web UI & Home Automation
+
+- [ ] **Re-tool home automation and add Matter devices** — restructure the
+  web GUI home-automation section around the Matter hub (v1.86.0): list
+  commissioned Matter devices with live state and controls, support
+  commissioning/removal from the UI, and fold existing integrations (radon,
+  DROP water, etc.) into a consistent device model.
+- [ ] **Rationalize the web UI frame structure** — evaluate the current LCARS
+  frames/pages, consolidate overlapping views, define a clearer navigation
+  hierarchy, and improve functionality (status at a glance, fewer dead ends,
+  consistent controls). Produce a proposed layout before implementing.
 
 ---
 
