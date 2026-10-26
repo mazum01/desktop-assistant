@@ -7,8 +7,9 @@ you add or change UI, and update it when you introduce a new component.
 > System) is the fictional computer interface that Michael Okuda designed for
 > *Star Trek: The Next Generation*. It is Paramount/CBS intellectual property.
 > VERA uses an *LCARS-inspired* homage for personal, non-commercial use. This
-> document is an original summary of the visual conventions. No artwork,
-> templates, fonts, or text have been copied from the sources listed at the end.
+> document is an original summary of the visual conventions. The one adapted
+> element is the **image frame** (§3.1), whose layout comes from TheLCARS.com
+> template under its EULA; see the attribution there.
 
 ---
 
@@ -107,6 +108,49 @@ Reuse these components; don't invent near-duplicates.
 | **Card cross-link** | `h2 > a.card-link` | Floats right in the card title, ice-colored, ends with `›`. Use it instead of an "Open X" button. |
 | **Action button** | `.btn` | Existing rounded action buttons inside cards. Use them for verbs (Play, Say), not for state. |
 | **Decorative code** | `.lcars-code` | `aria-hidden`, sparse (3–6 on the page). |
+| **Image frame** | `figure.image-frame` | Wraps every live video stream. See §3.1. |
+
+### 3.1 Image frame (live video)
+
+Every live camera or video stream sits in an image frame, so streams look the
+same everywhere (Home Cam 1, Vision Cam 1/2, and future mouth-display or video
+playback views).
+
+```html
+<figure class="image-frame">
+  <figcaption class="image-frame-title"><span>Cam 1</span></figcaption>
+  <div class="image-frame-body"><div class="image-frame-holder">
+    <!-- the stream: <img>, <video>, or a .camera-wrap with overlays -->
+  </div></div>
+  <div aria-hidden="true" class="image-frame-base"><span></span><span></span><span></span><span></span><span></span></div>
+</figure>
+```
+
+- **Anatomy:**
+  - a top bar in the workspace hue (`--imgf-primary`), with the title cut into
+    it near the right and a rounded lilac end cap;
+  - a left spine split by a black-gapped lilac segment;
+  - a black screen body with a rounded inner left edge;
+  - a peach ring (`--imgf-secondary`) around the picture;
+  - a base row of five blocks.
+- **Knobs** (custom properties on `.image-frame`):
+  - `--imgf-primary`, `--imgf-secondary` and `--imgf-accent` set the colours;
+  - `--imgf-bar` (22px, 16px on phones) and `--imgf-spine` (34px / 18px) set
+    the bar and spine sizes;
+  - `--imgf-field` is the surface behind the frame. It defaults to `--bg2`
+    (the card interior); set it to `--bg` when the frame sits on the page field.
+- The frame grows to fill its container (`flex: 1`). Put the aspect ratio on
+  the stream wrapper, not on the frame.
+- Keep the title short (camera name and role). It is the stream's visible
+  label, so don't repeat it in a separate caption above the frame.
+- **Attribution (required by the EULA):** the layout is adapted from the "LCARS
+  Image Frame" in the *LCARS Inspired Website Template* by
+  [www.TheLCARS.com](https://www.thelcars.com), with modifications: it is
+  rebuilt on VERA tokens, fluid width, and a flexible body. The CSS lives in
+  `style.css` with this credit in a comment, and the dashboard's
+  System → Help → Credits links to the site. The template's licence permits
+  personal, non-commercial use only. Don't copy any other template code
+  verbatim, and don't hotlink their assets.
 
 ### States
 
@@ -169,6 +213,7 @@ Reuse these components; don't invent near-duplicates.
 - [ ] Reading order follows §4; the one-column fallback has been checked at ≤1150px and ≤700px.
 - [ ] Advanced and Engineering content is gated with `data-min-mode`.
 - [ ] State is readable without color; decorative codes are `aria-hidden`.
+- [ ] Live video uses the §3.1 image frame.
 - [ ] Bumped the `?v=` cache keys in `index.html` (and `js/main.js` imports).
 
 ## 8. Sources
@@ -178,6 +223,8 @@ Reuse these components; don't invent near-duplicates.
 - Rick Sternbach & Michael Okuda, *Star Trek: The Next Generation Technical
   Manual* (Pocket Books, 1991). The original description of the in-universe
   interface.
-- *The LCARS Website*: <https://www.thelcars.com>. A fan reference showing the
-  LCARS conventions applied to HTML/CSS. Its templates are covered by their own
-  licence and are **not** included in this repository.
+- *LCARS Inspired Website Template* by Jim Robertus,
+  <https://www.thelcars.com> (EULA: <https://www.thelcars.com/license/>). It
+  shows the LCARS conventions applied to HTML/CSS. Only the image frame layout
+  is adapted here, with attribution; the rest of the template is **not**
+  included.

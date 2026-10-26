@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.89.2] - 2026-10-26
+### Changed
+- Live video streams (Home Cam 1, Vision Cam 1 and Cam 2) are now framed in an
+  LCARS image frame: a titled top bar with a rounded cap, a split left spine, a
+  black screen body with a peach ring, and a five-block base. The layout is
+  adapted from the "LCARS Image Frame" in the LCARS Inspired Website Template by
+  www.TheLCARS.com, with modifications (VERA tokens, fluid width, flexible
+  body). The stream title replaces the old small camera label; FPS and face
+  overlays are unchanged.
+### Added
+- A Credits entry in System → Help, linking to TheLCARS.com as its EULA
+  requires.
+- Image frame component (§3.1) in `docs/ui/LCARS_DESIGN_GUIDE.md`, the
+  "live video uses the image frame" rule in the LCARS agent instruction, and a
+  layout regression test.
+
 ## [1.89.1] - 2026-10-26
 ### Changed
 - The header mode switch (Normal / Advanced / Engineering) is now an LCARS

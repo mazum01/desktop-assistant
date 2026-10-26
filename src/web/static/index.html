@@ -13,7 +13,7 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&amp;display=swap" rel="stylesheet"/>
-<link href="/static/style.css?v=1.89.1" rel="stylesheet"/>
+<link href="/static/style.css?v=1.89.2" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -75,7 +75,11 @@
 </section>
 <section aria-label="Camera" class="card" id="card-home-camera">
 <h2>Camera<a class="card-link" href="#/vision">Vision ›</a></h2>
-<a class="home-camera-link" href="#/vision" id="home-camera-link" title="Open Vision &amp; Motion"><img alt="Live view from camera 1" class="home-camera" id="home-camera"/></a>
+<figure class="image-frame">
+<figcaption class="image-frame-title"><span>Cam 1</span></figcaption>
+<div class="image-frame-body"><div class="image-frame-holder"><a class="home-camera-link" href="#/vision" id="home-camera-link" title="Open Vision &amp; Motion"><img alt="Live view from camera 1" class="home-camera" id="home-camera"/></a></div></div>
+<div aria-hidden="true" class="image-frame-base"><span></span><span></span><span></span><span></span><span></span></div>
+</figure>
 <p class="home-muted" id="home-camera-caption">—</p>
 </section>
 <section aria-label="Now playing" class="card" id="card-home-media">
@@ -273,23 +277,29 @@
 <h2>Camera Feeds<span aria-hidden="true" class="lcars-code section-code">824-09</span></h2>
 <div class="camera-feeds">
 <div class="camera-feed-wrap">
-<div class="camera-label">Cam 1 — Face Tracking</div>
-<div class="camera-wrap">
+<figure class="image-frame">
+<figcaption class="image-frame-title"><span>Cam 1 — Face Tracking</span></figcaption>
+<div class="image-frame-body"><div class="image-frame-holder"><div class="camera-wrap">
 <img alt="camera stream" id="camera-stream" src="/stream"/>
 <span class="face-overlay" id="face-overlay">0 faces</span>
 <span class="fps-overlay" id="fps-overlay-1">– fps</span>
-</div>
+</div></div></div>
+<div aria-hidden="true" class="image-frame-base"><span></span><span></span><span></span><span></span><span></span></div>
+</figure>
 <div class="camera-actions">
 <button class="btn btn-sm btn-secondary" id="snap1-btn" onclick="saveSnapshot(1)">📷 Save Frame</button>
 <span class="snap-status" id="snap1-status"></span>
 </div>
 </div>
 <div class="camera-feed-wrap" id="cam2-wrap">
-<div class="camera-label">Cam 2 — Raw</div>
-<div class="camera-wrap">
+<figure class="image-frame">
+<figcaption class="image-frame-title"><span>Cam 2 — Raw</span></figcaption>
+<div class="image-frame-body"><div class="image-frame-holder"><div class="camera-wrap">
 <img alt="camera 2 stream" id="camera-stream2" src=""/>
 <span class="fps-overlay" id="fps-overlay-2">– fps</span>
-</div>
+</div></div></div>
+<div aria-hidden="true" class="image-frame-base"><span></span><span></span><span></span><span></span><span></span></div>
+</figure>
 <div class="camera-actions">
 <button class="btn btn-sm btn-secondary" id="snap2-btn" onclick="saveSnapshot(2)">📷 Save Frame</button>
 <span class="snap-status" id="snap2-status"></span>
@@ -1294,12 +1304,14 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
               Cyan rectangles show detected objects; green ovals show recognized faces.
               Click <em>Describe What I See</em> to have DA speak a summary.
             </p>
+<h3>Credits</h3>
+<p class="help-credit">Camera image frame adapted from the LCARS Inspired Website Template by <a href="https://www.thelcars.com" rel="noopener" target="_blank">www.TheLCARS.com</a>, with modifications. LCARS was designed by Michael Okuda; Star Trek is a trademark of Paramount/CBS. VERA is a personal, non-commercial project.</p>
 </div>
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.89.1"></script>
-<script src="/static/js/main.js?v=1.89.1" type="module"></script>
+<script src="/static/app.js?v=1.89.2"></script>
+<script src="/static/js/main.js?v=1.89.2" type="module"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

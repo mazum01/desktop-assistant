@@ -445,7 +445,8 @@ def test_custom_eq_and_hardware_details_are_collapsed_not_removed(layout):
 
 def test_asset_cache_keys_match_current_release(layout):
     version = (ROOT / "VERSION").read_text().strip()
-    assets = [node["attrs"].get("src", node["attrs"].get("href", "")) for node in layout]
+    # Loaded assets only; plain <a> links (e.g. credits) are navigation, not assets.
+    assets = [node["attrs"].get("src", node["attrs"].get("href", "")) for node in layout if node["tag"] != "a"]
     assert f"/static/style.css?v={version}" in assets
     assert f"/static/app.js?v={version}" in assets
     assert f"/static/js/main.js?v={version}" in assets
@@ -657,6 +658,17 @@ def test_lcars_design_guide_is_referenced_by_agent_instructions():
     scoped = (root / ".github" / "instructions" / "lcars-ui.instructions.md").read_text()
     assert 'applyTo: "src/web/**"' in scoped and "LCARS_DESIGN_GUIDE.md" in scoped
     assert "docs/ui/LCARS_DESIGN_GUIDE.md" in (root / ".github" / "copilot-instructions.md").read_text()
+
+
+def test_live_video_streams_sit_in_lcars_image_frames(layout):
+    by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
+    for stream in ("home-camera", "camera-stream", "camera-stream2"):
+        ancestors = by_id[stream]["ancestors"]
+        assert any("image-frame" in a["attrs"].get("class", "").split() for a in ancestors), stream
+        assert any("image-frame-holder" in a["attrs"].get("class", "").split() for a in ancestors), stream
+    css = (STATIC / "style.css").read_text()
+    assert "LCARS Inspired Website Template by www.TheLCARS.com" in css
+    assert 'href="https://www.thelcars.com"' in (STATIC / "index.html").read_text()
 
 
 def test_card_drag_and_drop_is_retired(layout):
