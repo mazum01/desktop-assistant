@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.87.1] - 2026-10-26
+### Changed
+- Web dashboard header: the "Vision-Enabled Reasoning Agent" subtext now
+  sits beside the VERA name, with the version number stacked beneath it.
+  Font sizes are unchanged.
+
 ## [1.87.0] - 2026-10-26
 ### Added
 - Hailo AI accelerator thermal monitoring. The thermal service reads both

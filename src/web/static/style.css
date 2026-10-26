@@ -104,6 +104,7 @@ header::after {
   background: var(--workspace-color);
 }
 .header-left { display: flex; align-items: center; gap: 12px; }
+.header-brand-text { display: flex; flex-direction: column; justify-content: center; }
 .logo { font-size: 42px; font-weight: 900; color: var(--orange); line-height: 1; }
 h1 { font-family: "Arial Narrow", "Roboto Condensed", sans-serif; font-size: 30px; font-weight: 800; line-height: 1.05; letter-spacing: .12em; }
 .brand-caption, .eyebrow { color: var(--orange); font-size: 11px; letter-spacing: .12em; font-weight: 700; }
