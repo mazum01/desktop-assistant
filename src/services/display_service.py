@@ -32,6 +32,7 @@ import logging
 import queue
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -99,6 +100,8 @@ class DisplayService(Service):
         # BLE link drops stale frames instead of queueing them, which would
         # make the bars drift further and further behind the music.
         self._latest_spectrum: Optional[bytes] = None
+        self._latest_spectrum_ts: Optional[float] = None
+        self._spectrum_latency = SpectrumLatencyTracker()
         self._notification_buffer = bytearray()
         # None = no link state observed yet, so the first successful connect
         # after boot announces rather than being treated as a no-op transition.
@@ -266,6 +269,11 @@ class DisplayService(Service):
                 log.warning("Invalid BLE display reply", exc_info=True)
                 self.bus.publish("display.error", {"error": "invalid_display_reply"})
                 continue
+            if reply.get("cmd") == "eq":
+                report = self._spectrum_latency.on_ack()
+                if report is not None:
+                    log.info("DisplayService spectrum latency: %s", report)
+                    self.bus.publish("display.spectrum_latency", report)
             if reply.get("cmd") == "video":
                 self._publish_reply(reply)
             elif reply.get("event"):
@@ -328,15 +336,25 @@ class DisplayService(Service):
         if len(values) > max_bands:
             values = values[:max_bands]
 
+        audio_ts = SpectrumLatencyTracker.audio_time(payload)
         line = json.dumps({"cmd": "eq", "bins": values}, separators=(",", ":")) + "\n"
         with self._ble_lock:
             self._latest_spectrum = line.encode("utf-8")
+            self._latest_spectrum_ts = audio_ts
 
     def _take_latest_spectrum(self) -> Optional[bytes]:
+        return self._take_latest_spectrum_with_ts()[0]
+
+    def _take_latest_spectrum_with_ts(self) -> tuple[Optional[bytes], Optional[float]]:
         with self._ble_lock:
-            frame = self._latest_spectrum
+            frame, ts = self._latest_spectrum, self._latest_spectrum_ts
             self._latest_spectrum = None
-        return frame
+            self._latest_spectrum_ts = None
+        return frame, ts
+
+    def spectrum_latency(self) -> dict:
+        """Rolling spectrum display-latency statistics (milliseconds)."""
+        return self._spectrum_latency.summary()
 
     # ── Emission / BLE transport ────────────────────────────────────────
 
@@ -523,29 +541,42 @@ class DisplayService(Service):
                         while not self._ble_stop.is_set() and client.is_connected:
                             # Queued commands (mouth, video, status) take
                             # priority; otherwise send the newest spectrum.
+                            spectrum_ts: Optional[float] = None
+                            is_spectrum = False
                             try:
                                 encoded = self._ble_queue.get_nowait()
                             except queue.Empty:
-                                encoded = self._take_latest_spectrum()
+                                encoded, spectrum_ts = self._take_latest_spectrum_with_ts()
                                 if encoded is None:
                                     await asyncio.sleep(0.01)
                                     continue
+                                is_spectrum = True
 
                             if encoded is None or self._ble_stop.is_set():
                                 return
 
+                            send_start = time.time()
+                            chunk = self._ble_chunk_size(client)
                             try:
-                                for start in range(0, len(encoded), 20):
+                                # Spectrum frames are disposable and superseded
+                                # ~12x/s, so they skip the per-write ATT
+                                # response round trip (~100 ms/write measured),
+                                # which was the bulk of the display lag.
+                                for start in range(0, len(encoded), chunk):
                                     await client.write_gatt_char(
                                         self._cfg.ble_characteristic_uuid,
-                                        encoded[start:start + 20],
-                                        response=True,
+                                        encoded[start:start + chunk],
+                                        response=not is_spectrum,
                                     )
+                                if is_spectrum:
+                                    self._spectrum_latency.on_sent(
+                                        spectrum_ts, send_start, time.time())
                             except Exception:
                                 log.exception("DisplayService BLE write failed")
                                 self.bus.publish("display.error", {"error": "ble_write_failed", "ts": time.time()})
                                 break
                     finally:
+                        self._spectrum_latency.reset_pending()
                         self._set_ble_connected(False)
             except Exception as exc:
                 self._set_ble_connected(False)
@@ -561,6 +592,20 @@ class DisplayService(Service):
                         # the next connect attempt can succeed.
                         await self._force_clear_stale_connection()
                     await self._interruptible_sleep(2.0)
+
+    def _ble_chunk_size(self, client) -> int:
+        """Largest single ATT write for this link (negotiated MTU - 3).
+
+        The firmware reassembles newline-framed JSON across arbitrary chunk
+        boundaries, so using the full MTU just means fewer, faster writes.
+        Falls back to the 20-byte BLE minimum if the MTU isn't known.
+        """
+        try:
+            char = client.services.get_characteristic(self._cfg.ble_characteristic_uuid)
+            size = int(char.max_write_without_response_size)
+        except Exception:
+            return 20
+        return max(20, min(size, 512))
 
     async def _force_clear_stale_connection(self) -> None:
         address = self._cfg.ble_address
@@ -587,3 +632,78 @@ class DisplayService(Service):
         self._ble_warned = True
         log.warning("%s", message)
         self.bus.publish("display.error", {"error": message, "ts": time.time()})
+
+
+class SpectrumLatencyTracker:
+    """Measures how far the mouth-display spectrum trails the audio.
+
+    Each spectrum frame carries the wall-clock time of the audio it was
+    computed from. The tracker records when the frame's BLE write starts and
+    finishes, and matches the firmware's ``{"cmd":"eq"}`` ack (sent after the
+    bars are updated) to the oldest outstanding frame. Per-stage timings are
+    kept over a rolling window and summarised periodically.
+    """
+
+    def __init__(self, window: int = 120, report_every_s: float = 15.0) -> None:
+        self._lock = threading.Lock()
+        self._pending: deque = deque(maxlen=32)
+        self._samples: deque = deque(maxlen=window)
+        self._report_every_s = report_every_s
+        self._last_report = 0.0
+
+    @staticmethod
+    def audio_time(payload: dict) -> Optional[float]:
+        """Wall time at the centre of the audio window a frame describes."""
+        try:
+            ts = float(payload.get("ts"))
+        except (TypeError, ValueError):
+            return None
+        try:
+            window_s = max(0.0, float(payload.get("window_s", 0.0)))
+        except (TypeError, ValueError):
+            window_s = 0.0
+        return ts - window_s / 2.0
+
+    def on_sent(self, audio_ts: Optional[float], send_start: float, written: float) -> None:
+        with self._lock:
+            self._pending.append((audio_ts, send_start, written))
+
+    def reset_pending(self) -> None:
+        with self._lock:
+            self._pending.clear()
+
+    def on_ack(self, now: Optional[float] = None) -> Optional[dict]:
+        """Record an eq ack; return a summary when one is due, else None."""
+        now = time.time() if now is None else now
+        with self._lock:
+            if not self._pending:
+                return None
+            audio_ts, send_start, written = self._pending.popleft()
+            self._samples.append((
+                None if audio_ts is None else send_start - audio_ts,
+                written - send_start,
+                now - written,
+                None if audio_ts is None else now - audio_ts,
+            ))
+            if now - self._last_report < self._report_every_s:
+                return None
+            self._last_report = now
+        return self.summary()
+
+    def summary(self) -> dict:
+        with self._lock:
+            samples = list(self._samples)
+        if not samples:
+            return {"samples": 0}
+
+        def p50(idx: int) -> Optional[float]:
+            vals = sorted(s[idx] for s in samples if s[idx] is not None)
+            return round(vals[len(vals) // 2] * 1000.0, 1) if vals else None
+
+        return {
+            "samples": len(samples),
+            "audio_to_send_ms": p50(0),
+            "ble_write_ms": p50(1),
+            "write_to_ack_ms": p50(2),
+            "audio_to_display_ms": p50(3),
+        }

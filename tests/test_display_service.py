@@ -304,3 +304,80 @@ def test_custom_announcement_text():
     svc._set_ble_connected(True)
     svc._set_ble_connected(False)
     assert said == ["Screen online.", "Screen gone."]
+
+
+# ── Spectrum latency measurement / transport ────────────────────────────────
+
+def test_spectrum_latency_tracker_stages():
+    from src.services.display_service import SpectrumLatencyTracker
+
+    t = SpectrumLatencyTracker(report_every_s=0.0)
+    audio = SpectrumLatencyTracker.audio_time({"ts": 100.0, "window_s": 0.1})
+    assert audio == 99.95
+    t.on_sent(audio, send_start=100.05, written=100.06)
+    report = t.on_ack(now=100.16)
+    assert report["samples"] == 1
+    assert report["audio_to_send_ms"] == 100.0
+    assert report["ble_write_ms"] == 10.0
+    assert report["write_to_ack_ms"] == 100.0
+    assert report["audio_to_display_ms"] == 210.0
+
+
+def test_spectrum_latency_ack_without_pending_is_ignored():
+    from src.services.display_service import SpectrumLatencyTracker
+
+    t = SpectrumLatencyTracker(report_every_s=0.0)
+    assert t.on_ack(now=1.0) is None
+    t.on_sent(None, 1.0, 1.0)
+    t.reset_pending()
+    assert t.on_ack(now=2.0) is None
+    assert t.summary() == {"samples": 0}
+
+
+def test_ble_chunk_size_uses_negotiated_mtu_and_falls_back():
+    svc = _spectrum_svc()
+    client = MagicMock()
+    client.services.get_characteristic.return_value.max_write_without_response_size = 244
+    assert svc._ble_chunk_size(client) == 244
+    client.services.get_characteristic.side_effect = RuntimeError("no services")
+    assert svc._ble_chunk_size(client) == 20
+
+
+def test_spectrum_written_without_response_commands_with_response():
+    import asyncio
+    from src.services import display_service as ds
+
+    svc = DisplayService(bus=MessageBus(), config=DisplayServiceConfig(
+        ble_enabled=True, ble_address="AA:BB:CC:DD:EE:FF",
+        ble_characteristic_uuid="char", spectrum_enabled=True))
+    writes = []
+
+    class FakeClient:
+        is_connected = True
+
+        def __init__(self, *_a, **_k):
+            self.services = MagicMock()
+            self.services.get_characteristic.return_value.max_write_without_response_size = 244
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def write_gatt_char(self, _uuid, data, response):
+            writes.append((bytes(data), response))
+            if len(writes) >= 2:
+                svc._ble_stop.set()
+
+    svc.send_command("mouth", state="neutral")
+    svc._on_spectrum("display.spectrum", {"bins": [0.5] * 12, "ts": 1.0})
+    orig_client, orig_avail = ds.BleakClient, ds._BLEAK_AVAILABLE
+    ds.BleakClient, ds._BLEAK_AVAILABLE = FakeClient, True
+    try:
+        asyncio.run(svc._ble_worker_async())
+    finally:
+        ds.BleakClient, ds._BLEAK_AVAILABLE = orig_client, orig_avail
+
+    assert json.loads(writes[0][0])["cmd"] == "mouth" and writes[0][1] is True
+    assert json.loads(writes[1][0])["cmd"] == "eq" and writes[1][1] is False

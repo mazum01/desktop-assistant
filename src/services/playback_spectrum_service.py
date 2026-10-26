@@ -18,7 +18,7 @@ linear bins would waste most of the display on the sparse high end). Bands are
 published on the bus for :class:`DisplayService` to forward to the ESP32.
 
 Published topics
-    display.spectrum  {"bins": [float 0..1], "ts": float}
+    display.spectrum  {"bins": [float 0..1], "ts": float, "window_s": float}
 
 The capture subprocess only runs while playback is actually active, so an idle
 VERA doesn't hold a permanent monitor stream or burn CPU on FFTs of silence.
@@ -271,6 +271,7 @@ class PlaybackSpectrumService(Service):
         # One FFT window per published frame.
         frames = max(256, int(self._cfg.sample_rate / max(1.0, self._cfg.fps)))
         nbytes = frames * chans * 2
+        window_s = frames / float(max(1, int(self._cfg.sample_rate)))
 
         while not self._stop.is_set():
             if not self._active.wait(timeout=0.25):
@@ -303,7 +304,8 @@ class PlaybackSpectrumService(Service):
 
             if bins is not None:
                 self.bus.publish(
-                    "display.spectrum", {"bins": bins, "ts": time.time()}
+                    "display.spectrum",
+                    {"bins": bins, "ts": time.time(), "window_s": window_s},
                 )
 
         self._kill_proc()

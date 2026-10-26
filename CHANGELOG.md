@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.87.5] - 2026-10-26
+### Added
+- Spectrum display latency measurement: `DisplayService` timestamps each
+  spectrum frame from the audio window it describes, through the BLE write,
+  to the firmware's `eq` ack, and logs/publishes rolling medians on
+  `display.spectrum_latency` (`audio_to_send_ms`, `ble_write_ms`,
+  `write_to_ack_ms`, `audio_to_display_ms`). `display.spectrum` frames now
+  carry `window_s` so the audio-window centre can be located.
+### Changed
+- BLE display writes use the negotiated MTU instead of fixed 20-byte chunks,
+  and spectrum frames are written without ATT response. Measured audio→display
+  latency dropped from ~1080 ms to ~140 ms (BLE write 490 ms → 3 ms) and the
+  delivered spectrum rate rose from ~2 to ~8 frames/s.
+
 ## [1.87.4] - 2026-10-26
 ### Fixed
 - Mouth display spectrum analyzer no longer drifts progressively behind the

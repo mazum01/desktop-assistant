@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-1115.5 10059,-1115.5 10059,4 -4,4"/>
 <text text-anchor="start" x="4740" y="-1095.7" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="4887.5" y="-1084.5" font-family="Helvetica,sans-Serif" font-size="10.00">v1.87.4 — Spectrum display no longer drifts behind audio</text>
+<text text-anchor="start" x="4872" y="-1084.5" font-family="Helvetica,sans-Serif" font-size="10.00">v1.87.5 — Spectrum latency measured; low&#45;latency BLE frames</text>
 <g id="clust1" class="cluster">
 <title>cluster_matter</title>
 <path fill="#e4f4e4" stroke="black" d="M20,-252.5C20,-252.5 517,-252.5 517,-252.5 523,-252.5 529,-258.5 529,-264.5 529,-264.5 529,-741.5 529,-741.5 529,-747.5 523,-753.5 517,-753.5 517,-753.5 20,-753.5 20,-753.5 14,-753.5 8,-747.5 8,-741.5 8,-741.5 8,-264.5 8,-264.5 8,-258.5 14,-252.5 20,-252.5"/>
