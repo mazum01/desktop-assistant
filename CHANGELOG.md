@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.87.2] - 2026-10-26
+### Changed
+- Web dashboard LCARS frames: header height reduced from 110 px to 78 px to
+  trim the space above and below the VERA name; header and content-card
+  vertical bars widened 20% (24 px → 29 px, with sweep radii adjusted to keep
+  the inner curves round); header horizontal bar reduced from 14 px to 10 px
+  to match the content-card and left-menu bars. Content offset and card
+  scroll margins now derive from the header height.
+
 ## [1.87.1] - 2026-10-26
 ### Changed
 - Web dashboard header: the "Vision-Enabled Reasoning Agent" subtext now

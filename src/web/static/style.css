@@ -46,9 +46,12 @@
   --lcars-spine-width: 42px;
   --lcars-nav-sweep-x: 84px;
   --lcars-nav-sweep-y: 52px;
-  --lcars-topbar-spine: 24px;
-  --lcars-topbar-sweep-x: 48px;
+  --lcars-topbar-spine: 29px;
+  --lcars-topbar-bar: 10px;
+  --lcars-topbar-sweep-x: 53px;
   --lcars-topbar-sweep-y: 34px;
+  --lcars-frame-spine: 29px;
+  --header-height: 78px;
   --shell-gap: 24px;
 }
 
@@ -80,15 +83,15 @@ header {
   top: var(--shell-gap);
   left: calc(var(--rail-width) + var(--shell-gap) * 2);
   right: var(--shell-gap);
-  height: 110px;
+  height: var(--header-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 4px 40px 10px 22px;
+  padding: 0 40px 0 22px;
   background: var(--bg);
   border-left: var(--lcars-topbar-spine) solid var(--workspace-color);
-  border-bottom: 14px solid var(--workspace-color);
+  border-bottom: var(--lcars-topbar-bar) solid var(--workspace-color);
   border-bottom-left-radius: var(--lcars-topbar-sweep-x) var(--lcars-topbar-sweep-y);
 }
 /* Rounded end cap, split from the band by a black gap like the reference. */
@@ -96,11 +99,11 @@ header::after {
   content: "";
   position: absolute;
   right: 0;
-  bottom: -14px;
+  bottom: calc(0px - var(--lcars-topbar-bar));
   width: 24px;
-  height: 14px;
+  height: var(--lcars-topbar-bar);
   border-left: var(--lcars-gap) solid var(--bg);
-  border-radius: 0 7px 7px 0;
+  border-radius: 0 5px 5px 0;
   background: var(--workspace-color);
 }
 .header-left { display: flex; align-items: center; gap: 12px; }
@@ -112,7 +115,7 @@ h1 { font-family: "Arial Narrow", "Roboto Condensed", sans-serif; font-size: 30p
 .brand-full-name { display: block; color: var(--text-dim); font-size: 11px; line-height: 1.3; }
 .subtext { color: var(--text-dim); font-size: 12px; }
 .lcars-code { font-family: "Arial Narrow", sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .12em; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.frame-code { position: absolute; bottom: -14px; right: 40px; line-height: 14px; color: #08060b; }
+.frame-code { position: absolute; bottom: calc(0px - var(--lcars-topbar-bar)); right: 40px; line-height: var(--lcars-topbar-bar); color: #08060b; }
 .section-code { float: right; margin-left: 12px; color: var(--panel-accent); opacity: .7; }
 .eyebrow .lcars-code { margin-left: 12px; color: var(--workspace-color); }
 
@@ -222,7 +225,7 @@ main {
   max-width: 1800px;
   margin-left: calc(var(--rail-width) + var(--shell-gap) * 2);
   margin-right: var(--shell-gap);
-  padding: 158px 0 40px;
+  padding: calc(var(--header-height) + var(--shell-gap) * 2) 0 40px;
 }
 .workspace-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
 .workspace-heading h2 { font-size: 30px; color: var(--workspace-color); font-weight: 600; margin: 4px 0; }
@@ -245,12 +248,12 @@ main {
   min-width: 0;
   background: var(--bg2);
   border: 1px solid var(--border);
-  border-left: 24px solid var(--panel-accent);
+  border-left: var(--lcars-frame-spine) solid var(--panel-accent);
   border-top: 10px solid var(--panel-accent);
   /* Offset the unequal border widths to keep the inner arc circular. */
-  border-radius: 48px 0 0 0 / 34px 0 0 0;
+  border-radius: 53px 0 0 0 / 34px 0 0 0;
   padding: 16px 20px 20px;
-  scroll-margin-top: 154px;
+  scroll-margin-top: calc(var(--header-height) + var(--shell-gap) * 2 - 4px);
 }
 .card h2 {
   font-size: 14px;
@@ -1304,8 +1307,8 @@ main:focus { outline: none; }
 }
 
 @media (max-width: 700px) {
-  header { position: relative; top: auto; left: auto; right: auto; height: auto; min-height: 100px; padding: 16px; border-bottom-width: 14px; }
-  :root { --lcars-topbar-spine: 15px; --lcars-topbar-sweep-x: 30px; --lcars-topbar-sweep-y: 22px; }
+  header { position: relative; top: auto; left: auto; right: auto; height: auto; min-height: 72px; padding: 8px 16px; }
+  :root { --lcars-topbar-spine: 18px; --lcars-topbar-sweep-x: 33px; --lcars-topbar-sweep-y: 22px; }
   header { padding-left: 12px; padding-right: 34px; }
   h1 { font-size: 26px; }
   .brand-caption { font-size: 10px; }
