@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock
 from src.core.bus import MessageBus
 from src.services.display_service import DisplayService, DisplayServiceConfig
@@ -138,46 +139,60 @@ def test_set_mouth_state_rejects_when_ble_disabled():
 def _spectrum_svc():
     from src.services.display_service import DisplayService, DisplayServiceConfig
 
-    svc = DisplayService(
+    return DisplayService(
         bus=MagicMock(),
         config=DisplayServiceConfig(ble_enabled=True, spectrum_enabled=True),
     )
-    svc.send_command = MagicMock()
-    return svc
+
+
+def _pending_eq(svc):
+    frame = svc._take_latest_spectrum()
+    return None if frame is None else json.loads(frame)
 
 
 def test_spectrum_frame_forwarded_as_eq_command():
     svc = _spectrum_svc()
     svc._on_spectrum("display.spectrum", {"bins": [0.1, 0.5, 0.9]})
-    svc.send_command.assert_called_once()
-    assert svc.send_command.call_args.args[0] == "eq"
-    assert svc.send_command.call_args.kwargs["bins"] == [0.1, 0.5, 0.9]
+    assert _pending_eq(svc) == {"cmd": "eq", "bins": [0.1, 0.5, 0.9]}
+
+
+def test_spectrum_frames_bypass_fifo_and_latest_wins():
+    # Regression: queueing every frame let the bars drift seconds behind the
+    # music when BLE writes were slower than the frame rate.
+    svc = _spectrum_svc()
+    svc._cfg.spectrum_max_fps = 1000.0
+    for v in (0.1, 0.2, 0.3):
+        svc._last_spectrum_sent = 0.0
+        svc._on_spectrum("display.spectrum", {"bins": [v]})
+    assert svc._ble_queue.empty()
+    assert _pending_eq(svc)["bins"] == [0.3]
+    assert _pending_eq(svc) is None
 
 
 def test_spectrum_suppressed_while_speaking():
     svc = _spectrum_svc()
-    svc._on_speaking_started("av.speaking_started", {})
-    svc.send_command.reset_mock()
     svc._on_spectrum("display.spectrum", {"bins": [0.4, 0.4]})
-    svc.send_command.assert_not_called()
+    svc._on_speaking_started("av.speaking_started", {})
+    assert _pending_eq(svc) is None
+    svc._last_spectrum_sent = 0.0
+    svc._on_spectrum("display.spectrum", {"bins": [0.4, 0.4]})
+    assert _pending_eq(svc) is None
 
 
 def test_spectrum_resumes_after_speech_finishes():
     svc = _spectrum_svc()
     svc._on_speaking_started("av.speaking_started", {})
     svc._on_spoke("av.spoke", {})
-    svc.send_command.reset_mock()
     svc._last_spectrum_sent = 0.0
     svc._on_spectrum("display.spectrum", {"bins": [0.4, 0.4]})
-    svc.send_command.assert_called_once()
+    assert _pending_eq(svc)["bins"] == [0.4, 0.4]
 
 
 def test_spectrum_values_clamped_and_truncated():
     svc = _spectrum_svc()
     svc._cfg.spectrum_max_bands = 3
     svc._on_spectrum("display.spectrum", {"bins": [-1.0, 2.0, 0.5, 0.7, 0.9]})
-    bins = svc.send_command.call_args.kwargs["bins"]
-    assert bins == [0.0, 1.0, 0.5]
+    assert _pending_eq(svc)["bins"] == [0.0, 1.0, 0.5]
 
 
 def test_spectrum_rate_limited():
@@ -185,14 +200,14 @@ def test_spectrum_rate_limited():
     svc._cfg.spectrum_max_fps = 1.0
     svc._on_spectrum("display.spectrum", {"bins": [0.5]})
     svc._on_spectrum("display.spectrum", {"bins": [0.6]})
-    assert svc.send_command.call_count == 1
+    assert _pending_eq(svc)["bins"] == [0.5]
 
 
 def test_spectrum_ignored_when_disabled():
     svc = _spectrum_svc()
     svc._cfg.spectrum_enabled = False
     svc._on_spectrum("display.spectrum", {"bins": [0.5]})
-    svc.send_command.assert_not_called()
+    assert _pending_eq(svc) is None
 
 
 def test_spectrum_ignores_malformed_payloads():
@@ -200,7 +215,7 @@ def test_spectrum_ignores_malformed_payloads():
     for bad in (None, {}, {"bins": []}, {"bins": "nope"}, {"bins": ["x"]}):
         svc._last_spectrum_sent = 0.0
         svc._on_spectrum("display.spectrum", bad)
-    svc.send_command.assert_not_called()
+    assert _pending_eq(svc) is None
 
 
 # ── BLE connection announcements ────────────────────────────────────────────

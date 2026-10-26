@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.87.4] - 2026-10-26
+### Fixed
+- Mouth display spectrum analyzer no longer drifts progressively behind the
+  music. Spectrum frames were pushed into the 128-deep BLE command FIFO, and
+  since acknowledged 20-byte BLE writes can't sustain 12 frames/s the backlog
+  grew for as long as playback ran. Frames now use a latest-wins slot that
+  bypasses the FIFO (queued mouth/video/status commands still go first), so
+  the display is never more than one frame behind; a stale frame is also
+  discarded when speech takes over the mouth.
+
 ## [1.87.3] - 2026-10-26
 ### Fixed
 - Web dashboard: scrolled content no longer shows through the gap above the

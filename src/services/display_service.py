@@ -95,6 +95,10 @@ class DisplayService(Service):
         self._ble_stop = threading.Event()
         self._speaking = False
         self._last_spectrum_sent = 0.0
+        # Latest-wins slot for spectrum frames. They bypass the FIFO so a slow
+        # BLE link drops stale frames instead of queueing them, which would
+        # make the bars drift further and further behind the music.
+        self._latest_spectrum: Optional[bytes] = None
         self._notification_buffer = bytearray()
         # None = no link state observed yet, so the first successful connect
         # after boot announces rather than being treated as a no-op transition.
@@ -278,6 +282,7 @@ class DisplayService(Service):
         can't paint over the talking animation mid-sentence.
         """
         self._speaking = True
+        self._take_latest_spectrum()
         if self._cfg.ble_enabled:
             self.set_mouth_state("speaking")
 
@@ -295,8 +300,9 @@ class DisplayService(Service):
         """Forward a playback spectrum frame to the device as an 'eq' command.
 
         Frames are dropped (not queued) while speaking, and rate-limited to
-        the configured cadence: BLE writes are the bottleneck here, and a
-        backed-up queue would render stale spectrum data seconds late.
+        the configured cadence. Only the newest unsent frame is kept: BLE
+        writes are the bottleneck here, and queueing every frame made the
+        display lag progressively further behind the audio.
         """
         if not self._cfg.ble_enabled or not self._cfg.spectrum_enabled:
             return
@@ -322,7 +328,15 @@ class DisplayService(Service):
         if len(values) > max_bands:
             values = values[:max_bands]
 
-        self.send_command("eq", bins=values)
+        line = json.dumps({"cmd": "eq", "bins": values}, separators=(",", ":")) + "\n"
+        with self._ble_lock:
+            self._latest_spectrum = line.encode("utf-8")
+
+    def _take_latest_spectrum(self) -> Optional[bytes]:
+        with self._ble_lock:
+            frame = self._latest_spectrum
+            self._latest_spectrum = None
+        return frame
 
     # ── Emission / BLE transport ────────────────────────────────────────
 
@@ -507,11 +521,15 @@ class DisplayService(Service):
                     self._set_ble_connected(True)
                     try:
                         while not self._ble_stop.is_set() and client.is_connected:
+                            # Queued commands (mouth, video, status) take
+                            # priority; otherwise send the newest spectrum.
                             try:
-                                encoded = self._ble_queue.get(timeout=0.05)
+                                encoded = self._ble_queue.get_nowait()
                             except queue.Empty:
-                                await asyncio.sleep(0.01)
-                                continue
+                                encoded = self._take_latest_spectrum()
+                                if encoded is None:
+                                    await asyncio.sleep(0.01)
+                                    continue
 
                             if encoded is None or self._ble_stop.is_set():
                                 return
