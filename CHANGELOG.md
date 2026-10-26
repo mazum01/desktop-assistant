@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.87.3] - 2026-10-26
+### Fixed
+- Web dashboard: scrolled content no longer shows through the gap above the
+  fixed header frame (opaque backdrop behind the header, including its sweep corner), and the left menu's top horizontal sweep
+  now aligns exactly with the header frame's bottom sweep at every
+  breakpoint.
+
 ## [1.87.2] - 2026-10-26
 ### Changed
 - Web dashboard LCARS frames: header height reduced from 110 px to 78 px to

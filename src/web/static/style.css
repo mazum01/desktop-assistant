@@ -94,6 +94,19 @@ header {
   border-bottom: var(--lcars-topbar-bar) solid var(--workspace-color);
   border-bottom-left-radius: var(--lcars-topbar-sweep-x) var(--lcars-topbar-sweep-y);
 }
+/* Opaque backdrop behind the fixed header (incl. the gap above it, the sweep
+   corner, and the end-cap notch) so scrolled cards never show through. */
+body::before {
+  content: "";
+  position: fixed;
+  z-index: 99;
+  top: 0;
+  left: calc(var(--rail-width) + var(--shell-gap) * 2);
+  right: 0;
+  height: calc(var(--shell-gap) + var(--header-height));
+  background: var(--bg);
+  pointer-events: none;
+}
 /* Rounded end cap, split from the band by a black gap like the reference. */
 header::after {
   content: "";
@@ -149,7 +162,10 @@ h1 { font-family: "Arial Narrow", "Roboto Condensed", sans-serif; font-size: 30p
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 1px 0 12px 7px;
+  /* Ends exactly where the header's bottom bar begins so both sweeps line up. */
+  height: calc(var(--header-height) - var(--lcars-topbar-bar));
+  flex-shrink: 0;
+  margin: 0 0 0 7px;
   color: var(--lcars-peach);
   font: 600 var(--lcars-heading-size)/1 var(--console-font);
   letter-spacing: .04em;
@@ -1310,6 +1326,7 @@ main:focus { outline: none; }
   header { position: relative; top: auto; left: auto; right: auto; height: auto; min-height: 72px; padding: 8px 16px; }
   :root { --lcars-topbar-spine: 18px; --lcars-topbar-sweep-x: 33px; --lcars-topbar-sweep-y: 22px; }
   header { padding-left: 12px; padding-right: 34px; }
+  body::before { display: none; }
   h1 { font-size: 26px; }
   .brand-caption { font-size: 10px; }
   .brand-full-name { font-size: 10px; }
