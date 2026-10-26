@@ -107,12 +107,15 @@ class ThermalManager:
         self._thresh = thresholds or ThermalThresholds.from_yaml()
         self._on_critical = on_critical
         self._fan = FanController(gpio_pin=gpio_pin)
-        try:
-            self._sensor = probe_temperature_sensor(bus=i2c_bus, address=i2c_address)
-        except TemperatureSensorProbeError:
-            self._fan.set_duty(100.0)
-            raise
-        self._sensor_type = self._sensor.sensor_type
+        self._i2c_bus = i2c_bus
+        self._i2c_address = i2c_address
+        self._sensor = None
+        self._sensor_type = "unavailable"
+        self._next_probe_at = 0.0
+        self._probe_failure_logged = False
+        # A transient I²C failure at boot must not kill thermal control:
+        # stay in fail-safe and keep re-probing from the control loop.
+        self._probe_sensor()
         if self._thresh.tach_enabled:
             self._tach: Optional[FanTach] = FanTach(gpio=tach_gpio, pulses_per_rev=tach_pulses_per_rev)
         else:
@@ -125,7 +128,7 @@ class ThermalManager:
         self._last_blended_c: Optional[float] = None # weighted average used for control
         self._case_weight: float = self._thresh.case_weight
         self._cpu_weight:  float = self._thresh.cpu_weight
-        self._sensor_ok: bool = True
+        self._sensor_ok: bool = self._sensor is not None
         self._override_duty: Optional[float] = None
         self._control_points: list[tuple[float, float]] = _normalise_control_points(
             self._thresh.control_points or _legacy_control_points(self._thresh)
@@ -152,8 +155,28 @@ class ThermalManager:
         self._fan.close()
         if self._tach is not None:
             self._tach.close()
-        self._sensor.close()
+        if self._sensor is not None:
+            self._sensor.close()
         log.info("ThermalManager stopped")
+
+    _PROBE_RETRY_S = 5.0
+
+    def _probe_sensor(self) -> bool:
+        """Try to detect the case sensor; on failure force the fan to 100%."""
+        self._next_probe_at = time.monotonic() + self._PROBE_RETRY_S
+        try:
+            sensor = probe_temperature_sensor(bus=self._i2c_bus, address=self._i2c_address)
+        except TemperatureSensorProbeError as exc:
+            self._fan.set_duty(100.0)
+            if not self._probe_failure_logged:
+                log.error("Temperature sensor probe failed — fan fail-safe 100%%; retrying every %.0fs: %s",
+                          self._PROBE_RETRY_S, exc)
+                self._probe_failure_logged = True
+            return False
+        self._sensor = sensor
+        self._sensor_type = sensor.sensor_type
+        log.info("Temperature sensor detected: %s", self._sensor_type)
+        return True
 
     @property
     def temperature_c(self) -> Optional[float]:
@@ -247,6 +270,13 @@ class ThermalManager:
 
     def _loop(self) -> None:
         while not self._stop_event.is_set():
+            if self._sensor is None:
+                self._sensor_ok = False
+                self._last_cpu_c = _read_cpu_temp_c()
+                if time.monotonic() < self._next_probe_at or not self._probe_sensor():
+                    self._fan.set_duty(100.0)
+                    self._stop_event.wait(timeout=self._thresh.poll_interval_s)
+                    continue
             try:
                 case_c = self._sensor.read_temperature_c()
                 self._last_case_c = case_c

@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.86.1] - 2026-10-26
+### Fixed
+- Thermal service no longer dies when the TMP117/TMP102 case sensor is absent
+  or returns an I²C error at boot; it holds the fan at 100% fail-safe and
+  re-probes every 5 s, so temperatures return automatically once the sensor
+  responds. Fan/RPM telemetry is still published while in fail-safe.
+- Dashboard now self-heals after being left idle: stalled MJPEG camera feeds
+  are detected and reconnected, a silent/half-open WebSocket is replaced,
+  streams and status reconnect immediately when the tab becomes visible or
+  the network returns, and the page reloads itself when the server version
+  changes.
+- Dashboard static asset cache keys now track the current release.
+
 ## [1.86.0] - 2026-10-25
 ### Added
 - Optional, independently supervised Matter controller with a loopback-only

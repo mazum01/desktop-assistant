@@ -141,7 +141,35 @@ def test_thermal_manager_sets_fan_to_full_if_sensor_probe_fails(monkeypatch):
         Mock(side_effect=TemperatureSensorProbeError("not detected")),
     )
 
-    with pytest.raises(TemperatureSensorProbeError, match="not detected"):
-        ThermalManager(thresholds=ThermalThresholds(tach_enabled=False))
+    manager = ThermalManager(thresholds=ThermalThresholds(tach_enabled=False))
 
     fan.set_duty.assert_called_once_with(100.0)
+    assert manager.sensor_ok is False
+    assert manager.sensor_type == "unavailable"
+    manager.stop()
+
+
+def test_thermal_manager_recovers_when_sensor_appears_after_boot(monkeypatch):
+    import time as _time
+
+    fan = Mock()
+    sensor = Mock(sensor_type="TMP117")
+    sensor.read_temperature_c.return_value = 30.0
+    probe = Mock(side_effect=[TemperatureSensorProbeError("Remote I/O error"), sensor])
+    monkeypatch.setattr("src.thermal.thermal_manager.FanController", Mock(return_value=fan))
+    monkeypatch.setattr("src.thermal.thermal_manager.probe_temperature_sensor", probe)
+    monkeypatch.setattr("src.thermal.thermal_manager._read_cpu_temp_c", lambda: 50.0)
+    monkeypatch.setattr(ThermalManager, "_PROBE_RETRY_S", 0.0)
+
+    manager = ThermalManager(thresholds=ThermalThresholds(tach_enabled=False, poll_interval_s=0.01))
+    assert manager.sensor_ok is False
+    manager.start()
+    deadline = _time.monotonic() + 2.0
+    while manager.temperature_c is None and _time.monotonic() < deadline:
+        _time.sleep(0.01)
+    manager.stop()
+
+    assert probe.call_count == 2
+    assert manager.sensor_type == "TMP117"
+    assert manager.sensor_ok is True
+    assert manager.temperature_c is not None

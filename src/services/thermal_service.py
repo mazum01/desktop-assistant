@@ -60,6 +60,7 @@ class ThermalService(Service):
 
         if temp_c is None:
             self.bus.publish("thermal.error", {"reason": "no_reading"})
+            self._publish_fan(m, duty)
             return
 
         self.bus.publish(
@@ -76,19 +77,7 @@ class ThermalService(Service):
                 "sensor_type":      getattr(m, "sensor_type", None),
             },
         )
-        override_on   = getattr(m, "override_active", False)
-        override_duty = getattr(m, "override_duty", None)
-        self.bus.publish(
-            "thermal.fan",
-            {
-                "duty":          duty,
-                "backend":       getattr(m, "fan_backend", "unknown"),
-                "override":      override_on,
-                "override_duty": override_duty,
-            },
-        )
-        tach_on = getattr(m, "tach_enabled", True)
-        self.bus.publish("thermal.rpm", {"rpm": getattr(m, "fan_rpm", None), "enabled": tach_on})
+        self._publish_fan(m, duty)
 
         critical_c = getattr(m, "_thresholds", None)
         if critical_c is not None:
@@ -96,6 +85,19 @@ class ThermalService(Service):
             if critical and not self._last_critical:
                 self.bus.publish("thermal.critical", {"celsius": temp_c})
             self._last_critical = critical
+
+    def _publish_fan(self, m, duty) -> None:
+        self.bus.publish(
+            "thermal.fan",
+            {
+                "duty":          duty,
+                "backend":       getattr(m, "fan_backend", "unknown"),
+                "override":      getattr(m, "override_active", False),
+                "override_duty": getattr(m, "override_duty", None),
+            },
+        )
+        tach_on = getattr(m, "tach_enabled", True)
+        self.bus.publish("thermal.rpm", {"rpm": getattr(m, "fan_rpm", None), "enabled": tach_on})
 
     def on_stop(self) -> None:
         for unsub in self._unsubs:

@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-1254 9520.5,-1254 9520.5,4 -4,4"/>
 <text text-anchor="start" x="4470.75" y="-1234.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="4612.25" y="-1223" font-family="Helvetica,sans-Serif" font-size="10.00">v1.86.0 — Optional Matter controller and audio mute bridge</text>
+<text text-anchor="start" x="4608.25" y="-1223" font-family="Helvetica,sans-Serif" font-size="10.00">v1.86.1 — Dashboard auto&#45;recovery; thermal sensor re&#45;probe</text>
 <g id="clust1" class="cluster">
 <title>cluster_matter</title>
 <path fill="#e4f4e4" stroke="black" d="M435,-252.5C435,-252.5 932,-252.5 932,-252.5 938,-252.5 944,-258.5 944,-264.5 944,-264.5 944,-727 944,-727 944,-733 938,-739 932,-739 932,-739 435,-739 435,-739 429,-739 423,-733 423,-727 423,-727 423,-264.5 423,-264.5 423,-258.5 429,-252.5 435,-252.5"/>

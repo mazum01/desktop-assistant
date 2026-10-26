@@ -320,28 +320,138 @@ function _initServoSliders() {
 }
 
 
-function connectWS() {
-  ws = new WebSocket(WS_URL);
+let _wsLastMessageMs = 0;
+let _wsRetryTimer = null;
+let _pageVersion = null;
+const WS_STALE_MS = 5000;     // server pushes every 250 ms
+const STREAM_STALL_MS = 15000;
 
-  ws.onopen = () => {
+function connectWS() {
+  clearTimeout(_wsRetryTimer);
+  _wsRetryTimer = null;
+  const sock = new WebSocket(WS_URL);
+  ws = sock;
+  _wsLastMessageMs = Date.now();
+
+  sock.onopen = () => {
     wsRetryMs = 1000;
     setHealth("ok");
   };
 
-  ws.onclose = () => {
+  sock.onclose = () => {
+    // Ignore close events from sockets that were deliberately replaced.
+    if (ws !== sock) return;
     setHealth("unknown");
-    setTimeout(connectWS, wsRetryMs);
+    _wsRetryTimer = setTimeout(connectWS, wsRetryMs);
     wsRetryMs = Math.min(wsRetryMs * 1.5, 15000);
   };
 
-  ws.onerror = () => ws.close();
+  sock.onerror = () => sock.close();
 
-  ws.onmessage = (evt) => {
+  sock.onmessage = (evt) => {
+    _wsLastMessageMs = Date.now();
     try {
       const data = JSON.parse(evt.data);
+      if (data.version) {
+        if (_pageVersion === null) _pageVersion = data.version;
+        else if (data.version !== _pageVersion) { location.reload(); return; }
+      }
       updateDashboard(data);
     } catch (e) { console.error('[VERA] WS update error:', e); }
   };
+}
+
+// Sleeping laptops and backgrounded tabs can leave a half-open socket that
+// never fires onclose; replace it if it has gone quiet.
+function ensureWSFresh(force = false) {
+  if (!force) {
+    if (_wsRetryTimer) return; // backoff reconnect already scheduled
+    const state = ws ? ws.readyState : WebSocket.CLOSED;
+    if (state === WebSocket.CONNECTING) return;
+    if (state === WebSocket.OPEN && Date.now() - _wsLastMessageMs <= WS_STALE_MS) return;
+  }
+  const old = ws;
+  ws = null;
+  if (old) { try { old.close(); } catch (_) {} }
+  wsRetryMs = 1000;
+  connectWS();
+}
+
+// ── Camera stream watchdog ────────────────────────────────────────
+// MJPEG <img> elements can freeze without firing onerror (server restart,
+// Wi-Fi drop, tab throttling). Sample each stream into a tiny canvas and
+// reconnect when the picture stops changing or the tab becomes visible.
+const _streams = {};
+
+function _registerStream(id, path) {
+  const img = document.getElementById(id);
+  if (!img) return;
+  _streams[id] = { img, path, sig: null, changedMs: Date.now() };
+  _reconnectStream(id);
+}
+
+function _reconnectStream(id) {
+  const s = _streams[id];
+  if (!s) return;
+  s.sig = null;
+  s.changedMs = Date.now();
+  s.img.src = `${s.path}?key=${encodeURIComponent(VERA_API_KEY)}&t=${Date.now()}`;
+}
+
+function reconnectStreams() {
+  Object.keys(_streams).forEach(_reconnectStream);
+}
+
+const _sampleCanvas = document.createElement("canvas");
+_sampleCanvas.width = 16;
+_sampleCanvas.height = 9;
+
+function _streamSignature(img) {
+  if (!img.naturalWidth) return null;
+  try {
+    const ctx = _sampleCanvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, 16, 9);
+    const px = ctx.getImageData(0, 0, 16, 9).data;
+    let h = 0;
+    for (let i = 0; i < px.length; i++) h = (h * 31 + px[i]) | 0;
+    return h;
+  } catch (_) {
+    return null;
+  }
+}
+
+function checkStreams() {
+  if (document.hidden) return;
+  const now = Date.now();
+  Object.entries(_streams).forEach(([id, s]) => {
+    const wrap = s.img.closest("[id$='-wrap']");
+    if (wrap && wrap.style.display === "none" && s.img.naturalWidth) wrap.style.display = "";
+    if (s.img.offsetParent === null) return; // hidden/collapsed stream
+    const sig = _streamSignature(s.img);
+    if (sig !== null && sig !== s.sig) {
+      s.sig = sig;
+      s.changedMs = now;
+    } else if (now - s.changedMs > STREAM_STALL_MS) {
+      console.warn(`[VERA] ${id} stalled — reconnecting`);
+      _reconnectStream(id);
+    }
+  });
+}
+
+function _onPageResumed() {
+  if (document.hidden) return;
+  // Returning to the tab should not wait out a long backoff.
+  ensureWSFresh(Boolean(_wsRetryTimer));
+  reconnectStreams();
+}
+
+function initAutoRecovery() {
+  document.addEventListener("visibilitychange", _onPageResumed);
+  window.addEventListener("pageshow", (e) => { if (e.persisted) _onPageResumed(); });
+  window.addEventListener("online", _onPageResumed);
+  window.addEventListener("focus", () => ensureWSFresh());
+  setInterval(() => { if (!document.hidden) ensureWSFresh(); }, 2000);
+  setInterval(checkStreams, 3000);
 }
 
 // ── Room status polling (REST fallback for stability gauge) ───────
@@ -3211,17 +3321,20 @@ document.addEventListener("DOMContentLoaded", () => {
   // Set camera stream src with API key so MJPEG streams authenticate.
   // Attach onerror AFTER setting src so the initial HTML src="" doesn't
   // hide cam2-wrap before we get a chance to load it properly.
-  const _streamKey = encodeURIComponent(VERA_API_KEY);
-  const _cam1 = document.getElementById('camera-stream');
   const _cam2 = document.getElementById('camera-stream2');
-  if (_cam1) _cam1.src = `/stream?key=${_streamKey}`;
   if (_cam2) {
     _cam2.onerror = () => {
       const wrap = document.getElementById('cam2-wrap');
       if (wrap) wrap.style.display = 'none';
     };
-    _cam2.src = `/stream2?key=${_streamKey}`;
+    _cam2.onload = () => {
+      const wrap = document.getElementById('cam2-wrap');
+      if (wrap) wrap.style.display = '';
+    };
   }
+  _registerStream('camera-stream', '/stream');
+  _registerStream('camera-stream2', '/stream2');
+  initAutoRecovery();
 
   el("say-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") doSay();

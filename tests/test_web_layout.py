@@ -172,6 +172,106 @@ run().catch(error => {console.error(error); process.exitCode = 1;});
     )
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for auto-recovery regression")
+def test_dashboard_recovers_stale_websocket_and_frozen_streams(tmp_path):
+    script = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(process.argv[2], 'utf8');
+let clock = 1000000;
+const sockets = [];
+class FakeWS {
+  constructor(url) { this.url = url; this.readyState = FakeWS.CONNECTING; sockets.push(this); }
+  close() { this.readyState = FakeWS.CLOSED; if (this.onclose) this.onclose(); }
+}
+FakeWS.CONNECTING = 0; FakeWS.OPEN = 1; FakeWS.CLOSED = 3;
+let pixel = 1;
+const canvasCtx = {
+  drawImage() {},
+  getImageData() { return {data: [pixel, pixel, pixel, 255]}; },
+};
+const listeners = {};
+const imgs = {
+  'camera-stream': {src: '', naturalWidth: 640, offsetParent: {}, style: {}, closest: () => null},
+};
+const timers = [];
+let reloads = 0;
+const context = vm.createContext({
+  WebSocket: FakeWS,
+  WS_URL: 'ws://vera/ws',
+  VERA_API_KEY: 'k',
+  Date: {now: () => clock},
+  setTimeout: (fn) => { timers.push(fn); return timers.length; },
+  clearTimeout: () => {},
+  setInterval: () => 0,
+  console: {warn() {}, error() {}},
+  location: {reload: () => { reloads += 1; }},
+  setHealth: () => {},
+  updateDashboard: () => {},
+  document: {
+    hidden: false,
+    createElement: () => ({getContext: () => canvasCtx}),
+    getElementById: id => imgs[id],
+    addEventListener: (event, fn) => { listeners[event] = fn; },
+  },
+  window: {addEventListener: (event, fn) => { listeners[event] = fn; }},
+});
+vm.runInContext(
+  'let ws = null; let wsRetryMs = 1000;\n' +
+  source.slice(source.indexOf('let _wsLastMessageMs'), source.indexOf('// ── Room status polling')) +
+  '\nthis.state = () => ({ws, wsRetryMs});', context);
+
+// Fresh socket is left alone; a silent open socket is replaced.
+context.connectWS();
+const first = sockets[0];
+first.readyState = FakeWS.OPEN; first.onopen();
+first.onmessage({data: JSON.stringify({version: '1.0.0'})});
+clock += 2000; context.ensureWSFresh();
+assert.equal(sockets.length, 1);
+clock += 6000; context.ensureWSFresh();
+assert.equal(sockets.length, 2);
+assert.equal(timers.length, 0); // replaced socket's onclose must not schedule a retry
+assert.equal(context.state().ws, sockets[1]);
+
+// A server restart onto a new version reloads the page to pick up new assets.
+sockets[1].readyState = FakeWS.OPEN;
+sockets[1].onmessage({data: JSON.stringify({version: '1.0.0'})});
+assert.equal(reloads, 0);
+sockets[1].onmessage({data: JSON.stringify({version: '1.0.1'})});
+assert.equal(reloads, 1);
+
+// Unexpected close backs off instead of hammering; resuming the tab reconnects now.
+sockets[1].onclose();
+assert.equal(timers.length, 1);
+context.ensureWSFresh();
+assert.equal(sockets.length, 2);
+
+// A frozen MJPEG picture is reconnected with a cache-busting URL.
+context._registerStream('camera-stream', '/stream');
+const initial = imgs['camera-stream'].src;
+assert.match(initial, /^\/stream\?key=k&t=\d+$/);
+context.checkStreams();
+clock += 10000; pixel = 2; context.checkStreams();
+assert.equal(imgs['camera-stream'].src, initial);
+clock += 16000; context.checkStreams();
+assert.notEqual(imgs['camera-stream'].src, initial);
+
+context.initAutoRecovery();
+const beforeResume = imgs['camera-stream'].src;
+clock += 1;
+listeners.visibilitychange();
+assert.notEqual(imgs['camera-stream'].src, beforeResume);
+assert.equal(sockets.length, 3); // pending backoff skipped on resume
+"""
+    runner = tmp_path / "auto-recovery.cjs"
+    runner.write_text(script)
+    subprocess.run(
+        ["node", str(runner), str(STATIC / "app.js")],
+        check=True, capture_output=True, text=True,
+    )
+
+
 def test_decorative_codes_are_sparse_and_hidden_from_assistive_technology(layout):
     codes = [
         node for node in layout
