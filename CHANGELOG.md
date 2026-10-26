@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.88.1] - 2026-10-26
+### Fixed
+- EQ filter-chain makeup gain was never applied: the builtin `linear` node was
+  given a `"Gain"` control, but its controls are `Mult`/`Add`, so PipeWire
+  silently ignored it and ran at 1.0x. The node now sets `"Mult"`, so music
+  (which bypasses the TTS loudness boost) is lifted as intended.
+- Lowered `MAKEUP_GAIN_DB` from 3 dB to 2 dB (1.26x) for more headroom ahead
+  of the trailing hard clamp, since the EQ curve already boosts up to ~+11 dB.
+- Startup now regenerates a named-preset filter-chain config whenever it no
+  longer matches the generated graph (previously only when the sync-delay
+  stage was missing), so stale configs pick up fixes like this automatically.
+
 ## [1.88.0] - 2026-10-26
 ### Added
 - Auto-calibrated audio/visual sync for the mouth-display spectrum bars. The

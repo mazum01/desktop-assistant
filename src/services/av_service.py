@@ -558,11 +558,14 @@ class AVService(Service):
                 log.info("AVService: filter-chain EQ config differs from saved "
                          "custom curve — re-applying %d band(s)", len(bands))
                 pipewire_eq.apply_custom_bands(bands)
-            elif pipewire_eq.is_configured() and not pipewire_eq.has_sync_delay():
+            elif pipewire_eq.is_configured():
+                # Regenerate when the generated graph changed shape (e.g. new
+                # sync-delay stage, makeup control fix) since it was written.
                 preset = self._persisted_eq_preset()
-                if preset in pipewire_eq.PRESET_BANDS:
-                    log.info("AVService: upgrading filter-chain EQ with A/V "
-                             "sync delay stage (preset %s)", preset)
+                if (preset in pipewire_eq.PRESET_BANDS
+                        and not pipewire_eq.preset_config_matches(preset)):
+                    log.info("AVService: filter-chain EQ config is stale — "
+                             "regenerating preset %s", preset)
                     pipewire_eq.apply_preset(preset)
 
             if pipewire_eq.is_active() and self._audio is not None:

@@ -45,7 +45,8 @@ def test_build_config_makeup_stage_chained_after_eq():
     assert "label = linear" in cfg
     assert "label = clamp" in cfg
     # 6 dB -> ~1.9953 linear
-    assert '"Gain" = 1.9953' in cfg
+    assert '"Mult" = 1.9953' in cfg
+    assert '"Gain" = 1.9953' not in cfg
     assert f'{{ output = "eq_band_{last}:Out"  input = "makeup:In" }}' in cfg
     assert '{ output = "makeup:Out"  input = "ceiling:In" }' in cfg
     # N-1 band links + 2 makeup links + 1 sync-delay link
@@ -63,7 +64,7 @@ def test_build_config_defaults_to_module_makeup_gain():
 
     cfg = _build_config(PRESET_BANDS["flat"])
     expected = 10 ** (pw.MAKEUP_GAIN_DB / 20.0)
-    assert f'"Gain" = {expected:.4f}' in cfg
+    assert f'"Mult" = {expected:.4f}' in cfg
 
 
 def test_build_config_gains():
@@ -255,3 +256,15 @@ def test_set_sync_delay_noop_without_stage(monkeypatch):
 
     monkeypatch.setattr(eq, "has_sync_delay", lambda: False)
     assert eq.set_sync_delay(0.1) is False
+
+
+def test_preset_config_matches(tmp_path, monkeypatch):
+    import src.audio.pipewire_eq as eq
+
+    conf = tmp_path / "da-eq.conf"
+    monkeypatch.setattr(eq, "_CONF_FILE", conf)
+    assert not eq.preset_config_matches("flat")
+    conf.write_text(_build_config(PRESET_BANDS["flat"]))
+    assert eq.preset_config_matches("flat")
+    assert not eq.preset_config_matches("bass_boost")
+    assert not eq.preset_config_matches("nonexistent")

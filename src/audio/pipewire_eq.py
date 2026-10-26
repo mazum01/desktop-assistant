@@ -49,8 +49,9 @@ _CONF_FILE = _CONF_DIR / "da-eq.conf"
 # Kept deliberately modest: the shipped custom EQ curve already contributes up
 # to ~+11 dB of boost at its peak, and the trailing clamp is a hard limiter, so
 # an aggressive value here would clip into audible distortion rather than
-# sounding louder.
-MAKEUP_GAIN_DB: float = 3.0
+# sounding louder. The builtin ``linear`` plugin's controls are ``Mult``/``Add``
+# (unknown control names are silently ignored by PipeWire).
+MAKEUP_GAIN_DB: float = 2.0
 
 # Audio/visual sync delay stage, appended to the end of the chain.
 #
@@ -166,7 +167,7 @@ def _build_config(bands: list, makeup_db: Optional[float] = None) -> str:
         gain_lin = 10 ** (float(makeup_db) / 20.0)
         nodes_lines.append(
             f"                    {{ type = builtin  name = makeup  label = linear"
-            f'  control = {{ "Gain" = {gain_lin:.4f}  "Offset" = 0.0 }} }}'
+            f'  control = {{ "Mult" = {gain_lin:.4f}  "Add" = 0.0 }} }}'
         )
         # Hard-clamp after makeup so the boost can never wrap or blow up
         # downstream; the EQ curve itself already leaves the signal near FS.
@@ -443,17 +444,24 @@ def config_matches(bands: list) -> bool:
     different preset path, or a partial/failed earlier apply) persisted
     silently until the user manually re-saved the EQ profile.
     """
-    if not _CONF_FILE.exists():
-        return False
-    try:
-        current = _CONF_FILE.read_text()
-    except Exception:
-        return False
     band_tuples = [
         (float(b["hz"]), float(b["gain_db"]), float(b.get("q", 1.0)), "peaking")
         for b in bands
     ]
+    return _conf_matches(band_tuples)
+
+
+def preset_config_matches(preset: str) -> bool:
+    """True if the on-disk filter-chain config exactly encodes named *preset*."""
+    bands = PRESET_BANDS.get(preset)
+    return bands is not None and _conf_matches(bands)
+
+
+def _conf_matches(band_tuples: list) -> bool:
+    if not _CONF_FILE.exists():
+        return False
     try:
+        current = _CONF_FILE.read_text()
         return current.strip() == _build_config(band_tuples).strip()
     except Exception:
         return False

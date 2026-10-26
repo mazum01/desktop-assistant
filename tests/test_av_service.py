@@ -45,3 +45,41 @@ def test_restore_pipewire_eq_no_restart_when_config_matches():
         svc._restore_pipewire_eq()
 
     apply_.assert_not_called()
+
+
+def test_restore_pipewire_eq_regenerates_stale_preset_config():
+    from src.services.av_service import AVService
+    from src.audio import pipewire_eq
+
+    svc = AVService.__new__(AVService)
+    svc._audio = None
+
+    with patch.object(pipewire_eq, "ensure_default"), \
+         patch.object(pipewire_eq, "is_configured", return_value=True), \
+         patch.object(pipewire_eq, "preset_config_matches", return_value=False), \
+         patch.object(pipewire_eq, "apply_preset") as apply_, \
+         patch.object(pipewire_eq, "is_active", return_value=False), \
+         patch.object(AVService, "_persisted_custom_eq_bands", return_value=[]), \
+         patch.object(AVService, "_persisted_eq_preset", return_value="flat"):
+        svc._restore_pipewire_eq()
+
+    apply_.assert_called_once_with("flat")
+
+
+def test_restore_pipewire_eq_keeps_matching_preset_config():
+    from src.services.av_service import AVService
+    from src.audio import pipewire_eq
+
+    svc = AVService.__new__(AVService)
+    svc._audio = None
+
+    with patch.object(pipewire_eq, "ensure_default"), \
+         patch.object(pipewire_eq, "is_configured", return_value=True), \
+         patch.object(pipewire_eq, "preset_config_matches", return_value=True), \
+         patch.object(pipewire_eq, "apply_preset") as apply_, \
+         patch.object(pipewire_eq, "is_active", return_value=False), \
+         patch.object(AVService, "_persisted_custom_eq_bands", return_value=[]), \
+         patch.object(AVService, "_persisted_eq_preset", return_value="flat"):
+        svc._restore_pipewire_eq()
+
+    apply_.assert_not_called()
