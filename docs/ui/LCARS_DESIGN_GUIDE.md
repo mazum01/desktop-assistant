@@ -7,9 +7,8 @@ you add or change UI, and update it when you introduce a new component.
 > System) is the fictional computer interface that Michael Okuda designed for
 > *Star Trek: The Next Generation*. It is Paramount/CBS intellectual property.
 > VERA uses an *LCARS-inspired* homage for personal, non-commercial use. This
-> document is an original summary of the visual conventions. The one adapted
-> element is the **image frame** (§3.1), whose layout comes from TheLCARS.com
-> template under its EULA; see the attribution there.
+> document is an original summary of the visual conventions. No artwork,
+> templates, fonts, or text have been copied from the sources listed at the end.
 
 ---
 
@@ -108,49 +107,55 @@ Reuse these components; don't invent near-duplicates.
 | **Card cross-link** | `h2 > a.card-link` | Floats right in the card title, ice-colored, ends with `›`. Use it instead of an "Open X" button. |
 | **Action button** | `.btn` | Existing rounded action buttons inside cards. Use them for verbs (Play, Say), not for state. |
 | **Decorative code** | `.lcars-code` | `aria-hidden`, sparse (3–6 on the page). |
-| **Image frame** | `figure.image-frame` | Wraps every live video stream. See §3.1. |
+| **Sweep card** | `.card.lcars-sweep-card` + `.lcars-sweep-bar` | Card frame closed by a bottom elbow; the thick bottom bar carries controls. Used for live video. See §3.1. |
 
-### 3.1 Image frame (live video)
+### 3.1 Sweep card (live video and other hero panels)
 
-Every live camera or video stream sits in an image frame, so streams look the
-same everywhere (Home Cam 1, Vision Cam 1/2, and future mouth-display or video
-playback views).
+The standard card frame (top-left elbow, top bar, left spine) closed by a
+**bottom elbow** into a thick bottom bar. Controls that act on the whole panel
+sit in that bar. Home's camera card uses it, with a Cam 1 / Cam 2 source switch.
 
 ```html
-<figure class="image-frame">
-  <figcaption class="image-frame-title"><span>Cam 1</span></figcaption>
-  <div class="image-frame-body"><div class="image-frame-holder">
-    <!-- the stream: <img>, <video>, or a .camera-wrap with overlays -->
-  </div></div>
-  <div aria-hidden="true" class="image-frame-base"><span></span><span></span><span></span><span></span><span></span></div>
-</figure>
+<section class="card lcars-sweep-card" id="…">
+  <span aria-hidden="true" class="frame-break frame-break-top"></span>
+  <span aria-hidden="true" class="frame-break frame-break-spine"></span>
+  <span aria-hidden="true" class="frame-break frame-break-lower"></span>
+  <h2>Title<a class="card-link" href="#/…">Workspace ›</a></h2>
+  … content …
+  <div class="lcars-sweep-bar">
+    <span aria-hidden="true" class="sweep-block"></span>
+    <div aria-label="…" class="cam-switch" role="group">
+      <button aria-pressed="true" type="button">Cam 1</button>
+      <button aria-pressed="false" type="button">Cam 2</button>
+    </div>
+  </div>
+</section>
 ```
 
-- **Anatomy:**
-  - a top bar in the workspace hue (`--imgf-primary`), with the title cut into
-    it near the right and a rounded lilac end cap;
-  - a left spine split by a black-gapped lilac segment;
-  - a black screen body with a rounded inner left edge;
-  - a peach ring (`--imgf-secondary`) around the picture;
-  - a base row of five blocks.
-- **Knobs** (custom properties on `.image-frame`):
-  - `--imgf-primary`, `--imgf-secondary` and `--imgf-accent` set the colours;
-  - `--imgf-bar` (22px, 16px on phones) and `--imgf-spine` (34px / 18px) set
-    the bar and spine sizes;
-  - `--imgf-field` is the surface behind the frame. It defaults to `--bg2`
-    (the card interior); set it to `--bg` when the frame sits on the page field.
-- The frame grows to fill its container (`flex: 1`). Put the aspect ratio on
-  the stream wrapper, not on the frame.
-- Keep the title short (camera name and role). It is the stream's visible
-  label, so don't repeat it in a separate caption above the frame.
-- **Attribution (required by the EULA):** the layout is adapted from the "LCARS
-  Image Frame" in the *LCARS Inspired Website Template* by
-  [www.TheLCARS.com](https://www.thelcars.com), with modifications: it is
-  rebuilt on VERA tokens, fluid width, and a flexible body. The CSS lives in
-  `style.css` with this credit in a comment, and the dashboard's
-  System → Help → Credits links to the site. The template's licence permits
-  personal, non-commercial use only. Don't copy any other template code
-  verbatim, and don't hotlink their assets.
+- **Bottom elbow:** `border-bottom: var(--lcars-bar-height)` in the panel hue,
+  with `border-bottom-left-radius: 53px 50px`. The browser draws the inner curve
+  from the unequal border widths, matching the top elbow.
+- **Frame breaks and colour changes:** these are the LCARS habit of chopping a
+  bar into differently coloured segments separated by black gaps.
+  - `.frame-break-top`: a lilac block cut into the top bar, about 18% from the
+    right.
+  - `.frame-break-spine`: a lilac segment across the spine, just below the
+    middle.
+  - `.frame-break-lower`: the rest of the spine below it turns peach, then a
+    black gap hands back to the panel hue just above the bottom elbow.
+
+  All three are decorative, `aria-hidden`, and `pointer-events: none`.
+- **Sweep bar:** right-aligned on the bottom bar.
+  - It holds an optional `.sweep-block` colour chip, then a segmented control.
+    Each piece is separated by a `--lcars-gap` black gap, and only the far
+    right end is rounded.
+  - Active segment: `--lcars-ice` with a white inset underline (`inset 0 -6px
+    #fff`). Inactive: `--lcars-dim`. State is carried by `aria-pressed`.
+- **Knobs:** `--sweep-spine`, `--sweep-top` and `--sweep-bar` on
+  `.lcars-sweep-card`. The phone media query reduces them to match the
+  narrower card frame.
+- **Behaviour:** use the sweep card for one hero panel per page. Don't put it
+  on every card, or it stops being special.
 
 ### States
 
@@ -213,7 +218,7 @@ playback views).
 - [ ] Reading order follows §4; the one-column fallback has been checked at ≤1150px and ≤700px.
 - [ ] Advanced and Engineering content is gated with `data-min-mode`.
 - [ ] State is readable without color; decorative codes are `aria-hidden`.
-- [ ] Live video uses the §3.1 image frame.
+- [ ] Hero / live-video panels use the §3.1 sweep card; frame breaks are decorative and `aria-hidden`.
 - [ ] Bumped the `?v=` cache keys in `index.html` (and `js/main.js` imports).
 
 ## 8. Sources
@@ -223,8 +228,7 @@ playback views).
 - Rick Sternbach & Michael Okuda, *Star Trek: The Next Generation Technical
   Manual* (Pocket Books, 1991). The original description of the in-universe
   interface.
-- *LCARS Inspired Website Template* by Jim Robertus,
-  <https://www.thelcars.com> (EULA: <https://www.thelcars.com/license/>). It
-  shows the LCARS conventions applied to HTML/CSS. Only the image frame layout
-  is adapted here, with attribution; the rest of the template is **not**
-  included.
+- *The LCARS Website*: <https://www.thelcars.com>. A fan reference showing the
+  LCARS conventions applied to HTML/CSS. Its templates are covered by their own
+  licence (personal, non-commercial use with attribution; no redistribution)
+  and are **not** included in this repository.

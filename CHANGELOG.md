@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.89.3] - 2026-10-26
+### Changed
+- Removed the LCARS image frame (and its TheLCARS.com credit) from all camera
+  streams. Vision & Motion goes back to its plain side-by-side feeds.
+- The Home camera card is now an LCARS **sweep card**: the existing card frame
+  is closed by a bottom elbow and a thick bottom bar. Frame breaks change colour
+  along the frame: a lilac block in the top bar, a lilac spine segment, and a
+  peach lower spine, each set off by black gaps.
+### Added
+- A Cam 1 / Cam 2 source switch in the Home camera's bottom sweep. The choice
+  is saved in the browser (`vera-home-cam`), only streams while Home is
+  visible, and changes the caption to "Cam 2 · raw view" (or "Cam N
+  unavailable" on error).
+- The sweep card component (§3.1) in `docs/ui/LCARS_DESIGN_GUIDE.md`, plus
+  layout and Node regression tests for the switch.
+
 ## [1.89.2] - 2026-10-26
 ### Changed
 - Live video streams (Home Cam 1, Vision Cam 1 and Cam 2) are now framed in an

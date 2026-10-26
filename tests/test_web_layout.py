@@ -660,15 +660,21 @@ def test_lcars_design_guide_is_referenced_by_agent_instructions():
     assert "docs/ui/LCARS_DESIGN_GUIDE.md" in (root / ".github" / "copilot-instructions.md").read_text()
 
 
-def test_live_video_streams_sit_in_lcars_image_frames(layout):
+def test_home_camera_has_lcars_bottom_sweep_with_camera_switch(layout):
     by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
-    for stream in ("home-camera", "camera-stream", "camera-stream2"):
-        ancestors = by_id[stream]["ancestors"]
-        assert any("image-frame" in a["attrs"].get("class", "").split() for a in ancestors), stream
-        assert any("image-frame-holder" in a["attrs"].get("class", "").split() for a in ancestors), stream
-    css = (STATIC / "style.css").read_text()
-    assert "LCARS Inspired Website Template by www.TheLCARS.com" in css
-    assert 'href="https://www.thelcars.com"' in (STATIC / "index.html").read_text()
+    card = by_id["card-home-camera"]
+    assert "lcars-sweep-card" in card["attrs"]["class"].split()
+    buttons = [node for node in layout if "data-home-cam" in node["attrs"]]
+    assert [b["attrs"]["data-home-cam"] for b in buttons] == ["1", "2"]
+    for button in buttons:
+        assert button["tag"] == "button" and "aria-pressed" in button["attrs"]
+        assert any("lcars-sweep-bar" in a["attrs"].get("class", "").split() for a in button["ancestors"])
+        assert card in button["ancestors"]
+    breaks = [node for node in layout if "frame-break" in node["attrs"].get("class", "").split()]
+    assert breaks and all(node["attrs"].get("aria-hidden") == "true" for node in breaks)
+    assert not any("image-frame" in node["attrs"].get("class", "") for node in layout)
+    home = (JS / "pages" / "home.js").read_text()
+    assert "2: '/stream2'" in home and "localStorage.setItem(CAMERA_KEY" in home
 
 
 def test_card_drag_and_drop_is_retired(layout):
@@ -730,9 +736,54 @@ def test_home_reuses_app_events_and_streams_camera_only_while_visible():
         assert re.search(r"CustomEvent\(['\"]" + re.escape(event) + r"['\"]", source), event
     assert "function _unregisterStream(id)" in source
     home = (JS / "pages" / "home.js").read_text()
-    assert "_registerStream('home-camera', '/stream')" in home
+    assert "window._registerStream('home-camera', CAMERA_STREAMS[homeCam])" in home
     assert "_unregisterStream('home-camera')" in home
     assert "innerHTML" not in home
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for Home regression")
+def test_home_camera_switch_streams_selected_camera_only_while_visible(tmp_path):
+    script = r"""
+const assert = require('node:assert/strict');
+const listeners = {}, registered = [], store = {};
+const el = id => ({id, attrs: {}, alt: '', textContent: '', dataset: {}, style: {setProperty() {}},
+  replaceChildren() {}, append() {},
+  setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k]; },
+  addEventListener() {}, classList: {toggle() {}, add() {}, remove() {}}});
+const nodes = {};
+const buttons = ['1', '2'].map(n => Object.assign(el('cam' + n), {dataset: {homeCam: n}}));
+globalThis.document = {
+  getElementById: id => (nodes[id] ||= el(id)),
+  querySelectorAll: sel => sel === '[data-home-cam]' ? buttons : [],
+  createElement: () => el('x'), hidden: false,
+};
+globalThis.localStorage = {getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; }};
+globalThis.window = {
+  addEventListener: (type, fn) => { listeners[type] = fn; },
+  _registerStream: (id, path) => registered.push([id, path]),
+  _unregisterStream: id => registered.push([id, null]),
+};
+globalThis.fetch = async () => ({ok: true, json: async () => ({})});
+import(require('node:url').pathToFileURL(process.argv[2]).href).then(({initHome, selectCamera}) => {
+  initHome();
+  selectCamera(2);
+  assert.deepEqual(registered, [], 'no stream while Home is hidden');
+  assert.equal(store['vera-home-cam'], '2');
+  assert.equal(buttons[1].attrs['aria-pressed'], 'true');
+  assert.equal(buttons[0].attrs['aria-pressed'], 'false');
+  listeners['vera:route']({detail: {tab: 'home'}});
+  assert.deepEqual(registered.at(-1), ['home-camera', '/stream2']);
+  selectCamera(1);
+  assert.deepEqual(registered.at(-1), ['home-camera', '/stream']);
+  listeners['vera:route']({detail: {tab: 'media', previous: 'home'}});
+  assert.deepEqual(registered.at(-1), ['home-camera', null]);
+  const count = registered.length;
+  selectCamera(2);
+  assert.equal(registered.length, count, 'switching while hidden must not start a stream');
+  process.exit(0);
+}).catch(err => { console.error(err); process.exit(1); });
+"""
+    _run_module_test(tmp_path, script, JS / "pages" / "home.js")
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for EQ regression")

@@ -171,7 +171,8 @@ function onStatus(data) {
   const named = (faces.faces || []).map(f => f.name).filter(n => n && n !== 'unknown');
   const count = Number(faces.count || 0);
   setText('home-faces', count ? `${count}${named.length ? ' · ' + named.join(', ') : ''}` : 'None');
-  setText('home-camera-caption', count ? `${count} face${count === 1 ? '' : 's'} in view` : 'No faces in view');
+  state.faceCount = count;
+  renderCameraCaption();
   const spoke = last['av.spoke'];
   setText('home-last-spoken', spoke && spoke.text ? `“${spoke.text}”` : '—');
 
@@ -394,15 +395,53 @@ async function repeat() {
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 
 let settingsTimer = null;
+let homeActive = false;
+
+// ── Camera source switch (bottom sweep) ────────────────────────────────────
+
+const CAMERA_STREAMS = { 1: '/stream', 2: '/stream2' };
+const CAMERA_KEY = 'vera-home-cam';
+let homeCam = 1;
+
+function renderCameraCaption() {
+  if (homeCam === 2) {
+    setText('home-camera-caption', 'Cam 2 · raw view');
+    return;
+  }
+  const count = state.faceCount || 0;
+  setText('home-camera-caption', count ? `${count} face${count === 1 ? '' : 's'} in view` : 'No faces in view');
+}
+
+function renderCameraSwitch() {
+  document.querySelectorAll('[data-home-cam]').forEach(btn => {
+    btn.setAttribute('aria-pressed', String(Number(btn.dataset.homeCam) === homeCam));
+  });
+  const img = $('home-camera');
+  if (img) img.alt = `Live view from camera ${homeCam}`;
+}
+
+function startCamera() {
+  if (typeof window._registerStream === 'function') window._registerStream('home-camera', CAMERA_STREAMS[homeCam]);
+}
+
+export function selectCamera(cam) {
+  homeCam = Number(cam) === 2 ? 2 : 1;
+  try { localStorage.setItem(CAMERA_KEY, String(homeCam)); } catch { /* storage unavailable */ }
+  renderCameraSwitch();
+  renderCameraCaption();
+  if (homeActive) startCamera();
+}
 
 function enter() {
-  if (typeof window._registerStream === 'function') window._registerStream('home-camera', '/stream');
+  homeActive = true;
+  startCamera();
   refreshSettings();
   clearInterval(settingsTimer);
   settingsTimer = setInterval(() => { if (!document.hidden) refreshSettings(); }, SETTINGS_REFRESH_MS);
 }
 
 function leave() {
+  homeActive = false;
   if (typeof window._unregisterStream === 'function') window._unregisterStream('home-camera');
   clearInterval(settingsTimer);
   settingsTimer = null;
@@ -438,5 +477,13 @@ export function initHome() {
   $('home-say-btn')?.addEventListener('click', say);
   $('home-say-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') say(); });
   $('home-repeat-btn')?.addEventListener('click', repeat);
+  try { homeCam = localStorage.getItem(CAMERA_KEY) === '2' ? 2 : 1; } catch { homeCam = 1; }
+  document.querySelectorAll('[data-home-cam]').forEach(btn => {
+    btn.addEventListener('click', () => selectCamera(btn.dataset.homeCam));
+  });
+  $('home-camera')?.addEventListener('error', () => {
+    if (homeActive && $('home-camera').getAttribute('src')) setText('home-camera-caption', `Cam ${homeCam} unavailable`);
+  });
+  renderCameraSwitch();
   renderAlerts();
 }

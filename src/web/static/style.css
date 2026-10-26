@@ -324,6 +324,14 @@ main {
   min-width: 240px;     /* never collapse below this */
 }
 /* Consistent 4:3 box for both feeds — black-bars if aspect differs */
+.camera-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
 .camera-wrap {
   position: relative;
   display: block;
@@ -878,8 +886,6 @@ main {
   padding: 1px 4px;
   font-size: .8rem;
 }
-.help-credit { margin: 4px 0; color: var(--text-dim); font-size: 13px; }
-.help-credit a { color: var(--lcars-ice); }
 .help-list {
   font-size: .85rem;
   padding-left: 1.2rem;
@@ -1265,6 +1271,7 @@ input[type="checkbox"] { accent-color: var(--orange); }
 .camera-feeds { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); overflow: visible; }
 .camera-feed-wrap { min-width: 0; }
 .camera-wrap { aspect-ratio: 16 / 9; border-radius: 0; }
+.camera-label { color: var(--yellow); }
 .camera-wrap img { border-radius: 0 !important; }
 .advanced-panel summary { color: var(--yellow); cursor: pointer; padding: 8px 0; font-weight: 600; }
 .advanced-panel[open] summary { margin-bottom: 16px; }
@@ -1335,61 +1342,49 @@ header .badge-unknown { background: var(--lcars-dim); }
 .card h2 .card-link { float: right; margin-left: 12px; color: var(--lcars-ice); font: 600 15px/1.7 var(--console-font); letter-spacing: .04em; text-decoration: none; }
 .card h2 .card-link:hover { text-decoration: underline; }
 
-/* LCARS image frame for live video. Layout adapted from the "LCARS Image
-   Frame" in the LCARS Inspired Website Template by www.TheLCARS.com, with
-   modifications: rebuilt on VERA tokens, fluid width, and a flexible body. */
-.image-frame {
-  --imgf-primary: var(--panel-accent);
-  --imgf-secondary: var(--lcars-peach);
-  --imgf-accent: var(--lcars-lilac);
-  --imgf-bar: 22px;
-  --imgf-spine: 34px;
-  --imgf-split: 58%;
-  --imgf-field: var(--bg2); /* surface the frame sits on; cut-outs use it */
-  position: relative; display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0;
-  background: linear-gradient(var(--imgf-primary) var(--imgf-split), var(--imgf-secondary) var(--imgf-split));
-  border-radius: 40px 0 0 40px;
+
+/* LCARS sweep card: the standard card frame closed by a bottom elbow and a
+   thick bottom bar that carries controls. Black-gapped "frame breaks" change
+   colour along the top bar and spine. See LCARS_DESIGN_GUIDE.md §3.1. */
+.lcars-sweep-card {
+  --sweep-spine: var(--lcars-frame-spine);
+  --sweep-top: var(--lcars-topbar-bar);
+  --sweep-bar: var(--lcars-bar-height);
+  position: relative;
+  border-bottom: var(--sweep-bar) solid var(--panel-accent);
+  border-bottom-left-radius: 53px 50px;
 }
-.image-frame::before {
-  content: ""; position: absolute; top: 0; right: 0;
-  width: calc(var(--imgf-bar) * 2); height: var(--imgf-bar); background: var(--imgf-field);
+.frame-break { position: absolute; pointer-events: none; }
+.frame-break-top {
+  top: calc(-1 * var(--sweep-top)); right: 18%; width: 22%; max-width: 160px; height: var(--sweep-top);
+  background: var(--lcars-lilac); border-inline: var(--lcars-gap) solid #000;
 }
-.image-frame::after {
-  content: ""; position: absolute; left: 0; top: var(--imgf-split);
-  width: var(--imgf-spine); height: 64px;
-  border-block: var(--lcars-gap) solid var(--imgf-field); background: var(--imgf-accent);
+.frame-break-spine {
+  left: calc(-1 * var(--sweep-spine)); width: var(--sweep-spine); top: 46%; height: 64px;
+  background: var(--lcars-lilac); border-block: var(--lcars-gap) solid #000;
 }
-.image-frame-title {
-  position: relative; z-index: 1; display: flex; justify-content: flex-end;
-  height: var(--imgf-bar); padding-left: 40px;
-  border-right: calc(var(--imgf-bar) * 2) solid var(--imgf-accent);
-  border-radius: 0 999px 999px 0;
+.frame-break-lower {
+  left: calc(-1 * var(--sweep-spine)); width: var(--sweep-spine); top: calc(46% + 64px); bottom: 24px;
+  background: var(--lcars-peach); border-bottom: var(--lcars-gap) solid #000;
 }
-.image-frame-title span {
-  padding: 0 var(--lcars-gap); border-right: var(--lcars-gap) solid var(--imgf-field); background: var(--imgf-field);
-  color: var(--imgf-secondary); font: 600 calc(var(--imgf-bar) + 4px) / var(--imgf-bar) var(--console-font);
-  letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.lcars-sweep-bar {
+  position: absolute; right: -1px; bottom: calc(-1 * var(--sweep-bar)); height: var(--sweep-bar);
+  display: flex; background: #000; border-radius: 0 calc(var(--sweep-bar) / 2) calc(var(--sweep-bar) / 2) 0;
 }
-.image-frame-body {
-  display: flex; flex: 1 1 auto; margin-left: var(--imgf-spine); padding: 10px;
-  background: #000; border-radius: 26px 0 0 26px;
+.sweep-block { width: 56px; margin-left: var(--lcars-gap); background: var(--lcars-lilac); }
+.cam-switch { display: flex; gap: var(--lcars-gap); margin-left: var(--lcars-gap); }
+.cam-switch button {
+  display: flex; align-items: flex-end; justify-content: flex-end;
+  min-width: 84px; padding: 0 12px 5px; border: 0; border-radius: 0;
+  background: var(--lcars-dim); color: #000; cursor: pointer;
+  font: 600 17px/1 var(--console-font); letter-spacing: .04em; text-transform: uppercase;
 }
-.image-frame-holder {
-  display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; padding: 8px;
-  border: 2px solid var(--imgf-secondary); border-radius: 18px;
-}
-.image-frame-holder > * { flex: 1 1 auto; border-radius: 10px; overflow: hidden; }
-.image-frame-base {
-  display: grid; grid-template-columns: 20% 13% 28px 15% 1fr;
-  height: var(--imgf-bar); margin-left: calc(var(--imgf-spine) * 2);
-  border-left: var(--lcars-gap) solid var(--imgf-field);
-}
-.image-frame-base span:nth-child(1) { background: var(--imgf-accent); border-right: var(--lcars-gap) solid var(--imgf-field); }
-.image-frame-base span:nth-child(2) { background: var(--imgf-secondary); border-right: var(--lcars-gap) solid var(--imgf-field); }
-.image-frame-base span:nth-child(3) { background: var(--imgf-field); border-left: 9px solid var(--imgf-accent); border-right: 9px solid var(--imgf-secondary); }
-.image-frame-base span:nth-child(4) { background: var(--imgf-secondary); border-left: var(--lcars-gap) solid var(--imgf-field); }
-.image-frame-base span:nth-child(5) { background: var(--imgf-field); }
-.camera-feed-wrap { display: flex; flex-direction: column; }
+.cam-switch button:last-child { border-radius: 0 calc(var(--sweep-bar) / 2) calc(var(--sweep-bar) / 2) 0; padding-right: 18px; }
+.cam-switch button[aria-pressed="true"] { background: var(--lcars-ice); box-shadow: inset 0 -6px #fff; }
+.cam-switch button:hover { box-shadow: inset 0 0 0 2px #000; }
+.cam-switch button[aria-pressed="true"]:hover { box-shadow: inset 0 -6px #fff, inset 0 0 0 2px #000; }
+.cam-switch button:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+#card-home-camera { padding-bottom: 14px; }
 
 /* ── Home ──────────────────────────────────────────────────────── */
 #tab-home {
@@ -1413,7 +1408,7 @@ header .badge-unknown { background: var(--lcars-dim); }
 .home-alerts { margin-top: 6px; gap: 6px; }
 .home-alerts button.pill { cursor: pointer; font: inherit; }
 .home-muted { color: var(--text-dim); font-size: 12px; margin-top: 6px; }
-.home-camera-link { display: block; min-height: 220px; background: #000; }
+.home-camera-link { display: block; flex: 1 1 auto; min-height: 220px; background: #000; overflow: hidden; }
 .home-camera { width: 100%; height: 100%; object-fit: cover; display: block; }
 .home-media { display: flex; gap: 14px; align-items: center; min-height: 64px; }
 .home-media-art { width: 64px; height: 64px; object-fit: cover; }
@@ -1493,9 +1488,7 @@ header .badge-unknown { background: var(--lcars-dim); }
   .mode-toggle button, header .badge { min-width: 0; padding: 0 8px 4px; font-size: 14px; }
   .home-status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .home-alerts-box { grid-column: 1 / -1; }
-  .image-frame { --imgf-bar: 16px; --imgf-spine: 18px; border-radius: 24px 0 0 24px; }
-  .image-frame::after { height: 40px; }
-  .image-frame-body { padding: 6px; border-radius: 14px 0 0 14px; }
-  .image-frame-holder { padding: 4px; border-radius: 10px; }
-  .image-frame-base { grid-template-columns: 20% 13% 22px 15% 1fr; }
+  .lcars-sweep-card { --sweep-spine: 20px; --sweep-top: 8px; border-bottom-left-radius: 40px 40px; }
+  .cam-switch button { min-width: 64px; padding: 0 10px 4px; font-size: 14px; }
+  .sweep-block { width: 32px; }
 }
