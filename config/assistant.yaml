@@ -143,6 +143,10 @@ notifications:
     absence_min: 30
     enabled: true
     min_interval_min: 60
+  hailo_alerts:
+    enabled: true
+    message: Warning.  A.I. system high temperature alarm.
+    warn_celsius: 85.0
   thermal_alerts:
     critical_celsius: 85.0
     enabled: true

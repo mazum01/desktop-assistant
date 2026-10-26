@@ -34,6 +34,9 @@ class SystemStatusSkill(Skill):
         parts: list[str] = []
         if temp is not None:
             parts.append(f"My CPU temperature is {temp:.1f} degrees Celsius")
+        hailo = self._data.get("hailo_temperature")
+        if hailo is not None:
+            parts.append(f"A.I. accelerator is {hailo:.1f} degrees")
         if fan is not None:
             parts.append(f"fan is at {fan:.0f} percent")
         if cpu is not None:

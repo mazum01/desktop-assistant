@@ -5,6 +5,9 @@ Monitors system health and presence, and speaks proactively when:
 1. **Thermal alert** — CPU temperature crosses a warning or critical threshold.
    Rate-limited per severity so the same alert isn't repeated too often.
 
+   A separate alarm fires when the Hailo accelerator die temperature
+   (``thermal.hailo``) crosses ``hailo_warn_celsius``.
+
 2. **Long absence** — no face has been seen for ``absence_alert_min`` minutes.
    DA says something to draw attention when a person wanders back into range
    (or just hasn't been around in a while).
@@ -12,6 +15,7 @@ Monitors system health and presence, and speaks proactively when:
 Topics subscribed
 -----------------
 thermal.temp    ``{"celsius": float, "fan_duty": float}``
+thermal.hailo   ``{"celsius": float|None, "ok": bool}``
 perception.faces ``{count: int, …}``
 av.spoke        (suppresses alerts while TTS is active)
 
@@ -51,6 +55,9 @@ class NotificationService(Service):
         absence_alerts_enabled: bool = True,
         absence_min: float = 30.0,
         absence_rate_limit_min: float = 60.0,
+        hailo_alerts_enabled: bool = True,
+        hailo_warn_celsius: float = 85.0,
+        hailo_warn_text: str = "Warning. A.I. system high temperature alarm.",
     ) -> None:
         super().__init__(bus=bus)
         self._qh = quiet_hours
@@ -61,6 +68,9 @@ class NotificationService(Service):
         self._absence_alerts_enabled = absence_alerts_enabled
         self._absence_s = absence_min * 60.0
         self._absence_rate_limit_s = absence_rate_limit_min * 60.0
+        self._hailo_alerts_enabled = hailo_alerts_enabled
+        self._hailo_warn_celsius = hailo_warn_celsius
+        self._hailo_warn_text = hailo_warn_text
 
         self._last_temp: float = 0.0
         self._speaking: bool = False
@@ -76,6 +86,7 @@ class NotificationService(Service):
     def on_start(self) -> None:
         self._unsubs += [
             self.bus.subscribe("thermal.temp",     self._on_thermal),
+            self.bus.subscribe("thermal.hailo",    self._on_hailo_thermal),
             self.bus.subscribe("perception.faces", self._on_faces),
             self.bus.subscribe("av.spoke",         self._on_spoke),
             self.bus.subscribe("av.speaking_started", self._on_speaking_started),
@@ -132,6 +143,15 @@ class NotificationService(Service):
                 f"Heads up — my CPU is {self._last_temp:.0f} degrees Celsius. "
                 "I'm running a bit warm.",
             )
+
+    def _on_hailo_thermal(self, _topic, payload) -> None:
+        if not self._hailo_alerts_enabled or not isinstance(payload, dict):
+            return
+        temp = payload.get("celsius")
+        if temp is None:
+            return
+        if float(temp) >= self._hailo_warn_celsius:
+            self._maybe_notify("hailo_warn", self._hailo_warn_text)
 
     def _on_faces(self, _topic, payload) -> None:
         if isinstance(payload, dict) and payload.get("count", 0) > 0:

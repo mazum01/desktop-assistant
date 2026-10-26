@@ -43,3 +43,9 @@ def test_handle_no_data():
     m = skill.match("status report")
     result = skill.handle("status report", m, _bus())
     assert isinstance(result, str)
+
+
+def test_status_includes_hailo_temperature():
+    skill = SystemStatusSkill(live_data={"temperature": 50.0, "hailo_temperature": 42.25})
+    reply = skill.handle("system status", None, None)
+    assert "A.I. accelerator is 42.2 degrees" in reply or "A.I. accelerator is 42.3 degrees" in reply

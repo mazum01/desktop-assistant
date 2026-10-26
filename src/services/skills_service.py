@@ -12,6 +12,7 @@ Topics subscribed
 -----------------
 av.utterance        ``{"text": str}``
 thermal.temp        ``{"celsius": float}``  — feeds SystemStatusSkill live data
+thermal.hailo       ``{"celsius": float|None}`` — Hailo die temp for status reports
 av.spoke            (used to update cpu_percent in live_data)
 """
 
@@ -111,6 +112,7 @@ class SkillsService(Service):
     def on_start(self) -> None:
         self.bus.subscribe("av.utterance",  self._on_utterance)
         self.bus.subscribe("thermal.temp",  self._on_thermal)
+        self.bus.subscribe("thermal.hailo", self._on_hailo_thermal)
         # Start skills that have background threads
         self._reminder_skill.start(self.bus)
         log.info("SkillsService started.")
@@ -132,6 +134,11 @@ class SkillsService(Service):
         matched = self._registry.dispatch(text, self.bus)
         if not matched:
             log.debug("SkillsService: no skill matched %r", text)
+
+    def _on_hailo_thermal(self, _topic, payload) -> None:
+        if isinstance(payload, dict):
+            celsius = payload.get("celsius")
+            self._live_data["hailo_temperature"] = None if celsius is None else float(celsius)
 
     def _on_thermal(self, _topic, payload) -> None:
         if isinstance(payload, dict):

@@ -480,19 +480,25 @@ function updateDashboard(data) {
 
   // Telemetry
   const temp = last["thermal.temp"];
+  const formatTemp = (celsius) => {
+    if (celsius == null || Number.isNaN(Number(celsius))) return "—";
+    return `${num(celsius, 1)} °C / ${num((Number(celsius) * 9) / 5 + 32, 1)} °F`;
+  };
+  const hailo = last["thermal.hailo"];
+  const hailoEl = el("stat-temp-hailo");
+  if (hailoEl && hailo) {
+    hailoEl.textContent = hailo.ok === false ? "unavailable" : formatTemp(hailo.celsius);
+    hailoEl.title = hailo.ok === false ? "Hailo control channel not responding" :
+      `ts0 ${num(hailo.ts0_celsius, 1)} °C · ts1 ${num(hailo.ts1_celsius, 1)} °C`;
+    hailoEl.style.color = hailo.ok === false ? "var(--red)" : "var(--blue)";
+  }
   if (temp) {
     const sensorLabel = el("blend-case-label");
     if (sensorLabel) {
       sensorLabel.textContent = temp.sensor_type ? `Case (${temp.sensor_type}):` : "Case sensor:";
     }
     const renderTemp = (elemId, celsius) => {
-      if (celsius == null || Number.isNaN(Number(celsius))) {
-        el(elemId).textContent = "—";
-      } else {
-        const c = num(celsius, 1);
-        const f = num((Number(celsius) * 9) / 5 + 32, 1);
-        el(elemId).textContent = `${c} °C / ${f} °F`;
-      }
+      el(elemId).textContent = formatTemp(celsius);
       el(elemId).style.color = temp.ok === false ? "var(--red)" : "var(--blue)";
     };
 

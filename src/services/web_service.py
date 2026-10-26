@@ -1201,7 +1201,7 @@ class WebService:
         """Pull latest status from the bus (same topics as IPC bridge)."""
         self._refresh_remote_service_states()
         snapshot_topics = (
-            "thermal.temp", "thermal.fan", "thermal.rpm",
+            "thermal.temp", "thermal.fan", "thermal.rpm", "thermal.hailo",
             "motion.position",
             "vision.frame_ready", "vision.error",
             "audio.level", "audio.spectrum", "audio.spectrum_test_reference",

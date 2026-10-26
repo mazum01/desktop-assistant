@@ -10,6 +10,9 @@ Topics published:
     thermal.rpm      {"rpm": int|None, "enabled": bool}
     thermal.critical {"celsius": float}        — when temp > critical_c
     thermal.error    {"reason": str}           — sensor failure / failsafe
+    thermal.hailo    {"celsius": float|None, "ts0_celsius": float|None,
+                      "ts1_celsius": float|None, "ok": bool}
+                     — Hailo die temperature (monitoring only, no fan effect)
 
 Topics subscribed:
     thermal.fan.set_override   {"duty": float}  — pin fan to a fixed duty %
@@ -19,6 +22,7 @@ Topics subscribed:
 from __future__ import annotations
 
 import logging
+import time
 from typing import Optional
 
 from src.core.bus import MessageBus
@@ -31,12 +35,21 @@ class ThermalService(Service):
     name = "thermal"
     tick_seconds = 1.0
 
-    def __init__(self, bus: Optional[MessageBus] = None, manager=None) -> None:
+    def __init__(
+        self,
+        bus: Optional[MessageBus] = None,
+        manager=None,
+        hailo_reader=None,
+        hailo_poll_interval_s: float = 5.0,
+    ) -> None:
         super().__init__(bus=bus)
         self._manager_factory = manager
         self._manager = None
         self._last_critical = False
         self._unsubs: list = []
+        self._hailo_reader = hailo_reader
+        self._hailo_poll_interval_s = hailo_poll_interval_s
+        self._next_hailo_poll = 0.0
 
     def on_start(self) -> None:
         if self._manager is None:
@@ -51,6 +64,7 @@ class ThermalService(Service):
         log.info("ThermalService started")
 
     def run_tick(self) -> None:
+        self._poll_hailo()
         m = self._manager
         if m is None:
             return
@@ -85,6 +99,30 @@ class ThermalService(Service):
             if critical and not self._last_critical:
                 self.bus.publish("thermal.critical", {"celsius": temp_c})
             self._last_critical = critical
+
+    def _poll_hailo(self) -> None:
+        if self._hailo_reader is None:
+            return
+        now = time.monotonic()
+        if now < self._next_hailo_poll:
+            return
+        self._next_hailo_poll = now + self._hailo_poll_interval_s
+        reading = self._hailo_reader.read()
+        if reading is None:
+            self.bus.publish(
+                "thermal.hailo",
+                {"celsius": None, "ts0_celsius": None, "ts1_celsius": None, "ok": False},
+            )
+            return
+        self.bus.publish(
+            "thermal.hailo",
+            {
+                "celsius":     reading.celsius,
+                "ts0_celsius": reading.ts0_celsius,
+                "ts1_celsius": reading.ts1_celsius,
+                "ok":          True,
+            },
+        )
 
     def _publish_fan(self, m, duty) -> None:
         self.bus.publish(

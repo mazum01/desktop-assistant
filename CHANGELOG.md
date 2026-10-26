@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.87.0] - 2026-10-26
+### Added
+- Hailo AI accelerator thermal monitoring. The thermal service reads both
+  on-die sensors through the HailoRT control channel every 5 s (without
+  disturbing running inference) and publishes `thermal.hailo`. Monitoring
+  only — it does not affect fan control.
+- Dashboard "Hailo Temp" telemetry tile, Hailo temperature in the spoken
+  system-status report, and a spoken "Warning. A.I. system high temperature
+  alarm." when the die reaches 85 °C (configurable under
+  `notifications.hailo_alerts`; polling under `hailo` in `thermal.yaml`).
+
 ## [1.86.1] - 2026-10-26
 ### Fixed
 - Thermal service no longer dies when the TMP117/TMP102 case sensor is absent

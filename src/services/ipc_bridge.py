@@ -454,7 +454,7 @@ class IPCBridge(Service):
 
         # Topics we want to surface in the dashboard.
         snapshot_topics = (
-            "thermal.temp", "thermal.fan", "thermal.rpm", "thermal.error",
+            "thermal.temp", "thermal.fan", "thermal.rpm", "thermal.error", "thermal.hailo",
             "motion.position",
             "vision.frame_ready", "vision.error",
             "audio.level", "audio.error",

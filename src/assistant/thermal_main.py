@@ -19,6 +19,7 @@ from src.assistant.runner import run_services
 from src.core.bus import MessageBus
 from src.services.ipc_bridge import IPCBridge
 from src.services.thermal_service import ThermalService
+from src.thermal.hailo_temp import HailoMonitorConfig, HailoTemperatureReader
 
 
 # Separate IPC endpoints from the core process so both can run side by
@@ -30,7 +31,12 @@ THERMAL_REP = "ipc:///tmp/desktop-assistant-thermal.rep"
 
 def main() -> int:
     bus = MessageBus()  # local bus — published events also fan out via IPCBridge
-    thermal = ThermalService(bus=bus)
+    hailo_cfg = HailoMonitorConfig.from_yaml()
+    thermal = ThermalService(
+        bus=bus,
+        hailo_reader=HailoTemperatureReader() if hailo_cfg.enabled else None,
+        hailo_poll_interval_s=hailo_cfg.poll_interval_s,
+    )
     ipc = IPCBridge(
         bus=bus,
         pub_endpoint=THERMAL_PUB,

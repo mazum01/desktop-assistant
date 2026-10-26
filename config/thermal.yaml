@@ -30,3 +30,6 @@ thresholds:
   poll_interval_s: 1.0
   spin_up_duty: 60.0
   spin_up_duration_s: 3.0
+hailo:
+  enabled: true
+  poll_interval_s: 5.0

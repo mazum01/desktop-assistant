@@ -145,6 +145,7 @@ def build_node(
     notif_cfg = cfg.get("notifications", {})
     notif_thermal_cfg = notif_cfg.get("thermal_alerts", {})
     notif_absence_cfg = notif_cfg.get("absence_alerts", {})
+    notif_hailo_cfg = notif_cfg.get("hailo_alerts", {})
     notif = NotificationService(
         bus=node.bus,
         quiet_hours=qh,
@@ -155,6 +156,10 @@ def build_node(
         absence_alerts_enabled=bool(notif_absence_cfg.get("enabled", True)),
         absence_min=float(notif_absence_cfg.get("absence_min", 30.0)),
         absence_rate_limit_min=float(notif_absence_cfg.get("min_interval_min", 60.0)),
+        hailo_alerts_enabled=bool(notif_hailo_cfg.get("enabled", True)),
+        hailo_warn_celsius=float(notif_hailo_cfg.get("warn_celsius", 85.0)),
+        hailo_warn_text=str(notif_hailo_cfg.get(
+            "message", "Warning. A.I. system high temperature alarm.")),
     )
 
     tg_cfg = cfg.get("telegram", {})

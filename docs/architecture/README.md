@@ -30,7 +30,7 @@ Keep this list in sync with the diagram.
 
 * `service.started` / `service.stopped` (all services)
 * `system.startup_status` (runner startup/restart progress + ready/degraded state)
-* **thermal**: `thermal.temp`, `thermal.fan`, `thermal.rpm`, `thermal.critical`, `thermal.error`
+* **thermal**: `thermal.temp`, `thermal.fan`, `thermal.rpm`, `thermal.critical`, `thermal.error`, `thermal.hailo` (Hailo die temp, every 5 s, monitor-only)
 * **motion** (in): `motion.pan_to`, `motion.relax`, `motion.stop`
 * **motion** (out): `motion.position`, `motion.moved`
 * **vision** (out): `vision.frame_ready`, `vision.error`, `vision.still_saved`

@@ -99,3 +99,26 @@ def test_face_seen_resets_last_seen():
     time.sleep(0.01)
     svc._on_faces("perception.faces", {"count": 1})
     assert svc._last_face_seen > before
+
+
+def test_hailo_alarm_speaks_configured_text_above_threshold():
+    svc, bus = _make_service(
+        hailo_warn_celsius=85.0,
+        hailo_warn_text="Warning.  A.I. system high temperature alarm.",
+        thermal_rate_limit_min=0,
+    )
+    svc._on_hailo_thermal("thermal.hailo", {"celsius": 84.9, "ok": True})
+    bus.publish.assert_not_called()
+    svc._on_hailo_thermal("thermal.hailo", {"celsius": 85.0, "ok": True})
+    bus.publish.assert_called_once_with(
+        "av.say", {"text": "Warning.  A.I. system high temperature alarm."}
+    )
+
+
+def test_hailo_alarm_ignores_missing_reading_and_disabled_alerts():
+    svc, bus = _make_service(thermal_rate_limit_min=0)
+    svc._on_hailo_thermal("thermal.hailo", {"celsius": None, "ok": False})
+    disabled, disabled_bus = _make_service(hailo_alerts_enabled=False, thermal_rate_limit_min=0)
+    disabled._on_hailo_thermal("thermal.hailo", {"celsius": 99.0, "ok": True})
+    bus.publish.assert_not_called()
+    disabled_bus.publish.assert_not_called()
