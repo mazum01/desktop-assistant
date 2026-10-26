@@ -13,7 +13,7 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&amp;display=swap" rel="stylesheet"/>
-<link href="/static/style.css?v=1.89.0" rel="stylesheet"/>
+<link href="/static/style.css?v=1.89.1" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -31,7 +31,7 @@
 <button aria-pressed="false" data-mode-option="advanced" title="Adds tuning detail and readouts" type="button">Advanced</button>
 <button aria-pressed="false" data-mode-option="engineering" title="Raw diagnostics and low-level controls" type="button">Engineering</button>
 </div>
-<div class="badge badge-unknown" id="health-badge">⬤ connecting</div>
+<div class="badge badge-unknown" id="health-badge">Connecting</div>
 </div>
 <span aria-hidden="true" class="lcars-code frame-code">47-0821 / 1701</span>
 </header>
@@ -64,23 +64,22 @@
 </div>
 
 <div aria-labelledby="nav-home" class="tab-pane" data-description="At-a-glance status and the controls you use every day." data-title="Home" id="tab-home" role="tabpanel">
-<section aria-label="Status" class="card home-wide" id="card-home-status">
+<section aria-label="Status" class="card" id="card-home-status">
 <h2>Status</h2>
-<div class="grid-4 home-status-strip">
+<div class="home-status-strip">
 <div class="stat-box"><div class="stat-label">Health</div><div class="stat-value" id="home-health">—</div></div>
 <div class="stat-box"><div class="stat-label">Room</div><div class="stat-value" id="home-room">—</div></div>
 <div class="stat-box"><div class="stat-label">People</div><div class="stat-value" id="home-faces">—</div></div>
-<div class="stat-box"><div class="stat-label">Last spoken</div><div class="stat-value home-spoken" id="home-last-spoken">—</div></div>
+<div class="stat-box home-alerts-box"><div class="stat-label">Alerts</div><div aria-label="Alerts" aria-live="polite" class="pill-row home-alerts" id="home-alerts"></div></div>
 </div>
-<div aria-label="Alerts" aria-live="polite" class="pill-row home-alerts" id="home-alerts"></div>
 </section>
 <section aria-label="Camera" class="card" id="card-home-camera">
-<h2>Camera</h2>
+<h2>Camera<a class="card-link" href="#/vision">Vision ›</a></h2>
 <a class="home-camera-link" href="#/vision" id="home-camera-link" title="Open Vision &amp; Motion"><img alt="Live view from camera 1" class="home-camera" id="home-camera"/></a>
 <p class="home-muted" id="home-camera-caption">—</p>
 </section>
 <section aria-label="Now playing" class="card" id="card-home-media">
-<h2>Now Playing</h2>
+<h2>Now Playing<a class="card-link" href="#/media">Media ›</a></h2>
 <div class="home-media">
 <img alt="" class="home-media-art" hidden="" id="home-media-art"/>
 <div class="home-media-text">
@@ -95,37 +94,36 @@
 <button class="btn btn-secondary" id="home-mute-btn" type="button">🔇 Mute</button>
 </div>
 <label class="home-volume"><span>Volume</span><input aria-label="Volume" id="home-volume" max="100" min="0" type="range" value="50"/><span id="home-volume-label">—</span></label>
-<button class="btn btn-secondary btn-sm" onclick="switchTab('controls')" type="button">Open Media</button>
 </section>
 <section aria-label="Quick toggles" class="card" id="card-home-toggles">
 <h2>Quick Toggles</h2>
-<div class="home-toggles">
-<label class="home-toggle"><span>Privacy mode</span><span class="toggle-label"><input id="home-toggle-privacy" type="checkbox"/><span class="toggle-slider"></span></span></label>
-<label class="home-toggle"><span>Quiet hours <small class="home-muted" id="home-quiet-window"></small></span><span class="toggle-label"><input id="home-toggle-quiet" type="checkbox"/><span class="toggle-slider"></span></span></label>
-<label class="home-toggle"><span>Mute audio</span><span class="toggle-label"><input id="home-toggle-mute" type="checkbox"/><span class="toggle-slider"></span></span></label>
-<label class="home-toggle"><span>Face tracking</span><span class="toggle-label"><input id="home-toggle-face" type="checkbox"/><span class="toggle-slider"></span></span></label>
-<label class="home-toggle"><span>Idle motion</span><span class="toggle-label"><input id="home-toggle-idle" type="checkbox"/><span class="toggle-slider"></span></span></label>
+<div class="lcars-toggle-grid">
+<label class="lcars-toggle"><input id="home-toggle-privacy" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Privacy</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
+<label class="lcars-toggle"><input id="home-toggle-quiet" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Quiet hours</span><small class="lcars-toggle-detail" id="home-quiet-window"></small><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
+<label class="lcars-toggle"><input id="home-toggle-mute" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Mute</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
+<label class="lcars-toggle"><input id="home-toggle-face" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Face tracking</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
+<label class="lcars-toggle"><input id="home-toggle-idle" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Idle motion</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
 </div>
 <p aria-live="polite" class="home-muted" id="home-action-status"></p>
 </section>
 <section aria-label="Say something" class="card" id="card-home-say">
-<h2>Say Something</h2>
+<h2>Say Something<a class="card-link" href="#/voice">Voice ›</a></h2>
 <div class="row-input">
 <input aria-label="Text for VERA to speak" id="home-say-input" placeholder="Type something for VERA to say…" type="text"/>
 <button class="btn btn-primary" id="home-say-btn" type="button">Say</button>
 </div>
-<div class="home-repeat">
-<button class="btn btn-secondary btn-sm" id="home-repeat-btn" type="button">🔁 Repeat last</button>
+<div class="home-last-spoken">
+<div><span class="stat-label">Last spoken</span><p id="home-last-spoken">—</p></div>
+<button class="btn btn-secondary btn-sm" id="home-repeat-btn" type="button">↻ Repeat</button>
 </div>
 </section>
 <section aria-label="Environment" class="card" id="card-home-environment">
-<h2>Environment</h2>
+<h2>Environment<a class="card-link" href="#/smart-home">Smart Home ›</a></h2>
 <div class="home-iot" id="home-iot"><p class="home-muted">Waiting for devices…</p></div>
-<button class="btn btn-secondary btn-sm" onclick="switchTab('smart-home')" type="button">Open Smart Home</button>
 </section>
-<section aria-label="Thermal and scene" class="card" data-min-mode="advanced" id="card-home-thermal">
+<section aria-label="Thermal and scene" class="card home-wide" data-min-mode="advanced" id="card-home-thermal">
 <h2>Thermal &amp; Scene</h2>
-<div class="grid-4">
+<div class="home-readouts">
 <div class="stat-box"><div class="stat-label">Case</div><div class="stat-value" id="home-temp-case">—</div></div>
 <div class="stat-box"><div class="stat-label">SoC</div><div class="stat-value" id="home-temp-soc">—</div></div>
 <div class="stat-box"><div class="stat-label">Blended</div><div class="stat-value" id="home-temp-blended">—</div></div>
@@ -136,11 +134,8 @@
 </div>
 </section>
 <section aria-label="Engineering readout" class="card home-wide" data-min-mode="engineering" id="card-home-engineering">
-<h2>Engineering Readout</h2>
-<div class="home-eng">
+<h2>Engineering Readout<a class="card-link" href="#/overview">Overview ›</a></h2>
 <code id="home-eng-line">—</code>
-<button class="btn btn-secondary btn-sm" id="home-eng-link" type="button">Open Overview</button>
-</div>
 </section>
 </div>
 
@@ -1303,8 +1298,8 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.89.0"></script>
-<script src="/static/js/main.js?v=1.89.0" type="module"></script>
+<script src="/static/app.js?v=1.89.1"></script>
+<script src="/static/js/main.js?v=1.89.1" type="module"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

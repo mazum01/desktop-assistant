@@ -4,6 +4,30 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.89.1] - 2026-10-26
+### Changed
+- The header mode switch (Normal / Advanced / Engineering) is now an LCARS
+  segmented button bar: square blocks separated by black gaps, labels at the
+  bottom-right, and a peach active segment with a white inset bar (red in
+  Engineering). The health indicator forms the bar's rounded right end and
+  reads OK / Degraded / Connecting, with no dot glyph.
+- Home page flow: a full-width status strip (health, room, people, alerts);
+  the camera fills the left column next to Now Playing and Quick Toggles; Say
+  Something (with Last spoken / Repeat) sits beside Environment; Advanced and
+  Engineering readouts are full width at the bottom. The layout uses named grid
+  areas and collapses to one column at ≤1150px.
+- Quick toggles are LCARS lit/unlit blocks (ice = on, dim lilac = off) with an
+  ON/OFF readout, so state isn't shown by color alone.
+- "Open …" buttons are replaced with cross-links in the card titles (Vision ›,
+  Media ›, Voice ›, Smart Home ›, Overview ›).
+### Added
+- `docs/ui/LCARS_DESIGN_GUIDE.md`: an original LCARS design guide covering
+  principles, VERA tokens, components, states, layout and flow, accessibility,
+  and a checklist, with cited sources.
+- Agent instructions to review the guide whenever building UI: a scoped
+  `.github/instructions/lcars-ui.instructions.md` (`src/web/**`) and imperative
+  #10 in `.github/copilot-instructions.md`.
+
 ## [1.89.0] - 2026-10-26
 ### Added
 - Web UI **Home** page (new default, `#/home`): status strip (health, room,

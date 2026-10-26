@@ -117,3 +117,14 @@ style issue. Fix it in the same commit as the CLI change.
   version bump, changelog entry, and Co-authored-by trailer for each commit.
 - Keep unrelated pre-existing user changes intact and do not commit them unless
   they are part of the requested work or are explicitly requested.
+
+## 10. UI Design — LCARS Guide
+
+- **Before building or modifying any UI element** (web dashboard HTML/CSS/JS, the
+  display, or any other user-facing visual), review
+  `docs/ui/LCARS_DESIGN_GUIDE.md` and follow its principles, tokens, components,
+  layout rules, and checklist.
+- Reuse existing LCARS components and `:root` tokens; do not add one-off colors,
+  borders, or ad-hoc controls.
+- When a new component, token, or layout pattern is introduced, update the guide
+  in the same commit.

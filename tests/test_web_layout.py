@@ -624,6 +624,41 @@ def test_header_offers_three_interface_modes(layout):
     assert any(node["tag"] == "header" for node in group["ancestors"])
 
 
+def test_mode_toggle_and_health_form_one_lcars_bar():
+    css = (STATIC / "style.css").read_text()
+    assert ".mode-toggle { display: flex; gap: var(--lcars-gap); }" in css
+    assert ".mode-toggle button, header .badge {" in css
+    assert '.mode-toggle button[aria-pressed="true"] { background: var(--lcars-peach); box-shadow: inset 0 -6px #fff; }' in css
+    assert "header .badge-ok { background: var(--green); }" in css
+    assert "⬤" not in (STATIC / "app.js").read_text()
+
+
+def test_home_toggles_are_lcars_lit_blocks_with_text_state(layout):
+    toggles = [node for node in layout if "lcars-toggle" in node["attrs"].get("class", "").split()]
+    assert len(toggles) == 5
+    css = (STATIC / "style.css").read_text()
+    assert ".lcars-toggle input:checked + .lcars-toggle-face { background: var(--lcars-ice); }" in css
+    assert '.lcars-toggle-state::after { content: "OFF"; }' in css
+    assert 'content: "ON"' in css
+
+
+def test_home_flow_uses_named_grid_areas_and_title_links(layout):
+    css = (STATIC / "style.css").read_text()
+    assert '"status status"' in css and '"camera media"' in css and '"camera toggles"' in css
+    links = {node["attrs"]["href"] for node in layout
+             if "card-link" in node["attrs"].get("class", "").split()}
+    assert {"#/vision", "#/media", "#/voice", "#/smart-home", "#/overview"} <= links
+
+
+def test_lcars_design_guide_is_referenced_by_agent_instructions():
+    root = STATIC.parents[2]
+    guide = root / "docs" / "ui" / "LCARS_DESIGN_GUIDE.md"
+    assert guide.exists() and "## 7. Checklist" in guide.read_text()
+    scoped = (root / ".github" / "instructions" / "lcars-ui.instructions.md").read_text()
+    assert 'applyTo: "src/web/**"' in scoped and "LCARS_DESIGN_GUIDE.md" in scoped
+    assert "docs/ui/LCARS_DESIGN_GUIDE.md" in (root / ".github" / "copilot-instructions.md").read_text()
+
+
 def test_card_drag_and_drop_is_retired(layout):
     assert not any("drag-handle" in node["attrs"].get("class", "") for node in layout)
     source = (STATIC / "app.js").read_text()

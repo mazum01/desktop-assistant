@@ -438,7 +438,5 @@ export function initHome() {
   $('home-say-btn')?.addEventListener('click', say);
   $('home-say-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') say(); });
   $('home-repeat-btn')?.addEventListener('click', repeat);
-  $('home-camera-link')?.addEventListener('click', e => { e.preventDefault(); window.switchTab('perception'); });
-  $('home-eng-link')?.addEventListener('click', () => window.openWorkspace('overview'));
   renderAlerts();
 }

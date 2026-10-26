@@ -1211,13 +1211,13 @@ function setHealth(state) {
   el.className = "badge";
   if (state === "ok") {
     el.classList.add("badge-ok");
-    el.textContent = "⬤ OK";
+    el.textContent = "OK";
   } else if (state === "degraded") {
     el.classList.add("badge-degraded");
-    el.textContent = "⬤ DEGRADED";
+    el.textContent = "Degraded";
   } else {
     el.classList.add("badge-unknown");
-    el.textContent = "⬤ connecting";
+    el.textContent = "Connecting";
   }
 }
 
