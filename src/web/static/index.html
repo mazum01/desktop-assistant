@@ -13,7 +13,7 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&amp;display=swap" rel="stylesheet"/>
-<link href="/static/style.css?v=1.88.2" rel="stylesheet"/>
+<link href="/static/style.css?v=1.89.0" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -25,7 +25,14 @@
 <span class="subtext" id="version-uptime">connecting…</span>
 </div>
 </div>
+<div class="header-right">
+<div aria-label="Interface mode" class="mode-toggle" role="group">
+<button aria-pressed="true" data-mode-option="normal" title="Everyday controls" type="button">Normal</button>
+<button aria-pressed="false" data-mode-option="advanced" title="Adds tuning detail and readouts" type="button">Advanced</button>
+<button aria-pressed="false" data-mode-option="engineering" title="Raw diagnostics and low-level controls" type="button">Engineering</button>
+</div>
 <div class="badge badge-unknown" id="health-badge">⬤ connecting</div>
+</div>
 <span aria-hidden="true" class="lcars-code frame-code">47-0821 / 1701</span>
 </header>
 <aside aria-label="VERA navigation" class="lcars-sidebar">
@@ -37,6 +44,7 @@
 </div>
 <span class="rail-label" id="rail-workspaces-label">WORKSPACES</span>
 <nav aria-labelledby="rail-workspaces-label" aria-orientation="vertical" class="tab-nav" role="tablist">
+<button aria-controls="tab-home" aria-selected="false" class="tab-btn" data-tab="home" id="nav-home" onclick="switchTab('home')" role="tab" tabindex="-1"><svg aria-hidden="true" class="nav-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M3.34 19a10 10 0 1 1 17.32 0"/><path d="m12 14 4-4"/></svg><span>Home</span></button>
 <button aria-controls="tab-overview" aria-selected="false" class="tab-btn" data-tab="overview" id="nav-overview" onclick="switchTab('overview')" role="tab" tabindex="-1"><svg aria-hidden="true" class="nav-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="7" width="7" x="3" y="3"/><rect height="7" width="7" x="14" y="3"/><rect height="7" width="7" x="3" y="14"/><rect height="7" width="7" x="14" y="14"/></svg><span>Overview</span></button>
 <button aria-controls="tab-perception" aria-selected="false" class="tab-btn" data-tab="perception" id="nav-perception" onclick="switchTab('perception')" role="tab" tabindex="-1"><svg aria-hidden="true" class="nav-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Vision &amp; Motion</span></button>
 <button aria-controls="tab-controls" aria-selected="false" class="tab-btn" data-tab="controls" id="nav-controls" onclick="switchTab('controls')" role="tab" tabindex="-1"><svg aria-hidden="true" class="nav-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span>Media &amp; Audio</span></button>
@@ -55,9 +63,90 @@
 <button class="btn btn-secondary" onclick="openWorkspace('voice', 'card-quiet')">Quiet hours</button>
 </div>
 
+<div aria-labelledby="nav-home" class="tab-pane" data-description="At-a-glance status and the controls you use every day." data-title="Home" id="tab-home" role="tabpanel">
+<section aria-label="Status" class="card home-wide" id="card-home-status">
+<h2>Status</h2>
+<div class="grid-4 home-status-strip">
+<div class="stat-box"><div class="stat-label">Health</div><div class="stat-value" id="home-health">—</div></div>
+<div class="stat-box"><div class="stat-label">Room</div><div class="stat-value" id="home-room">—</div></div>
+<div class="stat-box"><div class="stat-label">People</div><div class="stat-value" id="home-faces">—</div></div>
+<div class="stat-box"><div class="stat-label">Last spoken</div><div class="stat-value home-spoken" id="home-last-spoken">—</div></div>
+</div>
+<div aria-label="Alerts" aria-live="polite" class="pill-row home-alerts" id="home-alerts"></div>
+</section>
+<section aria-label="Camera" class="card" id="card-home-camera">
+<h2>Camera</h2>
+<a class="home-camera-link" href="#/vision" id="home-camera-link" title="Open Vision &amp; Motion"><img alt="Live view from camera 1" class="home-camera" id="home-camera"/></a>
+<p class="home-muted" id="home-camera-caption">—</p>
+</section>
+<section aria-label="Now playing" class="card" id="card-home-media">
+<h2>Now Playing</h2>
+<div class="home-media">
+<img alt="" class="home-media-art" hidden="" id="home-media-art"/>
+<div class="home-media-text">
+<span class="stat-label" id="home-media-source">—</span>
+<strong id="home-media-title">Nothing playing</strong>
+<span class="home-muted" id="home-media-subtitle"></span>
+</div>
+</div>
+<div class="btn-row home-media-controls">
+<button class="btn btn-primary" id="home-media-play" type="button">▶ Play</button>
+<button class="btn btn-secondary" id="home-media-next" type="button">⏭ Next</button>
+<button class="btn btn-secondary" id="home-mute-btn" type="button">🔇 Mute</button>
+</div>
+<label class="home-volume"><span>Volume</span><input aria-label="Volume" id="home-volume" max="100" min="0" type="range" value="50"/><span id="home-volume-label">—</span></label>
+<button class="btn btn-secondary btn-sm" onclick="switchTab('controls')" type="button">Open Media</button>
+</section>
+<section aria-label="Quick toggles" class="card" id="card-home-toggles">
+<h2>Quick Toggles</h2>
+<div class="home-toggles">
+<label class="home-toggle"><span>Privacy mode</span><span class="toggle-label"><input id="home-toggle-privacy" type="checkbox"/><span class="toggle-slider"></span></span></label>
+<label class="home-toggle"><span>Quiet hours <small class="home-muted" id="home-quiet-window"></small></span><span class="toggle-label"><input id="home-toggle-quiet" type="checkbox"/><span class="toggle-slider"></span></span></label>
+<label class="home-toggle"><span>Mute audio</span><span class="toggle-label"><input id="home-toggle-mute" type="checkbox"/><span class="toggle-slider"></span></span></label>
+<label class="home-toggle"><span>Face tracking</span><span class="toggle-label"><input id="home-toggle-face" type="checkbox"/><span class="toggle-slider"></span></span></label>
+<label class="home-toggle"><span>Idle motion</span><span class="toggle-label"><input id="home-toggle-idle" type="checkbox"/><span class="toggle-slider"></span></span></label>
+</div>
+<p aria-live="polite" class="home-muted" id="home-action-status"></p>
+</section>
+<section aria-label="Say something" class="card" id="card-home-say">
+<h2>Say Something</h2>
+<div class="row-input">
+<input aria-label="Text for VERA to speak" id="home-say-input" placeholder="Type something for VERA to say…" type="text"/>
+<button class="btn btn-primary" id="home-say-btn" type="button">Say</button>
+</div>
+<div class="home-repeat">
+<button class="btn btn-secondary btn-sm" id="home-repeat-btn" type="button">🔁 Repeat last</button>
+</div>
+</section>
+<section aria-label="Environment" class="card" id="card-home-environment">
+<h2>Environment</h2>
+<div class="home-iot" id="home-iot"><p class="home-muted">Waiting for devices…</p></div>
+<button class="btn btn-secondary btn-sm" onclick="switchTab('smart-home')" type="button">Open Smart Home</button>
+</section>
+<section aria-label="Thermal and scene" class="card" data-min-mode="advanced" id="card-home-thermal">
+<h2>Thermal &amp; Scene</h2>
+<div class="grid-4">
+<div class="stat-box"><div class="stat-label">Case</div><div class="stat-value" id="home-temp-case">—</div></div>
+<div class="stat-box"><div class="stat-label">SoC</div><div class="stat-value" id="home-temp-soc">—</div></div>
+<div class="stat-box"><div class="stat-label">Blended</div><div class="stat-value" id="home-temp-blended">—</div></div>
+<div class="stat-box"><div class="stat-label">Hailo</div><div class="stat-value" id="home-temp-hailo">—</div></div>
+<div class="stat-box"><div class="stat-label">Fan duty</div><div class="stat-value" id="home-fan">—</div></div>
+<div class="stat-box"><div class="stat-label">Scene match / threshold</div><div class="stat-value" id="home-scene-confidence">—</div></div>
+<div class="stat-box"><div class="stat-label">Last scene scan</div><div class="stat-value" id="home-scene-check">—</div></div>
+</div>
+</section>
+<section aria-label="Engineering readout" class="card home-wide" data-min-mode="engineering" id="card-home-engineering">
+<h2>Engineering Readout</h2>
+<div class="home-eng">
+<code id="home-eng-line">—</code>
+<button class="btn btn-secondary btn-sm" id="home-eng-link" type="button">Open Overview</button>
+</div>
+</section>
+</div>
+
 <div aria-labelledby="nav-overview" class="tab-pane" data-description="Live status and shortcuts to the controls you use most." data-title="Overview" id="tab-overview" role="tabpanel">
 <section aria-label="Telemetry" class="card" id="card-telemetry" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Telemetry<span aria-hidden="true" class="lcars-code section-code">308-72</span></h2>
+<h2>Telemetry<span aria-hidden="true" class="lcars-code section-code">308-72</span></h2>
 <div class="grid-6">
 <div class="stat-box">
 <div class="stat-label">Case Temp</div>
@@ -140,7 +229,7 @@
 </div>
 </section>
 <section aria-label="System Resources" class="card" id="card-resources" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>System Resources</h2>
+<h2>System Resources</h2>
 <div class="resource-graphs">
 <div class="resource-graph-wrap">
 <div class="resource-graph-label">
@@ -179,14 +268,14 @@
 </div>
 </section>
 <section aria-label="Services ⟳ Restart Daemon" class="card" id="card-services" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Services  <button class="btn btn-warning btn-sm" onclick="restartDaemon()" title="Restart the vera-core systemd service">⟳ Restart Daemon</button></h2>
+<h2>Services  <button class="btn btn-warning btn-sm" onclick="restartDaemon()" title="Restart the vera-core systemd service">⟳ Restart Daemon</button></h2>
 <div class="pill-row" id="services-container">
 <span class="pill pill-unknown">loading…</span>
 </div>
 </section></div>
 <div aria-labelledby="nav-perception" class="tab-pane" data-description="See the camera feeds, direct the head, and tune perception." data-title="Vision &amp; Motion" id="tab-perception" role="tabpanel">
 <section aria-label="Camera Feeds" class="card camera-card" id="card-camera" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Camera Feeds<span aria-hidden="true" class="lcars-code section-code">824-09</span></h2>
+<h2>Camera Feeds<span aria-hidden="true" class="lcars-code section-code">824-09</span></h2>
 <div class="camera-feeds">
 <div class="camera-feed-wrap">
 <div class="camera-label">Cam 1 — Face Tracking</div>
@@ -214,7 +303,7 @@
 </div>
 </section>
 <section aria-label="Head movement" class="card" id="card-controls" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Head movement</h2>
+<h2>Head movement</h2>
 <div class="head-movement-sliders">
 <div class="control-group">
 <label for="pan-slider">Pan servo  <span id="pan-angle-display">180°</span></label>
@@ -232,7 +321,7 @@
 </div>
 </div>
 </section>
-<section aria-label="Scene awareness" class="card" id="card-scene" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>Scene awareness</h2>
+<section aria-label="Scene awareness" class="card" id="card-scene" tabindex="-1"><h2>Scene awareness</h2>
 <div class="control-group">
 <label>Vision &amp; cloud services</label>
 <div class="row-input">
@@ -263,7 +352,7 @@
 </div></section>
 <section aria-label="Head Tracking Tuning ▾ Show" class="card" id="card-tracking" tabindex="-1">
 <h2>
-<span class="drag-handle" title="Drag to reorder">⠿</span>Head Tracking Tuning
+Head Tracking Tuning
         <button class="btn btn-sm btn-secondary" id="tuning-toggle-btn" onclick="toggleTuningPanel()" style="float:right">▾ Show</button>
 </h2>
 <div id="tuning-panel" style="display:none">
@@ -305,7 +394,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </section>
 <section aria-label="Depth Estimation" class="card" id="card-depth" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Depth Estimation</h2>
+<h2>Depth Estimation</h2>
 <div class="control-group">
 <label>Dense Stereo (SGBM)</label>
 <div class="row-input">
@@ -358,7 +447,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </section>
 <section aria-label="Face Registry 🗑 Delete All 👤 Remove Guests ↺ Re-identify" class="card" id="card-faces" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Face Registry  <button class="btn btn-danger btn-sm" onclick="deleteAllFaces()" title="Delete all known faces permanently">🗑 Delete All</button>  <button class="btn btn-warning btn-sm" onclick="deleteGuestFaces()" title="Remove unnamed Guest entries">👤 Remove Guests</button>  <button class="btn btn-secondary btn-sm" onclick="refreshFaces()" title="Prune outlier embeddings and re-identify all faces">↺ Re-identify</button></h2>
+<h2>Face Registry  <button class="btn btn-danger btn-sm" onclick="deleteAllFaces()" title="Delete all known faces permanently">🗑 Delete All</button>  <button class="btn btn-warning btn-sm" onclick="deleteGuestFaces()" title="Remove unnamed Guest entries">👤 Remove Guests</button>  <button class="btn btn-secondary btn-sm" onclick="refreshFaces()" title="Prune outlier embeddings and re-identify all faces">↺ Re-identify</button></h2>
 <div id="face-registry-wrap">
 <table id="face-table">
 <thead>
@@ -382,7 +471,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section>
-<section aria-label="Camera configuration" class="card" id="card-camera-settings" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>Camera configuration</h2>
+<section aria-label="Camera configuration" class="card" id="card-camera-settings" tabindex="-1"><h2>Camera configuration</h2>
 <div class="control-group">
 <label for="camera-focus-mode">Cam 1 Focus</label>
 <div class="row-input" style="align-items:center;gap:12px;flex-wrap:wrap">
@@ -494,7 +583,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div></section>
 <section aria-label="Privacy Mode" class="card" id="card-privacy-settings" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Privacy Mode</h2>
+<h2>Privacy Mode</h2>
 <div class="control-group">
 <label class="qh-toggle" style="margin:0">
 <input id="privacy-enabled" type="checkbox"/>
@@ -543,7 +632,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </section></div>
 <div aria-labelledby="nav-controls" class="tab-pane" data-description="Playback, stations, podcasts, volume, and equalization in one place." data-title="Media &amp; Audio" id="tab-controls" role="tabpanel">
 <section aria-label="Output levels &amp; equalizer" class="card" id="card-audio-runtime" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Output levels &amp; equalizer<span aria-hidden="true" class="lcars-code section-code">196-53</span></h2>
+<h2>Output levels &amp; equalizer<span aria-hidden="true" class="lcars-code section-code">196-53</span></h2>
 <div class="control-group">
 <label>Output Volume</label>
 <div class="music-volume-row">
@@ -605,7 +694,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 <div class="workspace-crosslink"><span>Output routing &amp; device setup</span><button class="btn btn-secondary btn-sm" onclick="openWorkspace('system', 'card-audio')">Audio hardware →</button></div>
 </section>
 <section aria-label="Music (Pandora)" class="card" id="card-music" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Music (Pandora)</h2>
+<h2>Music (Pandora)</h2>
 <div id="music-not-configured" style="display:none;color:var(--yellow);margin-bottom:8px;font-size:0.9em">
         ⚠ pianobar not configured. Create <code>~/.config/pianobar/config</code> with your Pandora credentials.
       </div>
@@ -656,7 +745,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </section>
 <section aria-label="Apple Podcasts" class="card" id="card-podcasts" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Apple Podcasts</h2>
+<h2>Apple Podcasts</h2>
 <div class="control-group">
 <label>Search or subscribe</label>
 <div class="row-input" style="gap:8px;flex-wrap:wrap">
@@ -700,7 +789,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 <div id="podcast-status" style="font-size:0.85em;color:var(--text-muted)">No podcast playback</div>
 </section></div>
 <div aria-labelledby="nav-voice" class="tab-pane" data-description="Speech, microphone input, greetings, skills, and quiet hours." data-title="Voice &amp; Behavior" id="tab-voice" role="tabpanel">
-<section aria-label="Speech &amp; recording" class="card" id="card-speech" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>Speech &amp; recording</h2>
+<section aria-label="Speech &amp; recording" class="card" id="card-speech" tabindex="-1"><h2>Speech &amp; recording</h2>
 <div class="control-group">
 <label>Say something</label>
 <div class="row-input">
@@ -722,7 +811,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 <span id="record-remaining" style="font-size:12px;color:var(--text-muted)"></span>
 </div>
 </div></section>
-<section aria-label="Microphone &amp; input analyzer" class="card" id="card-microphone" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>Microphone &amp; input analyzer</h2>
+<section aria-label="Microphone &amp; input analyzer" class="card" id="card-microphone" tabindex="-1"><h2>Microphone &amp; input analyzer</h2>
 <div class="control-group">
 <label>Microphone Input Gain</label>
 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -743,7 +832,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div></section>
 <section aria-label="Voice recognition" class="card" id="card-voice-settings" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Voice recognition</h2>
+<h2>Voice recognition</h2>
 <details class="advanced-panel">
 <summary>Configure speech recognition &amp; wake behavior</summary>
 <div class="control-group">
@@ -785,7 +874,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </details>
 </section>
 <section aria-label="Quiet Hours" class="card" id="card-quiet" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Quiet Hours</h2>
+<h2>Quiet Hours</h2>
 <div class="qh-form">
 <label class="qh-toggle">
 <input id="qh-enabled" type="checkbox"/>
@@ -807,7 +896,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </section>
 <section aria-label="Greeting Settings" class="card" id="card-greeting" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Greeting Settings</h2>
+<h2>Greeting Settings</h2>
 <div class="qh-form">
 <div class="row-input" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
 <label style="flex:1;min-width:160px">
@@ -834,7 +923,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </section>
 <section aria-label="Voice Skills" class="card" id="card-skills" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Voice Skills <button class="btn btn-secondary btn-sm" id="skills-toggle-btn" onclick="toggleSkills()">Show</button></h2>
+<h2>Voice Skills <button class="btn btn-secondary btn-sm" id="skills-toggle-btn" onclick="toggleSkills()">Show</button></h2>
 <div id="skills-panel" style="display:none">
 <p style="font-size:13px;color:var(--text-dim);margin:4px 0 8px 0">
           Speak these phrases (or type them below) to trigger a skill.
@@ -851,7 +940,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </section>
 <section aria-label="STT Transcript History (last 20)" class="card" id="card-stt-transcripts" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>STT Transcript History <span class="subtext">(last 20)</span></h2>
+<h2>STT Transcript History <span class="subtext">(last 20)</span></h2>
 <div class="event-log" id="stt-transcript-log"></div>
 </section></div>
 <div aria-labelledby="nav-smart-home" class="tab-pane" data-description="Connected devices, environmental readings, and home controls." data-title="Smart Home" id="tab-smart-home" role="tabpanel">
@@ -861,7 +950,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div></div>
 <div aria-labelledby="nav-settings" class="tab-pane" data-description="Configure head movement, tracking, travel limits, and servo channels." data-title="Settings" id="tab-settings" role="tabpanel">
 <section aria-label="Head Movement Settings" class="card" id="card-head-movement-settings" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Head Movement Settings</h2>
+<h2>Head Movement Settings</h2>
 <div class="control-group">
 <div class="row-input" style="margin-top:6px">
 <label class="qh-toggle" style="margin:0">
@@ -916,7 +1005,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 <div aria-labelledby="nav-system" class="tab-pane" data-description="Software updates, cooling, audio hardware, diagnostics, and power." data-title="System" id="tab-system" role="tabpanel">
 <section aria-label="Updates" class="card" id="card-updates" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Updates</h2>
+<h2>Updates</h2>
 <div class="update-versions">
 <span>Installed: <strong id="update-installed">—</strong></span>
 <span>Available: <strong id="update-available">—</strong></span>
@@ -942,7 +1031,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 <details><summary>Update history</summary><ul id="update-history"></ul></details>
 </section>
 <section aria-label="Fan Control Points" class="card" id="card-fan-curve" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Fan Control Points</h2>
+<h2>Fan Control Points</h2>
 <div class="control-group" style="margin-bottom:12px">
 <label>Temperature Blend</label>
 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -977,7 +1066,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section>
-<section aria-label="Audio hardware" class="card" id="card-audio" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>Audio hardware</h2><details class="advanced-panel"><summary>Configure audio hardware</summary>
+<section aria-label="Audio hardware" class="card" id="card-audio" tabindex="-1"><h2>Audio hardware</h2><details class="advanced-panel"><summary>Configure audio hardware</summary>
 
 <div class="control-group">
 <label for="audio-backend-select">Hardware Backend</label>
@@ -1100,7 +1189,7 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 <span class="qh-status" id="audio-status"></span>
 </div>
 </details></section>
-<section aria-label="ReSpeaker Flex XVF3800" class="card" id="card-xvf" tabindex="-1"><h2><span class="drag-handle" title="Drag to reorder">⠿</span>ReSpeaker Flex XVF3800</h2><details class="advanced-panel"><summary>Inspect &amp; tune microphone DSP</summary>
+<section aria-label="ReSpeaker Flex XVF3800" class="card" id="card-xvf" tabindex="-1"><h2>ReSpeaker Flex XVF3800</h2><details class="advanced-panel"><summary>Inspect &amp; tune microphone DSP</summary>
 
 <p style="font-size:0.85em;color:var(--text-muted);margin-bottom:12px">
   Live diagnostics and safe DSP tuning from the XVF host-control interface.
@@ -1128,18 +1217,18 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </details></section>
 <section aria-label="Event Log (last 20)" class="card" id="card-events" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Event Log <span class="subtext">(last 20)</span></h2>
+<h2>Event Log <span class="subtext">(last 20)</span></h2>
 <div class="event-log" id="event-log"></div>
 </section>
 <section aria-label="System Power" class="card" id="card-power" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>System Power</h2>
+<h2>System Power</h2>
 <div class="btn-row">
 <button class="btn btn-warning" id="btn-reboot" onclick="systemReboot()">↺ Reboot</button>
 <button class="btn btn-danger" id="btn-shutdown" onclick="systemShutdown()">⏻ Shutdown</button>
 <button class="btn btn-secondary" onclick="doVersion()">Speak Version</button></div>
 </section>
 <section aria-label="Help" class="card" id="card-help" tabindex="-1">
-<h2><span class="drag-handle" title="Drag to reorder">⠿</span>Help <button class="btn btn-secondary btn-sm" id="help-toggle-btn" onclick="toggleHelp()">Show</button></h2>
+<h2>Help <button class="btn btn-secondary btn-sm" id="help-toggle-btn" onclick="toggleHelp()">Show</button></h2>
 <div id="help-panel" style="display:none">
 <div class="help-grid">
 <div>
@@ -1214,7 +1303,8 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.88.2"></script>
+<script src="/static/app.js?v=1.89.0"></script>
+<script src="/static/js/main.js?v=1.89.0" type="module"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

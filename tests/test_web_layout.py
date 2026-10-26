@@ -12,6 +12,17 @@ import pytest
 
 ROOT = Path(__file__).parents[1]
 STATIC = ROOT / "src" / "web" / "static"
+JS = STATIC / "js"
+
+
+def _run_module_test(tmp_path, script, module, *args):
+    """Run a CommonJS harness that dynamically imports an ES module copy."""
+    copy = tmp_path / (module.stem + ".mjs")
+    copy.write_text(module.read_text())
+    runner = tmp_path / "test.cjs"
+    runner.write_text(script)
+    result = subprocess.run(["node", str(runner), str(copy), *args], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr or result.stdout
 
 
 class LayoutParser(HTMLParser):
@@ -320,6 +331,13 @@ def test_decorative_codes_are_sparse_and_hidden_from_assistive_technology(layout
         "stat-room", "stat-spoken", "repeat-spoken-btn",
     ]),
     ("smart-home", ["iot-toolbar", "iot-add-btn"]),
+    ("home", [
+        "home-health", "home-room", "home-faces", "home-alerts", "home-camera",
+        "home-media-play", "home-media-next", "home-volume", "home-mute-btn",
+        "home-toggle-privacy", "home-toggle-quiet", "home-toggle-mute",
+        "home-toggle-face", "home-toggle-idle", "home-say-input", "home-repeat-btn",
+        "home-iot", "home-temp-hailo", "home-fan", "home-scene-confidence", "home-eng-line",
+    ]),
 ])
 def test_controls_live_with_their_related_tasks(layout, workspace, controls):
     by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
@@ -348,22 +366,26 @@ def test_sidebar_frames_icon_navigation_like_lcars_elbow(layout):
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for stardate regression")
-def test_rail_stardate_uses_year_and_day_of_year():
-    source = (STATIC / "app.js").read_text().split("// ── Software updates")[0]
-    script = source + r"""
+def test_rail_stardate_uses_year_and_day_of_year(tmp_path):
+    script = r"""
 const assert = require('node:assert/strict');
-assert.equal(railStardate(new Date(2026, 9, 23, 14, 0)), '2026.296');
-assert.equal(railStardate(new Date(2026, 0, 1, 0, 1)), '2026.001');
-assert.equal(railStardate(new Date(2024, 11, 31, 23, 59)), '2024.366');
+globalThis.window = {};
+import(require('node:url').pathToFileURL(process.argv[2]).href).then(({railStardate}) => {
+  assert.equal(railStardate(new Date(2026, 9, 23, 14, 0)), '2026.296');
+  assert.equal(railStardate(new Date(2026, 0, 1, 0, 1)), '2026.001');
+  assert.equal(railStardate(new Date(2024, 11, 31, 23, 59)), '2024.366');
+  assert.equal(window.railStardate, railStardate);
+}).catch(e => { console.error(e); process.exit(1); });
 """
-    subprocess.run(["node", "-e", script], check=True, capture_output=True, text=True)
+    _run_module_test(tmp_path, script, JS / "core" / "router.js")
 
 
 def test_tabs_have_accessible_matching_panels(layout):
     by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
     tabs = [node for node in layout if node["attrs"].get("role") == "tab"]
     panels = [node for node in layout if node["attrs"].get("role") == "tabpanel"]
-    assert len(tabs) == len(panels) == 7
+    assert len(tabs) == len(panels) == 8
+    assert tabs[0]["attrs"]["id"] == "nav-home"
     for tab in tabs:
         panel = by_id[tab["attrs"]["aria-controls"]]
         assert panel["attrs"]["aria-labelledby"] == tab["attrs"]["id"]
@@ -404,7 +426,7 @@ def test_head_movement_sliders_and_configuration_are_separate(layout):
 
 
 def test_existing_event_handlers_still_resolve(layout):
-    source = (STATIC / "app.js").read_text()
+    source = "\n".join(path.read_text() for path in [STATIC / "app.js", *JS.rglob("*.js")])
     for node in layout:
         for name, handler in node["attrs"].items():
             if name.startswith("on") and handler:
@@ -426,19 +448,23 @@ def test_asset_cache_keys_match_current_release(layout):
     assets = [node["attrs"].get("src", node["attrs"].get("href", "")) for node in layout]
     assert f"/static/style.css?v={version}" in assets
     assert f"/static/app.js?v={version}" in assets
+    assert f"/static/js/main.js?v={version}" in assets
+    main = (JS / "main.js").read_text()
+    assert "new URL(import.meta.url).search" in main
+    # Sub-modules must inherit main.js's ?v= key instead of using static imports.
+    assert not re.search(r"^import ", main, re.M)
+    for module in JS.rglob("*.js"):
+        assert not re.search(r"^import .* from ['\"]\.", module.read_text(), re.M), module
     external = [url for url in assets if url.startswith(("https://", "http://"))]
     assert all(url.startswith(("https://fonts.googleapis.com", "https://fonts.gstatic.com"))
                for url in external)
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for navigation regression")
-def test_navigation_migrates_old_audio_tab_and_supports_keyboard(tmp_path):
-    source = (STATIC / "app.js").read_text().split("// ── Software updates")[0]
+def test_hash_router_defaults_home_migrates_legacy_routes_and_supports_keyboard(tmp_path):
     script = r"""
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const ids = ['overview', 'perception', 'controls', 'voice', 'smart-home', 'system', 'settings'];
+const ids = ['home', 'overview', 'perception', 'controls', 'voice', 'smart-home', 'system', 'settings'];
 function node(id) {
   const classes = new Set();
   return {id, attrs: {}, dataset: {}, classList: {
@@ -456,56 +482,210 @@ const title = node('workspace-title'), description = node('workspace-description
 const frameCode = {textContent: '47-0821 / 1701'};
 const fixedCode = {textContent: '308-72'};
 let keydown;
-const document = {
-  body: {dataset: {}},
-  getElementById: id => [...panes,...buttons,title,description,target].find(n=>n.id===id),
-  querySelectorAll: q => q==='.tab-pane' ? panes : q==='.tab-btn' ? buttons
-    : q==='.frame-code' ? [frameCode] : [frameCode, fixedCode],
-  querySelector: q => q==='.tab-pane.active' ? panes.find(p=>p.classList.contains('active'))
-    : {addEventListener: (_,handler) => {keydown=handler;}},
-};
-const values = {'vera-active-tab':'audio'};
-const localStorage = {getItem:k=>values[k],setItem:(k,v)=>{values[k]=v;}};
-const context = vm.createContext({document, localStorage, setInterval() {}, window:{scrollTo() {}}});
-vm.runInContext(fs.readFileSync(process.argv[2],'utf8'), context);
-vm.runInContext('initTabs()', context);
-assert.equal(values['vera-active-tab'], 'controls');
-assert.equal(document.body.dataset.workspace, 'controls');
-assert.equal(panes.filter(p=>p.classList.contains('active')).length, 1);
-assert.equal(buttons[2].attrs['aria-selected'], 'true');
-assert.equal(title.textContent,'controls');
-assert.match(frameCode.textContent, /^\d{2}-\d{4} \/ \d{4}$/);
-assert.notEqual(frameCode.textContent, '47-0821 / 1701');
-const initialCode = frameCode.textContent;
-vm.runInContext("switchTab('controls')", context);
-assert.equal(frameCode.textContent, initialCode);
-keydown({key:'ArrowRight',target:buttons[2],preventDefault(){}});
-assert.notEqual(frameCode.textContent, initialCode);
-assert.equal(fixedCode.textContent, '308-72');
-assert.equal(values['vera-active-tab'], 'voice');
-assert.equal(document.body.dataset.workspace, 'voice');
-assert.equal(focused,buttons[3]);
-keydown({key:'End',target:buttons[3],preventDefault(){}});
-assert.equal(values['vera-active-tab'],'settings');
-assert.equal(document.body.dataset.workspace,'settings');
-assert.equal(buttons[6].attrs['aria-selected'],'true');
-assert.equal(title.textContent,'settings');
-keydown({key:'ArrowDown',target:buttons[6],preventDefault(){}});
-assert.equal(values['vera-active-tab'],'overview');
-assert.equal(document.body.dataset.workspace,'overview');
-keydown({key:'Home',target:buttons[0],preventDefault(){}});
-assert.equal(values['vera-active-tab'],'overview');
-vm.runInContext("switchTab('no-longer-exists')",context);
-assert.equal(values['vera-active-tab'],'overview');
-vm.runInContext("openWorkspace('voice','card-quiet')",context);
-assert.equal(focused,target);
-assert.equal(buttons.filter(b=>b.tabIndex===0).length,1);
+const listeners = {};
+const routes = [];
+const values = {'vera-active-tab': 'voice'};
+Object.assign(globalThis, {
+  document: {
+    body: {dataset: {}},
+    getElementById: id => [...panes,...buttons,title,description,target].find(n=>n.id===id),
+    querySelectorAll: q => q==='.tab-pane' ? panes : q==='.tab-btn' ? buttons
+      : q==='.frame-code' ? [frameCode] : [frameCode, fixedCode],
+    querySelector: q => q==='.tab-pane.active' ? panes.find(p=>p.classList.contains('active'))
+      : {addEventListener: (_,handler) => {keydown=handler;}},
+  },
+  localStorage: {getItem:k=>values[k], setItem:(k,v)=>{values[k]=v;}, removeItem:k=>{delete values[k];}},
+  location: {hash: process.argv[3]},
+  history: {
+    pushState(_s,_t,hash) {location.hash = hash; history.pushes++;},
+    replaceState(_s,_t,hash) {location.hash = hash;}, pushes: 0,
+  },
+  window: {
+    scrollTo() {},
+    addEventListener: (type, handler) => {listeners[type] = handler;},
+    dispatchEvent: event => { if (event.type === 'vera:route') routes.push(event.detail); },
+  },
+  CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init.detail; } },
+  setInterval() {},
+});
+const document = globalThis.document;
+import(require('node:url').pathToFileURL(process.argv[2]).href).then(router => {
+  router.initRouter();
+  if (process.argv[3] === '') {
+    // No hash: Home is the default and the stale last-tab preference is dropped.
+    assert.equal(location.hash, '#/home');
+    assert.equal(document.body.dataset.workspace, 'home');
+    assert.equal(values['vera-active-tab'], undefined);
+    assert.deepEqual(routes, [{tab: 'home', previous: null}]);
+    return;
+  }
+  // Old "audio" bookmarks land on the media workspace with its public slug.
+  assert.equal(location.hash, '#/media');
+  assert.equal(document.body.dataset.workspace, 'controls');
+  assert.equal(panes.filter(p=>p.classList.contains('active')).length, 1);
+  assert.equal(buttons[3].attrs['aria-selected'], 'true');
+  assert.equal(title.textContent, 'controls');
+  assert.match(frameCode.textContent, /^\d{2}-\d{4} \/ \d{4}$/);
+  assert.notEqual(frameCode.textContent, '47-0821 / 1701');
+  const initialCode = frameCode.textContent;
+  window.switchTab('controls');
+  assert.equal(frameCode.textContent, initialCode);
+  assert.equal(history.pushes, 0);
+  keydown({key:'ArrowRight',target:buttons[3],preventDefault(){}});
+  assert.notEqual(frameCode.textContent, initialCode);
+  assert.equal(fixedCode.textContent, '308-72');
+  assert.equal(location.hash, '#/voice');
+  assert.equal(document.body.dataset.workspace, 'voice');
+  assert.equal(focused, buttons[4]);
+  assert.deepEqual(routes.at(-1), {tab: 'voice', previous: 'controls'});
+  keydown({key:'End',target:buttons[4],preventDefault(){}});
+  assert.equal(location.hash, '#/settings');
+  assert.equal(buttons[7].attrs['aria-selected'], 'true');
+  keydown({key:'ArrowDown',target:buttons[7],preventDefault(){}});
+  assert.equal(location.hash, '#/home');
+  keydown({key:'End',target:buttons[0],preventDefault(){}});
+  keydown({key:'Home',target:buttons[7],preventDefault(){}});
+  assert.equal(document.body.dataset.workspace, 'home');
+  window.switchTab('no-longer-exists');
+  assert.equal(location.hash, '#/home');
+  window.switchTab('perception');
+  assert.equal(location.hash, '#/vision');
+  // Browser back/forward changes the hash and fires hashchange.
+  location.hash = '#/smart-home';
+  listeners.hashchange();
+  assert.equal(document.body.dataset.workspace, 'smart-home');
+  location.hash = '#/audio';
+  listeners.hashchange();
+  assert.equal(location.hash, '#/media');
+  location.hash = '#/bogus';
+  listeners.hashchange();
+  assert.equal(document.body.dataset.workspace, 'home');
+  assert.equal(location.hash, '#/home');
+  window.openWorkspace('voice', 'card-quiet');
+  assert.equal(focused, target);
+  assert.equal(buttons.filter(b=>b.tabIndex===0).length, 1);
+}).catch(e => { console.error(e); process.exit(1); });
 """
-    navigation = tmp_path / "navigation.js"
-    navigation.write_text(source)
-    runner = tmp_path / "test.cjs"
-    runner.write_text(script)
-    subprocess.run(["node", str(runner), str(navigation)], check=True, capture_output=True, text=True)
+    for initial_hash in ("#/audio", ""):
+        _run_module_test(tmp_path, script, JS / "core" / "router.js", initial_hash)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for interface mode regression")
+def test_interface_mode_persists_and_engineering_requires_confirmation(tmp_path):
+    script = r"""
+const assert = require('node:assert/strict');
+const values = {'vera-ui-mode': 'bogus'};
+const buttons = ['normal', 'advanced', 'engineering'].map(mode => ({
+  dataset: {modeOption: mode}, attrs: {}, setAttribute(k, v) {this.attrs[k] = v;},
+  addEventListener(_t, handler) {this.click = handler;},
+}));
+const events = [];
+let prompts = 0, answer = false;
+Object.assign(globalThis, {
+  document: {body: {dataset: {}}, querySelectorAll: () => buttons},
+  localStorage: {getItem: k => values[k], setItem: (k, v) => {values[k] = v;}},
+  window: {confirm: () => {prompts++; return answer;}, dispatchEvent: e => events.push(e.detail.mode)},
+  CustomEvent: class { constructor(type, init) { this.detail = init.detail; } },
+});
+import(require('node:url').pathToFileURL(process.argv[2]).href).then(mode => {
+  mode.initMode();
+  assert.equal(document.body.dataset.mode, 'normal');
+  assert.equal(buttons[0].attrs['aria-pressed'], 'true');
+  buttons[1].click();
+  assert.equal(document.body.dataset.mode, 'advanced');
+  assert.equal(values['vera-ui-mode'], 'advanced');
+  assert.equal(prompts, 0);
+  assert.ok(mode.modeAtLeast('advanced') && !mode.modeAtLeast('engineering'));
+  buttons[2].click();
+  assert.equal(prompts, 1);
+  assert.equal(document.body.dataset.mode, 'advanced');
+  assert.equal(buttons[1].attrs['aria-pressed'], 'true');
+  answer = true;
+  buttons[2].click();
+  assert.equal(document.body.dataset.mode, 'engineering');
+  assert.equal(values['vera-ui-mode'], 'engineering');
+  buttons[2].click();
+  assert.equal(prompts, 2);
+  assert.equal(mode.setMode('bogus'), false);
+  assert.deepEqual(events, ['normal', 'advanced', 'engineering', 'engineering']);
+}).catch(e => { console.error(e); process.exit(1); });
+"""
+    _run_module_test(tmp_path, script, JS / "core" / "mode.js")
+    css = (STATIC / "style.css").read_text()
+    assert ('body:not([data-mode="advanced"]):not([data-mode="engineering"]) [data-min-mode="advanced"],\n'
+            'body:not([data-mode="engineering"]) [data-min-mode="engineering"] { display: none !important; }') in css
+
+
+def test_header_offers_three_interface_modes(layout):
+    options = [node["attrs"]["data-mode-option"] for node in layout if "data-mode-option" in node["attrs"]]
+    assert options == ["normal", "advanced", "engineering"]
+    group = next(node for node in layout if "mode-toggle" in node["attrs"].get("class", "").split())
+    assert group["attrs"]["role"] == "group"
+    assert any(node["tag"] == "header" for node in group["ancestors"])
+
+
+def test_card_drag_and_drop_is_retired(layout):
+    assert not any("drag-handle" in node["attrs"].get("class", "") for node in layout)
+    source = (STATIC / "app.js").read_text()
+    assert "initCardDragDrop" not in source and "drag-handle" not in source
+    assert "function _forgetCardOrder()" in source
+    assert ".drag-handle" not in (STATIC / "style.css").read_text()
+
+
+def test_home_gates_detail_by_interface_mode(layout):
+    by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
+    assert by_id["card-home-thermal"]["attrs"]["data-min-mode"] == "advanced"
+    assert by_id["card-home-engineering"]["attrs"]["data-min-mode"] == "engineering"
+    for card in ("card-home-status", "card-home-camera", "card-home-media",
+                 "card-home-toggles", "card-home-say", "card-home-environment"):
+        assert "data-min-mode" not in by_id[card]["attrs"], card
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for Home regression")
+def test_home_alerts_and_quiet_hours_window(tmp_path):
+    script = r"""
+const assert = require('node:assert/strict');
+globalThis.document = {getElementById: () => null};
+globalThis.window = {};
+import(require('node:url').pathToFileURL(process.argv[2]).href).then(({computeAlerts, quietHoursActive}) => {
+  const at = (h, m) => new Date(2026, 0, 1, h, m);
+  const overnight = {enabled: true, start: '21:00', end: '06:00'};
+  assert.equal(quietHoursActive(overnight, at(22, 0)), true);
+  assert.equal(quietHoursActive(overnight, at(5, 59)), true);
+  assert.equal(quietHoursActive(overnight, at(6, 0)), false);
+  assert.equal(quietHoursActive({...overnight, enabled: false}, at(22, 0)), false);
+  assert.equal(quietHoursActive({enabled: true, start: '09:00', end: '17:00'}, at(12, 0)), true);
+  assert.equal(quietHoursActive({enabled: true, start: '09:00', end: '17:00'}, at(18, 0)), false);
+
+  const calm = {status: {healthy: true, services: {av: 'running'}, last: {
+    'thermal.temp': {ok: true, cpu_celsius: 60}, 'thermal.hailo': {ok: true, celsius: 45}}},
+    update: {installed_version: '1.0.0', available_version: '1.0.0'},
+    settings: {privacy: false, quiet: overnight, muted: false}};
+  assert.deepEqual(computeAlerts(calm, at(12, 0)), []);
+
+  const busy = {status: {healthy: false, services: {av: 'running', music: 'error', iot: 'stopped'}, last: {
+    'thermal.temp': {ok: true, cpu_celsius: 80}, 'thermal.hailo': {ok: false}}},
+    update: {installed_version: '1.0.0', available_version: '1.1.0'},
+    settings: {privacy: true, quiet: overnight, muted: true}};
+  const texts = computeAlerts(busy, at(23, 0)).map(a => a.text);
+  assert.deepEqual(texts, ['System degraded', 'SoC hot 80 °C', 'Hailo unavailable',
+    'Service music error, iot stopped', 'Update 1.1.0 available', 'Privacy on', 'Quiet hours', 'Muted']);
+  const hotHailo = {...calm, status: {...calm.status, last: {'thermal.hailo': {ok: true, celsius: 90}}}};
+  assert.deepEqual(computeAlerts(hotHailo, at(12, 0)).map(a => a.text), ['Hailo hot 90 °C']);
+}).catch(e => { console.error(e); process.exit(1); });
+"""
+    _run_module_test(tmp_path, script, JS / "pages" / "home.js")
+
+
+def test_home_reuses_app_events_and_streams_camera_only_while_visible():
+    source = (STATIC / "app.js").read_text()
+    for event in ("vera:status", "vera:music", "vera:podcast", "vera:update"):
+        assert re.search(r"CustomEvent\(['\"]" + re.escape(event) + r"['\"]", source), event
+    assert "function _unregisterStream(id)" in source
+    home = (JS / "pages" / "home.js").read_text()
+    assert "_registerStream('home-camera', '/stream')" in home
+    assert "_unregisterStream('home-camera')" in home
+    assert "innerHTML" not in home
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for EQ regression")

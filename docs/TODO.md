@@ -226,10 +226,50 @@ VERA through the established BLE GATT path.
   commissioned Matter devices with live state and controls, support
   commissioning/removal from the UI, and fold existing integrations (radon,
   DROP water, etc.) into a consistent device model.
-- [ ] **Rationalize the web UI frame structure** — evaluate the current LCARS
-  frames/pages, consolidate overlapping views, define a clearer navigation
-  hierarchy, and improve functionality (status at a glance, fewer dead ends,
-  consistent controls). Produce a proposed layout before implementing.
+- [x] **Web UI reorganization — Phase 1 (Foundation) and Phase 2 (Home)** —
+  ES-module hash router (`#/home`, `#/media`, `#/vision`, …), Normal /
+  Advanced / Engineering header toggle with `data-min-mode` gating, fixed card
+  layout (drag-to-reorder retired), and a new default **Home** page. *(v1.89.0)*
+
+Remaining web UI reorganization phases (layout per the approved plan; feature
+pages are for use and monitoring, Settings is for configuring; tag detail with
+`data-min-mode="advanced|engineering"`):
+
+- [ ] **Phase 3 — Media page** — unified now-playing with transport; Pandora
+  stations/thumbs; podcasts search/subscribe/episodes/seek; volume, mute, voice
+  volume; [A] EQ preset + custom bands; [E] A/V sync panel (applied delay,
+  display lag, output latency, spectrum fps, BLE write/ack latency, `lead_ms`
+  knob). Backend: expose `display.spectrum_latency` + calibrator state
+  (`GET /api/av-sync`) and `PUT` for `lead_ms` / `extra_output_ms`. Reserve a
+  slot for video playback.
+- [ ] **Phase 4 — Vision & Motion page** — Cam 1 feed + Save Frame; [A] Cam 2
+  and fps overlays; pan/tilt sliders + new **Center** button; Describe scene,
+  [A] **Find object** (`/api/vision/find`); People (rename/delete, [A] merge/
+  guests/re-identify/train, [E] raw IDs/seen counts); [A] scene-awareness
+  status; [E] depth (stereo/mono enable, maps, mono stats via
+  `/api/depth/mono/stats`); [E] tracking tuning.
+- [ ] **Phase 5 — Voice & Personality page** — speak text, **Tell a joke** /
+  **Say the time** buttons (`/api/joke`, `/api/time`); skills list with
+  enable/disable, [A] skill config; [A] record/playback; [E] STT transcripts;
+  [E] mic analyzer + test tones. Reserve a slot for mouth-display behavior.
+- [ ] **Phase 6 — Smart Home placeholder** — keep the dynamic IoT cards and
+  add/configure modals; add a "Matter devices — coming soon" card (real
+  Matter UI is the item above).
+- [ ] **Phase 7 — Settings consolidation** — second-level left-rail entries,
+  deep-linkable (`#/settings/<section>`): General (room name, quiet hours,
+  greeting), Camera, Vision (object detection, room checking, privacy tuning),
+  Cloud AI, Motion (servo, face tracking, idle motion, new **person-seek**
+  toggle via `/api/settings/person-seek`, travel limits, [E] PCA9685
+  channels), Audio (mic gain, [E] backend, [E] XVF3800), Voice pipeline,
+  Cooling ([E] fan curve/blend, [E] fan override), Updates, Power & About.
+- [ ] **Phase 8 — Engineering section** (Engineering mode only) — telemetry
+  detail, processes, services + restart daemon (confirm), event log, latency
+  dashboard, API/CLI reference. Backend: `GET/PUT /api/fan/override`
+  mirroring `vera fan` (keep the 100% fail-safe) and a rate-capped
+  `/ws/bus?topics=…` live bus watch behind the API key.
+- [ ] **Phase 9 — Cleanup** — retire the legacy Overview and System tabs once
+  their content has moved, finish extracting `app.js` into page modules,
+  remove dead code, update layout tests, docs, and the architecture diagram.
 
 ---
 

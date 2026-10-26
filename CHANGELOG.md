@@ -4,6 +4,36 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.89.0] - 2026-10-26
+### Added
+- Web UI **Home** page (new default, `#/home`): status strip (health, room,
+  people, last spoken), alert pills (degraded, SoC/Hailo hot, Hailo
+  unavailable, services not running, update available, privacy, quiet hours,
+  muted), Cam 1 thumbnail that streams only while Home is visible, now-playing
+  mini player (Pandora or podcast) with play/pause, next, volume and mute,
+  quick toggles (privacy, quiet hours, mute, face tracking, idle motion), Say
+  box with Repeat, and an IoT environment glance. Advanced mode adds
+  thermal/fan and scene-stability readouts; Engineering mode adds a servo/mic/
+  CPU/memory one-liner.
+- Header **Normal / Advanced / Engineering** interface-mode toggle, remembered
+  per browser (`vera-ui-mode`); entering Engineering asks for confirmation.
+  Elements tagged `data-min-mode` are hidden by CSS below their level
+  (presentation only — API access is unchanged).
+- Hash router (`src/web/static/js/core/router.js`) with public slugs
+  (`#/media`, `#/vision`, `#/voice`, `#/smart-home`, `#/settings`,
+  `#/overview`, `#/system`); browser back/forward and bookmarks work, and the
+  legacy `audio` route maps to Media.
+### Changed
+- Dashboard navigation moved out of `app.js` into ES modules under
+  `src/web/static/js/` (loaded via `main.js` with the release cache key);
+  `app.js` now publishes `vera:status`, `vera:music`, `vera:podcast` and
+  `vera:update` window events that pages consume instead of re-polling.
+- `docs/TODO.md`: replaced the generic web UI rationalization item with
+  backlog items for reorganization phases 3–9.
+### Removed
+- Drag-to-reorder cards (fixed layout); saved card orders and the old
+  last-tab preference are cleared from localStorage.
+
 ## [1.88.2] - 2026-10-26
 ### Changed
 - Backlog (`docs/TODO.md`): added mouth-display items (presence-aware resting

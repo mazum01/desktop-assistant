@@ -62,6 +62,7 @@ body[data-workspace="smart-home"], .tab-btn[data-tab="smart-home"] { --workspace
 body[data-workspace="system"], .tab-btn[data-tab="system"] { --workspace-color: #ccbb88; }
 body[data-workspace="settings"], .tab-btn[data-tab="settings"] { --workspace-color: #99cccc; }
 .tab-btn[data-tab="overview"] { --workspace-color: var(--orange); }
+body[data-workspace="home"], .tab-btn[data-tab="home"] { --workspace-color: #ff9c63; }
 body { --panel-accent: var(--workspace-color); }
 
 html, body {
@@ -1117,30 +1118,6 @@ main {
   margin-left: 8px;
 }
 
-/* ── Drag-and-drop card reordering ───────────────────────────── */
-.drag-handle {
-  cursor: grab;
-  color: var(--text-dim);
-  font-size: 18px;
-  margin-right: 6px;
-  user-select: none;
-  opacity: 0.35;
-  transition: opacity 0.15s;
-  vertical-align: middle;
-  line-height: 1;
-}
-.drag-handle:hover { opacity: 0.85; }
-.card.dragging {
-  opacity: 0.35;
-  outline: 2px dashed var(--border);
-}
-.card.drag-over-top {
-  box-shadow: 0 -3px 0 0 var(--blue), var(--shadow);
-}
-.card.drag-over-bottom {
-  box-shadow: 0 3px 0 0 var(--blue), var(--shadow);
-}
-
 /* ── IoT plugin device cards ─────────────────────────────────────── */
 .iot-primary-row {
   display: flex;
@@ -1314,6 +1291,45 @@ input[type="checkbox"] { accent-color: var(--orange); }
 main:focus { outline: none; }
 .help-table td:first-child { white-space: normal; overflow-wrap: anywhere; }
 
+/* ── Interface modes (presentation only) ─────────────────────────── */
+body:not([data-mode="advanced"]):not([data-mode="engineering"]) [data-min-mode="advanced"],
+body:not([data-mode="engineering"]) [data-min-mode="engineering"] { display: none !important; }
+.header-right { display: flex; align-items: center; gap: 14px; }
+.mode-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 18px; overflow: hidden; }
+.mode-toggle button {
+  background: var(--bg3); color: var(--text-dim); border: 0; padding: 5px 12px;
+  font: 700 11px/1.4 "Arial Narrow", sans-serif; letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
+}
+.mode-toggle button + button { border-left: 1px solid var(--border); }
+.mode-toggle button[aria-pressed="true"] { background: var(--workspace-color); color: #000; }
+.mode-toggle button[data-mode-option="engineering"][aria-pressed="true"] { background: var(--red); }
+.mode-toggle button:focus-visible { outline: 2px solid var(--orange); outline-offset: -2px; }
+
+/* ── Home ──────────────────────────────────────────────────────── */
+#tab-home .home-wide { grid-column: 1 / -1; }
+.home-status-strip .stat-value { font-size: 17px; overflow-wrap: anywhere; }
+.home-spoken { font-size: 13px !important; font-weight: 500; color: var(--text) !important; }
+.home-alerts { margin-top: 14px; }
+.home-alerts button.pill { cursor: pointer; font: inherit; }
+.home-muted { color: var(--text-dim); font-size: 12px; margin-top: 6px; }
+.home-camera-link { display: block; aspect-ratio: 16 / 9; background: #000; border-radius: 4px; overflow: hidden; }
+.home-camera { width: 100%; height: 100%; object-fit: cover; display: block; }
+.home-media { display: flex; gap: 14px; align-items: center; min-height: 72px; }
+.home-media-art { width: 72px; height: 72px; object-fit: cover; border-radius: 4px; }
+.home-media-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.home-media-text strong { font-size: 16px; overflow-wrap: anywhere; }
+.home-media-controls { margin: 14px 0 10px; }
+.home-volume { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; color: var(--text-dim); font-size: 12px; }
+.home-volume input { flex: 1; }
+.home-toggles { display: grid; gap: 4px; }
+.home-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+.home-toggle:last-child { border-bottom: 0; }
+.home-repeat { margin-top: 12px; }
+.home-iot { display: grid; gap: 6px; margin-bottom: 12px; }
+.home-iot-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.home-eng { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.home-eng code { color: var(--blue); font-size: 13px; overflow-wrap: anywhere; }
+
 @media (max-width: 1150px) {
   :root { --rail-width: 186px; --shell-gap: 16px; }
   .tab-pane { grid-template-columns: minmax(0, 1fr); }
@@ -1368,4 +1384,10 @@ main:focus { outline: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+@media (max-width: 700px) {
+  header { flex-wrap: wrap; row-gap: 6px; }
+  .header-right { gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .mode-toggle button { padding: 4px 7px; font-size: 10px; }
 }

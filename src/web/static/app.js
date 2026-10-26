@@ -1,81 +1,7 @@
 /* VERA Dashboard — app.js */
 
-// ── Tab navigation ────────────────────────────────────────────────────────
-
-const _TAB_KEY     = 'vera-active-tab';
-const _DEFAULT_TAB = 'overview';
-
-function switchTab(tabId) {
-  // Older bookmarks/preferences used "audio" for controls now grouped with media.
-  if (tabId === 'audio') tabId = 'controls';
-  if (!document.getElementById('tab-' + tabId)) tabId = _DEFAULT_TAB;
-  const previous = document.querySelector('.tab-pane.active');
-  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => {
-    const selected = b.dataset.tab === tabId;
-    b.classList.toggle('active', selected);
-    b.setAttribute('aria-selected', String(selected));
-    b.tabIndex = selected ? 0 : -1;
-  });
-  const pane = document.getElementById('tab-' + tabId);
-  pane.classList.add('active');
-  document.body.dataset.workspace = tabId;
-  document.getElementById('workspace-title').textContent = pane.dataset.title;
-  document.getElementById('workspace-description').textContent = pane.dataset.description;
-  document.title = `VERA / ${pane.dataset.title}`;
-  localStorage.setItem(_TAB_KEY, tabId);
-  if (previous !== pane) {
-    document.querySelectorAll('.frame-code').forEach(code => {
-      code.textContent = code.textContent.replace(/\d/g,
-        digit => String((Number(digit) + 1 + Math.floor(Math.random() * 9)) % 10));
-    });
-  }
-  if (previous && previous !== pane) window.scrollTo({ top: 0, behavior: 'instant' });
-}
-
-function openWorkspace(tabId, cardId) {
-  switchTab(tabId);
-  const target = document.getElementById(cardId || 'workspace-title');
-  target.closest('details')?.setAttribute('open', '');
-  target.querySelector('details')?.setAttribute('open', '');
-  target.setAttribute('tabindex', '-1');
-  target.focus({ preventScroll: true });
-  target.scrollIntoView({ block: 'start' });
-}
-
-function railStardate(date = new Date()) {
-  const year = date.getFullYear();
-  const day = Math.floor((Date.UTC(year, date.getMonth(), date.getDate()) - Date.UTC(year, 0, 0)) / 86400000);
-  return `${year}.${String(day).padStart(3, '0')}`;
-}
-
-function updateRailStardate() {
-  const stardate = document.getElementById('rail-stardate');
-  if (!stardate) return;
-  const now = new Date();
-  stardate.textContent = railStardate(now);
-  stardate.dateTime = now.toISOString().slice(0, 10);
-}
-
-function initTabs() {
-  updateRailStardate();
-  setInterval(updateRailStardate, 60000);
-  const saved = localStorage.getItem(_TAB_KEY) || _DEFAULT_TAB;
-  switchTab(saved);
-  document.querySelector('.tab-nav').addEventListener('keydown', event => {
-    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    const buttons = Array.from(document.querySelectorAll('.tab-btn'));
-    const index = buttons.indexOf(event.target);
-    if (index < 0) return;
-    event.preventDefault();
-    const direction = ['ArrowUp', 'ArrowLeft'].includes(event.key) ? -1 : 1;
-    const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
-      : (index + direction + buttons.length) % buttons.length;
-    const next = buttons[nextIndex];
-    switchTab(next.dataset.tab);
-    next.focus();
-  });
-}
+// Navigation, interface modes and the Home page live in ES modules under
+// /static/js/ (loaded after this script). They read the globals defined here.
 
 // ── Software updates ──────────────────────────────────────────────────────
 
@@ -110,6 +36,7 @@ async function updateApi(operation, method = 'GET', payload) {
 async function pollUpdates() {
   try {
     const status = await updateApi('status');
+    window.dispatchEvent(new CustomEvent('vera:update', { detail: status }));
     document.getElementById('update-installed').textContent = status.installed_version || '—';
     document.getElementById('update-available').textContent = status.available_version || '—';
     document.getElementById('update-status').textContent =
@@ -398,6 +325,13 @@ function _reconnectStream(id) {
   s.img.src = `${s.path}?key=${encodeURIComponent(VERA_API_KEY)}&t=${Date.now()}`;
 }
 
+function _unregisterStream(id) {
+  const s = _streams[id];
+  if (!s) return;
+  delete _streams[id];
+  s.img.removeAttribute("src");
+}
+
 function reconnectStreams() {
   Object.keys(_streams).forEach(_reconnectStream);
 }
@@ -472,6 +406,7 @@ function _startRoomPoller() {
 
 function updateDashboard(data) {
   const last = data.last || {};
+  window.dispatchEvent(new CustomEvent("vera:status", { detail: data }));
 
   // Header
   const version = data.version || "?";
@@ -692,7 +627,6 @@ function renderIoTDevices(iot) {
       card.dataset.iotDevice = deviceId;
       card.innerHTML = `
         <h2>
-          <span class="drag-handle" title="Drag to reorder">⠿</span>
           <span class="iot-card-icon">${snap.device_icon || "🔌"}</span>
           <span class="iot-card-name">${snap.device_name || deviceId}</span>
           <span style="margin-left:auto;display:flex;gap:6px">
@@ -3318,7 +3252,6 @@ function closeLightbox() {
 // ── Say on enter key ──────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
-  initTabs();
   document.getElementById('update-settings').addEventListener('input', () => {
     _updateSettingsDirty = true;
   });
@@ -3383,7 +3316,7 @@ document.addEventListener("DOMContentLoaded", () => {
   _startRoomPoller();
   initFpsCounters();
   loadTrackingParams();
-  initCardDragDrop();
+  _forgetCardOrder();
 
   // IoT button event delegation — handles Add, Config, Remove, Announce, and
   // device-action buttons. Avoids inline onclick attributes which can be
@@ -3460,6 +3393,7 @@ async function loadMusicStatus() {
       if (panel) panel.style.display = (d.eq_preset === "custom") ? "block" : "none";
       if (d.eq_preset === "custom") loadCustomEq();
     }
+    window.dispatchEvent(new CustomEvent("vera:music", { detail: d }));
   } catch (e) { /* ignore */ }
 }
 
@@ -3810,6 +3744,7 @@ async function loadPodcastStatus() {
       if (elapsedEl) elapsedEl.textContent = "0:00";
       if (durEl) durEl.textContent = "0:00";
     }
+    window.dispatchEvent(new CustomEvent("vera:podcast", { detail: s }));
   } catch (_e) {
     _setPodcastStatus("Podcast status unavailable.", false);
   }
@@ -4316,98 +4251,11 @@ function _drawTrackingChart(cv) {
   plot(s => s.servo_angle,   yAngle, "#fa4", false);
 }
 
-// ── Drag-and-drop card reordering ────────────────────────────────────────────
-// Cards are reordered by dragging the ⠿ handle in each card's header.
-// Order is persisted in localStorage (per tab-pane) so it survives page refresh.
-
-const _CARD_ORDER_KEY = "vera-lcars-card-order-v1";
-let _dragSrcCard = null;
-let _dragHandleDown = false;
-
-function initCardDragDrop() {
-  // Migrate away from old single-key order (pre-tab layout)
-  localStorage.removeItem("da-card-order");
-
-  // Restore saved card order for each pane independently
-  document.querySelectorAll('.tab-pane').forEach(pane => {
-    const key = `${_CARD_ORDER_KEY}-${pane.id}`;
-    let saved;
-    try {
-      saved = JSON.parse(localStorage.getItem(key) || "null");
-    } catch (error) {
-      console.warn("Ignoring invalid saved workspace order", key, error);
-      localStorage.removeItem(key);
-    }
-    if (saved && Array.isArray(saved)) {
-      saved.forEach(id => {
-        const card = document.getElementById(id);
-        if (card && card.closest('.tab-pane') === pane) pane.appendChild(card);
-      });
-    }
-  });
-
-  // Attach mousedown on every drag handle to gate which drags are allowed
-  document.querySelectorAll(".drag-handle").forEach(handle => {
-    handle.addEventListener("mousedown", () => { _dragHandleDown = true; });
-    handle.addEventListener("mouseup",   () => { _dragHandleDown = false; });
-  });
-
-  document.querySelectorAll(".tab-pane > .card").forEach(card => {
-    // Only allow drag when initiated from the handle
-    card.addEventListener("dragstart", e => {
-      if (!_dragHandleDown) { e.preventDefault(); return; }
-      _dragSrcCard = card;
-      card.classList.add("dragging");
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", card.id);
-    });
-
-    card.addEventListener("dragend", () => {
-      _dragHandleDown = false;
-      if (_dragSrcCard) _dragSrcCard.classList.remove("dragging");
-      _dragSrcCard = null;
-      document.querySelectorAll(".drag-over-top, .drag-over-bottom")
-              .forEach(c => c.classList.remove("drag-over-top", "drag-over-bottom"));
-    });
-
-    card.addEventListener("dragover", e => {
-      if (!_dragSrcCard || _dragSrcCard === card) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      const rect = card.getBoundingClientRect();
-      const isTop = e.clientY < rect.top + rect.height / 2;
-      card.classList.toggle("drag-over-top",    isTop);
-      card.classList.toggle("drag-over-bottom", !isTop);
-    });
-
-    card.addEventListener("dragleave", e => {
-      // Only clear if we actually left the card (not just entered a child)
-      if (!card.contains(e.relatedTarget)) {
-        card.classList.remove("drag-over-top", "drag-over-bottom");
-      }
-    });
-
-    card.addEventListener("drop", e => {
-      e.preventDefault();
-      card.classList.remove("drag-over-top", "drag-over-bottom");
-      if (!_dragSrcCard || _dragSrcCard === card) return;
-      // Only allow drop within the same tab-pane
-      const pane = card.closest('.tab-pane');
-      if (!pane || !pane.contains(_dragSrcCard)) return;
-      const rect = card.getBoundingClientRect();
-      const insertBefore = e.clientY < rect.top + rect.height / 2;
-      pane.insertBefore(_dragSrcCard, insertBefore ? card : card.nextSibling);
-      _saveCardOrder(pane);
-    });
-  });
-
-  // Make cards draggable (needed for HTML5 DnD API)
-  document.querySelectorAll(".tab-pane > .card").forEach(c => c.setAttribute("draggable", "true"));
-}
-
-function _saveCardOrder(pane) {
-  const order = Array.from(pane.querySelectorAll(':scope > .card')).map(c => c.id);
-  localStorage.setItem(`${_CARD_ORDER_KEY}-${pane.id}`, JSON.stringify(order));
+// Cards use a fixed layout; drop any order saved by the retired drag-and-drop.
+function _forgetCardOrder() {
+  Object.keys(localStorage)
+    .filter(key => key === "da-card-order" || key.startsWith("vera-lcars-card-order-v1"))
+    .forEach(key => localStorage.removeItem(key));
 }
 
 // ── Depth Estimation ──────────────────────────────────────────────
