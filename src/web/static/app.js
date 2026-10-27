@@ -322,7 +322,8 @@ function _reconnectStream(id) {
   if (!s) return;
   s.sig = null;
   s.changedMs = Date.now();
-  s.img.src = `${s.path}?key=${encodeURIComponent(VERA_API_KEY)}&t=${Date.now()}`;
+  const sep = s.path.includes("?") ? "&" : "?";
+  s.img.src = `${s.path}${sep}key=${encodeURIComponent(VERA_API_KEY)}&t=${Date.now()}`;
 }
 
 function _unregisterStream(id) {

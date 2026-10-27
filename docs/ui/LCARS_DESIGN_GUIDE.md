@@ -115,7 +115,7 @@ Reuse these components; don't invent near-duplicates.
 | **Mirrored sweep card** | `.lcars-sweep-card.is-mirrored` | Same frame with the spine, elbows and frame breaks on the **right**. Use it for the companion panel beside a sweep card so the pair reads as one bracketed console (Home's Vision + Vision Control). |
 | **Group label** | `.lcars-group-label` | Small uppercase peach label that names a block of controls inside a card ("Behavior", "Head position"). Not a heading. |
 | **Compact toggle grid** | `.lcars-toggle-grid.is-compact` | Two columns of bar-height toggles with name and `ON`/`OFF` on one line. Use in dense control panels. |
-| **LCARS data row** | `dl.lcars-data-list` > `.lcars-data-row` > `dt` + `dd` | Read-only key/value readout: 72px peach name block, ice value that truncates with an ellipsis. Use it for live facts such as Vision Control's Scene group (Room, Objects); never for something the user can change. |
+| **LCARS data row** | `dl.lcars-data-list` > `.lcars-data-row` > `dt` + `dd` | Read-only key/value readout: 72px peach name block, ice value that truncates with an ellipsis. Add `dd.is-caps` to show a proper name in uppercase (Room). Use it for live facts such as Vision Control's Scene group (Room, Objects); never for something the user can change. |
 | **LCARS slider** | `label.lcars-slider` > name `span` + `input[type=range]` + `output` | Peach name block, ice-accent range, ice value readout. Follows the live value while idle; sends only the latest value while dragging. |
 
 ### 3.1 Sweep card (live video and other hero panels)
@@ -185,6 +185,13 @@ switch (camera 1 / camera 2; VERA's cameras are its eyes, so the UI names them t
     black gap hands back to the panel hue just above the bottom elbow.
 
   The frame breaks are decorative, `aria-hidden`, and `pointer-events: none`.
+- **Jewel variety:** the spine breaks and bar blocks ("jewels") are driven by
+  card-level variables: `--jewel-top`, `--jewel-height`, `--jewel`,
+  `--jewel-lower` and `--jewel-block`. Cards that sit side by side must not
+  repeat the same jewel set. Add `.is-alt-jewels` to the companion card: a
+  short ice break high on the spine (22%, 40px), a lilac run below it, and
+  peach bar blocks. Home's Vision keeps the default set, and Vision Control
+  uses the alternate.
 - **Bottom sweep bar:** right-aligned on the bottom bar.
   - It holds an optional `.sweep-block` colour chip, then a segmented control.
     Each piece is separated by a `--lcars-gap` black gap. The bar ends square,

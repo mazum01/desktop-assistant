@@ -154,3 +154,55 @@ def test_run_tick_skips_frames_already_processed():
     for _ in range(3):
         svc.run_tick()
     assert ready == [1] and svc.frame_index() == 1
+
+
+def _encode_variants(request_plain, request_heading):
+    import threading
+    from src.core.bus import MessageBus
+    from src.services.vision_service import VisionService
+    from src.vision.camera import CameraConfig
+    svc = VisionService(bus=MessageBus(), camera_config=CameraConfig())
+    if request_plain:
+        svc.latest_jpeg(heading=False)
+    if request_heading:
+        svc.latest_jpeg()
+    frame = np.zeros((90, 160, 3), np.uint8)
+    svc._encode_queue.put((frame, None, [], [], {}, 175.0, 135.0, 215.0, 1, None))
+    dials = []
+    with patch("src.services.vision_service._draw_servo_overlay",
+               side_effect=lambda img, *a: (dials.append(a), img.fill(255))):
+        svc._encoder_running = True
+        worker = threading.Thread(target=svc._encoder_loop)
+        worker.start()
+        try:
+            for _ in range(100):
+                if svc._latest_jpeg or svc._latest_jpeg_no_heading:
+                    break
+                threading.Event().wait(0.02)
+        finally:
+            svc._encoder_running = False
+            worker.join(2)
+    return svc, dials
+
+
+def _mean(jpeg):
+    return cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR).mean()
+
+
+def test_heading_dial_variant_is_default():
+    svc, dials = _encode_variants(request_plain=False, request_heading=False)
+    assert len(dials) == 1
+    assert _mean(svc.latest_jpeg()) > 200
+    assert svc._latest_jpeg_no_heading is None
+
+
+def test_plain_variant_skips_dial_and_only_encodes_what_is_watched():
+    svc, dials = _encode_variants(request_plain=True, request_heading=False)
+    assert dials == []  # only Home is watching: no dial drawn or encoded
+    assert _mean(svc.latest_jpeg(heading=False)) < 10
+    assert svc._latest_jpeg is None
+
+    svc, dials = _encode_variants(request_plain=True, request_heading=True)
+    assert len(dials) == 1
+    assert _mean(svc._latest_jpeg_no_heading) < 10
+    assert _mean(svc._latest_jpeg) > 200

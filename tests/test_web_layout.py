@@ -205,6 +205,7 @@ const canvasCtx = {
 const listeners = {};
 const imgs = {
   'camera-stream': {src: '', naturalWidth: 640, offsetParent: {}, style: {}, closest: () => null},
+  'home-camera': {src: '', naturalWidth: 640, offsetParent: {}, style: {}, closest: () => null, removeAttribute() {}},
 };
 const timers = [];
 let reloads = 0;
@@ -267,6 +268,11 @@ clock += 10000; pixel = 2; context.checkStreams();
 assert.equal(imgs['camera-stream'].src, initial);
 clock += 16000; context.checkStreams();
 assert.notEqual(imgs['camera-stream'].src, initial);
+
+// A path that already carries a query string keeps a valid URL.
+context._registerStream('home-camera', '/stream?heading=0');
+assert.match(imgs['home-camera'].src, /^\/stream\?heading=0&key=k&t=\d+$/);
+context._unregisterStream('home-camera');
 
 context.initAutoRecovery();
 const beforeResume = imgs['camera-stream'].src;
@@ -757,6 +763,12 @@ def test_home_vision_control_frame_sits_beside_vision(layout):
     assert "renderHead(pos)" in home
     assert "'/api/settings/camera/overlay'" in home
     assert ".lcars-data-row" in css
+    # The pair must not repeat the same jewels, and Room reads in caps.
+    camera_classes = by_id["card-home-camera"]["attrs"]["class"].split()
+    assert "is-alt-jewels" in classes and "is-alt-jewels" not in camera_classes
+    assert ".lcars-sweep-card.is-alt-jewels" in css and "var(--jewel-block)" in css
+    assert "is-caps" in by_id["home-control-room"]["attrs"]["class"].split()
+    assert "'/stream?heading=0'" in home
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for Home regression")
@@ -880,7 +892,7 @@ import(require('node:url').pathToFileURL(process.argv[2]).href).then(({initHome,
   listeners['vera:route']({detail: {tab: 'home'}});
   assert.deepEqual(registered.at(-1), ['home-camera', '/stream2']);
   selectCamera(1);
-  assert.deepEqual(registered.at(-1), ['home-camera', '/stream']);
+  assert.deepEqual(registered.at(-1), ['home-camera', '/stream?heading=0']);
   listeners['vera:route']({detail: {tab: 'media', previous: 'home'}});
   assert.deepEqual(registered.at(-1), ['home-camera', null]);
   const count = registered.length;

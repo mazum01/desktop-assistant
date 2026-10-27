@@ -1501,3 +1501,20 @@ def test_overlay_confidence_setting_round_trip():
     r = client.put("/api/settings/camera/overlay", json={"show_confidence": True})
     assert r.status_code == 200 and r.json()["show_confidence"] is True
     assert seen == [{"enabled": True}]
+
+
+def test_frame_fetch_pulls_only_the_stream_variants_being_watched():
+    vision = MagicMock()
+    vision.latest_jpeg.side_effect = lambda heading=True: b"dial" if heading else b"plain"
+    svc = WebService(bus=MessageBus(), port=18081, registry=_mock_registry(), vision_service=vision)
+
+    svc._fetch_frame()  # nobody watching: keep the default variant fresh
+    assert vision.latest_jpeg.call_args_list[-1].kwargs == {}
+    assert svc._latest_frame == b"dial" and svc._latest_frame_no_heading is None
+
+    vision.latest_jpeg.reset_mock()
+    svc._stream_clients[False] = 1  # only Home (?heading=0) is open
+    svc._fetch_frame()
+    assert [c.kwargs for c in vision.latest_jpeg.call_args_list] == [{"heading": False}]
+    assert svc._latest_frame_no_heading == b"plain"
+    assert svc._cam1_frame_count == 2

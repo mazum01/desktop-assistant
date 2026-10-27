@@ -30,7 +30,9 @@ Topics subscribed:
 
 Public accessors (in-process callers):
     svc.latest_frame() → np.ndarray | None   (BGR, for detection)
-    svc.latest_jpeg()  → bytes | None        (pre-encoded JPEG, for streaming)
+    svc.latest_jpeg(heading=True) → bytes | None  (pre-encoded JPEG, for streaming;
+        heading=False returns the variant without the pan-heading dial, which is
+        only encoded while a caller has asked for it in the last few seconds)
 """
 
 from __future__ import annotations
@@ -964,6 +966,10 @@ class VisionService(Service):
         self._latest_observation_time: float = 0.0
         self._latest_observation_rotation: int = 0
         self._latest_jpeg: Optional[bytes] = None
+        self._latest_jpeg_no_heading: Optional[bytes] = None
+        # Monotonic time each stream variant was last requested; the encoder
+        # skips a variant nobody has asked for recently.
+        self._variant_requested = {True: 0.0, False: 0.0}
         self._index = 0
         self._lock = threading.Lock()
         # Detection caches — written by bus callbacks, read in run_tick
@@ -1252,12 +1258,23 @@ class VisionService(Service):
                            show_confidence=self._show_confidence)
             if privacy_state:
                 _draw_privacy_overlay(display, privacy_state, sx, sy)
-            if servo_angle is not None:
-                _draw_servo_overlay(display, servo_angle, servo_min, servo_max)
-
-            ok, buf = cv2.imencode(".jpg", display, self._jpeg_params)
-            with self._lock:
-                self._latest_jpeg = bytes(buf) if ok else None
+            want_heading, want_plain = self._wanted_variants()
+            if servo_angle is None:
+                ok, buf = cv2.imencode(".jpg", display, self._jpeg_params)
+                jpeg = bytes(buf) if ok else None
+                with self._lock:
+                    self._latest_jpeg = jpeg
+                    self._latest_jpeg_no_heading = jpeg
+            else:
+                if want_plain:
+                    ok, buf = cv2.imencode(".jpg", display, self._jpeg_params)
+                    with self._lock:
+                        self._latest_jpeg_no_heading = bytes(buf) if ok else None
+                if want_heading:
+                    _draw_servo_overlay(display, servo_angle, servo_min, servo_max)
+                    ok, buf = cv2.imencode(".jpg", display, self._jpeg_params)
+                    with self._lock:
+                        self._latest_jpeg = bytes(buf) if ok else None
 
             self.bus.publish("vision.jpeg_ready", {"index": idx})
 
@@ -1304,10 +1321,29 @@ class VisionService(Service):
             return (self._latest, self._latest_small,
                     self._latest_observation_time, self._latest_observation_rotation)
 
-    def latest_jpeg(self) -> Optional[bytes]:
-        """Return the most recent pre-encoded JPEG (with overlays). Used by WebService."""
+    _VARIANT_IDLE_S = 3.0
+
+    def _wanted_variants(self) -> tuple:
+        """Return (with_heading, without_heading) encode flags.
+
+        The heading variant is always encoded unless only the plain variant
+        has been requested recently, so in-process callers keep working.
+        """
+        now = time.monotonic()
         with self._lock:
-            return self._latest_jpeg
+            plain = now - self._variant_requested[False] < self._VARIANT_IDLE_S
+            heading = now - self._variant_requested[True] < self._VARIANT_IDLE_S
+        return (heading or not plain), plain
+
+    def latest_jpeg(self, heading: bool = True) -> Optional[bytes]:
+        """Return the most recent pre-encoded JPEG (with overlays). Used by WebService.
+
+        *heading* False selects the variant without the pan-heading dial.
+        """
+        heading = bool(heading)
+        with self._lock:
+            self._variant_requested[heading] = time.monotonic()
+            return self._latest_jpeg if heading else self._latest_jpeg_no_heading
 
     def frame_index(self) -> int:
         with self._lock:

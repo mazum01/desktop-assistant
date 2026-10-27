@@ -837,9 +837,9 @@ def main() -> int:
             },
         }
 
-    def _rpc_vision_latest_jpeg(_msg):
+    def _rpc_vision_latest_jpeg(msg):
         import base64
-        jpeg = vis.latest_jpeg()
+        jpeg = vis.latest_jpeg(heading=(msg or {}).get("heading", True) is not False)
         return {"ok": True, "jpeg_b64": base64.b64encode(jpeg).decode("ascii") if jpeg else None}
 
     def _rpc_vision_snapshot_jpeg(msg):

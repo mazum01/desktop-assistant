@@ -1352,6 +1352,13 @@ header .badge-unknown { background: var(--lcars-dim); }
   --sweep-spine: var(--lcars-frame-spine);
   --sweep-bar: var(--lcars-bar-height);
   --sweep-top: var(--sweep-bar);
+  /* Jewels: the spine frame breaks and bar blocks. Neighbouring cards set
+     different values (.is-alt-jewels) so a pair never reads as a copy. */
+  --jewel-top: 46%;
+  --jewel-height: 64px;
+  --jewel: var(--lcars-lilac);
+  --jewel-lower: var(--lcars-peach);
+  --jewel-block: var(--lcars-lilac);
   position: relative;
   border-top-width: var(--sweep-top);
   border-top-left-radius: 53px 50px;
@@ -1360,12 +1367,12 @@ header .badge-unknown { background: var(--lcars-dim); }
 }
 .frame-break { position: absolute; pointer-events: none; }
 .frame-break-spine {
-  left: calc(-1 * var(--sweep-spine)); width: var(--sweep-spine); top: 46%; height: 64px;
-  background: var(--lcars-lilac); border-block: var(--lcars-gap) solid #000;
+  left: calc(-1 * var(--sweep-spine)); width: var(--sweep-spine); top: var(--jewel-top); height: var(--jewel-height);
+  background: var(--jewel); border-block: var(--lcars-gap) solid #000;
 }
 .frame-break-lower {
-  left: calc(-1 * var(--sweep-spine)); width: var(--sweep-spine); top: calc(46% + 64px); bottom: 24px;
-  background: var(--lcars-peach); border-bottom: var(--lcars-gap) solid #000;
+  left: calc(-1 * var(--sweep-spine)); width: var(--sweep-spine); top: calc(var(--jewel-top) + var(--jewel-height)); bottom: 24px;
+  background: var(--jewel-lower); border-bottom: var(--lcars-gap) solid #000;
 }
 .lcars-sweep-bar {
   position: absolute; right: -1px; bottom: calc(-1 * var(--sweep-bar)); height: var(--sweep-bar);
@@ -1384,7 +1391,16 @@ header .badge-unknown { background: var(--lcars-dim); }
 /* A slim top bar (sweep-top below the bar height) hugs the readout text. */
 .lcars-sweep-bar-top .sweep-readout { padding-bottom: 2px; }
 .sweep-readout-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sweep-block { width: 56px; margin-left: var(--lcars-gap); background: var(--lcars-lilac); }
+.sweep-block { width: 56px; margin-left: var(--lcars-gap); background: var(--jewel-block); }
+/* Alternate jewel set for the companion card: a short ice break high on the
+   spine, a lilac run below it, and peach bar blocks. */
+.lcars-sweep-card.is-alt-jewels {
+  --jewel-top: 22%;
+  --jewel-height: 40px;
+  --jewel: var(--lcars-ice);
+  --jewel-lower: var(--lcars-lilac);
+  --jewel-block: var(--lcars-peach);
+}
 /* Sweep title: the card's name cut into the left of the thick top bar as a
    black gap with text in the frame hue. It doubles as the cross-link. */
 .lcars-sweep-title {
@@ -1436,6 +1452,7 @@ header .badge-unknown { background: var(--lcars-dim); }
   margin: 0; color: var(--lcars-ice); font: 600 18px/1.1 var(--console-font);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.lcars-data-row dd.is-caps { text-transform: uppercase; letter-spacing: .04em; }
 /* LCARS slider: name block | range | live value readout, one bar high. */
 .lcars-slider-group { display: grid; gap: var(--lcars-gap); }
 .lcars-slider {

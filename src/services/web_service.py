@@ -6,7 +6,8 @@ Serves a live dark-themed single-page dashboard on ``http://<pi>:8080``.
 Endpoints
 ---------
 GET  /                    Main dashboard HTML
-GET  /stream              MJPEG camera stream (from bus vision.jpeg_ready frames)
+GET  /stream              MJPEG camera stream (from bus vision.jpeg_ready frames);
+                          ?heading=0 omits the pan-heading dial (Home page)
 WS   /ws                  Live JSON status + event tail (pushes every ~250 ms)
 GET  /health                 Liveness check {"ok":true}
 GET  /api/status          One-shot status snapshot
@@ -897,6 +898,9 @@ class WebService:
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._latest_frame: Optional[bytes] = None   # JPEG bytes
+        self._latest_frame_no_heading: Optional[bytes] = None
+        # Open /stream clients per variant (True = with heading dial).
+        self._stream_clients = {True: 0, False: 0}
         self._frame_event: Optional[asyncio.Event] = None   # created in _run_server
         self._latest_frame2: Optional[bytes] = None  # second camera JPEG
         self._frame2_event: Optional[asyncio.Event] = None  # created in _run_server
@@ -1063,9 +1067,18 @@ class WebService:
         """
         if self._vision_svc is None:
             return
-        jpeg = self._vision_svc.latest_jpeg()
-        if jpeg is not None:
-            self._latest_frame = jpeg
+        got = False
+        if self._stream_clients[False] > 0:
+            plain = self._vision_svc.latest_jpeg(heading=False)
+            if plain is not None:
+                self._latest_frame_no_heading = plain
+                got = True
+        if self._stream_clients[True] > 0 or self._stream_clients[False] == 0:
+            jpeg = self._vision_svc.latest_jpeg()
+            if jpeg is not None:
+                self._latest_frame = jpeg
+                got = True
+        if got:
             self._cam1_frame_count += 1
             if self._loop is not None and self._frame_event is not None:
                 self._loop.call_soon_threadsafe(self._frame_event.set)
@@ -1348,26 +1361,33 @@ class WebService:
         # ── MJPEG stream ──────────────────────────────────────────────
 
         @app.get("/stream")
-        async def mjpeg_stream():
+        async def mjpeg_stream(heading: str = "1"):
+            with_heading = heading.strip().lower() not in ("0", "false", "off", "no")
+
             async def generate():
                 last_sent: Optional[bytes] = None
-                while True:
-                    evt = self._frame_event
-                    if evt is None:
-                        await asyncio.sleep(0.05)
-                        continue
-                    try:
-                        await asyncio.wait_for(evt.wait(), timeout=1.0)
-                    except asyncio.TimeoutError:
-                        continue
-                    evt.clear()
-                    frame = self._latest_frame
-                    if frame and frame is not last_sent:
-                        last_sent = frame
-                        yield (
-                            b"--frame\r\n"
-                            b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
-                        )
+                self._stream_clients[with_heading] += 1
+                try:
+                    while True:
+                        evt = self._frame_event
+                        if evt is None:
+                            await asyncio.sleep(0.05)
+                            continue
+                        try:
+                            await asyncio.wait_for(evt.wait(), timeout=1.0)
+                        except asyncio.TimeoutError:
+                            continue
+                        evt.clear()
+                        frame = (self._latest_frame if with_heading
+                                 else self._latest_frame_no_heading)
+                        if frame and frame is not last_sent:
+                            last_sent = frame
+                            yield (
+                                b"--frame\r\n"
+                                b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+                            )
+                finally:
+                    self._stream_clients[with_heading] -= 1
 
             return StreamingResponse(
                 generate(),

@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.94.1] - 2026-10-27
+### Changed
+- Home: the Vision Control Room readout is now uppercase (`dd.is-caps`), matching the LCARS readouts.
+- Home: the live view no longer shows the pan-heading dial overlay, because the Head position sliders already show the angle. Home now requests `/stream?heading=0`, and the Vision page keeps the dial. VisionService encodes the dial-free JPEG only while someone is watching it (it is requested via the `heading` flag on the `vision.latest_jpeg` RPC), and the web server only fetches the variants that have open stream clients.
+- Home: Vision and Vision Control now use different frame "jewels". New `--jewel-*` card variables and an `.is-alt-jewels` modifier give Vision Control an ice spine break placed high, a lilac lower run, and peach bar blocks. Documented in the LCARS guide.
+
+### Fixed
+- The stream watchdog built an invalid URL (two `?`) for stream paths that already have a query string.
+
 ## [1.94.0] - 2026-10-27
 ### Added
 - Vision Control frame: new Scene group showing the detected room and the objects in view (sorted by confidence, with duplicates counted, e.g. "cup ×2"). It shows "—" when the detection data is more than 10s old.

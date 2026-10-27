@@ -268,8 +268,9 @@ class VisionServiceProxy:
             return {}
         return reply.get("status", {})
 
-    def latest_jpeg(self) -> Optional[bytes]:
-        reply = self._client.call({"cmd": "vision.latest_jpeg"}, timeout_ms=500)
+    def latest_jpeg(self, heading: bool = True) -> Optional[bytes]:
+        reply = self._client.call(
+            {"cmd": "vision.latest_jpeg", "heading": bool(heading)}, timeout_ms=500)
         if not reply.get("ok"):
             return None
         data = reply.get("jpeg_b64")

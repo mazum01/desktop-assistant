@@ -539,7 +539,8 @@ let homeActive = false;
 
 // ── Camera source switch (bottom sweep) ────────────────────────────────────
 
-const CAMERA_STREAMS = { 1: '/stream', 2: '/stream2' };
+// Home omits the pan-heading dial; the Head position sliders already show it.
+const CAMERA_STREAMS = { 1: '/stream?heading=0', 2: '/stream2' };
 const CAMERA_KEY = 'vera-home-cam';
 const EYE_NAMES = { 1: 'Left eye', 2: 'Right eye' };
 let homeCam = 1;
