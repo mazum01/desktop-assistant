@@ -105,9 +105,10 @@ Reuse these components; don't invent near-duplicates.
 | **Lit/unlit toggle** | `.lcars-toggle` > `input` + `.lcars-toggle-face` | Block with the right end rounded. Unlit = `--lcars-dim`, lit = `--lcars-ice`. Always shows an `ON`/`OFF` readout. The native checkbox stays in the DOM, visually hidden but focusable. |
 | **Readout** | `.stat-box` > `.stat-label` + `.stat-value` | Small uppercase label above a large value on black. |
 | **Alert frame** | `section.lcars-alert-frame` > `.lcars-alert-title` + pills | Top bar sweeping down into left and right spines, open at the bottom. Shown only while there are messages; hue follows the worst alert. See §3.2. |
+| **Sweep title** | `a.lcars-sweep-title` | A sweep card's name, cut into the left of its thick top bar as a black gap with text in the frame hue. It replaces the card's `h2` and doubles as the cross-link (ice on hover). Label the card with `aria-labelledby`. See §3.1. |
 | **Sweep readout** | `.lcars-sweep-bar-top` > `.sweep-readout` | Read-only key/value block in a sweep card's top bar (no hover, not focusable). See §3.1. |
 | **Status pill** | `.pill.pill-ok/-warn/-bad` | Short status words. Never color alone: the text must state the condition. |
-| **Card cross-link** | `h2 > a.card-link` | Floats right in the card title, ice-colored, ends with `›`. Use it instead of an "Open X" button. |
+| **Card cross-link** | `h2 > a.card-link` | Floats right in the card title, ice-colored, ends with `›`. Use it instead of an "Open X" button. Sweep cards use the sweep title as their link instead. |
 | **Action button** | `.btn` | Existing rounded action buttons inside cards. Use them for verbs (Play, Say), not for state. |
 | **Decorative code** | `.lcars-code` | `aria-hidden`, sparse (3–6 on the page). |
 | **Sweep card** | `.card.lcars-sweep-card` + `.lcars-sweep-bar` | Card frame closed by a bottom elbow; the thick bottom bar carries controls. Used for live video. See §3.1. |
@@ -116,19 +117,19 @@ Reuse these components; don't invent near-duplicates.
 
 The standard card frame (top-left elbow, top bar, left spine) closed by a
 **bottom elbow** into a thick bottom bar. Controls that act on the whole panel
-sit in that bar. Home's camera card uses it, with a Left Eye / Right Eye source
+sit in that bar. Home's camera card ("Vision") uses it, with a Left Eye / Right Eye source
 switch (camera 1 / camera 2; VERA's cameras are its eyes, so the UI names them that way).
 
 ```html
-<section class="card lcars-sweep-card" id="…">
+<section aria-labelledby="…-title" class="card lcars-sweep-card" id="…">
   <span aria-hidden="true" class="frame-break frame-break-spine"></span>
   <span aria-hidden="true" class="frame-break frame-break-lower"></span>
+  <a class="lcars-sweep-title" href="#/…" id="…-title">Vision</a>
   <div aria-label="…" class="lcars-sweep-bar lcars-sweep-bar-top" role="group">
     <span aria-hidden="true" class="sweep-block"></span>
     <div class="sweep-readout"><span class="sweep-readout-key">Room</span><span class="sweep-readout-value">Office</span></div>
   </div>
-  <h2>Title<a class="card-link" href="#/…">Workspace ›</a></h2>
-  … content …
+  … content (no h2, no caption under the picture) …
   <div class="lcars-sweep-bar">
     <span aria-hidden="true" class="sweep-block"></span>
     <div aria-label="…" class="cam-switch" role="group">
@@ -145,6 +146,10 @@ switch (camera 1 / camera 2; VERA's cameras are its eyes, so the UI names them t
 - **Thick top bar:** the top border is as thick as the bottom bar
   (`--sweep-top` = `--sweep-bar`) with a matching `53px 50px` elbow, so it can
   carry text.
+- **Title:** `.lcars-sweep-title` sits at the left of the top bar, past the
+  elbow: a black cut-out the height of the bar, uppercase text in the panel
+  hue. It is the only title (no `h2`) and links to the related workspace.
+  Keep video and other hero content clean: no caption text inside the frame.
 - **Top readouts:** `.lcars-sweep-bar-top` mirrors the bottom bar at the top
   right: a lilac `.sweep-block`, then read-only `.sweep-readout` blocks (peach,
   then lilac). Each shows a small key and an uppercase value at the

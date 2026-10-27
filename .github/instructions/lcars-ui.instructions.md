@@ -9,7 +9,7 @@ Before you add or change any web UI element, read
 
 - Reuse the components in §3 (frame, rail button, segmented bar, segmented
   selector, lit/unlit toggle,
-  readout, alert frame, sweep readout, status pill, card cross-link, sweep
+  readout, alert frame, sweep title, sweep readout, status pill, card cross-link, sweep
   card). Live video and hero panels use the §3.1 sweep card with a bottom elbow
   and frame breaks; page alerts use the §3.2 alert frame, shown only while
   there are messages. Active/selected buttons use the

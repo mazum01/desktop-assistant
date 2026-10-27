@@ -651,7 +651,7 @@ def test_home_flow_uses_named_grid_areas_and_title_links(layout):
     assert '#tab-home.has-alerts {' in css and '"alerts alerts"' in css
     links = {node["attrs"]["href"] for node in layout
              if "card-link" in node["attrs"].get("class", "").split()}
-    assert {"#/vision", "#/media", "#/voice", "#/smart-home", "#/overview"} <= links
+    assert {"#/media", "#/voice", "#/smart-home", "#/overview"} <= links
 
 
 def test_home_status_moves_to_header_alert_frame_and_camera_top_bar(layout):
@@ -675,12 +675,20 @@ def test_home_status_moves_to_header_alert_frame_and_camera_top_bar(layout):
         assert camera in ancestors
         assert any("lcars-sweep-bar-top" in a["attrs"].get("class", "").split() for a in ancestors)
         assert not any(a["tag"] == "button" for a in ancestors)
+    # The card's title is a "Vision" link cut into the top bar; no in-frame caption.
+    title = by_id["home-vision-title"]
+    assert title["tag"] == "a" and title["attrs"]["href"] == "#/vision"
+    assert "lcars-sweep-title" in title["attrs"]["class"].split() and camera in title["ancestors"]
+    assert camera["attrs"]["aria-labelledby"] == "home-vision-title"
+    assert "home-camera-caption" not in by_id
+    assert not any(n["tag"] == "h2" and camera in n["ancestors"] for n in layout)
     css = (STATIC / "style.css").read_text()
     assert ".lcars-alert-frame[hidden] { display: none; }" in css
     assert ".home-camera { position: absolute; inset: 0;" in css
     assert "calc(var(--sweep-bar) / 2)" not in css  # sweep bars end square
     home = (JS / "pages" / "home.js").read_text()
     assert "frame.hidden = alerts.length === 0" in home and "All clear" not in home
+    assert "home-camera-caption" not in home and "raw view" not in home
 
 
 def test_lcars_design_guide_is_referenced_by_agent_instructions():

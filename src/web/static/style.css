@@ -1382,6 +1382,16 @@ header .badge-unknown { background: var(--lcars-dim); }
 .sweep-readout-key { flex: none; font-size: 12px; opacity: .72; }
 .sweep-readout-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sweep-block { width: 56px; margin-left: var(--lcars-gap); background: var(--lcars-lilac); }
+/* Sweep title: the card's name cut into the left of the thick top bar as a
+   black gap with text in the frame hue. It doubles as the cross-link. */
+.lcars-sweep-title {
+  position: absolute; top: calc(-1 * var(--sweep-top)); left: 40px; z-index: 1;
+  height: var(--sweep-top); padding: 0 12px; background: #000; color: var(--panel-accent);
+  font: 600 calc(var(--sweep-top) - 8px)/var(--sweep-top) var(--console-font);
+  letter-spacing: .06em; text-transform: uppercase; text-decoration: none;
+}
+.lcars-sweep-title:hover { color: var(--lcars-ice); }
+.lcars-sweep-title:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
 .cam-switch { display: flex; gap: var(--lcars-gap); margin-left: var(--lcars-gap); }
 .cam-switch button, .lcars-segmented button {
   display: flex; align-items: flex-end; justify-content: flex-end;
@@ -1534,11 +1544,12 @@ header .badge-unknown { background: var(--lcars-dim); }
   header { flex-wrap: wrap; row-gap: 6px; }
   :root { --lcars-bar-height: 28px; }
   .mode-toggle button, header .badge { min-width: 0; padding: 0 8px 4px; font-size: 14px; }
-  .lcars-sweep-card { --sweep-spine: 20px; border-top-left-radius: 40px 40px; border-bottom-left-radius: 40px 40px; }
+  .lcars-sweep-card { --sweep-spine: 20px; border-top-width: var(--sweep-top); border-top-left-radius: 40px 40px; border-bottom-left-radius: 40px 40px; }
   .lcars-alert-frame { --alert-bar: 12px; border-width: var(--alert-bar) 20px 0; padding: 12px 14px 6px; }
   .lcars-alert-title { font-size: 12px; left: 28px; }
   .sweep-readout { min-width: 0; max-width: 150px; padding: 0 8px 4px; font-size: 14px; gap: 5px; }
   .sweep-readout-key { font-size: 10px; }
   .cam-switch button { min-width: 88px; padding: 0 10px 4px; font-size: 14px; }
   .sweep-block { width: 32px; }
+  .lcars-sweep-title { left: 14px; padding: 0 8px; }
 }

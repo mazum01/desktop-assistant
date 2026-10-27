@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.92.1] - 2026-10-27
+### Changed
+- Home camera card is now titled **Vision**. The title is cut into the left
+  of the frame's thick top bar (new LCARS **sweep title**,
+  `a.lcars-sweep-title`) and links to the Vision & Motion tab, replacing the
+  `Camera` heading and its `Vision ›` link.
+- Removed the caption under the picture ("No faces in view", "Right eye · raw
+  view", "… unavailable"); the People readout already gives the face count
+  and the stream reconnects on its own.
+### Fixed
+- Phones: the sweep card's thick top bar was squashed to 8px by the phone
+  `.card` rule, so the Room/People readouts floated above a thin line.
+
 ## [1.92.0] - 2026-10-27
 ### Added
 - **Display units** setting (Settings → Display Units): US Customary, Metric

@@ -194,8 +194,6 @@ function onStatus(data) {
   const named = (faces.faces || []).map(f => f.name).filter(n => n && n !== 'unknown');
   const count = Number(faces.count || 0);
   setReadout('home-faces', count ? `${count}${named.length ? ' · ' + named.join(', ') : ''}` : 'None');
-  state.faceCount = count;
-  renderCameraCaption();
   const spoke = last['av.spoke'];
   setText('home-last-spoken', spoke && spoke.text ? `“${spoke.text}”` : '—');
 
@@ -427,15 +425,6 @@ const CAMERA_KEY = 'vera-home-cam';
 const EYE_NAMES = { 1: 'Left eye', 2: 'Right eye' };
 let homeCam = 1;
 
-function renderCameraCaption() {
-  if (homeCam === 2) {
-    setText('home-camera-caption', 'Right eye · raw view');
-    return;
-  }
-  const count = state.faceCount || 0;
-  setText('home-camera-caption', count ? `${count} face${count === 1 ? '' : 's'} in view` : 'No faces in view');
-}
-
 function renderCameraSwitch() {
   document.querySelectorAll('[data-home-cam]').forEach(btn => {
     btn.setAttribute('aria-pressed', String(Number(btn.dataset.homeCam) === homeCam));
@@ -452,7 +441,6 @@ export function selectCamera(cam) {
   homeCam = Number(cam) === 2 ? 2 : 1;
   try { localStorage.setItem(CAMERA_KEY, String(homeCam)); } catch { /* storage unavailable */ }
   renderCameraSwitch();
-  renderCameraCaption();
   if (homeActive) startCamera();
 }
 
@@ -506,9 +494,6 @@ export function initHome(deps = {}) {
   try { homeCam = localStorage.getItem(CAMERA_KEY) === '2' ? 2 : 1; } catch { homeCam = 1; }
   document.querySelectorAll('[data-home-cam]').forEach(btn => {
     btn.addEventListener('click', () => selectCamera(btn.dataset.homeCam));
-  });
-  $('home-camera')?.addEventListener('error', () => {
-    if (homeActive && $('home-camera').getAttribute('src')) setText('home-camera-caption', `${EYE_NAMES[homeCam]} unavailable`);
   });
   renderCameraSwitch();
   renderAlerts();

@@ -13,7 +13,7 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&amp;display=swap" rel="stylesheet"/>
-<link href="/static/style.css?v=1.92.0" rel="stylesheet"/>
+<link href="/static/style.css?v=1.92.1" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -67,17 +67,16 @@
 <span aria-hidden="true" class="lcars-alert-title">Alerts</span>
 <div aria-live="polite" class="home-alerts" id="home-alerts"></div>
 </section>
-<section aria-label="Camera" class="card lcars-sweep-card" id="card-home-camera">
+<section aria-labelledby="home-vision-title" class="card lcars-sweep-card" id="card-home-camera">
 <span aria-hidden="true" class="frame-break frame-break-spine"></span>
 <span aria-hidden="true" class="frame-break frame-break-lower"></span>
+<a class="lcars-sweep-title" href="#/vision" id="home-vision-title" title="Open Vision &amp; Motion">Vision</a>
 <div aria-label="Scene" class="lcars-sweep-bar lcars-sweep-bar-top" role="group">
 <span aria-hidden="true" class="sweep-block"></span>
 <div class="sweep-readout"><span class="sweep-readout-key">Room</span><span class="sweep-readout-value" id="home-room">—</span></div>
 <div class="sweep-readout"><span class="sweep-readout-key">People</span><span class="sweep-readout-value" id="home-faces">—</span></div>
 </div>
-<h2>Camera<a class="card-link" href="#/vision">Vision ›</a></h2>
 <a class="home-camera-link" href="#/vision" id="home-camera-link" title="Open Vision &amp; Motion"><img alt="Live view from the left eye" class="home-camera" id="home-camera"/></a>
-<p class="home-muted" id="home-camera-caption">—</p>
 <div class="lcars-sweep-bar">
 <span aria-hidden="true" class="sweep-block"></span>
 <div aria-label="Camera eye" class="cam-switch" role="group">
@@ -1323,8 +1322,8 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.92.0"></script>
-<script src="/static/js/main.js?v=1.92.0" type="module"></script>
+<script src="/static/app.js?v=1.92.1"></script>
+<script src="/static/js/main.js?v=1.92.1" type="module"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">
