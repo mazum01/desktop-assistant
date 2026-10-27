@@ -1317,6 +1317,8 @@ header .badge { min-width: 104px; border-radius: 0 calc(var(--lcars-bar-height) 
 header .badge-ok { background: var(--green); }
 header .badge-degraded { background: var(--red); }
 header .badge-unknown { background: var(--lcars-dim); }
+header .badge { gap: 7px; }
+header .badge-key { font-size: 12px; opacity: .72; }
 
 /* LCARS toggle: a lit (on) or unlit (off) block with an ON/OFF readout. */
 .lcars-toggle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--lcars-gap); }
@@ -1348,17 +1350,15 @@ header .badge-unknown { background: var(--lcars-dim); }
    colour along the top bar and spine. See LCARS_DESIGN_GUIDE.md §3.1. */
 .lcars-sweep-card {
   --sweep-spine: var(--lcars-frame-spine);
-  --sweep-top: var(--lcars-topbar-bar);
   --sweep-bar: var(--lcars-bar-height);
+  --sweep-top: var(--sweep-bar);
   position: relative;
+  border-top-width: var(--sweep-top);
+  border-top-left-radius: 53px 50px;
   border-bottom: var(--sweep-bar) solid var(--panel-accent);
   border-bottom-left-radius: 53px 50px;
 }
 .frame-break { position: absolute; pointer-events: none; }
-.frame-break-top {
-  top: calc(-1 * var(--sweep-top)); right: 18%; width: 22%; max-width: 160px; height: var(--sweep-top);
-  background: var(--lcars-lilac); border-inline: var(--lcars-gap) solid #000;
-}
 .frame-break-spine {
   left: calc(-1 * var(--sweep-spine)); width: var(--sweep-spine); top: 46%; height: 64px;
   background: var(--lcars-lilac); border-block: var(--lcars-gap) solid #000;
@@ -1371,6 +1371,17 @@ header .badge-unknown { background: var(--lcars-dim); }
   position: absolute; right: -1px; bottom: calc(-1 * var(--sweep-bar)); height: var(--sweep-bar);
   display: flex; background: #000;
 }
+/* The top bar mirrors the bottom one but carries read-only readouts. */
+.lcars-sweep-bar-top { top: calc(-1 * var(--sweep-top)); bottom: auto; height: var(--sweep-top); }
+.sweep-readout {
+  display: flex; align-items: flex-end; justify-content: flex-end; gap: 8px;
+  min-width: 96px; max-width: 280px; margin-left: var(--lcars-gap); padding: 0 12px 5px;
+  background: var(--lcars-peach); color: #000; cursor: default; user-select: text;
+  font: 600 17px/1 var(--console-font); letter-spacing: .04em; text-transform: uppercase;
+}
+.sweep-readout + .sweep-readout { background: var(--lcars-lilac); }
+.sweep-readout-key { flex: none; font-size: 12px; opacity: .72; }
+.sweep-readout-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sweep-block { width: 56px; margin-left: var(--lcars-gap); background: var(--lcars-lilac); }
 .cam-switch { display: flex; gap: var(--lcars-gap); margin-left: var(--lcars-gap); }
 .cam-switch button {
@@ -1387,41 +1398,48 @@ header .badge-unknown { background: var(--lcars-dim); }
 
 /* ── Home ──────────────────────────────────────────────────────── */
 #tab-home {
-  grid-template-columns: minmax(250px, 1.15fr) minmax(0, 2.2fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   grid-template-areas:
-    "status camera media"
-    "status camera toggles"
-    "say    say    env";
+    "camera media"
+    "camera toggles"
+    "say    env";
   align-items: stretch;
 }
-#card-home-status { grid-area: status; display: flex; flex-direction: column; }
-#card-home-status .lcars-readout-stack { flex: 1 1 auto; }
+#tab-home.has-alerts {
+  grid-template-areas:
+    "alerts alerts"
+    "camera media"
+    "camera toggles"
+    "say    env";
+}
 #card-home-camera { grid-area: camera; display: flex; flex-direction: column; }
 #card-home-media { grid-area: media; }
 #card-home-toggles { grid-area: toggles; }
 #card-home-say { grid-area: say; }
 #card-home-environment { grid-area: env; }
 #tab-home .home-wide { grid-column: 1 / -1; }
-/* LCARS readout stack: one reading per row, a coloured panel block carrying
-   the label (black, bottom-right) beside its value. See guide §3.2. */
-.lcars-readout-stack { display: flex; flex-direction: column; gap: var(--lcars-gap); margin: 0; }
-.lcars-readout { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: var(--lcars-gap); min-height: 58px; }
-.lcars-readout dt {
-  display: flex; align-items: flex-end; justify-content: flex-end; padding: 0 8px 5px;
-  background: var(--readout-hue, var(--lcars-peach)); color: #000;
-  font: 600 15px/1 var(--console-font); letter-spacing: .05em; text-transform: uppercase;
+/* LCARS alert frame: a top bar sweeping down into left and right spines, open
+   at the bottom. Hidden when there's nothing to report; the hue follows the
+   most severe alert. See guide §3.2. */
+.lcars-alert-frame {
+  --alert-hue: var(--lcars-ice);
+  --alert-bar: 16px;
+  grid-area: alerts; position: relative; min-width: 0;
+  padding: 14px 22px 8px;
+  background: var(--bg2);
+  border: solid var(--alert-hue);
+  border-width: var(--alert-bar) var(--lcars-frame-spine) 0;
+  border-radius: 53px 53px 0 0 / 34px 34px 0 0;
 }
-.lcars-readout:nth-child(2) { --readout-hue: var(--lcars-lilac); }
-.lcars-readout:nth-child(3) { --readout-hue: var(--lcars-ice); }
-.lcars-readout:nth-child(4) { --readout-hue: var(--panel-accent); }
-.lcars-readout dd {
-  margin: 0; padding: 6px 0 4px 6px; align-self: center; min-width: 0;
-  color: var(--yellow); font: 600 19px/1.2 var(--console-font); font-variant-numeric: tabular-nums;
-  overflow-wrap: break-word; text-transform: uppercase;
+.lcars-alert-frame[hidden] { display: none; }
+.lcars-alert-frame[data-level="warn"] { --alert-hue: var(--lcars-peach); }
+.lcars-alert-frame[data-level="fail"] { --alert-hue: var(--red); }
+.lcars-alert-title {
+  position: absolute; top: calc(-1 * var(--alert-bar)); left: 40px;
+  height: var(--alert-bar); padding: 0 10px; background: #000; color: var(--alert-hue);
+  font: 600 15px/var(--alert-bar) var(--console-font); letter-spacing: .08em; text-transform: uppercase;
 }
-.lcars-readout:last-child { flex: 1 1 auto; }
-.lcars-readout:last-child dd { align-self: end; padding-bottom: 6px; }
-.home-alerts { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.home-alerts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .home-alerts .pill { white-space: nowrap; }
 .home-alerts button.pill { cursor: pointer; font: inherit; }
 .home-muted { color: var(--text-dim); font-size: 12px; margin-top: 6px; }
@@ -1442,16 +1460,10 @@ header .badge-unknown { background: var(--lcars-dim); }
 .home-readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: var(--lcars-gap); }
 #home-eng-line { color: var(--lcars-ice); font-size: 13px; overflow-wrap: anywhere; }
 
-@media (max-width: 1400px) {
-  #tab-home {
-    grid-template-columns: minmax(250px, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr);
-    grid-template-areas: "status camera camera" "media media toggles" "say say env";
-  }
-}
-
 @media (max-width: 1150px) {
   :root { --rail-width: 186px; --shell-gap: 16px; }
-  #tab-home { grid-template-columns: minmax(0, 1fr); grid-template-areas: "status" "camera" "media" "toggles" "say" "env"; }
+  #tab-home { grid-template-columns: minmax(0, 1fr); grid-template-areas: "camera" "media" "toggles" "say" "env"; }
+  #tab-home.has-alerts { grid-template-areas: "alerts" "camera" "media" "toggles" "say" "env"; }
   .home-camera-link { aspect-ratio: 16 / 9; min-height: 0; }
   .home-camera { object-fit: cover; }
   .tab-pane { grid-template-columns: minmax(0, 1fr); }
@@ -1512,10 +1524,11 @@ header .badge-unknown { background: var(--lcars-dim); }
   header { flex-wrap: wrap; row-gap: 6px; }
   :root { --lcars-bar-height: 28px; }
   .mode-toggle button, header .badge { min-width: 0; padding: 0 8px 4px; font-size: 14px; }
-  .lcars-readout { grid-template-columns: 76px minmax(0, 1fr); min-height: 44px; }
-  .lcars-readout dt { font-size: 13px; }
-  .lcars-readout dd { font-size: 16px; }
-  .lcars-sweep-card { --sweep-spine: 20px; --sweep-top: 8px; border-bottom-left-radius: 40px 40px; }
+  .lcars-sweep-card { --sweep-spine: 20px; border-top-left-radius: 40px 40px; border-bottom-left-radius: 40px 40px; }
+  .lcars-alert-frame { --alert-bar: 12px; border-width: var(--alert-bar) 20px 0; padding: 12px 14px 6px; }
+  .lcars-alert-title { font-size: 12px; left: 28px; }
+  .sweep-readout { min-width: 0; max-width: 150px; padding: 0 8px 4px; font-size: 14px; gap: 5px; }
+  .sweep-readout-key { font-size: 10px; }
   .cam-switch button { min-width: 64px; padding: 0 10px 4px; font-size: 14px; }
   .sweep-block { width: 32px; }
 }

@@ -100,10 +100,11 @@ Reuse these components; don't invent near-duplicates.
 |---|---|---|
 | **Frame** (elbow + spine + bar) | `header`, `.card` | The left spine sweeps into a top bar. Card titles are uppercase in the panel accent. |
 | **Rail button** | `.tab-btn` | Full-color block with the label at bottom-right. Active state: `box-shadow: inset -6px 0 #fff`. |
-| **Segmented button bar** | `.mode-toggle` + `header .badge` | Square blocks split by gaps; only the outer ends are rounded. Active segment: peach with the rail buttons' white end highlight (`inset -6px 0 #fff`), never an underline. Use `aria-pressed`. |
+| **Segmented button bar** | `.mode-toggle` + `header .badge` (health: `.badge-key` "Health" + `.badge-value`) | Square blocks split by gaps; only the outer ends are rounded. Active segment: peach with the rail buttons' white end highlight (`inset -6px 0 #fff`), never an underline. Use `aria-pressed`. |
 | **Lit/unlit toggle** | `.lcars-toggle` > `input` + `.lcars-toggle-face` | Block with the right end rounded. Unlit = `--lcars-dim`, lit = `--lcars-ice`. Always shows an `ON`/`OFF` readout. The native checkbox stays in the DOM, visually hidden but focusable. |
 | **Readout** | `.stat-box` > `.stat-label` + `.stat-value` | Small uppercase label above a large value on black. |
-| **Readout stack** | `dl.lcars-readout-stack` > `.lcars-readout` > `dt` + `dd` | Vertical status column: one reading per row, a coloured panel block carrying the label beside its value. See §3.2. |
+| **Alert frame** | `section.lcars-alert-frame` > `.lcars-alert-title` + pills | Top bar sweeping down into left and right spines, open at the bottom. Shown only while there are messages; hue follows the worst alert. See §3.2. |
+| **Sweep readout** | `.lcars-sweep-bar-top` > `.sweep-readout` | Read-only key/value block in a sweep card's top bar (no hover, not focusable). See §3.1. |
 | **Status pill** | `.pill.pill-ok/-warn/-bad` | Short status words. Never color alone: the text must state the condition. |
 | **Card cross-link** | `h2 > a.card-link` | Floats right in the card title, ice-colored, ends with `›`. Use it instead of an "Open X" button. |
 | **Action button** | `.btn` | Existing rounded action buttons inside cards. Use them for verbs (Play, Say), not for state. |
@@ -118,9 +119,12 @@ sit in that bar. Home's camera card uses it, with a Cam 1 / Cam 2 source switch.
 
 ```html
 <section class="card lcars-sweep-card" id="…">
-  <span aria-hidden="true" class="frame-break frame-break-top"></span>
   <span aria-hidden="true" class="frame-break frame-break-spine"></span>
   <span aria-hidden="true" class="frame-break frame-break-lower"></span>
+  <div aria-label="…" class="lcars-sweep-bar lcars-sweep-bar-top" role="group">
+    <span aria-hidden="true" class="sweep-block"></span>
+    <div class="sweep-readout"><span class="sweep-readout-key">Room</span><span class="sweep-readout-value">Office</span></div>
+  </div>
   <h2>Title<a class="card-link" href="#/…">Workspace ›</a></h2>
   … content …
   <div class="lcars-sweep-bar">
@@ -136,17 +140,24 @@ sit in that bar. Home's camera card uses it, with a Cam 1 / Cam 2 source switch.
 - **Bottom elbow:** `border-bottom: var(--lcars-bar-height)` in the panel hue,
   with `border-bottom-left-radius: 53px 50px`. The browser draws the inner curve
   from the unequal border widths, matching the top elbow.
+- **Thick top bar:** the top border is as thick as the bottom bar
+  (`--sweep-top` = `--sweep-bar`) with a matching `53px 50px` elbow, so it can
+  carry text.
+- **Top readouts:** `.lcars-sweep-bar-top` mirrors the bottom bar at the top
+  right: a lilac `.sweep-block`, then read-only `.sweep-readout` blocks (peach,
+  then lilac). Each shows a small key and an uppercase value at the
+  bottom-right, truncated with an ellipsis; set `title` to the full text. They
+  are plain spans, never buttons: no hover ring and no focus stop.
 - **Frame breaks and colour changes:** these are the LCARS habit of chopping a
   bar into differently coloured segments separated by black gaps.
-  - `.frame-break-top`: a lilac block cut into the top bar, about 18% from the
-    right.
+  - The top bar's lilac `.sweep-block` and readouts, split by black gaps.
   - `.frame-break-spine`: a lilac segment across the spine, just below the
     middle.
   - `.frame-break-lower`: the rest of the spine below it turns peach, then a
     black gap hands back to the panel hue just above the bottom elbow.
 
-  All three are decorative, `aria-hidden`, and `pointer-events: none`.
-- **Sweep bar:** right-aligned on the bottom bar.
+  The frame breaks are decorative, `aria-hidden`, and `pointer-events: none`.
+- **Bottom sweep bar:** right-aligned on the bottom bar.
   - It holds an optional `.sweep-block` colour chip, then a segmented control.
     Each piece is separated by a `--lcars-gap` black gap. The bar ends square,
     flush with the card's right edge (no rounded end).
@@ -159,27 +170,29 @@ sit in that bar. Home's camera card uses it, with a Cam 1 / Cam 2 source switch.
 - **Behaviour:** use the sweep card for one hero panel per page. Don't put it
   on every card, or it stops being special.
 
-### 3.2 Readout stack (status column)
+### 3.2 Alert frame
 
-LCARS shows status as a vertical stack of panel blocks, like the sidebar
-panels: each block is a flat colour with a black condensed label at the
-bottom-right, separated from the next by a black gap. The reading sits to the
-right of its block. Home's Status card uses it.
+A full-width frame directly under the page title: a horizontal bar across the
+top that sweeps down into a spine on **both** the left and right, open at the
+bottom. Home uses it for alert messages.
 
 ```html
-<dl class="lcars-readout-stack">
-  <div class="lcars-readout"><dt>Health</dt><dd id="…">Nominal</dd></div>
-  <div class="lcars-readout"><dt>Room</dt><dd id="…">Office</dd></div>
-  …
-</dl>
+<section aria-label="Alerts" class="lcars-alert-frame" data-level="warn" hidden id="…">
+  <span aria-hidden="true" class="lcars-alert-title">Alerts</span>
+  <div aria-live="polite" class="home-alerts">…pills…</div>
+</section>
 ```
 
-- Rows cycle peach → lilac → ice → panel hue (`--readout-hue`).
-- Values are uppercase console font in `--yellow` (state colours such as
-  health may override), wrapping at word boundaries only.
-- The last row grows (`flex: 1`) so the stack fills its card and the label
-  block runs down to the bottom of the frame; its value aligns to the bottom.
-- Lists (e.g. alerts) inside a value stack vertically, one item per line.
+- **Only shown when there's a message.** JS toggles `hidden`; with nothing to
+  report there is no frame and no empty row (the page grid only adds the
+  `alerts` area while `#tab-home.has-alerts` is set).
+- **Hue = worst alert:** `data-level="fail"` → `--red`, `warn` →
+  `--lcars-peach`, otherwise `--lcars-ice`.
+- **Title cut-out:** `.lcars-alert-title` sits in the top bar as a black box
+  with text in the frame hue.
+- Messages are `.pill`s in a wrapping row; ones with a destination are buttons.
+- System health isn't repeated here: it lives in the header's segmented bar
+  (`HEALTH OK` / `HEALTH DEGRADED`).
 
 ### States
 
@@ -194,9 +207,10 @@ right of its block. Home's Status card uses it.
 1. **One question per card.** Each card answers a single question: what's my
    status, what's playing, what does the camera see.
 2. **Read top-down by urgency.** Lay out sections in this order:
-   - a status column (readout stack: health, room, people, alerts) on the
-     left, beside the primary visual (camera), which scales to the same height;
-   - the most-used controls to the right (wide screens) or below (≤1400px);
+   - health in the header bar; an alert frame under the page title, only
+     while there are messages;
+   - the primary visual (camera, with room and people in its top bar) next to
+     the most-used controls;
    - secondary actions;
    - Advanced and Engineering data at full width at the bottom.
 3. **Name the layout with grid areas.** Use `grid-template-areas` so the
@@ -210,7 +224,7 @@ right of its block. Home's Status card uses it.
 6. **Navigate with links, not buttons.** Use plain `#/slug` anchors, which the
    hash router handles. Don't add click handlers just to navigate.
 7. **Phones (≤700px):** shrink bars (`--lcars-bar-height: 28px`), let the
-   header wrap, and narrow the readout stack's label blocks.
+   header wrap, and shrink the alert frame and sweep readouts.
 
 ## 5. Accessibility
 

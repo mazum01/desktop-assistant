@@ -4,6 +4,23 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.91.0] - 2026-10-27
+### Changed
+- Home: removed the Status card.
+  - Health merges into the header's status block, now labelled
+    `HEALTH OK` / `HEALTH DEGRADED`.
+  - Alerts move to a new LCARS **alert frame** under the Home title: a top
+    bar sweeping into left and right spines. It appears only while there are
+    messages, and its hue follows the worst alert (red / peach / ice). The old
+    "All clear" pill is gone.
+  - Room and People are read-only readouts in the camera card's top bar,
+    styled like the Cam 1/Cam 2 blocks. The camera card's top bar is now as
+    thick as its bottom bar to carry them.
+- Home grid is back to camera beside Now Playing/Quick Toggles; the alerts row
+  is only added while the alert frame is showing.
+- LCARS design guide: §3.2 is now the alert frame (replacing the readout
+  stack); the sweep card documents the thick top bar and sweep readouts.
+
 ## [1.90.0] - 2026-10-26
 ### Changed
 - Home: the Status card is now a vertical LCARS **readout stack** (Health,

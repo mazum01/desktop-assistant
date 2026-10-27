@@ -1208,17 +1208,13 @@ function drawAudioSpectrum(payload) {
 
 function setHealth(state) {
   const el = document.getElementById("health-badge");
-  el.className = "badge";
-  if (state === "ok") {
-    el.classList.add("badge-ok");
-    el.textContent = "OK";
-  } else if (state === "degraded") {
-    el.classList.add("badge-degraded");
-    el.textContent = "Degraded";
-  } else {
-    el.classList.add("badge-unknown");
-    el.textContent = "Connecting";
-  }
+  const value = document.getElementById("health-badge-value") || el;
+  const [cls, text] = state === "ok" ? ["badge-ok", "OK"]
+    : state === "degraded" ? ["badge-degraded", "Degraded"]
+    : ["badge-unknown", "Connecting"];
+  el.className = `badge ${cls}`;
+  value.textContent = text;
+  el.title = `System health: ${text}`;
 }
 
 // ── Event log ─────────────────────────────────────────────────────

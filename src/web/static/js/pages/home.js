@@ -101,14 +101,23 @@ export function computeAlerts({ status, update, settings }, now = new Date()) {
   return alerts;
 }
 
+const ALERT_RANK = { fail: 3, warn: 2, unknown: 1 };
+
 function renderAlerts() {
   const host = $('home-alerts');
+  const frame = $('card-home-alerts');
   if (!host) return;
   const alerts = computeAlerts(state);
   const key = JSON.stringify(alerts);
   if (host.dataset.key === key) return;
   host.dataset.key = key;
-  host.replaceChildren(...(alerts.length ? alerts : [{ level: 'ok', text: 'All clear' }]).map(alert => {
+  if (frame) {
+    frame.hidden = alerts.length === 0;
+    const top = alerts.reduce((best, a) => (ALERT_RANK[a.level] || 0) > (ALERT_RANK[best] || 0) ? a.level : best, 'unknown');
+    frame.dataset.level = top;
+    $('tab-home')?.classList?.toggle('has-alerts', alerts.length > 0);
+  }
+  host.replaceChildren(...alerts.map(alert => {
     const pill = document.createElement(alert.route ? 'button' : 'span');
     pill.className = `pill pill-${alert.level}`;
     pill.textContent = alert.text;
@@ -161,16 +170,21 @@ function renderIot(iot) {
   }));
 }
 
+// Sweep-bar readouts truncate, so the full text rides along as a tooltip.
+function setReadout(id, text) {
+  setText(id, text);
+  const node = $(id);
+  if (node) node.title = text;
+}
+
 function onStatus(data) {
   state.status = data;
   const last = data.last || {};
-  setText('home-health', data.healthy === false ? 'Degraded' : 'Nominal');
-  $('home-health')?.style.setProperty('color', data.healthy === false ? 'var(--red)' : 'var(--green)');
-  setText('home-room', data.room || (data.room_detail && data.room_detail.name) || '—');
+  setReadout('home-room', data.room || (data.room_detail && data.room_detail.name) || '—');
   const faces = last['perception.faces'] || {};
   const named = (faces.faces || []).map(f => f.name).filter(n => n && n !== 'unknown');
   const count = Number(faces.count || 0);
-  setText('home-faces', count ? `${count}${named.length ? ' · ' + named.join(', ') : ''}` : 'None');
+  setReadout('home-faces', count ? `${count}${named.length ? ' · ' + named.join(', ') : ''}` : 'None');
   state.faceCount = count;
   renderCameraCaption();
   const spoke = last['av.spoke'];

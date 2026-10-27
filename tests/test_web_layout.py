@@ -332,7 +332,7 @@ def test_decorative_codes_are_sparse_and_hidden_from_assistive_technology(layout
     ]),
     ("smart-home", ["iot-toolbar", "iot-add-btn"]),
     ("home", [
-        "home-health", "home-room", "home-faces", "home-alerts", "home-camera",
+        "card-home-alerts", "home-room", "home-faces", "home-alerts", "home-camera",
         "home-media-play", "home-media-next", "home-volume", "home-mute-btn",
         "home-toggle-privacy", "home-toggle-quiet", "home-toggle-mute",
         "home-toggle-face", "home-toggle-idle", "home-say-input", "home-repeat-btn",
@@ -647,23 +647,36 @@ def test_home_toggles_are_lcars_lit_blocks_with_text_state(layout):
 
 def test_home_flow_uses_named_grid_areas_and_title_links(layout):
     css = (STATIC / "style.css").read_text()
-    assert '"status camera media"' in css and '"status camera toggles"' in css
+    assert '"camera media"' in css and '"camera toggles"' in css
+    assert '#tab-home.has-alerts {' in css and '"alerts alerts"' in css
     links = {node["attrs"]["href"] for node in layout
              if "card-link" in node["attrs"].get("class", "").split()}
     assert {"#/vision", "#/media", "#/voice", "#/smart-home", "#/overview"} <= links
 
 
-def test_home_status_is_a_vertical_lcars_readout_stack(layout):
+def test_home_status_moves_to_header_alert_frame_and_camera_top_bar(layout):
     by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
-    status = by_id["card-home-status"]
-    for value_id in ("home-health", "home-room", "home-faces", "home-alerts"):
-        node = by_id[value_id]
-        assert status in node["ancestors"]
-        assert any("lcars-readout" in a["attrs"].get("class", "").split() for a in node["ancestors"]), value_id
+    assert "card-home-status" not in by_id and "home-health" not in by_id
+    # Health merges into the header badge.
+    badge = by_id["health-badge"]
+    assert badge in by_id["health-badge-value"]["ancestors"]
+    # Alerts get their own frame that stays hidden until there's a message.
+    frame = by_id["card-home-alerts"]
+    assert "lcars-alert-frame" in frame["attrs"]["class"].split() and "hidden" in frame["attrs"]
+    assert frame in by_id["home-alerts"]["ancestors"]
+    # Room and people are read-only readouts in the camera's top sweep bar.
+    camera = by_id["card-home-camera"]
+    for value_id in ("home-room", "home-faces"):
+        ancestors = by_id[value_id]["ancestors"]
+        assert camera in ancestors
+        assert any("lcars-sweep-bar-top" in a["attrs"].get("class", "").split() for a in ancestors)
+        assert not any(a["tag"] == "button" for a in ancestors)
     css = (STATIC / "style.css").read_text()
-    assert ".lcars-readout-stack { display: flex; flex-direction: column;" in css
+    assert ".lcars-alert-frame[hidden] { display: none; }" in css
     assert ".home-camera { position: absolute; inset: 0;" in css
-    assert "calc(var(--sweep-bar) / 2)" not in css  # sweep bar and Cam 2 end square
+    assert "calc(var(--sweep-bar) / 2)" not in css  # sweep bars end square
+    home = (JS / "pages" / "home.js").read_text()
+    assert "frame.hidden = alerts.length === 0" in home and "All clear" not in home
 
 
 def test_lcars_design_guide_is_referenced_by_agent_instructions():
@@ -704,7 +717,7 @@ def test_home_gates_detail_by_interface_mode(layout):
     by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
     assert by_id["card-home-thermal"]["attrs"]["data-min-mode"] == "advanced"
     assert by_id["card-home-engineering"]["attrs"]["data-min-mode"] == "engineering"
-    for card in ("card-home-status", "card-home-camera", "card-home-media",
+    for card in ("card-home-alerts", "card-home-camera", "card-home-media",
                  "card-home-toggles", "card-home-say", "card-home-environment"):
         assert "data-min-mode" not in by_id[card]["attrs"], card
 
