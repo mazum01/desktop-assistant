@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.92.2] - 2026-10-27
+### Changed
+- Home Vision feed is now a fixed 16:9 picture 250px high
+  (250 × 16⁄9 = 444.4 × 250px) instead of stretching to fill a tall,
+  letterboxed box. The frame hugs the picture (8px black gap) and no longer
+  stretches to the row height; the camera column is exactly the frame's width.
+  On narrow screens the feed shrinks to fit, keeping 16:9.
+- The Vision frame's top bar is slimmed from 34px to 22px, just enough for
+  the Vision title and Room/People readouts.
+- Home grid reflowed for the shorter camera card: Say Something sits under
+  the camera, next to Quick Toggles, and Environment spans the full width.
+
 ## [1.92.1] - 2026-10-27
 ### Changed
 - Home camera card is now titled **Vision**. The title is cut into the left

@@ -647,7 +647,7 @@ def test_home_toggles_are_lcars_lit_blocks_with_text_state(layout):
 
 def test_home_flow_uses_named_grid_areas_and_title_links(layout):
     css = (STATIC / "style.css").read_text()
-    assert '"camera media"' in css and '"camera toggles"' in css
+    assert '"camera media"' in css and '"say    toggles"' in css
     assert '#tab-home.has-alerts {' in css and '"alerts alerts"' in css
     links = {node["attrs"]["href"] for node in layout
              if "card-link" in node["attrs"].get("class", "").split()}
@@ -686,6 +686,14 @@ def test_home_status_moves_to_header_alert_frame_and_camera_top_bar(layout):
     assert ".lcars-alert-frame[hidden] { display: none; }" in css
     assert ".home-camera { position: absolute; inset: 0;" in css
     assert "calc(var(--sweep-bar) / 2)" not in css  # sweep bars end square
+    # Fixed 16:9 feed, 250px high; the frame hugs it with a slim top bar.
+    assert "--home-cam-height: 250px;" in css
+    assert "--home-cam-width: calc(var(--home-cam-height) * 16 / 9);" in css
+    assert "grid-template-columns: var(--home-cam-card) minmax(0, 1fr);" in css
+    camera_rule = re.search(r"#card-home-camera \{[^}]*\}", css).group(0)
+    assert "--sweep-top: 22px;" in camera_rule and "align-self: start;" in camera_rule
+    link_rule = re.search(r"\.home-camera-link \{[^}]*\}", css).group(0)
+    assert "aspect-ratio: 16 / 9;" in link_rule and "flex: none;" in link_rule
     home = (JS / "pages" / "home.js").read_text()
     assert "frame.hidden = alerts.length === 0" in home and "All clear" not in home
     assert "home-camera-caption" not in home and "raw view" not in home

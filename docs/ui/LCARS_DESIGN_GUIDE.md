@@ -143,9 +143,17 @@ switch (camera 1 / camera 2; VERA's cameras are its eyes, so the UI names them t
 - **Bottom elbow:** `border-bottom: var(--lcars-bar-height)` in the panel hue,
   with `border-bottom-left-radius: 53px 50px`. The browser draws the inner curve
   from the unequal border widths, matching the top elbow.
-- **Thick top bar:** the top border is as thick as the bottom bar
+- **Top bar:** by default the top border is as thick as the bottom bar
   (`--sweep-top` = `--sweep-bar`) with a matching `53px 50px` elbow, so it can
-  carry text.
+  carry text. A card can slim it to just fit its text: Home's Vision card sets
+  `--sweep-top: 22px`. The title's font follows the bar (`--sweep-top − 2px`),
+  and readouts in a top bar sit 2px off its bottom edge.
+- **Fixed-size video:** the frame hugs the picture instead of letterboxing it.
+  Home's feed is a fixed 16:9 box 250px high, so 250 × 16⁄9 = 444.4px wide
+  (`--home-cam-height` on `#tab-home`). The card is that width plus its spine,
+  right border and two 8px gaps (`--home-cam-card`); it doesn't stretch to the
+  row height. The image uses `object-fit: cover`. On narrow screens the card
+  caps at 100% width and the feed shrinks, staying 16:9.
 - **Title:** `.lcars-sweep-title` sits at the left of the top bar, past the
   elbow: a black cut-out the height of the bar, uppercase text in the panel
   hue. It is the only title (no `h2`) and links to the related workspace.
@@ -234,8 +242,10 @@ element with `text-transform: uppercase`.
 3. **Name the layout with grid areas.** Use `grid-template-areas` so the
    reading order is explicit. Below 1150px, collapse to one column in the same
    order as the source.
-4. **Match heights within a row.** Use `align-items: stretch` and let the
-   primary visual fill its column (`flex: 1`), so cards don't leave ragged gaps.
+4. **Match heights within a row.** Use `align-items: stretch` so cards in a
+   row line up. A fixed-size visual (Home's 444×250 feed) keeps its own height
+   (`align-self: start`); flow the next card up underneath it rather than
+   spanning it across rows, so the column doesn't leave a ragged gap.
 5. **Gate by mode, not by duplicate pages.** Mark advanced content with
    `data-min-mode="advanced"` and engineering content with
    `data-min-mode="engineering"`. Normal mode shows only everyday controls.
