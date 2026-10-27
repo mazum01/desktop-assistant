@@ -417,6 +417,7 @@ function updateDashboard(data) {
   const temp = last["thermal.temp"];
   const formatTemp = (celsius) => {
     if (celsius == null || Number.isNaN(Number(celsius))) return "—";
+    if (window.veraUnits) return window.veraUnits.formatTemp(Number(celsius));
     return `${num(celsius, 1)} °C / ${num((Number(celsius) * 9) / 5 + 32, 1)} °F`;
   };
   const hailo = last["thermal.hailo"];
@@ -424,7 +425,7 @@ function updateDashboard(data) {
   if (hailoEl && hailo) {
     hailoEl.textContent = hailo.ok === false ? "unavailable" : formatTemp(hailo.celsius);
     hailoEl.title = hailo.ok === false ? "Hailo control channel not responding" :
-      `ts0 ${num(hailo.ts0_celsius, 1)} °C · ts1 ${num(hailo.ts1_celsius, 1)} °C`;
+      `ts0 ${formatTemp(hailo.ts0_celsius)} · ts1 ${formatTemp(hailo.ts1_celsius)}`;
     hailoEl.style.color = hailo.ok === false ? "var(--red)" : "var(--blue)";
   }
   if (temp) {

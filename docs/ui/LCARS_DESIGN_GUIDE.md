@@ -100,7 +100,8 @@ Reuse these components; don't invent near-duplicates.
 |---|---|---|
 | **Frame** (elbow + spine + bar) | `header`, `.card` | The left spine sweeps into a top bar. Card titles are uppercase in the panel accent. |
 | **Rail button** | `.tab-btn` | Full-color block with the label at bottom-right. Active state: `box-shadow: inset -6px 0 #fff`. |
-| **Segmented button bar** | `.mode-toggle` + `header .badge` (health: `.badge-key` "Health" + `.badge-value`) | Square blocks split by gaps; only the outer ends are rounded. Active segment: peach with the rail buttons' white end highlight (`inset -6px 0 #fff`), never an underline. Use `aria-pressed`. |
+| **Segmented button bar** | `.mode-toggle` + `header .badge` (health: just the state word in `.badge-value`; the block's hue and `aria-label="System health"` say what it is) | Square blocks split by gaps; only the outer ends are rounded. Active segment: peach with the rail buttons' white end highlight (`inset -6px 0 #fff`), never an underline. Use `aria-pressed`. |
+| **Segmented selector** | `.lcars-segmented` > `button[aria-pressed]` | One-of-N setting inside a card (e.g. Settings → Display Units). Same blocks as the header bar at `--lcars-bar-height`, outer ends rounded, wraps on narrow screens. Lit choice: `--lcars-ice` + white end highlight. Don't reuse `data-mode-option` — that attribute belongs to the interface-mode bar. |
 | **Lit/unlit toggle** | `.lcars-toggle` > `input` + `.lcars-toggle-face` | Block with the right end rounded. Unlit = `--lcars-dim`, lit = `--lcars-ice`. Always shows an `ON`/`OFF` readout. The native checkbox stays in the DOM, visually hidden but focusable. |
 | **Readout** | `.stat-box` > `.stat-label` + `.stat-value` | Small uppercase label above a large value on black. |
 | **Alert frame** | `section.lcars-alert-frame` > `.lcars-alert-title` + pills | Top bar sweeping down into left and right spines, open at the bottom. Shown only while there are messages; hue follows the worst alert. See §3.2. |
@@ -115,7 +116,8 @@ Reuse these components; don't invent near-duplicates.
 
 The standard card frame (top-left elbow, top bar, left spine) closed by a
 **bottom elbow** into a thick bottom bar. Controls that act on the whole panel
-sit in that bar. Home's camera card uses it, with a Cam 1 / Cam 2 source switch.
+sit in that bar. Home's camera card uses it, with a Left Eye / Right Eye source
+switch (camera 1 / camera 2; VERA's cameras are its eyes, so the UI names them that way).
 
 ```html
 <section class="card lcars-sweep-card" id="…">
@@ -130,8 +132,8 @@ sit in that bar. Home's camera card uses it, with a Cam 1 / Cam 2 source switch.
   <div class="lcars-sweep-bar">
     <span aria-hidden="true" class="sweep-block"></span>
     <div aria-label="…" class="cam-switch" role="group">
-      <button aria-pressed="true" type="button">Cam 1</button>
-      <button aria-pressed="false" type="button">Cam 2</button>
+      <button aria-pressed="true" type="button">Left Eye</button>
+      <button aria-pressed="false" type="button">Right Eye</button>
     </div>
   </div>
 </section>
@@ -192,7 +194,18 @@ bottom. Home uses it for alert messages.
   with text in the frame hue.
 - Messages are `.pill`s in a wrapping row; ones with a destination are buttons.
 - System health isn't repeated here: it lives in the header's segmented bar
-  (`HEALTH OK` / `HEALTH DEGRADED`).
+  (`OK` / `DEGRADED`, coloured green / red).
+
+### 3.3 Units
+
+Every measurement shown to the user follows the device-wide unit system
+chosen in Settings → Display Units (US Customary, Metric SI/MKS, UK Imperial,
+Scientific SI with kelvin). Readings stay in native units on the bus and the
+API; convert at render time with `js/core/units.js` (`formatTemp`,
+`formatValue`, `convertDisplay`) and re-render on the `vera:units` event.
+Never hard-code `°C` / `°F` or a flow/pressure unit in new UI.
+Unit symbols are case-sensitive (`pCi/L`, `kPa`, `mL`): never put them in an
+element with `text-transform: uppercase`.
 
 ### States
 

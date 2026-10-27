@@ -261,6 +261,33 @@ def test_put_quiet_hours_invalid_time(app_client_with_quiet):
     assert r.status_code == 400
 
 
+# ── Display units API ─────────────────────────────────────────────────────────
+
+def test_units_default_then_persist(tmp_path, monkeypatch):
+    from src.core import display_units
+    monkeypatch.setattr(display_units, "STATE_FILE", tmp_path / "display_units.json")
+    svc = WebService(bus=MessageBus(), port=18080, registry=_mock_registry(),
+                     display_units_default="si")
+    client = TestClient(svc._build_app())
+    r = client.get("/api/settings/units")
+    assert r.status_code == 200
+    assert r.json()["system"] == "si"
+    assert {s["id"] for s in r.json()["systems"]} >= {"us", "si", "imperial", "scientific"}
+    r = client.put("/api/settings/units", json={"system": "us"})
+    assert r.status_code == 200 and r.json()["system"] == "us"
+    assert client.get("/api/settings/units").json()["system"] == "us"
+    assert json.loads((tmp_path / "display_units.json").read_text()) == {"system": "us"}
+
+
+def test_units_rejects_unknown_system(tmp_path, monkeypatch):
+    from src.core import display_units
+    monkeypatch.setattr(display_units, "STATE_FILE", tmp_path / "display_units.json")
+    client = TestClient(WebService(bus=MessageBus(), port=18080)._build_app())
+    r = client.put("/api/settings/units", json={"system": "martian"})
+    assert r.status_code == 400
+    assert not (tmp_path / "display_units.json").exists()
+
+
 # ── Controls API ──────────────────────────────────────────────────────────────
 
 def test_say_publishes_to_bus(app_client):

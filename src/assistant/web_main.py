@@ -181,6 +181,7 @@ def build_node(
             podcast_service=podcast_proxy,
             skills_service=skills_proxy,
             iot_registry=iot_registry_proxy,
+            display_units_default=str(web_cfg.get("display_units", "us")),
             status_clients={
                 "core": core_client,
                 "thermal": thermal_client,

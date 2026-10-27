@@ -7,7 +7,8 @@ applyTo: "src/web/**"
 Before you add or change any web UI element, read
 [docs/ui/LCARS_DESIGN_GUIDE.md](../../docs/ui/LCARS_DESIGN_GUIDE.md) and follow it:
 
-- Reuse the components in §3 (frame, rail button, segmented bar, lit/unlit toggle,
+- Reuse the components in §3 (frame, rail button, segmented bar, segmented
+  selector, lit/unlit toggle,
   readout, alert frame, sweep readout, status pill, card cross-link, sweep
   card). Live video and hero panels use the §3.1 sweep card with a bottom elbow
   and frame breaks; page alerts use the §3.2 alert frame, shown only while
@@ -20,5 +21,7 @@ Before you add or change any web UI element, read
   State is never shown by color alone.
 - Order cards by urgency with named grid areas. Gate advanced and engineering
   content with `data-min-mode`.
+- Show measurements in the user's chosen unit system via `js/core/units.js`
+  (§3.3); never hard-code `°C`/`°F` or other units.
 - When you introduce a new component or token, update the guide in the same commit.
 - Run through the guide's §7 checklist before you commit.

@@ -18,10 +18,17 @@ const state = {
   volumeDragging: false,
 };
 
-function fmtTemp(celsius) {
+// Unit formatting comes from js/core/units.js via initHome(); until then (and in
+// standalone tests) readings render in their native units.
+let units = {
+  formatTemp: (celsius, digits = 1) => `${Number(celsius).toFixed(digits)} °C`,
+  convertDisplay: () => null,
+};
+
+function fmtTemp(celsius, digits = 1) {
   const c = Number(celsius);
   if (celsius == null || !Number.isFinite(c)) return '—';
-  return `${c.toFixed(1)} °C`;
+  return units.formatTemp(c, digits);
 }
 
 function fmtNum(value, digits = 0, suffix = '') {
@@ -80,11 +87,11 @@ export function computeAlerts({ status, update, settings }, now = new Date()) {
   if (status && status.healthy === false) alerts.push({ level: 'fail', text: 'System degraded' });
   if (temp && temp.ok === false) alerts.push({ level: 'fail', text: 'Temperature sensor fault' });
   const soc = temp && Number(temp.cpu_celsius);
-  if (Number.isFinite(soc) && soc >= SOC_HOT_C) alerts.push({ level: 'fail', text: `SoC hot ${soc.toFixed(0)} °C` });
+  if (Number.isFinite(soc) && soc >= SOC_HOT_C) alerts.push({ level: 'fail', text: `SoC hot ${fmtTemp(soc, 0)}` });
   if (hailo && hailo.ok === false) alerts.push({ level: 'warn', text: 'Hailo unavailable' });
   const hailoC = hailo && Number(hailo.celsius);
   if (hailo && hailo.ok !== false && Number.isFinite(hailoC) && hailoC >= HAILO_HOT_C) {
-    alerts.push({ level: 'fail', text: `Hailo hot ${hailoC.toFixed(0)} °C` });
+    alerts.push({ level: 'fail', text: `Hailo hot ${fmtTemp(hailoC, 0)}` });
   }
   const stopped = Object.entries((status && status.services) || {})
     .filter(([, svcState]) => svcState !== 'running')
@@ -138,10 +145,12 @@ function renderIot(iot) {
   const rows = devices.map(([id, snap]) => {
     const primary = (snap.display && snap.display.primary) || {};
     const available = snap.available !== false;
+    const converted = units.convertDisplay(primary.value, primary.unit);
     return {
       id,
       label: `${snap.device_icon || '🔌'} ${snap.device_name || id}`,
-      value: available ? `${primary.value ?? '—'}${primary.unit ? ' ' + primary.unit : ''}` : 'unavailable',
+      value: !available ? 'unavailable'
+        : converted ?? `${primary.value ?? '—'}${primary.unit ? ' ' + primary.unit : ''}`,
       color: available ? (primary.color || '') : 'var(--red)',
       title: available ? '' : (snap.error || ''),
     };
@@ -415,11 +424,12 @@ let homeActive = false;
 
 const CAMERA_STREAMS = { 1: '/stream', 2: '/stream2' };
 const CAMERA_KEY = 'vera-home-cam';
+const EYE_NAMES = { 1: 'Left eye', 2: 'Right eye' };
 let homeCam = 1;
 
 function renderCameraCaption() {
   if (homeCam === 2) {
-    setText('home-camera-caption', 'Cam 2 · raw view');
+    setText('home-camera-caption', 'Right eye · raw view');
     return;
   }
   const count = state.faceCount || 0;
@@ -431,7 +441,7 @@ function renderCameraSwitch() {
     btn.setAttribute('aria-pressed', String(Number(btn.dataset.homeCam) === homeCam));
   });
   const img = $('home-camera');
-  if (img) img.alt = `Live view from camera ${homeCam}`;
+  if (img) img.alt = `Live view from the ${EYE_NAMES[homeCam].toLowerCase()}`;
 }
 
 function startCamera() {
@@ -461,9 +471,11 @@ function leave() {
   settingsTimer = null;
 }
 
-export function initHome() {
+export function initHome(deps = {}) {
   if (!$('tab-home')) return;
+  if (deps.units) units = deps.units;
   window.addEventListener('vera:status', e => onStatus(e.detail || {}));
+  window.addEventListener('vera:units', () => { if (state.status) onStatus(state.status); });
   window.addEventListener('vera:music', e => { state.music = e.detail || {}; renderMedia(); });
   window.addEventListener('vera:podcast', e => { state.podcast = e.detail || {}; renderMedia(); });
   window.addEventListener('vera:update', e => { state.update = e.detail || {}; renderAlerts(); });
@@ -496,7 +508,7 @@ export function initHome() {
     btn.addEventListener('click', () => selectCamera(btn.dataset.homeCam));
   });
   $('home-camera')?.addEventListener('error', () => {
-    if (homeActive && $('home-camera').getAttribute('src')) setText('home-camera-caption', `Cam ${homeCam} unavailable`);
+    if (homeActive && $('home-camera').getAttribute('src')) setText('home-camera-caption', `${EYE_NAMES[homeCam]} unavailable`);
   });
   renderCameraSwitch();
   renderAlerts();

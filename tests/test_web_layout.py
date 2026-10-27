@@ -660,6 +660,10 @@ def test_home_status_moves_to_header_alert_frame_and_camera_top_bar(layout):
     # Health merges into the header badge.
     badge = by_id["health-badge"]
     assert badge in by_id["health-badge-value"]["ancestors"]
+    assert not any("badge-key" in n["attrs"].get("class", "") for n in layout)
+    assert badge["attrs"].get("aria-label") == "System health"
+    # The Home title area carries no extra buttons.
+    assert not any(n["attrs"].get("onclick") == "openWorkspace('voice', 'card-quiet')" for n in layout)
     # Alerts get their own frame that stays hidden until there's a message.
     frame = by_id["card-home-alerts"]
     assert "lcars-alert-frame" in frame["attrs"]["class"].split() and "hidden" in frame["attrs"]
@@ -694,6 +698,9 @@ def test_home_camera_has_lcars_bottom_sweep_with_camera_switch(layout):
     assert "lcars-sweep-card" in card["attrs"]["class"].split()
     buttons = [node for node in layout if "data-home-cam" in node["attrs"]]
     assert [b["attrs"]["data-home-cam"] for b in buttons] == ["1", "2"]
+    html = (STATIC / "index.html").read_text()
+    assert ">Left Eye</button>" in html and ">Right Eye</button>" in html
+    assert ">Cam 1<" not in html and ">Cam 2<" not in html
     for button in buttons:
         assert button["tag"] == "button" and "aria-pressed" in button["attrs"]
         assert any("lcars-sweep-bar" in a["attrs"].get("class", "").split() for a in button["ancestors"])
@@ -715,7 +722,13 @@ def test_card_drag_and_drop_is_retired(layout):
 
 def test_home_gates_detail_by_interface_mode(layout):
     by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
-    assert by_id["card-home-thermal"]["attrs"]["data-min-mode"] == "advanced"
+    assert by_id["card-home-scene"]["attrs"]["data-min-mode"] == "advanced"
+    assert by_id["card-home-thermal"]["attrs"]["data-min-mode"] == "engineering"
+    thermal = by_id["card-home-thermal"]
+    for value_id in ("home-temp-case", "home-temp-soc", "home-temp-blended", "home-temp-hailo", "home-fan"):
+        assert thermal in by_id[value_id]["ancestors"], value_id
+    for value_id in ("home-scene-confidence", "home-scene-check"):
+        assert by_id["card-home-scene"] in by_id[value_id]["ancestors"], value_id
     assert by_id["card-home-engineering"]["attrs"]["data-min-mode"] == "engineering"
     for card in ("card-home-alerts", "card-home-camera", "card-home-media",
                  "card-home-toggles", "card-home-say", "card-home-environment"):
@@ -871,3 +884,51 @@ run().catch(error => {console.error(error); process.exitCode = 1;});
         ["node", str(runner), str(STATIC / "app.js")],
         check=True, capture_output=True, text=True,
     )
+
+
+def test_display_units_selector_matches_backend_systems(layout):
+    from src.core import display_units
+    by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
+    card = by_id["card-display-units"]
+    assert by_id["tab-settings"] in card["ancestors"]
+    options = [n for n in layout if "data-units-option" in n["attrs"]]
+    assert [n["attrs"]["data-units-option"] for n in options] == list(display_units.SYSTEMS)
+    for node in options:
+        assert node["tag"] == "button" and "aria-pressed" in node["attrs"]
+        assert by_id["units-selector"] in node["ancestors"]
+        assert "data-mode-option" not in node["attrs"]
+    units_js = (JS / "core" / "units.js").read_text()
+    for key, spec in display_units.SYSTEMS.items():
+        for unit in spec["units"].values():
+            assert f"'{unit}'" in units_js, (key, unit)
+    main = (JS / "main.js").read_text()
+    assert "units.initUnits()" in main and "home.initHome({ units })" in main
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for units regression")
+def test_units_convert_home_readings(tmp_path):
+    script = r"""
+const assert = require('node:assert/strict');
+globalThis.document = {querySelectorAll: () => [], getElementById: () => null, addEventListener() {}};
+globalThis.window = {dispatchEvent() {}};
+globalThis.CustomEvent = class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } };
+import(require('node:url').pathToFileURL(process.argv[2]).href).then(u => {
+  assert.equal(u.formatTemp(25, 1, 'si'), '25.0 °C');
+  assert.equal(u.formatTemp(25, 1, 'us'), '77.0 °F');
+  assert.equal(u.formatTemp(25, 1, 'imperial'), '25.0 °C');
+  assert.equal(u.formatTemp(25, 2, 'scientific'), '298.15 K');
+  assert.equal(u.formatTemp(null, 1, 'us'), '—');
+  // Device display strings: DROP flow, radon, Nest embedded °F, Yale passthrough.
+  assert.equal(u.convertDisplay('1.00', 'gpm', 'us'), '1.00 gal/min');
+  assert.equal(u.convertDisplay('1.00', 'gpm', 'si'), '3.8 L/min');
+  assert.equal(u.convertDisplay('1.00', 'gpm', 'imperial'), '0.83 imp gal/min');
+  assert.equal(u.convertDisplay('2.00', 'pCi/L', 'si'), '74 Bq/m³');
+  assert.equal(u.convertDisplay('2.00', 'pCi/L', 'us'), '2.00 pCi/L');
+  assert.equal(u.convertDisplay('68.0°F', 'Hallway', 'si'), '20.0 °C Hallway');
+  assert.equal(u.convertDisplay('68.0°F', 'Hallway', 'us'), '68.0 °F Hallway');
+  assert.equal(u.convertDisplay('🔒 Locked', 'Front door', 'si'), null);
+  assert.equal(u.convertDisplay('—', 'Hallway', 'si'), null);
+  assert.equal(u.formatValue(60, 'PSI', 0, 'si'), '414 kPa');
+}).catch(e => { console.error(e); process.exit(1); });
+"""
+    _run_module_test(tmp_path, script, JS / "core" / "units.js")

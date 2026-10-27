@@ -106,6 +106,7 @@ import zmq
 
 from src.core.ipc_client import IPCClient
 from src.core.quiet_hours import QuietHours
+from src.core import display_units
 from src.services.object_service import _build_scene_description
 
 from pydantic import BaseModel, Field, StrictInt
@@ -312,6 +313,10 @@ class _RenameBody(BaseModel):
 
 class _RoomBody(BaseModel):
     name: str
+
+
+class _UnitsBody(BaseModel):
+    system: str
 
 
 class _QuietHoursBody(BaseModel):
@@ -846,8 +851,10 @@ class WebService:
         privacy_service=None,
         api_key: str = "",
         status_clients: Optional[dict[str, IPCClient]] = None,
+        display_units_default: str = display_units.FALLBACK_SYSTEM,
     ) -> None:
         self.bus = bus
+        self._display_units_default = display_units.normalize(display_units_default)
         self._host = host
         self._port = port
         self._api_key = api_key.strip() if api_key else ""
@@ -1580,6 +1587,23 @@ class WebService:
             if self.bus:
                 self.bus.publish("settings.quiet_hours_updated", self._quiet_hours.as_dict())
             return {"ok": True, **self._quiet_hours.as_dict()}
+
+        # ── Display units ──────────────────────────────────────────────
+
+        @app.get("/api/settings/units")
+        async def api_get_units():
+            system = await asyncio.to_thread(display_units.load, self._display_units_default)
+            return display_units.describe(system)
+
+        @app.put("/api/settings/units")
+        async def api_put_units(body: _UnitsBody):
+            if body.system not in display_units.SYSTEMS:
+                raise HTTPException(400, f"unknown unit system: {body.system}")
+            try:
+                await asyncio.to_thread(display_units.save, body.system)
+            except OSError as exc:
+                raise HTTPException(500, f"could not save unit system: {exc}")
+            return {"ok": True, **display_units.describe(body.system)}
 
         # ── Room ──────────────────────────────────────────────────────
 

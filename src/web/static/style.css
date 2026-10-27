@@ -287,6 +287,7 @@ main {
 }
 #card-telemetry, #card-audio-runtime, #card-camera-settings, #card-audio, #card-xvf, #card-help { grid-column: 1 / -1; }
 #card-controls, #card-head-movement-settings { grid-column: 1 / -1; }
+#card-display-units { grid-column: 1 / -1; }
 .head-movement-sliders {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1317,8 +1318,6 @@ header .badge { min-width: 104px; border-radius: 0 calc(var(--lcars-bar-height) 
 header .badge-ok { background: var(--green); }
 header .badge-degraded { background: var(--red); }
 header .badge-unknown { background: var(--lcars-dim); }
-header .badge { gap: 7px; }
-header .badge-key { font-size: 12px; opacity: .72; }
 
 /* LCARS toggle: a lit (on) or unlit (off) block with an ON/OFF readout. */
 .lcars-toggle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--lcars-gap); }
@@ -1384,16 +1383,28 @@ header .badge-key { font-size: 12px; opacity: .72; }
 .sweep-readout-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sweep-block { width: 56px; margin-left: var(--lcars-gap); background: var(--lcars-lilac); }
 .cam-switch { display: flex; gap: var(--lcars-gap); margin-left: var(--lcars-gap); }
-.cam-switch button {
+.cam-switch button, .lcars-segmented button {
   display: flex; align-items: flex-end; justify-content: flex-end;
   min-width: 84px; padding: 0 12px 5px; border: 0; border-radius: 0;
   background: var(--lcars-dim); color: #000; cursor: pointer;
   font: 600 17px/1 var(--console-font); letter-spacing: .04em; text-transform: uppercase;
 }
-.cam-switch button[aria-pressed="true"] { background: var(--lcars-ice); box-shadow: inset -6px 0 #fff; }
-.cam-switch button:hover { box-shadow: inset 0 0 0 2px #000; }
-.cam-switch button[aria-pressed="true"]:hover { box-shadow: inset -6px 0 #fff, inset 0 0 0 2px #000; }
-.cam-switch button:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+.cam-switch button { min-width: 112px; }
+.cam-switch button[aria-pressed="true"], .lcars-segmented button[aria-pressed="true"] { background: var(--lcars-ice); box-shadow: inset -6px 0 #fff; }
+.cam-switch button:hover, .lcars-segmented button:hover { box-shadow: inset 0 0 0 2px #000; }
+.cam-switch button[aria-pressed="true"]:hover, .lcars-segmented button[aria-pressed="true"]:hover { box-shadow: inset -6px 0 #fff, inset 0 0 0 2px #000; }
+.cam-switch button:focus-visible, .lcars-segmented button:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+.cam-switch button:disabled, .lcars-segmented button:disabled { cursor: progress; opacity: .6; }
+/* LCARS segmented selector: one-of-N choice as a button bar, rounded only on
+   the bar's outer ends. The lit block (ice + white end highlight) is current. */
+.lcars-segmented { display: flex; flex-wrap: wrap; gap: var(--lcars-gap); margin: 12px 0 10px; }
+.lcars-segmented button { flex: 1 1 150px; height: var(--lcars-bar-height); }
+.lcars-segmented button:first-child { border-radius: calc(var(--lcars-bar-height) / 2) 0 0 calc(var(--lcars-bar-height) / 2); }
+.lcars-segmented button:last-child { border-radius: 0 calc(var(--lcars-bar-height) / 2) calc(var(--lcars-bar-height) / 2) 0; }
+.units-note { color: var(--text-dim); font-size: 13px; max-width: 75ch; }
+/* Not uppercased: unit symbols are case-sensitive (pCi/L, kPa). */
+.units-detail { color: var(--lcars-ice); font: 500 15px/1.4 var(--console-font); letter-spacing: .04em; }
+.units-status { min-height: 1.2em; margin-top: 4px; font-size: 12px; color: var(--text-dim); }
 #card-home-camera { padding-bottom: 14px; }
 
 /* ── Home ──────────────────────────────────────────────────────── */
@@ -1500,7 +1511,6 @@ header .badge-key { font-size: 12px; opacity: .72; }
   .workspace-heading { align-items: flex-start; margin-bottom: 20px; }
   .workspace-heading h2 { font-size: 24px; }
   .workspace-heading p:last-child { font-size: 12px; }
-  .workspace-heading > .btn { display: none; }
   .eyebrow { font-size: 9px; }
   .card { padding: 14px 12px 18px; border-left-width: 20px; border-top-width: 8px; border-top-left-radius: 40px 28px; scroll-margin-top: 140px; }
   .section-code { display: none; }
@@ -1529,6 +1539,6 @@ header .badge-key { font-size: 12px; opacity: .72; }
   .lcars-alert-title { font-size: 12px; left: 28px; }
   .sweep-readout { min-width: 0; max-width: 150px; padding: 0 8px 4px; font-size: 14px; gap: 5px; }
   .sweep-readout-key { font-size: 10px; }
-  .cam-switch button { min-width: 64px; padding: 0 10px 4px; font-size: 14px; }
+  .cam-switch button { min-width: 88px; padding: 0 10px 4px; font-size: 14px; }
   .sweep-block { width: 32px; }
 }

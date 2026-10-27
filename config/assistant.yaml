@@ -285,3 +285,4 @@ web_dashboard:
   enabled: true
   host: 0.0.0.0
   port: 8080
+  display_units: us   # us | si | imperial | scientific — default until changed in Settings

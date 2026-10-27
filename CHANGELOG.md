@@ -4,6 +4,31 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.92.0] - 2026-10-27
+### Added
+- **Display units** setting (Settings → Display Units): US Customary, Metric
+  (SI / MKS), UK Imperial, and Scientific (SI, kelvin). The choice is
+  device-wide — `GET|PUT /api/settings/units`, persisted to
+  `~/.config/desktop-assistant/display_units.json` (new
+  `src/core/display_units.py`), default from `web_dashboard.display_units`.
+  - New `js/core/units.js` converts at render time and fires `vera:units`.
+  - Home converts temperatures, the SoC/Hailo hot alerts, and Environment
+    readings (DROP flow gpm → L/min or imp gal/min, radon pCi/L → Bq/m³, Nest
+    °F → °C/K). Overview telemetry temperatures follow the setting too
+    (replacing the fixed °C / °F pair).
+  - New LCARS **segmented selector** component (`.lcars-segmented`),
+    documented in the design guide along with a §3.3 units rule.
+### Changed
+- Header health block shows just the state (`OK` / `DEGRADED`); the "Health"
+  key is gone, with `aria-label="System health"` kept for screen readers.
+- Removed the Quiet hours shortcut button from the page title area (quiet
+  hours stay on Home's quick toggles and in Voice & Behavior).
+- Home camera switch reads **Left Eye / Right Eye** (camera 1 / camera 2);
+  captions and alt text match.
+- Home thermal readings (Case, SoC, Blended, Hailo, Fan duty) move to a new
+  Engineering-mode **Thermal** card; scene match / last scan stay in an
+  Advanced-mode **Scene** card.
+
 ## [1.91.0] - 2026-10-27
 ### Changed
 - Home: removed the Status card.
