@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.90.0] - 2026-10-26
+### Changed
+- Home: the Status card is now a vertical LCARS **readout stack** (Health,
+  Room, People, Alerts one above the other). Each reading has a coloured panel
+  block with a black bottom-right label, following the LCARS sidebar-panel
+  convention; the Alerts block runs to the bottom of the frame and alerts stack
+  vertically.
+- Home layout: Status sits to the left of the camera, and the camera feed scales
+  to the height of the status column (letterboxed, no cropping). Media and
+  toggles stay to the right on wide screens and move below at ≤1400px.
+- Camera sweep bar: Cam 2 (and the bar) now end square instead of rounded.
+- Active Cam 1/Cam 2 and Normal/Advanced/Engineering buttons use the rail
+  buttons' white end highlight instead of an underline.
+- LCARS design guide: new §3.2 readout stack; segmented-bar and sweep-bar
+  active states and the Home flow updated.
+
 ## [1.89.4] - 2026-10-26
 ### Fixed
 - The mouth-display spectrum analyzer now scales with the actual output volume

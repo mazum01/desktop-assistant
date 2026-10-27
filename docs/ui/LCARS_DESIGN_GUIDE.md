@@ -100,9 +100,10 @@ Reuse these components; don't invent near-duplicates.
 |---|---|---|
 | **Frame** (elbow + spine + bar) | `header`, `.card` | The left spine sweeps into a top bar. Card titles are uppercase in the panel accent. |
 | **Rail button** | `.tab-btn` | Full-color block with the label at bottom-right. Active state: `box-shadow: inset -6px 0 #fff`. |
-| **Segmented button bar** | `.mode-toggle` + `header .badge` | Square blocks split by gaps; only the outer ends are rounded. Active segment: peach with a white inset underline (`inset 0 -6px #fff`). Use `aria-pressed`. |
+| **Segmented button bar** | `.mode-toggle` + `header .badge` | Square blocks split by gaps; only the outer ends are rounded. Active segment: peach with the rail buttons' white end highlight (`inset -6px 0 #fff`), never an underline. Use `aria-pressed`. |
 | **Lit/unlit toggle** | `.lcars-toggle` > `input` + `.lcars-toggle-face` | Block with the right end rounded. Unlit = `--lcars-dim`, lit = `--lcars-ice`. Always shows an `ON`/`OFF` readout. The native checkbox stays in the DOM, visually hidden but focusable. |
 | **Readout** | `.stat-box` > `.stat-label` + `.stat-value` | Small uppercase label above a large value on black. |
+| **Readout stack** | `dl.lcars-readout-stack` > `.lcars-readout` > `dt` + `dd` | Vertical status column: one reading per row, a coloured panel block carrying the label beside its value. See §3.2. |
 | **Status pill** | `.pill.pill-ok/-warn/-bad` | Short status words. Never color alone: the text must state the condition. |
 | **Card cross-link** | `h2 > a.card-link` | Floats right in the card title, ice-colored, ends with `›`. Use it instead of an "Open X" button. |
 | **Action button** | `.btn` | Existing rounded action buttons inside cards. Use them for verbs (Play, Say), not for state. |
@@ -147,15 +148,38 @@ sit in that bar. Home's camera card uses it, with a Cam 1 / Cam 2 source switch.
   All three are decorative, `aria-hidden`, and `pointer-events: none`.
 - **Sweep bar:** right-aligned on the bottom bar.
   - It holds an optional `.sweep-block` colour chip, then a segmented control.
-    Each piece is separated by a `--lcars-gap` black gap, and only the far
-    right end is rounded.
-  - Active segment: `--lcars-ice` with a white inset underline (`inset 0 -6px
-    #fff`). Inactive: `--lcars-dim`. State is carried by `aria-pressed`.
+    Each piece is separated by a `--lcars-gap` black gap. The bar ends square,
+    flush with the card's right edge (no rounded end).
+  - Active segment: `--lcars-ice` with the rail buttons' white end highlight
+    (`inset -6px 0 #fff`). Inactive: `--lcars-dim`. State is carried by
+    `aria-pressed`.
 - **Knobs:** `--sweep-spine`, `--sweep-top` and `--sweep-bar` on
   `.lcars-sweep-card`. The phone media query reduces them to match the
   narrower card frame.
 - **Behaviour:** use the sweep card for one hero panel per page. Don't put it
   on every card, or it stops being special.
+
+### 3.2 Readout stack (status column)
+
+LCARS shows status as a vertical stack of panel blocks, like the sidebar
+panels: each block is a flat colour with a black condensed label at the
+bottom-right, separated from the next by a black gap. The reading sits to the
+right of its block. Home's Status card uses it.
+
+```html
+<dl class="lcars-readout-stack">
+  <div class="lcars-readout"><dt>Health</dt><dd id="…">Nominal</dd></div>
+  <div class="lcars-readout"><dt>Room</dt><dd id="…">Office</dd></div>
+  …
+</dl>
+```
+
+- Rows cycle peach → lilac → ice → panel hue (`--readout-hue`).
+- Values are uppercase console font in `--yellow` (state colours such as
+  health may override), wrapping at word boundaries only.
+- The last row grows (`flex: 1`) so the stack fills its card and the label
+  block runs down to the bottom of the frame; its value aligns to the bottom.
+- Lists (e.g. alerts) inside a value stack vertically, one item per line.
 
 ### States
 
@@ -170,8 +194,9 @@ sit in that bar. Home's camera card uses it, with a Cam 1 / Cam 2 source switch.
 1. **One question per card.** Each card answers a single question: what's my
    status, what's playing, what does the camera see.
 2. **Read top-down by urgency.** Lay out sections in this order:
-   - a status strip (health, alerts) at full width;
-   - the primary visual (camera) next to the most-used controls;
+   - a status column (readout stack: health, room, people, alerts) on the
+     left, beside the primary visual (camera), which scales to the same height;
+   - the most-used controls to the right (wide screens) or below (≤1400px);
    - secondary actions;
    - Advanced and Engineering data at full width at the bottom.
 3. **Name the layout with grid areas.** Use `grid-template-areas` so the
@@ -185,7 +210,7 @@ sit in that bar. Home's camera card uses it, with a Cam 1 / Cam 2 source switch.
 6. **Navigate with links, not buttons.** Use plain `#/slug` anchors, which the
    hash router handles. Don't add click handlers just to navigate.
 7. **Phones (≤700px):** shrink bars (`--lcars-bar-height: 28px`), let the
-   header wrap, and use two-column readout strips.
+   header wrap, and narrow the readout stack's label blocks.
 
 ## 5. Accessibility
 

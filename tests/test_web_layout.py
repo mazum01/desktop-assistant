@@ -629,7 +629,9 @@ def test_mode_toggle_and_health_form_one_lcars_bar():
     css = (STATIC / "style.css").read_text()
     assert ".mode-toggle { display: flex; gap: var(--lcars-gap); }" in css
     assert ".mode-toggle button, header .badge {" in css
-    assert '.mode-toggle button[aria-pressed="true"] { background: var(--lcars-peach); box-shadow: inset 0 -6px #fff; }' in css
+    assert '.mode-toggle button[aria-pressed="true"] { background: var(--lcars-peach); box-shadow: inset -6px 0 #fff; }' in css
+    # Active segments use the rail buttons' end highlight, never an underline.
+    assert "inset 0 -6px #fff" not in css
     assert "header .badge-ok { background: var(--green); }" in css
     assert "⬤" not in (STATIC / "app.js").read_text()
 
@@ -645,10 +647,23 @@ def test_home_toggles_are_lcars_lit_blocks_with_text_state(layout):
 
 def test_home_flow_uses_named_grid_areas_and_title_links(layout):
     css = (STATIC / "style.css").read_text()
-    assert '"status status"' in css and '"camera media"' in css and '"camera toggles"' in css
+    assert '"status camera media"' in css and '"status camera toggles"' in css
     links = {node["attrs"]["href"] for node in layout
              if "card-link" in node["attrs"].get("class", "").split()}
     assert {"#/vision", "#/media", "#/voice", "#/smart-home", "#/overview"} <= links
+
+
+def test_home_status_is_a_vertical_lcars_readout_stack(layout):
+    by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
+    status = by_id["card-home-status"]
+    for value_id in ("home-health", "home-room", "home-faces", "home-alerts"):
+        node = by_id[value_id]
+        assert status in node["ancestors"]
+        assert any("lcars-readout" in a["attrs"].get("class", "").split() for a in node["ancestors"]), value_id
+    css = (STATIC / "style.css").read_text()
+    assert ".lcars-readout-stack { display: flex; flex-direction: column;" in css
+    assert ".home-camera { position: absolute; inset: 0;" in css
+    assert "calc(var(--sweep-bar) / 2)" not in css  # sweep bar and Cam 2 end square
 
 
 def test_lcars_design_guide_is_referenced_by_agent_instructions():

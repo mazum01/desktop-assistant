@@ -13,7 +13,7 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&amp;display=swap" rel="stylesheet"/>
-<link href="/static/style.css?v=1.89.3" rel="stylesheet"/>
+<link href="/static/style.css?v=1.90.0" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -66,12 +66,12 @@
 <div aria-labelledby="nav-home" class="tab-pane" data-description="At-a-glance status and the controls you use every day." data-title="Home" id="tab-home" role="tabpanel">
 <section aria-label="Status" class="card" id="card-home-status">
 <h2>Status</h2>
-<div class="home-status-strip">
-<div class="stat-box"><div class="stat-label">Health</div><div class="stat-value" id="home-health">—</div></div>
-<div class="stat-box"><div class="stat-label">Room</div><div class="stat-value" id="home-room">—</div></div>
-<div class="stat-box"><div class="stat-label">People</div><div class="stat-value" id="home-faces">—</div></div>
-<div class="stat-box home-alerts-box"><div class="stat-label">Alerts</div><div aria-label="Alerts" aria-live="polite" class="pill-row home-alerts" id="home-alerts"></div></div>
-</div>
+<dl class="lcars-readout-stack">
+<div class="lcars-readout"><dt>Health</dt><dd id="home-health">—</dd></div>
+<div class="lcars-readout"><dt>Room</dt><dd id="home-room">—</dd></div>
+<div class="lcars-readout"><dt>People</dt><dd id="home-faces">—</dd></div>
+<div class="lcars-readout"><dt>Alerts</dt><dd><div aria-label="Alerts" aria-live="polite" class="home-alerts" id="home-alerts"></div></dd></div>
+</dl>
 </section>
 <section aria-label="Camera" class="card lcars-sweep-card" id="card-home-camera">
 <span aria-hidden="true" class="frame-break frame-break-top"></span>
@@ -1308,8 +1308,8 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.89.3"></script>
-<script src="/static/js/main.js?v=1.89.3" type="module"></script>
+<script src="/static/app.js?v=1.90.0"></script>
+<script src="/static/js/main.js?v=1.90.0" type="module"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">
