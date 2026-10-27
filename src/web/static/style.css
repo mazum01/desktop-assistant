@@ -1421,6 +1421,21 @@ header .badge-unknown { background: var(--lcars-dim); }
 }
 .is-compact .lcars-toggle-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .is-compact .lcars-toggle-state { grid-row: 1; font-size: 12px; }
+/* LCARS data rows: peach name block | ice value, one bar high, read-only. */
+.lcars-data-list { display: grid; gap: var(--lcars-gap); margin: 0; }
+.lcars-data-row {
+  display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center;
+  gap: 10px; min-height: var(--lcars-bar-height);
+}
+.lcars-data-row dt {
+  align-self: stretch; display: flex; align-items: flex-end; justify-content: flex-end;
+  padding: 0 10px 4px; background: var(--lcars-peach); color: #000;
+  font: 600 16px/1 var(--console-font); letter-spacing: .04em; text-transform: uppercase;
+}
+.lcars-data-row dd {
+  margin: 0; color: var(--lcars-ice); font: 600 18px/1.1 var(--console-font);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 /* LCARS slider: name block | range | live value readout, one bar high. */
 .lcars-slider-group { display: grid; gap: var(--lcars-gap); }
 .lcars-slider {
@@ -1618,4 +1633,5 @@ header .badge-unknown { background: var(--lcars-dim); }
   .is-mirrored .lcars-sweep-title { left: auto; right: 14px; }
   .is-compact .lcars-toggle-face { font-size: 14px; padding-inline: 8px 10px; }
   .lcars-slider { grid-template-columns: 56px minmax(0, 1fr) 52px; }
+  .lcars-data-row { grid-template-columns: 56px minmax(0, 1fr); }
 }

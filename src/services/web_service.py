@@ -43,6 +43,8 @@ GET  /api/settings/face-tracking  Get face tracking enabled state
 PUT  /api/settings/face-tracking  Set face tracking  body: {"enabled": bool}
 GET  /api/settings/random-motion  Get random motion enabled state
 PUT  /api/settings/random-motion  Set random motion  body: {"enabled": bool}
+GET  /api/settings/camera/overlay  Get stream overlay options
+PUT  /api/settings/camera/overlay  Show/hide overlay confidence %  body: {"show_confidence": bool}
 GET  /api/settings/object-detection  Get object detection enabled state
 PUT  /api/settings/object-detection  Set object detection  body: {"enabled": bool}
 GET  /api/settings/room-checking  Get room-change checking enabled state
@@ -378,6 +380,10 @@ class _GreetingBody(BaseModel):
 
 class _CameraRotationBody(BaseModel):
     rotation_deg: int
+
+
+class _OverlayBody(BaseModel):
+    show_confidence: bool
 
 
 class _CameraFocusBody(BaseModel):
@@ -2542,6 +2548,22 @@ class WebService:
             if self.bus:
                 self.bus.publish("camera.set_rotation", {"rotation_deg": deg})
             return {"ok": True, "rotation_deg": deg}
+
+        # ── Stream overlay options ─────────────────────────────────────
+
+        @app.get("/api/settings/camera/overlay")
+        async def api_get_camera_overlay():
+            if not self._vision_svc:
+                return {"show_confidence": True}
+            status = await asyncio.to_thread(self._vision_svc.get_status)
+            return {"show_confidence": bool(status.get("overlay_show_confidence", True))}
+
+        @app.put("/api/settings/camera/overlay")
+        async def api_put_camera_overlay(body: _OverlayBody):
+            if self.bus:
+                self.bus.publish("vision.set_overlay_confidence",
+                                 {"enabled": body.show_confidence})
+            return {"ok": True, "show_confidence": body.show_confidence}
 
         # ── Camera 2 rotation ──────────────────────────────────────────
 

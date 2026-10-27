@@ -335,7 +335,8 @@ def test_decorative_codes_are_sparse_and_hidden_from_assistive_technology(layout
         "card-home-alerts", "home-room", "home-faces", "home-alerts", "home-camera",
         "home-media-play", "home-media-next", "home-volume", "home-mute-btn",
         "home-toggle-privacy", "home-toggle-quiet", "home-toggle-mute",
-        "home-toggle-face", "home-toggle-idle", "home-toggle-motion",
+        "home-toggle-face", "home-toggle-idle", "home-toggle-motion", "home-toggle-confidence",
+        "home-control-room", "home-objects",
         "home-pan-slider", "home-tilt-slider", "home-eye", "home-say-input", "home-repeat-btn",
         "home-iot", "home-temp-hailo", "home-fan", "home-scene-confidence", "home-eng-line",
     ]),
@@ -639,7 +640,7 @@ def test_mode_toggle_and_health_form_one_lcars_bar():
 
 def test_home_toggles_are_lcars_lit_blocks_with_text_state(layout):
     toggles = [node for node in layout if "lcars-toggle" in node["attrs"].get("class", "").split()]
-    assert len(toggles) == 6
+    assert len(toggles) == 7
     css = (STATIC / "style.css").read_text()
     assert ".lcars-toggle input:checked + .lcars-toggle-face { background: var(--lcars-ice); }" in css
     assert '.lcars-toggle-state::after { content: "OFF"; }' in css
@@ -738,7 +739,8 @@ def test_home_vision_control_frame_sits_beside_vision(layout):
     assert control["attrs"]["aria-labelledby"] == "home-control-title"
     assert by_id["home-control-title"]["attrs"]["href"] == "#/vision"
     for value_id in ("home-toggle-motion", "home-toggle-privacy", "home-toggle-face",
-                     "home-toggle-idle", "home-pan-slider", "home-tilt-slider",
+                     "home-toggle-idle", "home-toggle-confidence", "home-control-room",
+                     "home-objects", "home-pan-slider", "home-tilt-slider",
                      "home-pan-value", "home-tilt-value", "home-control-status"):
         assert control in by_id[value_id]["ancestors"], value_id
     for value_id in ("home-toggle-quiet", "home-toggle-mute"):
@@ -753,6 +755,26 @@ def test_home_vision_control_frame_sits_beside_vision(layout):
     assert "'home-toggle-motion'" in home and "/api/settings/servo" in home
     assert "path: '/api/pan'" in home and "path: '/api/tilt'" in home
     assert "renderHead(pos)" in home
+    assert "'/api/settings/camera/overlay'" in home
+    assert ".lcars-data-row" in css
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for Home regression")
+def test_home_describes_objects_in_view(tmp_path):
+    script = r"""
+const assert = require('node:assert/strict');
+globalThis.document = {getElementById: () => null};
+globalThis.window = {};
+import(require('node:url').pathToFileURL(process.argv[2]).href).then(({describeObjects}) => {
+  const objs = [{label: 'cup', confidence: 0.4}, {label: 'keyboard', confidence: 0.9},
+                {label: 'cup', confidence: 0.5}];
+  assert.equal(describeObjects({objects: objs, ts: 100}, 101), 'keyboard, cup ×2');
+  assert.equal(describeObjects({objects: [], ts: 100}, 101), 'None');
+  assert.equal(describeObjects({objects: objs, ts: 100}, 200), '—');
+  assert.equal(describeObjects(null), '—');
+}).catch(e => { console.error(e); process.exit(1); });
+"""
+    _run_module_test(tmp_path, script, JS / "pages" / "home.js")
 
 
 def test_card_drag_and_drop_is_retired(layout):

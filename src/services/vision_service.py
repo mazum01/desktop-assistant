@@ -20,9 +20,11 @@ Topics published:
     vision.jpeg_ready     {"index": int}
     vision.error          {"reason": str}
     vision.lens_position  {"position": float}  — cam0 lens position (diopters), ~2 Hz
+    vision.overlay_confidence_changed {"enabled": bool}
 
 Topics subscribed:
     vision.capture_still  {"path": str}     — write a JPEG still to *path*
+    vision.set_overlay_confidence {"enabled": bool} — show/hide confidence % in overlays
     perception.faces      — caches face bboxes for overlay drawing
     perception.objects    — caches object bboxes for overlay drawing
 
@@ -534,12 +536,14 @@ def _draw_hud_face(frame: np.ndarray, cx: int, cy: int, half_w: int, half_h: int
 
 
 def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
-                   face_depths: dict | None = None) -> None:
+                   face_depths: dict | None = None,
+                   show_confidence: bool = True) -> None:
     """Draw HUD-style face overlays and object rectangles in-place on a BGR frame.
 
     All pixel dimensions scale with the frame resolution relative to a 640×480
     baseline so overlays look the same physical size regardless of capture res.
     face_depths maps face_id → depth_m for annotating faces with range.
+    show_confidence=False drops the match/detection percentage from labels.
     """
     h, w = frame_bgr.shape[:2]
     scale = min(w / 640.0, h / 480.0)
@@ -592,7 +596,8 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
             if depth_m is not None:
                 depth_ft = depth_m * 3.28084
                 lines.append((f"{depth_m:.2f}m ({depth_ft:.1f}ft)", small_scale, font_thick))
-            lines.append((f"{int(match_score * 100)}%", small_scale, font_thick))
+            if show_confidence:
+                lines.append((f"{int(match_score * 100)}%", small_scale, font_thick))
 
             # Measure each line; find widest for overflow check
             sizes = [cv2.getTextSize(ln, font, fs, th) for ln, fs, th in lines]
@@ -628,7 +633,7 @@ def _draw_overlays(frame_bgr: np.ndarray, faces: list, objects: list,
         obj_color = _object_color(label)
         cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), obj_color, box_thick, cv2.LINE_AA)
         conf  = obj.get("confidence", 0)
-        label_text = f"{label} {int(conf * 100)}%"
+        label_text = f"{label} {int(conf * 100)}%" if show_confidence else str(label)
         font_scale = max(0.8, 1.1 * scale)
         font_thick = max(1, round(scale))   # 1 at 640×480
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -991,6 +996,9 @@ class VisionService(Service):
         if not 40 <= quality <= 100:
             raise ValueError("camera stream_jpeg_quality must be between 40 and 100")
         self._overlay_scale = scale
+        self._show_confidence: bool = bool(
+            getattr(camera_config, "overlay_show_confidence", True))
+        self._last_captured_at: Optional[float] = None
         self._jpeg_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
         # Below 2x, 4:2:0 chroma blocks are wider than thin overlay strokes and
         # smear their color; at 2x+ a chroma block maps to one source pixel.
@@ -1025,6 +1033,9 @@ class VisionService(Service):
 
         self._unsubs.append(
             self.bus.subscribe("vision.capture_still", self._on_capture_still)
+        )
+        self._unsubs.append(
+            self.bus.subscribe("vision.set_overlay_confidence", self._on_set_overlay_confidence)
         )
         self._unsubs.append(
             self.bus.subscribe("perception.faces", self._on_faces)
@@ -1106,6 +1117,10 @@ class VisionService(Service):
     def stream_resolution(self) -> tuple:
         return (self._stream_width, self._stream_height)
 
+    @property
+    def show_confidence(self) -> bool:
+        return self._show_confidence
+
     def run_tick(self) -> None:
         if self._camera is None:
             return
@@ -1119,6 +1134,11 @@ class VisionService(Service):
             log.exception("capture_frame failed")
             self.bus.publish("vision.error", {"reason": "capture_failed"})
             return
+        # The capture thread can stall (e.g. under memory pressure); don't
+        # re-encode or re-run detection on a frame that was already handled.
+        if captured_at is not None and captured_at == self._last_captured_at:
+            return
+        self._last_captured_at = captured_at
 
         # Rotate only what the sensor did not already apply in hardware.
         with self._rotation_lock:
@@ -1228,7 +1248,8 @@ class VisionService(Service):
                 scaled_objects = _scale_bboxes(scaled_objects, kx, ky)
                 sx, sy = sx * kx, sy * ky
 
-            _draw_overlays(display, scaled_faces, scaled_objects, face_depths)
+            _draw_overlays(display, scaled_faces, scaled_objects, face_depths,
+                           show_confidence=self._show_confidence)
             if privacy_state:
                 _draw_privacy_overlay(display, privacy_state, sx, sy)
             if servo_angle is not None:
@@ -1363,6 +1384,15 @@ class VisionService(Service):
             self.bus.publish("camera.resolution_changed", {"width": w, "height": h})
         except Exception:
             log.exception("Failed to change camera 1 resolution to %dx%d", w, h)
+
+    def _on_set_overlay_confidence(self, _topic, payload) -> None:
+        """Show or hide the confidence percentage in face/object overlays."""
+        if not isinstance(payload, dict) or "enabled" not in payload:
+            return
+        self._show_confidence = bool(payload["enabled"])
+        log.info("Overlay confidence %s", "shown" if self._show_confidence else "hidden")
+        self.bus.publish("vision.overlay_confidence_changed",
+                         {"enabled": self._show_confidence})
 
     def _on_set_stream_resolution(self, _topic, payload) -> None:
         """Update the MJPEG stream downscale target without restarting the camera.

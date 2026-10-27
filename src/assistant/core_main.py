@@ -170,6 +170,8 @@ def main() -> int:
         stream_height=_cam_stream_height,
         overlay_scale=float(_cam_cfg_raw.get("overlay_scale", 2.0)),
         stream_jpeg_quality=int(_cam_cfg_raw.get("stream_jpeg_quality", 80)),
+        overlay_show_confidence=bool(_rt.get("camera", {}).get(
+            "overlay_show_confidence", _cam_cfg_raw.get("overlay_show_confidence", True))),
     )
 
     def _tracking_frame_width(cam_w: int, cam_h: int, rot_deg: int) -> int:
@@ -275,6 +277,7 @@ def main() -> int:
             "height": _cam_height,
             "stream_width": _cam_stream_width,
             "stream_height": _cam_stream_height,
+            "overlay_show_confidence": _camera_cfg.overlay_show_confidence,
         },
         "camera2": {
             "af_mode": str(_rt.get("camera2", {}).get("af_mode", _cam2_cfg_raw_early.get("af_mode", "continuous"))),
@@ -382,6 +385,12 @@ def main() -> int:
             _rt_state["camera"]["stream_height"] = int(payload["height"])
             _save_runtime(_rt_state)
 
+    def _on_overlay_confidence_changed(_t, payload):
+        if isinstance(payload, dict) and "enabled" in payload:
+            _rt_state["camera"]["overlay_show_confidence"] = bool(payload["enabled"])
+            _save_runtime(_rt_state)
+
+    bus.subscribe("vision.overlay_confidence_changed", _on_overlay_confidence_changed)
     bus.subscribe("motion.enabled_changed",         _on_servo_changed)
     bus.subscribe("motion.limits_changed",          _on_limits_changed)
     bus.subscribe("motion.channels_changed",        _on_channels_changed)
@@ -824,6 +833,7 @@ def main() -> int:
                 "rotation_deg": vis.rotation_deg,
                 "resolution": [w, h],
                 "stream_resolution": [sw, sh],
+                "overlay_show_confidence": vis.show_confidence,
             },
         }
 

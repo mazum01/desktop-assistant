@@ -1487,3 +1487,17 @@ def test_frame_events_do_not_block_bus_thread_on_slow_fetch():
         assert len(calls) <= 2  # burst coalesced into at most one follow-up fetch
     finally:
         svc._frame1_fetcher.stop()
+
+
+def test_overlay_confidence_setting_round_trip():
+    bus = MessageBus()
+    vision = MagicMock()
+    vision.get_status.return_value = {"overlay_show_confidence": False}
+    svc = WebService(bus=bus, port=18080, registry=_mock_registry(), vision_service=vision)
+    client = TestClient(svc._build_app())
+    assert client.get("/api/settings/camera/overlay").json() == {"show_confidence": False}
+    seen = []
+    bus.subscribe("vision.set_overlay_confidence", lambda _t, p: seen.append(p))
+    r = client.put("/api/settings/camera/overlay", json={"show_confidence": True})
+    assert r.status_code == 200 and r.json()["show_confidence"] is True
+    assert seen == [{"enabled": True}]

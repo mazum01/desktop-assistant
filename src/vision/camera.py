@@ -104,6 +104,8 @@ class CameraConfig:
     # MJPEG quality for the annotated stream. Below overlay_scale 2 it is
     # encoded without chroma subsampling so thin colored strokes stay clean.
     stream_jpeg_quality: int = 80
+    # Show the face-match / object-detection confidence % in stream overlays.
+    overlay_show_confidence: bool = True
 
 
 class Camera:

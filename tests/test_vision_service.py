@@ -52,7 +52,7 @@ def _encode_once(camera_config, frame, faces):
     svc._encode_queue.put((frame, None, faces, [], {}, None, 0, 180, 1, None))
     drawn = []
     with patch("src.services.vision_service._draw_overlays",
-               side_effect=lambda img, f, o, d: drawn.append((img.shape, f))):
+               side_effect=lambda img, f, o, d, **_: drawn.append((img.shape, f))):
         svc._encoder_running = True
         worker = threading.Thread(target=svc._encoder_loop)
         worker.start()
@@ -101,3 +101,56 @@ def test_bad_stream_settings_are_rejected(bad):
     from src.vision.camera import CameraConfig
     with pytest.raises(ValueError):
         VisionService(bus=MessageBus(), camera_config=CameraConfig(**bad))
+
+
+def test_object_label_omits_confidence_when_hidden():
+    frame = np.zeros((480, 640, 3), np.uint8)
+    obj = {"bbox": [100, 100, 200, 200], "label": "cup", "confidence": 0.93}
+    with patch("src.services.vision_service._put_text_outlined") as draw:
+        _draw_overlays(frame, [], [obj], show_confidence=False)
+    assert draw.call_args.args[1] == "cup"
+
+
+def test_face_label_omits_match_percentage_when_hidden():
+    frame = np.zeros((480, 640, 3), np.uint8)
+    face = {"bbox": [100, 100, 200, 200], "face_id": "a", "name": "Sam", "match_score": 0.8}
+    with patch("src.services.vision_service._put_text_outlined") as draw:
+        _draw_overlays(frame, [face], [], show_confidence=False)
+    assert [c.args[1] for c in draw.call_args_list] == ["Sam"]
+    with patch("src.services.vision_service._put_text_outlined") as draw:
+        _draw_overlays(frame, [face], [])
+    assert [c.args[1] for c in draw.call_args_list] == ["Sam", "80%"]
+
+
+def test_overlay_confidence_toggle_updates_service_and_announces():
+    from src.core.bus import MessageBus
+    from src.services.vision_service import VisionService
+    from src.vision.camera import CameraConfig
+    bus = MessageBus()
+    svc = VisionService(bus=bus, camera_config=CameraConfig(overlay_show_confidence=False))
+    assert svc.show_confidence is False
+    seen = []
+    bus.subscribe("vision.overlay_confidence_changed", lambda _t, p: seen.append(p))
+    svc._on_set_overlay_confidence("vision.set_overlay_confidence", {"enabled": True})
+    assert svc.show_confidence is True and seen == [{"enabled": True}]
+
+
+def test_run_tick_skips_frames_already_processed():
+    from src.core.bus import MessageBus
+    from src.services.vision_service import VisionService
+
+    class StalledCamera:
+        is_ready = True
+        hw_rotation_deg = 0
+        frame = np.zeros((48, 64, 3), np.uint8)
+
+        def capture_frames(self):
+            return self.frame, None, 123.0
+
+    bus = MessageBus()
+    ready = []
+    bus.subscribe("vision.frame_ready", lambda _t, p: ready.append(p["index"]))
+    svc = VisionService(bus=bus, camera=StalledCamera())
+    for _ in range(3):
+        svc.run_tick()
+    assert ready == [1] and svc.frame_index() == 1

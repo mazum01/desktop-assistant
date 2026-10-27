@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.94.0] - 2026-10-27
+### Added
+- Vision Control frame: new Scene group showing the detected room and the objects in view (sorted by confidence, with duplicates counted, e.g. "cup ×2"). It shows "—" when the detection data is more than 10s old.
+- "Confidence %" toggle that shows or hides the confidence percentages in the face/object overlays on the video stream. It is available at `GET/PUT /api/settings/camera/overlay`, published on the `vision.set_overlay_confidence` topic, and saved to runtime state so it survives restarts.
+- New LCARS data row component (`dl.lcars-data-list`), documented in the LCARS design guide.
+
+### Fixed
+- Frozen left-eye feed: when the camera capture thread stalled (3–6s at a time under memory/swap pressure), VisionService kept re-encoding and re-publishing the same stale frame, so the stream looked alive while the picture was frozen. `run_tick` now skips frames whose capture timestamp has not changed, which saves the wasted encodes, RPC calls and Hailo inference.
+
 ## [1.93.0] - 2026-10-27
 ### Added
 - Home "Vision Control" frame beside the Vision feed: a mirrored LCARS sweep

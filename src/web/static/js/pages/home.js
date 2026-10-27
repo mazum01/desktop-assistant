@@ -179,6 +179,23 @@ function renderIot(iot) {
   }));
 }
 
+// Objects in view, most confident first, duplicates counted: "keyboard, cup ×2".
+// Detections older than OBJECTS_STALE_S (detector off or stalled) read as "—".
+const OBJECTS_STALE_S = 10;
+
+export function describeObjects(payload, nowS = Date.now() / 1000) {
+  if (!payload || !Array.isArray(payload.objects)) return '—';
+  if (payload.ts && nowS - payload.ts > OBJECTS_STALE_S) return '—';
+  const counts = new Map();
+  const sorted = [...payload.objects].sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+  for (const obj of sorted) {
+    const label = obj.label || '?';
+    counts.set(label, (counts.get(label) || 0) + 1);
+  }
+  if (!counts.size) return 'None';
+  return [...counts].map(([label, n]) => (n > 1 ? `${label} ×${n}` : label)).join(', ');
+}
+
 // Sweep-bar readouts truncate, so the full text rides along as a tooltip.
 function setReadout(id, text) {
   setText(id, text);
@@ -189,7 +206,10 @@ function setReadout(id, text) {
 function onStatus(data) {
   state.status = data;
   const last = data.last || {};
-  setReadout('home-room', data.room || (data.room_detail && data.room_detail.name) || '—');
+  const roomName = data.room || (data.room_detail && data.room_detail.name) || '—';
+  setReadout('home-room', roomName);
+  setReadout('home-control-room', roomName);
+  setReadout('home-objects', describeObjects(last['perception.objects']));
   const faces = last['perception.faces'] || {};
   const named = (faces.faces || []).map(f => f.name).filter(n => n && n !== 'unknown');
   const count = Number(faces.count || 0);
@@ -358,6 +378,12 @@ const TOGGLES = {
       callLegacy('loadRandomMotionEnabled');
     },
   },
+  'home-toggle-confidence': {
+    label: 'Overlay confidence',
+    async save(show_confidence) {
+      await api('/api/settings/camera/overlay', 'PUT', { show_confidence });
+    },
+  },
 };
 
 async function onToggle(event) {
@@ -395,6 +421,7 @@ async function refreshSettings() {
     read('/api/audio/mute', d => { state.settings.muted = !!d.muted; check('home-toggle-mute', d.muted); }),
     read('/api/settings/face-tracking', d => check('home-toggle-face', d.enabled)),
     read('/api/settings/random-motion', d => check('home-toggle-idle', d.enabled)),
+    read('/api/settings/camera/overlay', d => check('home-toggle-confidence', d.show_confidence !== false)),
     read('/api/settings/servo', d => { state.settings.motion = d.enabled !== false; check('home-toggle-motion', state.settings.motion); }),
     read('/api/settings/servo/limits', d => setHeadRange('pan', d.min_deg, d.max_deg)),
     read('/api/settings/servo/channels', d => {
