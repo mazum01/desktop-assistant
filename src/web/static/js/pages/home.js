@@ -14,7 +14,7 @@ const state = {
   music: null,
   podcast: null,
   update: null,
-  settings: { privacy: null, quiet: null, muted: null },
+  settings: { privacy: null, quiet: null, muted: null, motion: null },
   volumeDragging: false,
 };
 
@@ -41,8 +41,8 @@ function setText(id, text) {
   if (node && node.textContent !== text) node.textContent = text;
 }
 
-function note(message, ok = true) {
-  const out = $('home-action-status');
+function note(message, ok = true, id = 'home-action-status') {
+  const out = $(id);
   if (!out) return;
   out.textContent = message;
   out.style.color = ok ? 'var(--green)' : 'var(--red)';
@@ -212,6 +212,7 @@ function onStatus(data) {
     : room.last_check_age_s == null ? '—' : `${fmtNum(room.last_check_age_s / 60, 0)} min ago`);
 
   const pos = last['motion.position'] || {};
+  renderHead(pos);
   const level = last['audio.level'] || {};
   setText('home-eng-line', [
     `pan ${fmtNum(pos.angle, 1, '°')}`, `tilt ${fmtNum(pos.tilt_angle, 1, '°')}`,
@@ -316,6 +317,15 @@ async function setMuted(muted) {
 // ── Quick toggles ──────────────────────────────────────────────────────────
 
 const TOGGLES = {
+  'home-toggle-motion': {
+    label: 'Head motion',
+    async save(enabled) {
+      await api('/api/settings/servo', 'PUT', { enabled });
+      state.settings.motion = enabled;
+      callLegacy('loadServoEnabled');
+      renderHeadEnabled();
+    },
+  },
   'home-toggle-privacy': {
     label: 'Privacy',
     async save(enabled) {
@@ -353,13 +363,14 @@ const TOGGLES = {
 async function onToggle(event) {
   const input = event.target;
   const toggle = TOGGLES[input.id];
+  const out = input.closest('#card-home-vision-control') ? 'home-control-status' : 'home-action-status';
   input.disabled = true;
   try {
     await toggle.save(input.checked);
-    note(`${toggle.label} ${input.checked ? 'on' : 'off'}`);
+    note(`${toggle.label} ${input.checked ? 'on' : 'off'}`, true, out);
   } catch (err) {
     input.checked = !input.checked;
-    note(`${toggle.label}: ${err.message}`, false);
+    note(`${toggle.label}: ${err.message}`, false, out);
   } finally {
     input.disabled = false;
     renderAlerts();
@@ -384,9 +395,90 @@ async function refreshSettings() {
     read('/api/audio/mute', d => { state.settings.muted = !!d.muted; check('home-toggle-mute', d.muted); }),
     read('/api/settings/face-tracking', d => check('home-toggle-face', d.enabled)),
     read('/api/settings/random-motion', d => check('home-toggle-idle', d.enabled)),
+    read('/api/settings/servo', d => { state.settings.motion = d.enabled !== false; check('home-toggle-motion', state.settings.motion); }),
+    read('/api/settings/servo/limits', d => setHeadRange('pan', d.min_deg, d.max_deg)),
+    read('/api/settings/servo/channels', d => {
+      const row = $('home-tilt-row');
+      if (row) row.hidden = !d.tilt_available;
+      setHeadRange('tilt', d.tilt_min_deg, d.tilt_max_deg);
+    }),
   ]);
+  renderHeadEnabled();
   renderAlerts();
   renderMedia();
+}
+
+// ── Head position sliders ───────────────────────────────────────────────────
+// Drag to aim; while idle they follow the live angle from motion.position.
+// Only the latest value is sent while a request is in flight.
+
+const HEAD = {
+  pan: { field: 'angle', path: '/api/pan', dragging: false, sending: false, pending: null },
+  tilt: { field: 'tilt_angle', path: '/api/tilt', dragging: false, sending: false, pending: null },
+};
+
+function setHeadRange(axis, min, max) {
+  const slider = $(`home-${axis}-slider`);
+  if (!slider || !Number.isFinite(Number(min)) || !Number.isFinite(Number(max))) return;
+  slider.min = min;
+  slider.max = max;
+}
+
+function renderHeadEnabled() {
+  const off = state.settings.motion === false;
+  for (const axis of Object.keys(HEAD)) {
+    const slider = $(`home-${axis}-slider`);
+    if (slider) {
+      slider.disabled = off;
+      slider.title = off ? 'Head motion is off' : '';
+    }
+  }
+}
+
+function renderHead(pos) {
+  for (const [axis, head] of Object.entries(HEAD)) {
+    const angle = Number(pos[head.field]);
+    if (pos[head.field] == null || !Number.isFinite(angle)) continue;
+    if (head.dragging || head.sending) continue;
+    const slider = $(`home-${axis}-slider`);
+    if (slider) slider.value = Math.round(angle);
+    setText(`home-${axis}-value`, fmtNum(angle, 0, '°'));
+  }
+}
+
+async function sendHead(axis) {
+  const head = HEAD[axis];
+  if (head.sending) return;
+  head.sending = true;
+  try {
+    while (head.pending !== null) {
+      const angle = head.pending;
+      head.pending = null;
+      await api(head.path, 'POST', { angle });
+    }
+  } catch (err) {
+    head.pending = null;
+    note(`${axis === 'pan' ? 'Pan' : 'Tilt'}: ${err.message}`, false, 'home-control-status');
+  } finally {
+    head.sending = false;
+  }
+}
+
+function initHeadSliders() {
+  for (const axis of Object.keys(HEAD)) {
+    const slider = $(`home-${axis}-slider`);
+    if (!slider) continue;
+    const head = HEAD[axis];
+    slider.addEventListener('input', () => {
+      head.dragging = true;
+      setText(`home-${axis}-value`, `${slider.value}°`);
+      head.pending = Number(slider.value);
+      sendHead(axis);
+    });
+    for (const type of ['change', 'pointerup', 'pointercancel', 'blur']) {
+      slider.addEventListener(type, () => { head.dragging = false; });
+    }
+  }
 }
 
 // ── Say ────────────────────────────────────────────────────────────────────
@@ -431,6 +523,7 @@ function renderCameraSwitch() {
   });
   const img = $('home-camera');
   if (img) img.alt = `Live view from the ${EYE_NAMES[homeCam].toLowerCase()}`;
+  setReadout('home-eye', EYE_NAMES[homeCam].replace(/ eye$/, ''));
 }
 
 function startCamera() {
@@ -495,6 +588,7 @@ export function initHome(deps = {}) {
   document.querySelectorAll('[data-home-cam]').forEach(btn => {
     btn.addEventListener('click', () => selectCamera(btn.dataset.homeCam));
   });
+  initHeadSliders();
   renderCameraSwitch();
   renderAlerts();
 }

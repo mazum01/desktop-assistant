@@ -4,6 +4,27 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.93.0] - 2026-10-27
+### Added
+- Home "Vision Control" frame beside the Vision feed: a mirrored LCARS sweep
+  card (spine and elbows on the right) titled as a link to the Vision tab.
+  It holds compact lit/unlit toggles for head motion (new on Home), privacy
+  mode, face tracking and random idle motion, plus pan and tilt sliders that
+  show the live head angles and aim the head when dragged (latest value wins;
+  range comes from the servo limits; tilt hides when no tilt servo; sliders
+  disable while head motion is off).
+- LCARS components: mirrored sweep card, group label, compact toggle grid
+  and slider, documented in the LCARS design guide.
+
+### Changed
+- Vision frame is now 50% of the workspace width with a fluid 16:9 feed
+  (replaces the fixed 444×250 size); Vision Control matches its width and height.
+- Home stacks to one column when the workspace (area right of the menu rail)
+  is under 840px, which keeps the feed at least 360px wide (~1085px viewport).
+- Left Eye / Right Eye switch moved to Vision Control's bottom bar; the Vision
+  frame's bottom bar shows a read-only Eye readout.
+- Quick Toggles now holds only Quiet hours and Mute.
+
 ## [1.92.2] - 2026-10-27
 ### Changed
 - Home Vision feed is now a fixed 16:9 picture 250px high

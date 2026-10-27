@@ -13,7 +13,7 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&amp;display=swap" rel="stylesheet"/>
-<link href="/static/style.css?v=1.92.2" rel="stylesheet"/>
+<link href="/static/style.css?v=1.93.0" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -77,6 +77,29 @@
 <div class="sweep-readout"><span class="sweep-readout-key">People</span><span class="sweep-readout-value" id="home-faces">—</span></div>
 </div>
 <a class="home-camera-link" href="#/vision" id="home-camera-link" title="Open Vision &amp; Motion"><img alt="Live view from the left eye" class="home-camera" id="home-camera"/></a>
+<div aria-label="Source" class="lcars-sweep-bar" role="group">
+<span aria-hidden="true" class="sweep-block"></span>
+<div class="sweep-readout"><span class="sweep-readout-key">Eye</span><span class="sweep-readout-value" id="home-eye">Left</span></div>
+</div>
+</section>
+<section aria-labelledby="home-control-title" class="card lcars-sweep-card is-mirrored" id="card-home-vision-control">
+<span aria-hidden="true" class="frame-break frame-break-spine"></span>
+<span aria-hidden="true" class="frame-break frame-break-lower"></span>
+<a class="lcars-sweep-title" href="#/vision" id="home-control-title" title="Open Vision &amp; Motion">Vision Control</a>
+<div aria-hidden="true" class="lcars-sweep-bar lcars-sweep-bar-top"><span class="sweep-block"></span></div>
+<span class="lcars-group-label" id="home-behavior-label">Behavior</span>
+<div aria-labelledby="home-behavior-label" class="lcars-toggle-grid is-compact" role="group">
+<label class="lcars-toggle"><input id="home-toggle-motion" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Head motion</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
+<label class="lcars-toggle"><input id="home-toggle-privacy" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Privacy</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
+<label class="lcars-toggle"><input id="home-toggle-face" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Face tracking</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
+<label class="lcars-toggle"><input id="home-toggle-idle" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Idle motion</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
+</div>
+<span class="lcars-group-label" id="home-head-label">Head position</span>
+<div aria-labelledby="home-head-label" class="lcars-slider-group" role="group">
+<label class="lcars-slider" id="home-pan-row"><span class="lcars-slider-name">Pan</span><input id="home-pan-slider" max="215" min="135" step="1" type="range" value="175"/><output class="lcars-slider-value" for="home-pan-slider" id="home-pan-value">—</output></label>
+<label class="lcars-slider" id="home-tilt-row"><span class="lcars-slider-name">Tilt</span><input id="home-tilt-slider" max="110" min="70" step="1" type="range" value="90"/><output class="lcars-slider-value" for="home-tilt-slider" id="home-tilt-value">—</output></label>
+</div>
+<p aria-live="polite" class="home-muted" id="home-control-status"></p>
 <div class="lcars-sweep-bar">
 <span aria-hidden="true" class="sweep-block"></span>
 <div aria-label="Camera eye" class="cam-switch" role="group">
@@ -105,11 +128,8 @@
 <section aria-label="Quick toggles" class="card" id="card-home-toggles">
 <h2>Quick Toggles</h2>
 <div class="lcars-toggle-grid">
-<label class="lcars-toggle"><input id="home-toggle-privacy" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Privacy</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
 <label class="lcars-toggle"><input id="home-toggle-quiet" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Quiet hours</span><small class="lcars-toggle-detail" id="home-quiet-window"></small><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
 <label class="lcars-toggle"><input id="home-toggle-mute" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Mute</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
-<label class="lcars-toggle"><input id="home-toggle-face" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Face tracking</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
-<label class="lcars-toggle"><input id="home-toggle-idle" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Idle motion</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
 </div>
 <p aria-live="polite" class="home-muted" id="home-action-status"></p>
 </section>
@@ -1322,8 +1342,8 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.92.2"></script>
-<script src="/static/js/main.js?v=1.92.2" type="module"></script>
+<script src="/static/app.js?v=1.93.0"></script>
+<script src="/static/js/main.js?v=1.93.0" type="module"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

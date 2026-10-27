@@ -112,6 +112,10 @@ Reuse these components; don't invent near-duplicates.
 | **Action button** | `.btn` | Existing rounded action buttons inside cards. Use them for verbs (Play, Say), not for state. |
 | **Decorative code** | `.lcars-code` | `aria-hidden`, sparse (3–6 on the page). |
 | **Sweep card** | `.card.lcars-sweep-card` + `.lcars-sweep-bar` | Card frame closed by a bottom elbow; the thick bottom bar carries controls. Used for live video. See §3.1. |
+| **Mirrored sweep card** | `.lcars-sweep-card.is-mirrored` | Same frame with the spine, elbows and frame breaks on the **right**. Use it for the companion panel beside a sweep card so the pair reads as one bracketed console (Home's Vision + Vision Control). |
+| **Group label** | `.lcars-group-label` | Small uppercase peach label that names a block of controls inside a card ("Behavior", "Head position"). Not a heading. |
+| **Compact toggle grid** | `.lcars-toggle-grid.is-compact` | Two columns of bar-height toggles with name and `ON`/`OFF` on one line. Use in dense control panels. |
+| **LCARS slider** | `label.lcars-slider` > name `span` + `input[type=range]` + `output` | Peach name block, ice-accent range, ice value readout. Follows the live value while idle; sends only the latest value while dragging. |
 
 ### 3.1 Sweep card (live video and other hero panels)
 
@@ -148,12 +152,17 @@ switch (camera 1 / camera 2; VERA's cameras are its eyes, so the UI names them t
   carry text. A card can slim it to just fit its text: Home's Vision card sets
   `--sweep-top: 22px`. The title's font follows the bar (`--sweep-top − 2px`),
   and readouts in a top bar sit 2px off its bottom edge.
-- **Fixed-size video:** the frame hugs the picture instead of letterboxing it.
-  Home's feed is a fixed 16:9 box 250px high, so 250 × 16⁄9 = 444.4px wide
-  (`--home-cam-height` on `#tab-home`). The card is that width plus its spine,
-  right border and two 8px gaps (`--home-cam-card`); it doesn't stretch to the
-  row height. The image uses `object-fit: cover`. On narrow screens the card
-  caps at 100% width and the feed shrinks, staying 16:9.
+- **Fluid 16:9 video:** the frame hugs the picture instead of letterboxing it.
+  The feed box is `width: 100%; aspect-ratio: 16 / 9`, so its height follows
+  the card width. On Home the Vision card takes half the workspace (the area
+  right of the menu rail) and the mirrored Vision Control card takes the other
+  half at the same height.
+- **Side-by-side breakpoint:** `main` is a size container
+  (`container: workspace / inline-size`). Home sits two columns wide only when
+  `@container workspace (min-width: 840px)`; below that it stacks in source
+  order. Rationale: the video is the card width minus 46px (spine 29 + border
+  1 + padding 16), the grid gap is 24px, so 2 × (360 + 46) + 24 ≈ 840px keeps
+  the feed at least 360px wide. With the 208px rail that is a ~1085px viewport.
 - **Title:** `.lcars-sweep-title` sits at the left of the top bar, past the
   elbow: a black cut-out the height of the bar, uppercase text in the panel
   hue. It is the only title (no `h2`) and links to the related workspace.
@@ -240,12 +249,13 @@ element with `text-transform: uppercase`.
    - secondary actions;
    - Advanced and Engineering data at full width at the bottom.
 3. **Name the layout with grid areas.** Use `grid-template-areas` so the
-   reading order is explicit. Below 1150px, collapse to one column in the same
+   reading order is explicit. Below the breakpoint (Home: an 840px workspace
+   container query), collapse to one column in the same
    order as the source.
 4. **Match heights within a row.** Use `align-items: stretch` so cards in a
-   row line up. A fixed-size visual (Home's 444×250 feed) keeps its own height
-   (`align-self: start`); flow the next card up underneath it rather than
-   spanning it across rows, so the column doesn't leave a ragged gap.
+   row line up. Pair a hero visual with a companion control card of equal
+   width (Home: Vision | Vision Control); the visual sets the row height and
+   the control card stretches to match.
 5. **Gate by mode, not by duplicate pages.** Mark advanced content with
    `data-min-mode="advanced"` and engineering content with
    `data-min-mode="engineering"`. Normal mode shows only everyday controls.
@@ -282,7 +292,7 @@ element with `text-transform: uppercase`.
 - [ ] Flat fills, black gaps, no outline borders on LCARS blocks.
 - [ ] Labels are uppercase, condensed, black on color, bottom-right.
 - [ ] Hover, active, focus, and disabled states follow §3.
-- [ ] Reading order follows §4; the one-column fallback has been checked at ≤1150px and ≤700px.
+- [ ] Reading order follows §4; the one-column fallback has been checked below the layout breakpoint and at ≤700px.
 - [ ] Advanced and Engineering content is gated with `data-min-mode`.
 - [ ] State is readable without color; decorative codes are `aria-hidden`.
 - [ ] Hero / live-video panels use the §3.1 sweep card; frame breaks are decorative and `aria-hidden`.

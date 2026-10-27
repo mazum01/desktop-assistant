@@ -335,7 +335,8 @@ def test_decorative_codes_are_sparse_and_hidden_from_assistive_technology(layout
         "card-home-alerts", "home-room", "home-faces", "home-alerts", "home-camera",
         "home-media-play", "home-media-next", "home-volume", "home-mute-btn",
         "home-toggle-privacy", "home-toggle-quiet", "home-toggle-mute",
-        "home-toggle-face", "home-toggle-idle", "home-say-input", "home-repeat-btn",
+        "home-toggle-face", "home-toggle-idle", "home-toggle-motion",
+        "home-pan-slider", "home-tilt-slider", "home-eye", "home-say-input", "home-repeat-btn",
         "home-iot", "home-temp-hailo", "home-fan", "home-scene-confidence", "home-eng-line",
     ]),
 ])
@@ -638,7 +639,7 @@ def test_mode_toggle_and_health_form_one_lcars_bar():
 
 def test_home_toggles_are_lcars_lit_blocks_with_text_state(layout):
     toggles = [node for node in layout if "lcars-toggle" in node["attrs"].get("class", "").split()]
-    assert len(toggles) == 5
+    assert len(toggles) == 6
     css = (STATIC / "style.css").read_text()
     assert ".lcars-toggle input:checked + .lcars-toggle-face { background: var(--lcars-ice); }" in css
     assert '.lcars-toggle-state::after { content: "OFF"; }' in css
@@ -647,7 +648,7 @@ def test_home_toggles_are_lcars_lit_blocks_with_text_state(layout):
 
 def test_home_flow_uses_named_grid_areas_and_title_links(layout):
     css = (STATIC / "style.css").read_text()
-    assert '"camera media"' in css and '"say    toggles"' in css
+    assert '"camera control"' in css and '"say    env"' in css
     assert '#tab-home.has-alerts {' in css and '"alerts alerts"' in css
     links = {node["attrs"]["href"] for node in layout
              if "card-link" in node["attrs"].get("class", "").split()}
@@ -686,14 +687,12 @@ def test_home_status_moves_to_header_alert_frame_and_camera_top_bar(layout):
     assert ".lcars-alert-frame[hidden] { display: none; }" in css
     assert ".home-camera { position: absolute; inset: 0;" in css
     assert "calc(var(--sweep-bar) / 2)" not in css  # sweep bars end square
-    # Fixed 16:9 feed, 250px high; the frame hugs it with a slim top bar.
-    assert "--home-cam-height: 250px;" in css
-    assert "--home-cam-width: calc(var(--home-cam-height) * 16 / 9);" in css
-    assert "grid-template-columns: var(--home-cam-card) minmax(0, 1fr);" in css
+    # Vision takes half the workspace; the frame hugs a fluid 16:9 feed.
     camera_rule = re.search(r"#card-home-camera \{[^}]*\}", css).group(0)
-    assert "--sweep-top: 22px;" in camera_rule and "align-self: start;" in camera_rule
+    assert "--sweep-top: 22px;" in camera_rule
     link_rule = re.search(r"\.home-camera-link \{[^}]*\}", css).group(0)
     assert "aspect-ratio: 16 / 9;" in link_rule and "flex: none;" in link_rule
+    assert "--home-cam-height" not in css
     home = (JS / "pages" / "home.js").read_text()
     assert "frame.hidden = alerts.length === 0" in home and "All clear" not in home
     assert "home-camera-caption" not in home and "raw view" not in home
@@ -720,12 +719,40 @@ def test_home_camera_has_lcars_bottom_sweep_with_camera_switch(layout):
     for button in buttons:
         assert button["tag"] == "button" and "aria-pressed" in button["attrs"]
         assert any("lcars-sweep-bar" in a["attrs"].get("class", "").split() for a in button["ancestors"])
-        assert card in button["ancestors"]
+        assert by_id["card-home-vision-control"] in button["ancestors"]
+    # The Vision frame's bottom bar shows which eye is live, read-only.
+    eye = by_id["home-eye"]
+    assert card in eye["ancestors"] and not any(a["tag"] == "button" for a in eye["ancestors"])
     breaks = [node for node in layout if "frame-break" in node["attrs"].get("class", "").split()]
     assert breaks and all(node["attrs"].get("aria-hidden") == "true" for node in breaks)
     assert not any("image-frame" in node["attrs"].get("class", "") for node in layout)
     home = (JS / "pages" / "home.js").read_text()
     assert "2: '/stream2'" in home and "localStorage.setItem(CAMERA_KEY" in home
+
+
+def test_home_vision_control_frame_sits_beside_vision(layout):
+    by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
+    control = by_id["card-home-vision-control"]
+    classes = control["attrs"]["class"].split()
+    assert "lcars-sweep-card" in classes and "is-mirrored" in classes
+    assert control["attrs"]["aria-labelledby"] == "home-control-title"
+    assert by_id["home-control-title"]["attrs"]["href"] == "#/vision"
+    for value_id in ("home-toggle-motion", "home-toggle-privacy", "home-toggle-face",
+                     "home-toggle-idle", "home-pan-slider", "home-tilt-slider",
+                     "home-pan-value", "home-tilt-value", "home-control-status"):
+        assert control in by_id[value_id]["ancestors"], value_id
+    for value_id in ("home-toggle-quiet", "home-toggle-mute"):
+        assert by_id["card-home-toggles"] in by_id[value_id]["ancestors"], value_id
+    assert by_id["home-pan-slider"]["attrs"]["type"] == "range"
+    css = (STATIC / "style.css").read_text()
+    assert "container: workspace / inline-size;" in css
+    assert "@container workspace (min-width: 840px)" in css
+    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);" in css
+    assert ".lcars-sweep-card.is-mirrored" in css and ".lcars-slider" in css
+    home = (JS / "pages" / "home.js").read_text()
+    assert "'home-toggle-motion'" in home and "/api/settings/servo" in home
+    assert "path: '/api/pan'" in home and "path: '/api/tilt'" in home
+    assert "renderHead(pos)" in home
 
 
 def test_card_drag_and_drop_is_retired(layout):
