@@ -108,7 +108,8 @@ Reuse these components; don't invent near-duplicates.
 | **Sweep title** | `a.lcars-sweep-title` | A sweep card's name, cut into the left of its thick top bar as a black gap with text in the frame hue. It replaces the card's `h2` and doubles as the cross-link (ice on hover). Label the card with `aria-labelledby`. See §3.1. |
 | **Sweep readout** | `.lcars-sweep-bar-top` > `.sweep-readout` | Read-only key/value block in a sweep card's top bar (no hover, not focusable). See §3.1. |
 | **Status pill** | `.pill.pill-ok/-warn/-bad` | Short status words. Never color alone: the text must state the condition. |
-| **Card cross-link** | `h2 > a.card-link` | Floats right in the card title, ice-colored, ends with `›`. Use it instead of an "Open X" button. Sweep cards use the sweep title as their link instead. |
+| **Card cross-link** | `h2 > a.card-link` | Floats right in the card title, ice-colored, ends with `›`. Use it instead of an "Open X" button. Sweep cards and bar-title cards use their title as the link instead. |
+| **Bar-title card** | `section.card.lcars-bar-title-card` > `h2.lcars-bar-title > a` | A standard card whose top bar is thickened to 22px (18px on phones) with the title cut into it, like a sweep title, instead of on its own row. The title link is the cross-link (accent, ice on hover), so there's no separate `›` link. Label the card with `aria-labelledby` on the link. Use it for prominent full-width cards where height matters (Home's Media Player); keep the sweep card for the one hero panel. |
 | **Action button** | `.btn` | Existing rounded action buttons inside cards. Use them for verbs (Play, Say), not for state. |
 | **Decorative code** | `.lcars-code` | `aria-hidden`, sparse (3–6 on the page). |
 | **Sweep card** | `.card.lcars-sweep-card` + `.lcars-sweep-bar` | Card frame closed by a bottom elbow; the thick bottom bar carries controls. Used for live video. See §3.1. |
@@ -268,7 +269,8 @@ element with `text-transform: uppercase`.
    - the primary visual (camera, with room and people in its top bar) next to
      the most-used controls;
    - the media player at full width under that pair (Pandora and podcasts in
-     one card, with a source selector);
+     one bar-title card, with a source selector; Mute sits beside the volume
+     slider);
    - secondary actions;
    - Advanced and Engineering data at full width at the bottom.
 3. **Name the layout with grid areas.** Use `grid-template-areas` so the

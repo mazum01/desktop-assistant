@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.95.2] - 2026-10-27
+### Changed
+- Home Media Player: the title is now cut into a thicker top bar, like the Vision frame title, and links to the Media page. This replaces the separate "Media ›" link. It uses a new reusable `.lcars-bar-title-card` modifier for standard cards, documented in the LCARS guide.
+- Home Media Player is shorter (about 330px → 245px on desktop): the title no longer takes its own row, the padding is tighter, and Mute now sits beside the volume slider instead of wrapping onto its own row.
+
 ## [1.95.1] - 2026-10-27
 ### Added
 - Vision Control: an "Object detect" toggle in Behavior turns Hailo-8 COCO object detection on and off (`/api/settings/object-detection`). It stays in sync with the Vision page checkbox.

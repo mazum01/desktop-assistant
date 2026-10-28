@@ -660,7 +660,18 @@ def test_home_flow_uses_named_grid_areas_and_title_links(layout):
     assert '#tab-home.has-alerts {' in css and '"alerts  alerts"' in css
     links = {node["attrs"]["href"] for node in layout
              if "card-link" in node["attrs"].get("class", "").split()}
-    assert {"#/media", "#/voice", "#/smart-home", "#/overview"} <= links
+    assert {"#/voice", "#/smart-home", "#/overview"} <= links
+    # The media player's title sits in its top bar and is the cross-link.
+    by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
+    media = by_id["card-home-media"]
+    assert "lcars-bar-title-card" in media["attrs"]["class"].split()
+    heading = by_id["home-media-heading"]
+    assert heading["tag"] == "a" and heading["attrs"]["href"] == "#/media"
+    assert any("lcars-bar-title" in a["attrs"].get("class", "").split() for a in heading["ancestors"])
+    assert not any("card-link" in n["attrs"].get("class", "").split()
+                   for n in layout if media in n["ancestors"])
+    assert by_id["home-mute-btn"]["ancestors"][-1]["attrs"]["class"] == "home-media-volume"
+    assert ".card.lcars-bar-title-card {" in css
 
 
 def test_home_status_moves_to_header_alert_frame_and_camera_top_bar(layout):

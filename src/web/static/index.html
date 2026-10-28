@@ -13,7 +13,7 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&amp;display=swap" rel="stylesheet"/>
-<link href="/static/style.css?v=1.95.1" rel="stylesheet"/>
+<link href="/static/style.css?v=1.95.2" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -130,8 +130,8 @@
 </div>
 </div>
 </section>
-<section aria-labelledby="home-media-heading" class="card" id="card-home-media">
-<h2 id="home-media-heading">Media Player<a class="card-link" href="#/media">Media ›</a></h2>
+<section aria-labelledby="home-media-heading" class="card lcars-bar-title-card" id="card-home-media">
+<h2 class="lcars-bar-title"><a href="#/media" id="home-media-heading" title="Open Media &amp; Audio">Media Player</a></h2>
 <div aria-label="Media source" class="lcars-segmented home-media-source" role="group">
 <button aria-pressed="true" data-home-source="pandora" type="button">Pandora</button>
 <button aria-pressed="false" data-home-source="podcast" type="button">Podcast</button>
@@ -162,10 +162,10 @@
 <button class="btn btn-secondary" data-podcast-only="" hidden="" id="home-media-back" type="button">« 30s</button>
 <button class="btn btn-secondary" data-podcast-only="" hidden="" id="home-media-forward" type="button">30s »</button>
 <button class="btn btn-secondary" id="home-media-stop" type="button">■ Stop</button>
-<button class="btn btn-secondary" id="home-mute-btn" type="button">🔇 Mute</button>
 </div>
-<div class="lcars-slider-group">
+<div class="home-media-volume">
 <label class="lcars-slider"><span class="lcars-slider-name">Volume</span><input aria-label="Volume" id="home-volume" max="100" min="0" type="range" value="50"/><output class="lcars-slider-value" for="home-volume" id="home-volume-label">—</output></label>
+<button class="btn btn-secondary" id="home-mute-btn" type="button">🔇 Mute</button>
 </div>
 </div>
 </div>
@@ -1387,8 +1387,8 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.95.1"></script>
-<script src="/static/js/main.js?v=1.95.1" type="module"></script>
+<script src="/static/app.js?v=1.95.2"></script>
+<script src="/static/js/main.js?v=1.95.2" type="module"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

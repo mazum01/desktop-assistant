@@ -1423,6 +1423,24 @@ header .badge-unknown { background: var(--lcars-dim); }
 .is-mirrored .lcars-sweep-bar { left: -1px; right: auto; flex-direction: row-reverse; }
 .is-mirrored .lcars-sweep-bar > * { margin-left: 0; margin-right: var(--lcars-gap); }
 .is-mirrored .lcars-sweep-title { left: auto; right: 40px; }
+/* Bar-title card: a standard card whose title is cut into a thicker top bar,
+   like a sweep title, instead of sitting on its own row. The title doubles
+   as the cross-link, so the card needs no separate "›" link. */
+.card.lcars-bar-title-card {
+  --bar-title-top: 22px;
+  position: relative; padding-top: 12px;
+  border-top-width: var(--bar-title-top);
+  border-top-left-radius: 53px 46px;
+}
+.lcars-bar-title-card > h2.lcars-bar-title {
+  position: absolute; top: calc(-1 * var(--bar-title-top)); left: 40px; z-index: 1;
+  height: var(--bar-title-top); margin: 0; padding: 0 12px; border: 0; background: #000;
+  font: 600 calc(var(--bar-title-top) - 2px)/var(--bar-title-top) var(--console-font);
+  letter-spacing: .06em;
+}
+.lcars-bar-title a { color: var(--panel-accent); text-decoration: none; }
+.lcars-bar-title a:hover { color: var(--lcars-ice); }
+.lcars-bar-title a:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
 /* Sub-frames: inner groups hung off one right-hand vertical bar. The bar
    sweeps up into the first group's top bar, tees off square into the middle
    groups' bars, and the last group's bottom bar sweeps down into it. Each
@@ -1599,7 +1617,7 @@ header .badge-unknown { background: var(--lcars-dim); }
   padding: 10px 14px;
 }
 #home-control-status { min-height: 1.2em; margin-top: auto; }
-#card-home-media { grid-area: media; container: home-media / inline-size; }
+#card-home-media { grid-area: media; container: home-media / inline-size; padding-bottom: 14px; }
 #card-home-toggles { grid-area: toggles; }
 #card-home-say { grid-area: say; }
 #card-home-environment { grid-area: env; }
@@ -1650,11 +1668,14 @@ header .badge-unknown { background: var(--lcars-dim); }
 .home-media-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .home-media-text strong { font-size: 16px; overflow-wrap: anywhere; }
 .home-media-time { color: var(--lcars-ice); font: 600 15px/1 var(--console-font); font-variant-numeric: tabular-nums; }
-.home-media-source { margin-bottom: 12px; }
+.home-media-source { margin-bottom: 10px; }
 .home-media-layout { display: grid; gap: 14px; }
 .home-media-controls-col { display: grid; gap: 10px; min-width: 0; }
 .home-media-controls { margin: 0; }
 .home-media-controls .btn[hidden] { display: none; }
+.home-media-volume { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.home-media-volume .lcars-slider { flex: 1; min-width: 0; }
+.home-media-volume .btn { flex: none; }
 @container home-media (min-width: 640px) {
   .home-media-layout { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); align-items: start; }
   .home-media-art { width: 96px; height: 96px; }
@@ -1735,6 +1756,8 @@ header .badge-unknown { background: var(--lcars-dim); }
   .lcars-sweep-title { left: 14px; padding: 0 8px; }
   .lcars-sweep-card.is-mirrored { border-left-width: 1px; border-right-width: var(--sweep-spine); border-top-left-radius: 0; border-bottom-left-radius: 0; border-top-right-radius: 40px 40px; border-bottom-right-radius: 40px 40px; }
   .is-mirrored .lcars-sweep-title { left: auto; right: 14px; }
+  .card.lcars-bar-title-card { --bar-title-top: 18px; border-top-left-radius: 40px 34px; }
+  .lcars-bar-title-card > h2.lcars-bar-title { left: 14px; padding: 0 8px; }
   .is-compact .lcars-toggle-face { font-size: 14px; padding-inline: 8px 10px; }
   .lcars-slider { grid-template-columns: 64px minmax(0, 1fr) 52px; }
   .lcars-data-row { grid-template-columns: 64px minmax(0, 1fr); }
