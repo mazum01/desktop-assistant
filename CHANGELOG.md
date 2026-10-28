@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.98.0] - 2026-10-28
+### Removed
+- The roll/pitch/yaw orientation footer on the ESP32 display. The installed S3 board has no IMU, so it only ever showed "IMU not detected". The mouth, EQ, status text and video now use the full 172-pixel screen height, and the 200 ms footer-only refresh flush is gone. The QMI8658 probe stays in `vera display video status` (`imu`) for the C6 board variant.
+
+### Added
+- The display firmware reports its compile timestamp as `build` in its `hello` event and video status. `upload_esp32_display_ble.sh` now confirms the display is running the uploaded build after every BLE OTA flash.
+
+### Fixed
+- BLE OTA falsely reported "upload FAILED" on the last sector even though the update had been applied. The firmware rebooted inside the NimBLE completion callback before the final ACK could go out; the reboot is now deferred to the main loop. If the final ACK is missing anyway, the uploader exits with code 3 and the script verifies the running build instead.
+
 ## [1.97.0] - 2026-10-27
 ### Added
 - More Star Trek easter eggs. New typed effects: shields, a cloak, a photon torpedo, multiplying tribbles, and a self-destruct countdown that Esc aborts. Also new: more one-line replies, more secret routes, hidden click targets on the health badge and header code, once-a-day greetings on First Contact Day (Apr 5) and Star Trek Day (Sep 8), and a devtools console greeting. Everything stays cosmetic; motion effects are skipped or static under reduced motion.

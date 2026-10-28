@@ -144,23 +144,29 @@ and an on-screen error. A non-looping clip emits `video_finished` at EOF.
 Speech/non-neutral mouth expressions and status messages pause video; neutral
 resumes it once the status screen releases control. EQ cannot replace active video.
 
-Video is centered in a 320x152 area above the 20-pixel footer. JPEGDEC selects
+Video is centered on the full 320x172 screen. JPEGDEC selects
 1/2/4/8 downscaling to fit without cropping or upscaling; clips too large to
 fit at 1/8 scale fail explicitly. Each source dimension is limited to 2560
 pixels, compressed frames to 96 KiB, and frame reads to 100 ms. Frame rate
 is fixed by `--fps` (1-20, default 10), not file timestamps; decoding/SD/display
 throughput may lower the achieved rate. Missed frames do not cause catch-up bursts.
-For predictable results, encode directly to 320x152:
+For predictable results, encode directly to 320x172:
 
 ```bash
-ffmpeg -i input.mp4 -an -vf 'scale=320:152:force_original_aspect_ratio=decrease,fps=10' \
+ffmpeg -i input.mp4 -an -vf 'scale=320:172:force_original_aspect_ratio=decrease,fps=10' \
   -c:v mjpeg -pix_fmt yuvj420p -q:v 7 -f mjpeg clip.mjpg
 ```
 
-## Orientation footer
+## IMU probe (status only)
 
-The firmware checks QMI8658 identity at addresses 0x6A/0x6B (WHO_AM_I=0x05)
-before writing sensor configuration. C6 touch uses SDA18/SCL19; S3 uses
+Nothing about orientation is drawn on screen; the mouth, EQ, status text and
+video use the full 172-pixel height. (Until v1.98.0 a 20-pixel roll/pitch/yaw
+footer was reserved at the bottom. It was removed because the installed S3
+board has no IMU; see *Root cause* below.)
+
+The firmware still checks QMI8658 identity at addresses 0x6A/0x6B
+(WHO_AM_I=0x05) before writing sensor configuration, and reports the result in
+`vera display video status` under `imu`. C6 touch uses SDA18/SCL19; S3 uses
 SDA42/SCL41. A failed identity probe does not prove the IMU is absent:
 board revision, wiring, power, and bus faults can also prevent detection.
 Legacy C6 reports the sensor unsupported. No magnetometer is used.
@@ -188,13 +194,13 @@ does not configure unknown devices or enable touch input. QMI8658 initialization
 still requires its documented address and identity check; discovery alone does
 not reconfigure the IMU. Interrupt lines are not required for polled readings.
 
-When present, accelerometer/gyro fusion displays roll, pitch, and **relative
-yaw**, in degrees in sensor-board axes (not compensated for the robot mount).
+When present, accelerometer/gyro fusion reports roll, pitch, and **relative
+yaw** in `status`, in degrees in sensor-board axes (not compensated for the robot mount).
 Yaw starts at zero on initialization, drifts, and is **not compass heading**.
 Gravity corrects roll/pitch only near 1g; Euler gyro updates are guarded near
 the pitch singularity. Samples older than 500 ms are unavailable, and resuming
-after a stale stream reinitializes orientation. With no detected IMU the footer
-shows `R:-- P:-- Y:-- IMU not detected`, and status omits numeric angles.
+after a stale stream reinitializes orientation. With no detected IMU, status
+omits numeric angles.
 
 ### Physical validation (2026-10-18)
 
@@ -217,7 +223,7 @@ shows `R:-- P:-- Y:-- IMU not detected`, and status omits numeric angles.
 The ESP32-S3-Touch-LCD-1.47 **has no onboard IMU.** Waveshare's feature list
 and demo set for the S3 board name only the JD9853 panel and the AXS5106L
 touch controller. The `0x63` ACK is that touch IC (AXS5106L 7-bit address),
-so `imu_not_detected` and the `IMU not detected` footer are correct. They do
+so `imu_not_detected` is correct. They do
 not indicate a firmware or wiring fault.
 
 The QMI8658A is fitted to the **ESP32-C6-Touch-LCD-1.47**, which shares the
@@ -325,6 +331,18 @@ stops advertising, so the uploader's scan-based connect fails with
 in the passwordless sudo allowlist and killing it would trip
 `Restart=on-failure`) and drops the link before uploading, then resumes the
 service on exit — including on failure or `Ctrl-C`, via a shell `trap`.
+
+**Build verification**: the firmware reports its compile timestamp as
+`build` in the `hello` event and in `vera display video status`. After the
+upload, the script resumes the core service and polls that status until
+`build` matches the stamp embedded in the `.bin` (up to 60 s). It fails if
+they don't match.
+
+Before v1.98.0, the firmware rebooted inside NimBLEOta's completion callback.
+That swallowed the final sector's ACK, so the uploader timed out on the last
+sector even though the update had been applied. The reboot is now deferred to
+`loop()`. If the final ACK is still missing, the uploader exits with code 3
+and the script falls back to build verification instead of reporting failure.
 
 ### Script options
 

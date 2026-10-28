@@ -134,3 +134,12 @@ def test_default_mouth_is_a_slight_smile_at_85_percent_screen_width():
     assert "kNeutral{Shape::kSmile, DEFAULT_MOUTH_WIDTH_FRAC, 0.09f, 0.0f, 0.25f" in renderer
     assert "draw_smile(x, y, w, h, geo.curve_frac, geo.color)" in renderer
     assert "draw_curve(x, y, w, h, geo.curve_frac, /*bulge_down=*/true" not in renderer
+
+
+def test_no_orientation_footer_on_screen():
+    """The S3 board has no IMU, so nothing reserves or draws a footer strip."""
+    sketch = Path(__file__).resolve().parents[1] / "firmware" / "vera_display"
+    sources = {p.name: p.read_text() for p in sketch.iterdir() if p.suffix in (".cpp", ".h", ".ino")}
+    assert not any("FOOTER_" in text for text in sources.values())
+    assert "vera_orientation::draw" not in "".join(sources.values())
+    assert "void draw()" not in sources["orientation.h"]

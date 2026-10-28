@@ -45,7 +45,7 @@ bool valid_path(const char *path) {
 
 int draw_block(JPEGDRAW *block) {
   Arduino_GFX *gfx = vera_mouth::gfx();
-  int content_h = gfx->height() - vera_media_config::FOOTER_HEIGHT;
+  int content_h = gfx->height();
   if (block->x < 0 || block->y < 0 || block->x + block->iWidth > gfx->width() ||
       block->y + block->iHeight > content_h) return 0;
   gfx->draw16bitRGBBitmap(block->x, block->y, block->pPixels,
@@ -168,7 +168,7 @@ bool update(bool visible) {
   }
   int width = decoder.getWidth(), height = decoder.getHeight(), options = 0;
   Arduino_GFX *gfx = vera_mouth::gfx();
-  int available_h = gfx->height() - vera_media_config::FOOTER_HEIGHT;
+  int available_h = gfx->height();
   int scale = vera_video_stream::scale_for(width, height, gfx->width(), available_h,
                                           vera_media_config::MAX_SOURCE_DIMENSION);
   if (!scale) {

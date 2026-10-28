@@ -1,11 +1,9 @@
 #include "orientation.h"
 
-#include <Arduino_GFX_Library.h>
 #include <Wire.h>
 #include <math.h>
 
 #include "media_config.h"
-#include "mouth_renderer.h"
 #include "orientation_math.h"
 
 namespace vera_orientation {
@@ -143,22 +141,6 @@ void update() {
   angles.update(v, angles.initialized ? (now - last_sample) / 1000.0f : 0);
   last_sample = now;
   error = nullptr;
-}
-
-void draw() {
-  Arduino_GFX *gfx = vera_mouth::gfx();
-  if (!gfx) return;
-  int y = gfx->height() - vera_media_config::FOOTER_HEIGHT;
-  gfx->fillRect(0, y, gfx->width(), vera_media_config::FOOTER_HEIGHT, RGB565_BLACK);
-  gfx->setTextSize(1);
-  gfx->setTextWrap(false);
-  gfx->setTextColor(available() ? RGB565_WHITE : RGB565_YELLOW);
-  gfx->setCursor(4, y + 6);
-  if (available()) {
-    gfx->printf("R:%+5.1f P:%+5.1f Yrel:%+6.1f", angles.roll, angles.pitch, angles.yaw);
-  } else {
-    gfx->print(address ? "IMU unavailable / stale" : "R:-- P:-- Y:--  IMU not detected");
-  }
 }
 
 void status(JsonObject out) {

@@ -119,10 +119,39 @@ step_done
 # ── Upload ─────────────────────────────────────────────────────────────
 step "Uploading firmware over BLE OTA"
 info "this takes several minutes; progress is reported per 4KB sector"
-if vrun "$PYTHON" -u "$UPLOADER" "$BIN_FILE" "$ADDRESS"; then
+# The firmware embeds its compile time ("Oct 28 2026 05:30:26") and reports it
+# as "build" in `vera display video status`; that's how a flash is verified.
+EXPECTED_BUILD="$(grep -a -o -E '[A-Z][a-z]{2} [ 0-9][0-9] [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2}' "$BIN_FILE" | head -n1 || true)"
+rc=0
+vrun "$PYTHON" -u "$UPLOADER" "$BIN_FILE" "$ADDRESS" || rc=$?
+if [[ "$rc" -eq 0 ]]; then
     step_done "device will reboot into the new firmware"
+elif [[ "$rc" -eq 3 ]]; then
+    step_done "final ACK missing — verifying the running build instead"
 else
-    rc=$?
     step_done "upload FAILED (exit $rc) — firmware was not applied"
     exit "$rc"
+fi
+
+# ── Verify ─────────────────────────────────────────────────────────────
+restore_ble_link
+step "Verifying the running firmware build"
+if [[ -z "$EXPECTED_BUILD" ]]; then
+    warn "no build stamp found in $BIN_FILE; skipping verification"
+    step_done
+    exit 0
+fi
+info "expecting build: $EXPECTED_BUILD"
+running=""
+for _ in $(seq 1 12); do
+    sleep 5
+    running="$("$PYTHON" "$ROOT/scripts/desktop-assistant" display video status 2>/dev/null \
+        | "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin).get("build",""))' 2>/dev/null || true)"
+    [[ "$running" == "$EXPECTED_BUILD" ]] && break
+done
+if [[ "$running" == "$EXPECTED_BUILD" ]]; then
+    step_done "display is running build $running"
+else
+    step_done "VERIFY FAILED — display reports build '${running:-unknown}'"
+    exit 1
 fi

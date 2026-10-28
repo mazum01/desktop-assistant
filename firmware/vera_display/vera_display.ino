@@ -69,8 +69,10 @@ String g_rx_buffer;
 struct PendingCommand { char line[vera_ble::MAX_MESSAGE_BYTES + 1]; };
 QueueHandle_t g_commands = nullptr;
 String g_request_id;
-uint32_t g_footer_at = 0;
 bool g_mouth_override = false;
+// Set by the OTA completion callback; loop() reboots once it passes. Rebooting
+// from the NimBLE callback itself would drop the final sector's ACK.
+std::atomic<uint32_t> g_ota_restart_at{0};
 
 NimBLEOta g_ota;
 
@@ -106,11 +108,15 @@ void send_ack(const char *cmd, bool ok, const char *error = nullptr) {
   send_status(doc);
 }
 
+// Compile timestamp, so the host can confirm which build a flash applied.
+constexpr char FIRMWARE_BUILD[] = __DATE__ " " __TIME__;
+
 void send_hello() {
   JsonDocument doc;
   doc["event"] = "hello";
   doc["fw"] = "vera_display";
   doc["proto"] = vera_ble::PROTOCOL_VERSION;
+  doc["build"] = FIRMWARE_BUILD;
   doc["board"] = vera_board::NAME;
   doc["touch"] = false;
   doc["video"] =
@@ -203,6 +209,7 @@ void handle_command(const String &line) {
     }
     reply["ok"] = ok;
     if (error) reply["error"] = error;
+    reply["build"] = FIRMWARE_BUILD;
     vera_video::status(reply["video"].to<JsonObject>());
     vera_orientation::status(reply["imu"].to<JsonObject>());
     send_status(reply);
@@ -395,8 +402,7 @@ class OtaStatusCallbacks : public NimBLEOtaCallbacks {
 
   void onComplete(NimBLEOta *ota) override {
     vera_status::show(vera_status::Level::kReady, "OTA complete\nRebooting...");
-    delay(1500);
-    ESP.restart();
+    g_ota_restart_at = (millis() + 1500) | 1;
   }
 
   void onError(NimBLEOta *ota, esp_err_t err, NimBLEOta::Reason reason) override {
@@ -461,6 +467,8 @@ void setup() {
 }
 
 void loop() {
+  uint32_t restart_at = g_ota_restart_at.load();
+  if (restart_at && static_cast<int32_t>(millis() - restart_at) >= 0) ESP.restart();
   if (g_hello_pending.exchange(false)) send_hello();
   if (g_queue_overflow.exchange(false) || g_message_overflow.load()) {
     JsonDocument reply;
@@ -477,7 +485,7 @@ void loop() {
   vera_orientation::update();
   bool was_playing = vera_video::active();
   bool visible = g_display_mode == DisplayMode::kMouth && !g_mouth_override;
-  bool video_frame = vera_video::update(visible);
+  vera_video::update(visible);
   if (const char *error = vera_video::take_error()) {
     JsonDocument reply;
     reply["event"] = "video_error";
@@ -509,10 +517,6 @@ void loop() {
     }
   } else if (!vera_video::active() || g_mouth_override) {
     vera_mouth::update();
-  }
-  if (!video_frame && millis() - g_footer_at >= vera_media_config::FOOTER_PERIOD_MS) {
-    g_footer_at = millis();
-    vera_mouth::flush();
   }
   delay(20);
 }

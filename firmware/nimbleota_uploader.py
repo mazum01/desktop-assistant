@@ -32,6 +32,10 @@ FW_ACK_CRC_ERROR = 0x0001
 FW_ACK_SECTOR_ERROR = 0x0002
 FW_ACK_LEN_ERROR = 0x0003
 RSP_CRC_ERROR = 0xFFFF
+# Exit code when every sector was sent but the final ACK never arrived. Older
+# firmware rebooted inside the completion callback, dropping that ACK, so the
+# update has probably been applied; the caller verifies the build stamp.
+EXIT_FINAL_ACK_MISSING = 3
 # Seconds to wait for a device ACK before declaring the transfer stalled.
 # Without this the uploader blocks forever and looks identical to a slow
 # transfer, which is exactly what a silent OTA failure looks like.
@@ -284,6 +288,12 @@ async def connect_to_device(address, file_size, sectors):
                     except asyncio.TimeoutError:
                         print(f"\nTimed out after {ACK_TIMEOUT:.0f}s waiting for "
                               f"an ACK on sector {sec_idx}/{sec_count}.", flush=True)
+                        if sec_idx == sec_count - 1:
+                            print("Every sector was sent; the device probably "
+                                  "applied the update and rebooted before its "
+                                  "final ACK went out.", flush=True)
+                            await client.disconnect()
+                            return EXIT_FINAL_ACK_MISSING
                         if sec_idx == 0:
                             print("The device accepted the start command but "
                                   "never acknowledged the first sector.\n"
@@ -412,6 +422,8 @@ async def main():
         ok = await connect_to_device(mac_address, file_size, sectors)
         if ok is False:
             sys.exit(1)
+        if ok == EXIT_FINAL_ACK_MISSING:
+            sys.exit(EXIT_FINAL_ACK_MISSING)
 
     except SystemExit:
         raise

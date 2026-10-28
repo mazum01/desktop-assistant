@@ -29,24 +29,6 @@ struct SerialStub {
 inline SerialStub Serial;
 """
     )
-    (tmp_path / "Arduino_GFX_Library.h").write_text(
-        """
-#pragma once
-#include "Arduino.h"
-constexpr int RGB565_BLACK = 0, RGB565_WHITE = 1, RGB565_YELLOW = 2;
-struct Arduino_GFX {
-  int height() { return 172; }
-  int width() { return 320; }
-  void fillRect(int,int,int,int,int) {}
-  void setTextSize(int) {}
-  void setTextWrap(bool) {}
-  void setTextColor(int) {}
-  void setCursor(int,int) {}
-  void print(const char*) {}
-  template<class... T> void printf(const char*, T...) {}
-};
-"""
-    )
     (tmp_path / "Wire.h").write_text(
         """
 #pragma once
@@ -111,7 +93,6 @@ struct JsonArray {
 #include <cassert>
 #include "Wire.h"
 #include "orientation.cpp"
-namespace vera_mouth { Arduino_GFX* gfx() { return nullptr; } }
 int main() {
   vera_orientation::begin();
   assert(Wire.sda == 42 && Wire.scl == 41 && Wire.hz == 100000);
