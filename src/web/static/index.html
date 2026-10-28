@@ -13,7 +13,7 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&amp;display=swap" rel="stylesheet"/>
-<link href="/static/style.css?v=1.95.0" rel="stylesheet"/>
+<link href="/static/style.css?v=1.95.1" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -90,6 +90,7 @@
 <span aria-hidden="true" class="frame-break frame-break-lower"></span>
 <a class="lcars-sweep-title" href="#/vision" id="home-control-title" title="Open Vision &amp; Motion">Vision Control</a>
 <div aria-hidden="true" class="lcars-sweep-bar lcars-sweep-bar-top"><span class="sweep-block"></span></div>
+<div class="lcars-subframe-stack">
 <div aria-labelledby="home-scene-label" class="lcars-subframe is-scene" id="home-scene-frame" role="group">
 <span class="lcars-subframe-title" id="home-scene-label">Scene</span>
 <div class="lcars-subframe-body has-cascade">
@@ -108,6 +109,7 @@
 <label class="lcars-toggle"><input id="home-toggle-privacy" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Privacy</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
 <label class="lcars-toggle"><input id="home-toggle-face" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Face tracking</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
 <label class="lcars-toggle"><input id="home-toggle-idle" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Idle motion</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
+<label class="lcars-toggle" title="Detect and label objects with the Hailo-8 (COCO)"><input id="home-toggle-objects" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Object detect</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
 <label class="lcars-toggle" title="Show confidence % on face and object overlays"><input id="home-toggle-confidence" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Confidence %</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
 </div>
 </div>
@@ -116,6 +118,7 @@
 <div aria-labelledby="home-head-label" class="lcars-slider-group" role="group">
 <label class="lcars-slider" id="home-pan-row"><span class="lcars-slider-name">Pan</span><input id="home-pan-slider" max="215" min="135" step="1" type="range" value="175"/><output class="lcars-slider-value" for="home-pan-slider" id="home-pan-value">—</output></label>
 <label class="lcars-slider" id="home-tilt-row"><span class="lcars-slider-name">Tilt</span><input id="home-tilt-slider" max="110" min="70" step="1" type="range" value="90"/><output class="lcars-slider-value" for="home-tilt-slider" id="home-tilt-value">—</output></label>
+</div>
 </div>
 </div>
 <p aria-live="polite" class="home-muted" id="home-control-status"></p>
@@ -1384,8 +1387,8 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.95.0"></script>
-<script src="/static/js/main.js?v=1.95.0" type="module"></script>
+<script src="/static/app.js?v=1.95.1"></script>
+<script src="/static/js/main.js?v=1.95.1" type="module"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

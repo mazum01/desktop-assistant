@@ -341,7 +341,7 @@ def test_decorative_codes_are_sparse_and_hidden_from_assistive_technology(layout
         "card-home-alerts", "home-room", "home-faces", "home-alerts", "home-camera",
         "home-media-play", "home-media-next", "home-volume", "home-mute-btn",
         "home-toggle-privacy", "home-toggle-quiet", "home-toggle-mute",
-        "home-toggle-face", "home-toggle-idle", "home-toggle-motion", "home-toggle-confidence",
+        "home-toggle-face", "home-toggle-idle", "home-toggle-motion", "home-toggle-confidence", "home-toggle-objects",
         "home-control-room", "home-control-people", "home-objects", "home-alerts-ack",
         "home-pan-slider", "home-tilt-slider", "home-eye", "home-say-input", "home-repeat-btn",
         "home-iot", "home-temp-hailo", "home-fan", "home-scene-confidence", "home-eng-line",
@@ -646,7 +646,7 @@ def test_mode_toggle_and_health_form_one_lcars_bar():
 
 def test_home_toggles_are_lcars_lit_blocks_with_text_state(layout):
     toggles = [node for node in layout if "lcars-toggle" in node["attrs"].get("class", "").split()]
-    assert len(toggles) == 7
+    assert len(toggles) == 8
     css = (STATIC / "style.css").read_text()
     assert ".lcars-toggle input:checked + .lcars-toggle-face { background: var(--lcars-ice); }" in css
     assert '.lcars-toggle-state::after { content: "OFF"; }' in css
@@ -746,7 +746,7 @@ def test_home_vision_control_frame_sits_beside_vision(layout):
     assert control["attrs"]["aria-labelledby"] == "home-control-title"
     assert by_id["home-control-title"]["attrs"]["href"] == "#/vision"
     for value_id in ("home-toggle-motion", "home-toggle-privacy", "home-toggle-face",
-                     "home-toggle-idle", "home-toggle-confidence", "home-control-room",
+                     "home-toggle-idle", "home-toggle-objects", "home-toggle-confidence", "home-control-room",
                      "home-objects", "home-pan-slider", "home-tilt-slider",
                      "home-pan-value", "home-tilt-value", "home-control-status"):
         assert control in by_id[value_id]["ancestors"], value_id
@@ -763,6 +763,7 @@ def test_home_vision_control_frame_sits_beside_vision(layout):
     assert "path: '/api/pan'" in home and "path: '/api/tilt'" in home
     assert "renderHead(pos)" in home
     assert "'/api/settings/camera/overlay'" in home
+    assert "'/api/settings/object-detection'" in home
     assert ".lcars-data-row" in css
     # The pair must not repeat the same jewels, and Room reads in caps.
     camera_classes = by_id["card-home-camera"]["attrs"]["class"].split()
@@ -923,6 +924,11 @@ def test_home_scene_subframes_media_player_and_alert_ack(layout):
     assert by_id["card-home-alerts"] in by_id["home-alerts-ack"]["ancestors"]
     css = (STATIC / "style.css").read_text()
     assert "justify-content: center; padding: 8px;" in css  # video centred in its frame
+    stack = by_id["home-scene-frame"]["ancestors"][-1]
+    assert "lcars-subframe-stack" in stack["attrs"]["class"].split()
+    assert stack in by_id["home-head-frame"]["ancestors"]
+    assert ".lcars-subframe:first-child { border-top-right-radius" in css
+    assert ".lcars-subframe:last-child:not(:first-child) {" in css
     assert ".lcars-subframe {" in css and ".lcars-data-cascade {" in css and "@keyframes lcars-cascade" in css
     home = (JS / "pages" / "home.js").read_text()
     assert "'vera-alert-acks'" in home and "'/api/podcasts/play'" in home

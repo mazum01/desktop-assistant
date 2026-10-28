@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.95.1] - 2026-10-27
+### Added
+- Vision Control: an "Object detect" toggle in Behavior turns Hailo-8 COCO object detection on and off (`/api/settings/object-detection`). It stays in sync with the Vision page checkbox.
+
+### Changed
+- Vision Control sub-frames now hang off one right-hand vertical bar inside the frame (`.lcars-subframe-stack`). Scene's top bar sweeps up out of it, Behavior tees off it square, and Head position's bar runs along the bottom and sweeps down into it. Titles sit near the bar. The design guide is updated.
+- The Scene number cascade redraws when the window is resized, so it always shows whole rows.
+
 ## [1.95.0] - 2026-10-27
 ### Added
 - Home media player: a full-width card under the Vision pair that covers both Pandora and podcasts. A Pandora/Podcast source selector switches between them, and the view follows whichever source starts playing. It shows now-playing details with elapsed/total time. Pandora: station picker, Play/Pause, Next, Like, Ban, Stop. Podcasts: show and episode pickers, Play/Pause, −30s/+30s, Stop. Both have volume and mute. Starting one source stops the other.

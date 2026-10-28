@@ -605,6 +605,13 @@ const TOGGLES = {
       callLegacy('loadRandomMotionEnabled');
     },
   },
+  'home-toggle-objects': {
+    label: 'Object detection',
+    async save(enabled) {
+      await api('/api/settings/object-detection', 'PUT', { enabled });
+      callLegacy('loadObjectDetectionEnabled');
+    },
+  },
   'home-toggle-confidence': {
     label: 'Overlay confidence',
     async save(show_confidence) {
@@ -648,6 +655,7 @@ async function refreshSettings() {
     read('/api/audio/mute', d => { state.settings.muted = !!d.muted; check('home-toggle-mute', d.muted); }),
     read('/api/settings/face-tracking', d => check('home-toggle-face', d.enabled)),
     read('/api/settings/random-motion', d => check('home-toggle-idle', d.enabled)),
+    read('/api/settings/object-detection', d => check('home-toggle-objects', d.enabled)),
     read('/api/settings/camera/overlay', d => check('home-toggle-confidence', d.show_confidence !== false)),
     read('/api/settings/servo', d => { state.settings.motion = d.enabled !== false; check('home-toggle-motion', state.settings.motion); }),
     read('/api/settings/servo/limits', d => setHeadRange('pan', d.min_deg, d.max_deg)),
@@ -818,6 +826,7 @@ export function initHome(deps = {}) {
   if (!$('tab-home')) return;
   if (deps.units) units = deps.units;
   window.addEventListener('vera:status', e => onStatus(e.detail || {}));
+  window.addEventListener('resize', () => { if (homeActive) renderCascade(); });
   window.addEventListener('vera:units', () => { if (state.status) onStatus(state.status); });
   window.addEventListener('vera:music', e => { state.music = e.detail || {}; renderMedia(); });
   window.addEventListener('vera:podcast', e => { state.podcast = e.detail || {}; renderMedia(); });

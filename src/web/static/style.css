@@ -1423,26 +1423,35 @@ header .badge-unknown { background: var(--lcars-dim); }
 .is-mirrored .lcars-sweep-bar { left: -1px; right: auto; flex-direction: row-reverse; }
 .is-mirrored .lcars-sweep-bar > * { margin-left: 0; margin-right: var(--lcars-gap); }
 .is-mirrored .lcars-sweep-title { left: auto; right: 40px; }
-/* Sub-frame: an inner elbow (top bar + left spine) grouping one cluster inside
-   a larger frame, with its title cut into the bar. Hue per group. */
+/* Sub-frames: inner groups hung off one right-hand vertical bar. The bar
+   sweeps up into the first group's top bar, tees off square into the middle
+   groups' bars, and the last group's bottom bar sweeps down into it. Each
+   group has its own hue; small black gaps between them break the bar. */
+.lcars-subframe-stack { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .lcars-subframe {
   --subframe-hue: var(--lcars-peach);
   --subframe-bar: 14px;
   --subframe-spine: 12px;
   position: relative; min-width: 0;
-  padding: 8px 0 2px 10px;
+  padding: 8px 10px 4px 0;
   border: solid var(--subframe-hue);
-  border-width: var(--subframe-bar) 0 0 var(--subframe-spine);
-  border-top-left-radius: 26px 20px;
+  border-width: var(--subframe-bar) var(--subframe-spine) 0 0;
+}
+.lcars-subframe:first-child { border-top-right-radius: 26px 20px; }
+.lcars-subframe:last-child:not(:first-child) {
+  border-width: 0 var(--subframe-spine) var(--subframe-bar) 0;
+  border-bottom-right-radius: 26px 20px;
+  padding: 4px 10px 8px 0;
 }
 .lcars-subframe.is-scene { --subframe-hue: var(--lcars-lilac); }
 .lcars-subframe.is-behavior { --subframe-hue: var(--blue); }
 .lcars-subframe.is-head { --subframe-hue: var(--lcars-peach); }
 .lcars-subframe-title {
-  position: absolute; top: calc(-1 * var(--subframe-bar)); left: 18px;
+  position: absolute; top: calc(-1 * var(--subframe-bar)); right: 18px;
   height: var(--subframe-bar); padding: 0 8px; background: #000; color: var(--subframe-hue);
   font: 600 13px/var(--subframe-bar) var(--console-font); letter-spacing: .08em; text-transform: uppercase;
 }
+.lcars-subframe:last-child:not(:first-child) > .lcars-subframe-title { top: auto; bottom: calc(-1 * var(--subframe-bar)); }
 .lcars-subframe-body.has-cascade {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 38%); gap: 12px; align-items: stretch;
 }
@@ -1731,6 +1740,6 @@ header .badge-unknown { background: var(--lcars-dim); }
   .lcars-data-row { grid-template-columns: 64px minmax(0, 1fr); }
   .lcars-select { grid-template-columns: 64px minmax(0, 1fr); }
   .lcars-data-row dt, .lcars-slider-name, .lcars-select-name { padding-inline: 6px; font-size: 14px; }
-  .lcars-subframe { padding-left: 6px; }
+  .lcars-subframe { padding-right: 6px; }
   .lcars-alert-ack { padding-inline: 10px 12px; font-size: 14px; }
 }
