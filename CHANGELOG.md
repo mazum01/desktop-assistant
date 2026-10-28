@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.97.0] - 2026-10-27
+### Added
+- More Star Trek easter eggs. New typed effects: shields, a cloak, a photon torpedo, multiplying tribbles, and a self-destruct countdown that Esc aborts. Also new: more one-line replies, more secret routes, hidden click targets on the health badge and header code, once-a-day greetings on First Contact Day (Apr 5) and Star Trek Day (Sep 8), and a devtools console greeting. Everything stays cosmetic; motion effects are skipped or static under reduced motion.
+
+### Fixed
+- The "tea, Earl Grey, hot" egg was shadowed by a shorter phrase. A test now rejects phrases that contain one another.
+
+### Docs
+- Root cause for the ESP32 display's missing orientation footer: the installed ESP32-S3-Touch-LCD-1.47 has no onboard IMU. Its only I2C device, `0x63`, is the AXS5106L touch controller. The QMI8658A is fitted only to the C6 touch variant. See `firmware/vera_display/README.md`.
+
 ## [1.96.0] - 2026-10-27
 ### Added
 - Star Trek easter eggs across the web UI (new `js/core/eggs.js`). They are purely cosmetic: they make no API calls, don't speak and don't change settings. Typed triggers are ignored while you are typing in a field. There are hidden keyboard sequences, typed words, rail clicks and secret routes, plus the occasional familiar registry number in the Scene data cascade. Discovering them is left as an exercise for the crew.

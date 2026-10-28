@@ -37,7 +37,18 @@ import(require('node:url').pathToFileURL(process.argv[2]).href).then(m => {
   assert.equal(m.konamiStep(5, 'ArrowUp'), 1);
 
   assert.equal(m.matchPhrase('xxengage'), 'engage');
-  assert.equal(m.matchPhrase('teaearlgreyhot'), 'teaearlgreyhot');
+  assert.equal(m.matchPhrase('teaearlgreyhot'), null);
+  assert.equal(m.matchPhrase('teaearlgrey'), 'earlgrey');
+  // No phrase may contain another, or the shorter one fires first.
+  const keys = Object.keys(m.PHRASES);
+  for (const a of keys) for (const b of keys) {
+    if (a !== b) assert.ok(!b.includes(a), `${a} shadows ${b}`);
+  }
+  assert.ok(keys.every(k => /^[a-z]+$/.test(k)));
+
+  assert.match(m.holidayGreeting(new Date(2063, 3, 5)), /First Contact/);
+  assert.match(m.holidayGreeting(new Date(2026, 8, 8)), /Star Trek Day/);
+  assert.equal(m.holidayGreeting(new Date(2026, 9, 27)), null);
   assert.equal(m.matchPhrase('hello'), null);
 
   assert.equal(m.isTypingTarget({tagName: 'INPUT'}), true);
@@ -66,7 +77,8 @@ def test_eggs_are_loaded_before_router_and_styled():
     assert main.index("eggs.initEggs()") < main.index("router.initRouter()")
     css = (STATIC / "style.css").read_text()
     for rule in (".lcars-comm {", "body.is-red-alert::after", "body.is-warp::after",
-                 "body.is-beaming #main-content"):
+                 "body.is-beaming #main-content", "body.is-shields::after",
+                 "body.is-cloaked #main-content", "body.is-torpedo::after", ".lcars-tribble {"):
         assert rule in css, rule
     eggs = EGGS.read_text()
     # Eggs stay cosmetic: no API calls, speech or settings changes.

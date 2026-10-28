@@ -1784,7 +1784,44 @@ body.is-warp::after {
 }
 /* Transporter: the workspace shimmers out and back in. */
 body.is-beaming #main-content { animation: lcars-beam 2.2s ease-in-out; }
-@media (prefers-reduced-motion: reduce) { body.is-warp::after { display: none; } }
+/* Shields: a blue bubble glows around the viewport. */
+body.is-shields::after {
+  content: ""; position: fixed; inset: 6px; z-index: 999; pointer-events: none;
+  border: 3px solid var(--lcars-ice); border-radius: 48px;
+  box-shadow: inset 0 0 80px var(--blue), 0 0 24px var(--blue);
+  animation: lcars-shields 3s ease-in-out forwards;
+}
+@keyframes lcars-shields { 0% { opacity: 0; } 15%, 70% { opacity: .8; } 40% { opacity: .45; } 100% { opacity: 0; } }
+/* Cloak: the workspace ripples out of view and back. */
+body.is-cloaked #main-content { animation: lcars-cloak 3.2s ease-in-out; }
+@keyframes lcars-cloak {
+  0%, 100% { opacity: 1; filter: none; }
+  30%, 70% { opacity: .04; filter: blur(2px) hue-rotate(90deg); }
+}
+/* Torpedo: a glowing round crosses the screen. */
+body.is-torpedo::after {
+  content: ""; position: fixed; top: 45%; left: -40px; z-index: 999; pointer-events: none;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 20%, var(--red) 45%, transparent 70%);
+  box-shadow: 0 0 30px 10px var(--red);
+  animation: lcars-torpedo 1.3s ease-in forwards;
+}
+@keyframes lcars-torpedo { to { transform: translate(calc(100vw + 80px), -20vh) scale(.4); } }
+/* Tribbles: fuzzy little balls in VERA's warm palette. */
+.lcars-tribble {
+  position: fixed; z-index: 998; pointer-events: none;
+  width: var(--tribble-size, 24px); height: calc(var(--tribble-size, 24px) * .78);
+  border-radius: 50%; background: var(--orange);
+  box-shadow: 0 0 0 2px var(--orange), 0 0 6px 3px var(--orange);
+  animation: lcars-tribble-in .3s ease-out;
+}
+.lcars-tribble[data-tone="1"] { background: var(--lcars-peach); box-shadow: 0 0 0 2px var(--lcars-peach), 0 0 6px 3px var(--lcars-peach); }
+.lcars-tribble[data-tone="2"] { background: var(--yellow); box-shadow: 0 0 0 2px var(--yellow), 0 0 6px 3px var(--yellow); }
+.lcars-tribble.is-leaving { opacity: 0; filter: brightness(3); transition: opacity .8s, filter .8s; }
+@keyframes lcars-tribble-in { from { transform: scale(0); } }
+@media (prefers-reduced-motion: reduce) {
+  body.is-warp::after, body.is-torpedo::after { display: none; }
+}
 @keyframes lcars-beam {
   0%, 100% { opacity: 1; filter: none; }
   35% { opacity: .1; filter: brightness(2.2) blur(3px) saturate(0); }

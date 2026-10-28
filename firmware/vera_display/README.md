@@ -212,6 +212,20 @@ shows `R:-- P:-- Y:-- IMU not detected`, and status omits numeric angles.
   This establishes a responding device on that bus, not its identity or the
   absence of an IMU on a different board revision/pin assignment.
 
+### Root cause (2026-10-27)
+
+The ESP32-S3-Touch-LCD-1.47 **has no onboard IMU.** Waveshare's feature list
+and demo set for the S3 board name only the JD9853 panel and the AXS5106L
+touch controller. The `0x63` ACK is that touch IC (AXS5106L 7-bit address),
+so `imu_not_detected` and the `IMU not detected` footer are correct. They do
+not indicate a firmware or wiring fault.
+
+The QMI8658A is fitted to the **ESP32-C6-Touch-LCD-1.47**, which shares the
+AXS5106L on SDA GPIO18 / SCL GPIO19 (IMU INT1 GPIO5, INT2 GPIO6). These pins
+match the C6 profile here. To get roll/pitch/yaw, either switch to the C6
+touch board (build the C6 profile) or wire an external QMI8658 breakout to
+the S3's I2C bus (SDA42/SCL41) at 0x6A/0x6B.
+
 ## BLE protocol
 
 - Service UUID, characteristic UUIDs, and device name are defined once in

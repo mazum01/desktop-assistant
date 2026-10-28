@@ -299,7 +299,10 @@ ignored while focus is in a form field. Every effect respects
 `prefers-reduced-motion` (warp is skipped; red alert shows a static frame).
 Route eggs (`#/holodeck` …) must never use the slug of a real page; a test
 enforces this. Add new eggs there, reply through `computerSays()`, and keep
-quotes to a few words.
+quotes to a few words. Effects are body classes that `bodyEffect()` toggles (`is-red-alert`,
+`is-warp`, `is-beaming`, `is-shields`, `is-cloaked`, `is-torpedo`). Overlays
+such as `.lcars-tribble` use `pointer-events: none` and VERA's palette
+tokens. Typed phrases must not contain one another; a test enforces this.
 
 ## 5. Accessibility
 
