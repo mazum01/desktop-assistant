@@ -270,6 +270,15 @@ pages are for use and monitoring, Settings is for configuring; tag detail with
 - [ ] **Phase 9 — Cleanup** — retire the legacy Overview and System tabs once
   their content has moved, finish extracting `app.js` into page modules,
   remove dead code, update layout tests, docs, and the architecture diagram.
+- [ ] **Idle screensaver (LCARS standby display)** — after a user-defined
+  period with no mouse, keyboard or touch input, the web UI switches to a
+  full-screen LCARS standby view showing the VERA logo, stardate and current
+  time. Any mouse, keyboard or touch activity dismisses it and returns to the
+  last page shown, with its scroll position kept. Setting: an idle timeout in
+  Settings (with an "off" choice), saved on the device so every browser uses
+  it. While the standby view is up, pause the camera streams to save bandwidth
+  and CPU. Follow the LCARS design guide, use the chosen display units and
+  time format, and respect reduced motion.
 
 ---
 
