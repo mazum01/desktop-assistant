@@ -535,8 +535,12 @@ function initMedia() {
 // ── Data cascade ───────────────────────────────────────────────────────────
 // Decorative columns of numbers in the Scene sub-frame; the colour wash is CSS.
 
+// Now and then a registry or stardate slips into the stream.
+const CASCADE_EGGS = ['1701', '74656', '74913', '2364', '47', '1031', '41153'];
+
 export function cascadeColumns(cols, rows, rand = Math.random) {
   return Array.from({ length: cols }, () => Array.from({ length: rows }, () => {
+    if (rand() > 0.97) return CASCADE_EGGS[Math.floor(rand() * CASCADE_EGGS.length) % CASCADE_EGGS.length];
     const digits = 2 + Math.floor(rand() * 6);
     let value = String(1 + Math.floor(rand() * 9));
     while (value.length < digits) value += Math.floor(rand() * 10);

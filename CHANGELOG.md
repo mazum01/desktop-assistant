@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.96.0] - 2026-10-27
+### Added
+- Star Trek easter eggs across the web UI (new `js/core/eggs.js`). They are purely cosmetic: they make no API calls, don't speak and don't change settings. Typed triggers are ignored while you are typing in a field. There are hidden keyboard sequences, typed words, rail clicks and secret routes, plus the occasional familiar registry number in the Scene data cascade. Discovering them is left as an exercise for the crew.
+- New LCARS "Computer" comm bar component (`.lcars-comm`) for short transient replies, documented in the LCARS guide along with the rules for adding easter eggs (§4.1).
+
 ## [1.95.2] - 2026-10-27
 ### Changed
 - Home Media Player: the title is now cut into a thicker top bar, like the Vision frame title, and links to the Media page. This replaces the separate "Media ›" link. It uses a new reusable `.lcars-bar-title-card` modifier for standard cards, documented in the LCARS guide.

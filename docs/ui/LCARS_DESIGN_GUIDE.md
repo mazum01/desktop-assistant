@@ -119,6 +119,7 @@ Reuse these components; don't invent near-duplicates.
 | **Compact toggle grid** | `.lcars-toggle-grid.is-compact` | Two columns of bar-height toggles with name and `ON`/`OFF` on one line. Use in dense control panels. |
 | **LCARS data row** | `dl.lcars-data-list` > `.lcars-data-row` > `dt` + `dd` | Read-only key/value readout: 72px peach name block, ice value that truncates with an ellipsis. Add `dd.is-caps` to show a proper name in uppercase (Room). Use it for live facts such as Vision Control's Scene group (Room, People, Objects); never for something the user can change. |
 | **LCARS select** | `label.lcars-select` > `span.lcars-select-name` + `select` | Lilac name block beside a native select, one bar high (Home media player: Station, Show, Episode). Group with `.lcars-select-group`. |
+| **Computer comm bar** | `div.lcars-comm#lcars-comm` > `.lcars-comm-key` + `.lcars-comm-text` (created by `computerSays()` in `js/core/eggs.js`) | Fixed pill-ended bar at the bottom right: peach "Computer" block, then the message in ice on black. `role="status"`, hides itself after 6s, ignores the pointer. Red during red alert. Use it for light, transient "computer" replies; real errors belong in the card's status line or the alert frame. |
 | **Alert acknowledge** | `button.lcars-alert-ack` | Alert-hue block with a rounded right end at the far side of the alert frame. See §3.2. |
 | **LCARS slider** | `label.lcars-slider` > name `span` + `input[type=range]` + `output` | Peach name block, ice-accent range, ice value readout. Follows the live value while idle; sends only the latest value while dragging. |
 
@@ -289,6 +290,16 @@ element with `text-transform: uppercase`.
    hash router handles. Don't add click handlers just to navigate.
 7. **Phones (≤700px):** shrink bars (`--lcars-bar-height: 28px`), let the
    header wrap, and shrink the alert frame and sweep readouts.
+
+### 4.1 Easter eggs
+
+Star Trek easter eggs live in `js/core/eggs.js`. They stay **cosmetic**: no API
+calls, no speech, no head movement and no setting changes. Typed triggers are
+ignored while focus is in a form field. Every effect respects
+`prefers-reduced-motion` (warp is skipped; red alert shows a static frame).
+Route eggs (`#/holodeck` …) must never use the slug of a real page; a test
+enforces this. Add new eggs there, reply through `computerSays()`, and keep
+quotes to a few words.
 
 ## 5. Accessibility
 

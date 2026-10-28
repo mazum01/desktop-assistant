@@ -1738,6 +1738,60 @@ header .badge-unknown { background: var(--lcars-dim); }
   .merge-modal-inner, .iot-modal-inner { padding: 20px 16px; max-height: 90vh; overflow-y: auto; }
 }
 
+/* ── Computer comm bar and easter-egg effects (js/core/eggs.js) ── */
+/* A pill-ended LCARS bar at the bottom right: peach "Computer" block, then
+   the message in ice on black. Hidden until there's something to say. */
+.lcars-comm {
+  position: fixed; right: 24px; bottom: 24px; z-index: 1000;
+  display: flex; align-items: stretch; max-width: min(560px, calc(100vw - 48px));
+  min-height: var(--lcars-bar-height); background: #000;
+  border: 2px solid var(--lcars-peach); border-radius: calc(var(--lcars-bar-height) / 2 + 2px);
+  overflow: hidden; pointer-events: none;
+  animation: lcars-comm-in .25s ease-out;
+}
+.lcars-comm[hidden] { display: none; }
+.lcars-comm-key {
+  flex: none; display: flex; align-items: flex-end; padding: 0 12px 4px 18px;
+  background: var(--lcars-peach); color: #000;
+  font: 600 16px/1 var(--console-font); letter-spacing: .06em; text-transform: uppercase;
+}
+.lcars-comm-text {
+  display: flex; align-items: center; padding: 6px 18px 6px 12px;
+  color: var(--lcars-ice); font: 500 17px/1.2 var(--console-font); letter-spacing: .02em;
+}
+@keyframes lcars-comm-in { from { opacity: 0; transform: translateY(12px); } }
+/* Red alert: a pulsing red frame around the viewport. Esc stands down. */
+body.is-red-alert::after {
+  content: ""; position: fixed; inset: 0; z-index: 999; pointer-events: none;
+  border: 8px solid var(--red); box-shadow: inset 0 0 60px rgba(255, 60, 60, .45);
+  animation: lcars-red-alert 1s steps(2, jump-none) infinite;
+}
+body.is-red-alert .lcars-comm { border-color: var(--red); }
+body.is-red-alert .lcars-comm-key { background: var(--red); }
+@keyframes lcars-red-alert { 50% { opacity: .25; } }
+/* Warp: star streaks rushing out from the centre. */
+body.is-warp::after {
+  content: ""; position: fixed; inset: -50%; z-index: 999; pointer-events: none;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, .85) 0deg .35deg, transparent .35deg 7deg);
+  -webkit-mask: radial-gradient(circle, transparent 8%, #000 40%, transparent 70%);
+  mask: radial-gradient(circle, transparent 8%, #000 40%, transparent 70%);
+  animation: lcars-warp 1.6s ease-in forwards;
+}
+@keyframes lcars-warp {
+  0% { opacity: 0; transform: scale(.2) rotate(0deg); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: scale(2.4) rotate(8deg); }
+}
+/* Transporter: the workspace shimmers out and back in. */
+body.is-beaming #main-content { animation: lcars-beam 2.2s ease-in-out; }
+@media (prefers-reduced-motion: reduce) { body.is-warp::after { display: none; } }
+@keyframes lcars-beam {
+  0%, 100% { opacity: 1; filter: none; }
+  35% { opacity: .1; filter: brightness(2.2) blur(3px) saturate(0); }
+  50% { opacity: 0; filter: brightness(3) blur(6px) saturate(0); }
+  65% { opacity: .1; filter: brightness(2.2) blur(3px) saturate(0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
