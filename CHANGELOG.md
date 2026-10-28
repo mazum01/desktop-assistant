@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.98.1] - 2026-10-28
+### Added
+- `docs/ui/EASTER_EGGS.md`: a spoiler list of every web UI easter egg (typed phrases, the Konami code, hidden click targets, secret routes, and ambient eggs), linked from the README and the LCARS guide. A test fails if a typed phrase or secret route is missing from it.
+
 ## [1.98.0] - 2026-10-28
 ### Removed
 - The roll/pitch/yaw orientation footer on the ESP32 display. The installed S3 board has no IMU, so it only ever showed "IMU not detected". The mouth, EQ, status text and video now use the full 172-pixel screen height, and the 200 ms footer-only refresh flush is gone. The QMI8658 probe stays in `vera display video status` (`imu`) for the C6 board variant.

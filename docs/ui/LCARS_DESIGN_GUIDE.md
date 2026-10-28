@@ -293,7 +293,8 @@ element with `text-transform: uppercase`.
 
 ### 4.1 Easter eggs
 
-Star Trek easter eggs live in `js/core/eggs.js`. They stay **cosmetic**: no API
+Star Trek easter eggs live in `js/core/eggs.js`. Every trigger is listed in
+[EASTER_EGGS.md](EASTER_EGGS.md); update it when adding or changing an egg. They stay **cosmetic**: no API
 calls, no speech, no head movement and no setting changes. Typed triggers are
 ignored while focus is in a form field. Every effect respects
 `prefers-reduced-motion` (warp is skipped; red alert shows a static frame).

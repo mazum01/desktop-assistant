@@ -83,3 +83,17 @@ def test_eggs_are_loaded_before_router_and_styled():
     eggs = EGGS.read_text()
     # Eggs stay cosmetic: no API calls, speech or settings changes.
     assert "fetch(" not in eggs and "/api/" not in eggs
+
+
+def test_every_egg_is_documented():
+    import re
+    eggs = EGGS.read_text()
+    doc = (ROOT / "docs" / "ui" / "EASTER_EGGS.md").read_text()
+    for name in ("PHRASES", "ROUTE_EGGS"):
+        start = eggs.index(f"export const {name}")
+        block = eggs[start:eggs.index("};", start)]
+        keys = re.findall(r"^\s*'?([a-z-]+)'?:", block, re.M)
+        assert keys
+        for key in keys:
+            token = f"`#/{key}`" if name == "ROUTE_EGGS" else f"`{key}`"
+            assert token in doc, f"{token} missing from docs/ui/EASTER_EGGS.md"

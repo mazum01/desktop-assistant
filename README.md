@@ -26,6 +26,8 @@ head, and temperature-controlled cooling.
 - [Clean Raspberry Pi OS Installation (VERA3)](docs/VERA3_SETUP.md)
 - [Automatic releases and device updates](docs/UPDATES.md)
 - [Matter controller, Google Home, and audio mute bridge](docs/MATTER.md)
+- [Web UI LCARS design guide](docs/ui/LCARS_DESIGN_GUIDE.md)
+- [Web UI easter eggs](docs/ui/EASTER_EGGS.md) (spoilers)
 - [TODO](docs/TODO.md)
 
 ## Body selection
