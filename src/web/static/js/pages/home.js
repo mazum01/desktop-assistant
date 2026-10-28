@@ -389,7 +389,7 @@ function renderMedia() {
   if (mediaSource === 'podcast') {
     const on = podcastActive();
     source = 'Podcast';
-    title = on ? (pod.episode_title || 'Episode') : 'Nothing playing';
+    title = on ? (pod.episode_title || 'Episode') : 'IDLE';
     subtitle = on ? (pod.podcast_title || '') : '';
     playing = pod.state === 'playing';
     time = on ? fmtProgress(pod.position_sec, pod.duration_sec) : '';
@@ -398,7 +398,7 @@ function renderMedia() {
     const on = music.state && music.state !== 'stopped';
     source = music.configured === false ? 'Pandora (not configured)' : 'Pandora';
     playing = music.state === 'playing';
-    title = on ? (song.title || '—') : 'Nothing playing';
+    title = on ? (song.title || '—') : 'IDLE';
     subtitle = on ? [song.artist, song.album].filter(Boolean).join(' · ') : '';
     art = on ? (song.cover_art_url || '') : '';
     time = on ? fmtProgress(song.elapsed_sec, song.duration_sec) : '';
