@@ -84,37 +84,75 @@ export function computeAlerts({ status, update, settings }, now = new Date()) {
   const last = (status && status.last) || {};
   const temp = last['thermal.temp'];
   const hailo = last['thermal.hailo'];
-  if (status && status.healthy === false) alerts.push({ level: 'fail', text: 'System degraded' });
-  if (temp && temp.ok === false) alerts.push({ level: 'fail', text: 'Temperature sensor fault' });
+  if (status && status.healthy === false) alerts.push({ id: 'degraded', level: 'fail', text: 'System degraded' });
+  if (temp && temp.ok === false) alerts.push({ id: 'temp-fault', level: 'fail', text: 'Temperature sensor fault' });
   const soc = temp && Number(temp.cpu_celsius);
-  if (Number.isFinite(soc) && soc >= SOC_HOT_C) alerts.push({ level: 'fail', text: `SoC hot ${fmtTemp(soc, 0)}` });
-  if (hailo && hailo.ok === false) alerts.push({ level: 'warn', text: 'Hailo unavailable' });
+  if (Number.isFinite(soc) && soc >= SOC_HOT_C) alerts.push({ id: 'soc-hot', level: 'fail', text: `SoC hot ${fmtTemp(soc, 0)}` });
+  if (hailo && hailo.ok === false) alerts.push({ id: 'hailo-unavailable', level: 'warn', text: 'Hailo unavailable' });
   const hailoC = hailo && Number(hailo.celsius);
   if (hailo && hailo.ok !== false && Number.isFinite(hailoC) && hailoC >= HAILO_HOT_C) {
-    alerts.push({ level: 'fail', text: `Hailo hot ${fmtTemp(hailoC, 0)}` });
+    alerts.push({ id: 'hailo-hot', level: 'fail', text: `Hailo hot ${fmtTemp(hailoC, 0)}` });
   }
   const stopped = Object.entries((status && status.services) || {})
     .filter(([, svcState]) => svcState !== 'running')
     .map(([name, svcState]) => `${name} ${svcState}`);
   if (stopped.length) {
-    alerts.push({ level: 'fail', text: `Service ${stopped.slice(0, 3).join(', ')}${stopped.length > 3 ? ` +${stopped.length - 3}` : ''}` });
+    alerts.push({ id: 'services', level: 'fail', text: `Service ${stopped.slice(0, 3).join(', ')}${stopped.length > 3 ? ` +${stopped.length - 3}` : ''}` });
   }
   if (update && update.available_version && update.available_version !== update.installed_version) {
-    alerts.push({ level: 'warn', text: `Update ${update.available_version} available`, route: 'system' });
+    alerts.push({ id: 'update', level: 'warn', text: `Update ${update.available_version} available`, route: 'system' });
   }
-  if (settings.privacy) alerts.push({ level: 'unknown', text: 'Privacy on' });
-  if (quietHoursActive(settings.quiet, now)) alerts.push({ level: 'unknown', text: 'Quiet hours' });
-  if (settings.muted) alerts.push({ level: 'warn', text: 'Muted' });
+  if (settings.privacy) alerts.push({ id: 'privacy', level: 'unknown', text: 'Privacy on' });
+  if (quietHoursActive(settings.quiet, now)) alerts.push({ id: 'quiet', level: 'unknown', text: 'Quiet hours' });
+  if (settings.muted) alerts.push({ id: 'muted', level: 'warn', text: 'Muted' });
   return alerts;
 }
 
 const ALERT_RANK = { fail: 3, warn: 2, unknown: 1 };
+const ACK_KEY = 'vera-alert-acks';
+
+// An acknowledgement is keyed by alert id and level, so an alert that clears and
+// comes back, or escalates from warn to fail, shows the bar again.
+export function alertAckKey(alert) {
+  return `${alert.id || alert.text}|${alert.level}`;
+}
+
+export function visibleAlerts(alerts, acks) {
+  const acked = new Set(acks || []);
+  return alerts.filter(alert => !acked.has(alertAckKey(alert)));
+}
+
+export function pruneAcks(alerts, acks) {
+  const active = new Set(alerts.map(alertAckKey));
+  return (acks || []).filter(key => active.has(key));
+}
+
+function readAcks() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ACK_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+function writeAcks(acks) {
+  try { localStorage.setItem(ACK_KEY, JSON.stringify(acks)); } catch { /* storage unavailable */ }
+}
+
+function acknowledgeAlerts() {
+  const all = computeAlerts(state);
+  writeAcks([...new Set([...readAcks(), ...all.map(alertAckKey)])]);
+  renderAlerts();
+}
 
 function renderAlerts() {
   const host = $('home-alerts');
   const frame = $('card-home-alerts');
   if (!host) return;
-  const alerts = computeAlerts(state);
+  const all = computeAlerts(state);
+  const stored = readAcks();
+  const acks = pruneAcks(all, stored);
+  if (acks.length !== stored.length) writeAcks(acks);
+  const alerts = visibleAlerts(all, acks);
   const key = JSON.stringify(alerts);
   if (host.dataset.key === key) return;
   host.dataset.key = key;
@@ -213,7 +251,9 @@ function onStatus(data) {
   const faces = last['perception.faces'] || {};
   const named = (faces.faces || []).map(f => f.name).filter(n => n && n !== 'unknown');
   const count = Number(faces.count || 0);
-  setReadout('home-faces', count ? `${count}${named.length ? ' · ' + named.join(', ') : ''}` : 'None');
+  const people = count ? `${count}${named.length ? ' · ' + named.join(', ') : ''}` : 'None';
+  setReadout('home-faces', people);
+  setReadout('home-control-people', people);
   const spoke = last['av.spoke'];
   setText('home-last-spoken', spoke && spoke.text ? `“${spoke.text}”` : '—');
 
@@ -244,34 +284,151 @@ function onStatus(data) {
   renderAlerts();
 }
 
-// ── Now playing ────────────────────────────────────────────────────────────
+// ── Media player ───────────────────────────────────────────────────────────
+// One player for Pandora and podcasts. The view follows whichever source starts
+// playing; otherwise it stays on the source the user picked.
+
+const SOURCE_KEY = 'vera-home-media-source';
+let mediaSource = 'pandora';
+let lastActiveSource = null;
+let podcastsLoaded = false;
 
 function podcastActive() {
   return state.podcast && ['playing', 'paused'].includes(state.podcast.state);
 }
 
+function musicActive() {
+  return state.music && ['playing', 'paused'].includes(state.music.state);
+}
+
+export function fmtClock(sec) {
+  const total = Math.max(0, Math.floor(Number(sec) || 0));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
+function fmtProgress(position, duration) {
+  if (!(Number(position) >= 0) || !(Number(duration) > 0)) return '';
+  return `${fmtClock(position)} / ${fmtClock(duration)}`;
+}
+
+function selectSource(source, persist = true) {
+  mediaSource = source === 'podcast' ? 'podcast' : 'pandora';
+  if (persist) { try { localStorage.setItem(SOURCE_KEY, mediaSource); } catch { /* ignore */ } }
+  if (mediaSource === 'podcast' && !podcastsLoaded) loadPodcastList();
+  renderMedia();
+}
+
+function fillSelect(select, options, selected) {
+  if (!select) return;
+  const key = JSON.stringify(options);
+  if (select.dataset.key !== key) {
+    select.dataset.key = key;
+    const keep = select.value;
+    select.replaceChildren(...options.map(({ value, label }) => {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      return opt;
+    }));
+    if (options.some(o => o.value === keep)) select.value = keep;
+  }
+  if (selected != null && document.activeElement !== select && options.some(o => o.value === String(selected))) {
+    select.value = String(selected);
+  }
+}
+
+async function loadPodcastList() {
+  try {
+    const data = await api('/api/podcasts');
+    const subs = data.subscriptions || [];
+    podcastsLoaded = true;
+    const opts = subs.length
+      ? subs.map(p => ({ value: String(p.id), label: p.title || `Podcast ${p.id}` }))
+      : [{ value: '', label: '— no subscriptions —' }];
+    const select = $('home-podcast-select');
+    fillSelect(select, opts, state.podcast && state.podcast.podcast_id);
+    if (select && select.value) loadEpisodes(select.value);
+  } catch (err) {
+    note(`Podcasts: ${err.message}`, false);
+  }
+}
+
+async function loadEpisodes(podcastId) {
+  const select = $('home-episode-select');
+  if (!select || !podcastId) return;
+  try {
+    const data = await api(`/api/podcasts/${encodeURIComponent(podcastId)}/episodes?limit=25`);
+    const episodes = data.episodes || [];
+    const opts = episodes.length
+      ? episodes.map((ep, idx) => ({ value: String(idx), label: ep.title || `Episode ${idx + 1}` }))
+      : [{ value: '0', label: '— latest episode —' }];
+    const p = state.podcast || {};
+    fillSelect(select, opts, String(p.podcast_id) === String(podcastId) ? p.episode_index : null);
+  } catch (err) {
+    note(`Episodes: ${err.message}`, false);
+  }
+}
+
 function renderMedia() {
   const music = state.music || {};
+  const pod = state.podcast || {};
   const muted = music.muted ?? state.settings.muted;
   if (music.muted !== undefined) state.settings.muted = !!music.muted;
-  let source, title, subtitle, playing, art = '';
-  if (podcastActive()) {
-    const p = state.podcast;
+
+  const active = podcastActive() ? 'podcast' : musicActive() ? 'pandora' : null;
+  if (active && active !== lastActiveSource) {
+    mediaSource = active;
+    if (active === 'podcast' && !podcastsLoaded) loadPodcastList();
+  }
+  lastActiveSource = active;
+
+  let source, title, subtitle, playing, time = '', art = '';
+  if (mediaSource === 'podcast') {
+    const on = podcastActive();
     source = 'Podcast';
-    title = p.episode_title || 'Episode';
-    subtitle = p.podcast_title || '';
-    playing = p.state === 'playing';
+    title = on ? (pod.episode_title || 'Episode') : 'Nothing playing';
+    subtitle = on ? (pod.podcast_title || '') : '';
+    playing = pod.state === 'playing';
+    time = on ? fmtProgress(pod.position_sec, pod.duration_sec) : '';
   } else {
     const song = music.song || {};
+    const on = music.state && music.state !== 'stopped';
     source = music.configured === false ? 'Pandora (not configured)' : 'Pandora';
     playing = music.state === 'playing';
-    title = music.state && music.state !== 'stopped' ? (song.title || '—') : 'Nothing playing';
-    subtitle = song.artist && music.state !== 'stopped' ? song.artist : '';
-    art = music.state !== 'stopped' ? (song.cover_art_url || '') : '';
+    title = on ? (song.title || '—') : 'Nothing playing';
+    subtitle = on ? [song.artist, song.album].filter(Boolean).join(' · ') : '';
+    art = on ? (song.cover_art_url || '') : '';
+    time = on ? fmtProgress(song.elapsed_sec, song.duration_sec) : '';
+    const stations = (music.stations || []).map(st => ({ value: String(st.id), label: st.name || String(st.id) }));
+    if (stations.length) fillSelect($('home-station-select'), stations, song.current_station_id);
   }
+
+  document.querySelectorAll('[data-home-source]').forEach(btn => {
+    btn.setAttribute('aria-pressed', String(btn.dataset.homeSource === mediaSource));
+  });
+  const pandoraPanel = $('home-pandora-panel');
+  if (pandoraPanel) pandoraPanel.hidden = mediaSource !== 'pandora';
+  const podcastPanel = $('home-podcast-panel');
+  if (podcastPanel) podcastPanel.hidden = mediaSource !== 'podcast';
+  document.querySelectorAll('[data-pandora-only]').forEach(n => { n.hidden = mediaSource !== 'pandora'; });
+  document.querySelectorAll('[data-podcast-only]').forEach(n => {
+    n.hidden = mediaSource !== 'podcast';
+    n.disabled = !podcastActive();
+  });
+  ['home-media-next', 'home-media-like', 'home-media-ban'].forEach(id => {
+    const btn = $(id);
+    if (btn) btn.disabled = !musicActive();
+  });
+  const stop = $('home-media-stop');
+  if (stop) stop.disabled = mediaSource === 'podcast' ? !podcastActive() : !musicActive();
+
   setText('home-media-source', source);
   setText('home-media-title', title);
   setText('home-media-subtitle', subtitle);
+  setText('home-media-time', time);
   const img = $('home-media-art');
   if (img) {
     if (art && img.getAttribute('src') !== art) img.src = art;
@@ -279,8 +436,6 @@ function renderMedia() {
     img.hidden = !art;
   }
   setText('home-media-play', playing ? '⏸ Pause' : '▶ Play');
-  const next = $('home-media-next');
-  if (next) next.disabled = podcastActive();
   const slider = $('home-volume');
   if (slider && !state.volumeDragging && Number(music.volume) >= 0) {
     slider.value = music.volume;
@@ -292,29 +447,54 @@ function renderMedia() {
   renderAlerts();
 }
 
-async function mediaPlayPause() {
+async function mediaAction(label, fn, refresh) {
   try {
-    if (podcastActive()) {
-      await api(`/api/podcasts/${state.podcast.state === 'playing' ? 'pause' : 'resume'}`, 'POST');
-      callLegacy('loadPodcastStatus');
-    } else {
-      const musicState = (state.music && state.music.state) || 'stopped';
-      if (musicState === 'stopped') await window.musicPlay();
-      else await api('/api/music/pause', 'POST');
-      callLegacy('loadMusicStatus');
-    }
+    await fn();
   } catch (err) {
-    note(`Playback: ${err.message}`, false);
+    note(`${label}: ${err.message}`, false);
   }
+  callLegacy(refresh);
 }
 
-async function mediaNext() {
-  try {
-    await api('/api/music/next', 'POST');
-    callLegacy('loadMusicStatus');
-  } catch (err) {
-    note(`Skip: ${err.message}`, false);
+function mediaPlayPause() {
+  if (mediaSource === 'podcast') {
+    return mediaAction('Podcast', async () => {
+      const pod = state.podcast || {};
+      const id = $('home-podcast-select')?.value;
+      const episode = Number($('home-episode-select')?.value || 0);
+      const sameEpisode = podcastActive() && String(pod.podcast_id) === String(id) && Number(pod.episode_index) === episode;
+      if (sameEpisode || (podcastActive() && !id)) {
+        await api(`/api/podcasts/${pod.state === 'playing' ? 'pause' : 'resume'}`, 'POST');
+      } else {
+        if (!id) throw new Error('subscribe to a podcast on the Media page first');
+        if (musicActive()) await api('/api/music/stop', 'POST');
+        await api('/api/podcasts/play', 'POST', { podcast_id: id, episode_index: episode });
+      }
+    }, 'loadPodcastStatus');
   }
+  return mediaAction('Playback', async () => {
+    const musicState = (state.music && state.music.state) || 'stopped';
+    const station = $('home-station-select')?.value;
+    if (musicState === 'stopped') {
+      if (podcastActive()) await api('/api/podcasts/stop', 'POST');
+      await api('/api/music/play', 'POST', station ? { station_id: station } : {});
+    } else {
+      await api('/api/music/pause', 'POST');
+    }
+  }, 'loadMusicStatus');
+}
+
+function changeStation() {
+  const station = $('home-station-select')?.value;
+  if (!station || !musicActive()) return;
+  const current = state.music && state.music.song && state.music.song.current_station_id;
+  if (String(current) === station) return;
+  mediaAction('Station', () => api('/api/music/station', 'POST', { station_id: station }), 'loadMusicStatus');
+}
+
+function mediaStop() {
+  if (mediaSource === 'podcast') return mediaAction('Stop', () => api('/api/podcasts/stop', 'POST'), 'loadPodcastStatus');
+  return mediaAction('Stop', () => api('/api/music/stop', 'POST'), 'loadMusicStatus');
 }
 
 async function setVolume(level) {
@@ -332,6 +512,53 @@ async function setMuted(muted) {
   if (state.music) state.music.muted = muted;
   callLegacy('loadMusicStatus');
   renderMedia();
+}
+
+function initMedia() {
+  try { mediaSource = localStorage.getItem(SOURCE_KEY) === 'podcast' ? 'podcast' : 'pandora'; } catch { /* ignore */ }
+  document.querySelectorAll('[data-home-source]').forEach(btn => {
+    btn.addEventListener('click', () => selectSource(btn.dataset.homeSource));
+  });
+  $('home-media-play')?.addEventListener('click', mediaPlayPause);
+  $('home-media-stop')?.addEventListener('click', mediaStop);
+  $('home-media-next')?.addEventListener('click', () => mediaAction('Skip', () => api('/api/music/next', 'POST'), 'loadMusicStatus'));
+  $('home-media-like')?.addEventListener('click', () => mediaAction('Like', () => api('/api/music/thumbs-up', 'POST'), 'loadMusicStatus'));
+  $('home-media-ban')?.addEventListener('click', () => mediaAction('Ban', () => api('/api/music/thumbs-down', 'POST'), 'loadMusicStatus'));
+  $('home-media-back')?.addEventListener('click', () => mediaAction('Skip', () => api('/api/podcasts/skip', 'POST', { delta_sec: -30 }), 'loadPodcastStatus'));
+  $('home-media-forward')?.addEventListener('click', () => mediaAction('Skip', () => api('/api/podcasts/skip', 'POST', { delta_sec: 30 }), 'loadPodcastStatus'));
+  $('home-station-select')?.addEventListener('change', changeStation);
+  $('home-podcast-select')?.addEventListener('change', e => loadEpisodes(e.target.value));
+  if (mediaSource === 'podcast') loadPodcastList();
+  renderMedia();
+}
+
+// ── Data cascade ───────────────────────────────────────────────────────────
+// Decorative columns of numbers in the Scene sub-frame; the colour wash is CSS.
+
+export function cascadeColumns(cols, rows, rand = Math.random) {
+  return Array.from({ length: cols }, () => Array.from({ length: rows }, () => {
+    const digits = 2 + Math.floor(rand() * 6);
+    let value = String(1 + Math.floor(rand() * 9));
+    while (value.length < digits) value += Math.floor(rand() * 10);
+    return value;
+  }));
+}
+
+function renderCascade() {
+  const host = $('home-scene-cascade');
+  if (!host) return;
+  // Whole rows only: 14px type at 1.25 line height (see .lcars-data-cascade).
+  const rows = host.clientHeight > 0 ? Math.max(1, Math.floor(host.clientHeight / 17.5)) : 6;
+  host.replaceChildren(...cascadeColumns(6, rows).map(col => {
+    const column = document.createElement('div');
+    column.className = 'lcars-cascade-col';
+    column.replaceChildren(...col.map(value => {
+      const cell = document.createElement('span');
+      cell.textContent = value;
+      return cell;
+    }));
+    return column;
+  }));
 }
 
 // ── Quick toggles ──────────────────────────────────────────────────────────
@@ -535,6 +762,8 @@ async function repeat() {
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 
 let settingsTimer = null;
+let cascadeTimer = null;
+const CASCADE_REFRESH_MS = 6000;
 let homeActive = false;
 
 // ── Camera source switch (bottom sweep) ────────────────────────────────────
@@ -571,6 +800,9 @@ function enter() {
   refreshSettings();
   clearInterval(settingsTimer);
   settingsTimer = setInterval(() => { if (!document.hidden) refreshSettings(); }, SETTINGS_REFRESH_MS);
+  setTimeout(renderCascade, 0);
+  clearInterval(cascadeTimer);
+  cascadeTimer = setInterval(() => { if (!document.hidden) renderCascade(); }, CASCADE_REFRESH_MS);
 }
 
 function leave() {
@@ -578,6 +810,8 @@ function leave() {
   if (typeof window._unregisterStream === 'function') window._unregisterStream('home-camera');
   clearInterval(settingsTimer);
   settingsTimer = null;
+  clearInterval(cascadeTimer);
+  cascadeTimer = null;
 }
 
 export function initHome(deps = {}) {
@@ -595,8 +829,9 @@ export function initHome(deps = {}) {
   });
 
   Object.keys(TOGGLES).forEach(id => $(id)?.addEventListener('change', onToggle));
-  $('home-media-play')?.addEventListener('click', mediaPlayPause);
-  $('home-media-next')?.addEventListener('click', mediaNext);
+  initMedia();
+  renderCascade();
+  $('home-alerts-ack')?.addEventListener('click', acknowledgeAlerts);
   $('home-mute-btn')?.addEventListener('click', async () => {
     try { await setMuted(!state.settings.muted); } catch (err) { note(`Mute: ${err.message}`, false); }
   });

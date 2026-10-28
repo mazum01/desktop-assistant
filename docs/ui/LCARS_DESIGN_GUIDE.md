@@ -113,9 +113,12 @@ Reuse these components; don't invent near-duplicates.
 | **Decorative code** | `.lcars-code` | `aria-hidden`, sparse (3–6 on the page). |
 | **Sweep card** | `.card.lcars-sweep-card` + `.lcars-sweep-bar` | Card frame closed by a bottom elbow; the thick bottom bar carries controls. Used for live video. See §3.1. |
 | **Mirrored sweep card** | `.lcars-sweep-card.is-mirrored` | Same frame with the spine, elbows and frame breaks on the **right**. Use it for the companion panel beside a sweep card so the pair reads as one bracketed console (Home's Vision + Vision Control). |
-| **Group label** | `.lcars-group-label` | Small uppercase peach label that names a block of controls inside a card ("Behavior", "Head position"). Not a heading. |
+| **Sub-frame** | `div.lcars-subframe` (`.is-scene` / `.is-behavior` / `.is-head`, or set `--subframe-hue`) > `span.lcars-subframe-title` + content | A small inner elbow (top bar + left spine, rounded outer corner) that groups one cluster inside a larger frame. Its title is cut into the bar as a black box with text in the sub-frame hue. Give neighbouring sub-frames different hues (Home: Scene lilac, Behavior blue, Head position peach). Label the group with `aria-labelledby` pointing at the title. |
+| **Data cascade** | `div.lcars-data-cascade[aria-hidden=true]` > `.lcars-cascade-col` > `span` | Decorative columns of random numbers, right-aligned, washed through dim → peach → ice → white → lilac by a stepped CSS animation staggered by row. It takes its height from its neighbours (`contain: size`), shows only whole rows and drops whole columns that don't fit. JS (`cascadeColumns` in `home.js`) fills it and refreshes the numbers every few seconds while the page is visible. At most one per page, beside real data; never in place of it. Our own implementation inspired by thelcars.com's home title area. |
 | **Compact toggle grid** | `.lcars-toggle-grid.is-compact` | Two columns of bar-height toggles with name and `ON`/`OFF` on one line. Use in dense control panels. |
-| **LCARS data row** | `dl.lcars-data-list` > `.lcars-data-row` > `dt` + `dd` | Read-only key/value readout: 72px peach name block, ice value that truncates with an ellipsis. Add `dd.is-caps` to show a proper name in uppercase (Room). Use it for live facts such as Vision Control's Scene group (Room, Objects); never for something the user can change. |
+| **LCARS data row** | `dl.lcars-data-list` > `.lcars-data-row` > `dt` + `dd` | Read-only key/value readout: 72px peach name block, ice value that truncates with an ellipsis. Add `dd.is-caps` to show a proper name in uppercase (Room). Use it for live facts such as Vision Control's Scene group (Room, People, Objects); never for something the user can change. |
+| **LCARS select** | `label.lcars-select` > `span.lcars-select-name` + `select` | Lilac name block beside a native select, one bar high (Home media player: Station, Show, Episode). Group with `.lcars-select-group`. |
+| **Alert acknowledge** | `button.lcars-alert-ack` | Alert-hue block with a rounded right end at the far side of the alert frame. See §3.2. |
 | **LCARS slider** | `label.lcars-slider` > name `span` + `input[type=range]` + `output` | Peach name block, ice-accent range, ice value readout. Follows the live value while idle; sends only the latest value while dragging. |
 
 ### 3.1 Sweep card (live video and other hero panels)
@@ -214,7 +217,10 @@ bottom. Home uses it for alert messages.
 ```html
 <section aria-label="Alerts" class="lcars-alert-frame" data-level="warn" hidden id="…">
   <span aria-hidden="true" class="lcars-alert-title">Alerts</span>
-  <div aria-live="polite" class="home-alerts">…pills…</div>
+  <div class="lcars-alert-body">
+    <div aria-live="polite" class="home-alerts">…pills…</div>
+    <button class="lcars-alert-ack" type="button">Acknowledge</button>
+  </div>
 </section>
 ```
 
@@ -226,6 +232,10 @@ bottom. Home uses it for alert messages.
 - **Title cut-out:** `.lcars-alert-title` sits in the top bar as a black box
   with text in the frame hue.
 - Messages are `.pill`s in a wrapping row; ones with a destination are buttons.
+- **Acknowledge** hides the current alerts, and the frame with them. Each
+  alert has a stable `id`; the acknowledgement is stored per browser
+  (`localStorage` `vera-alert-acks`) as `id|level`. An alert that clears and
+  comes back, escalates (warn → fail), or is new shows the frame again.
 - System health isn't repeated here: it lives in the header's segmented bar
   (`OK` / `DEGRADED`, coloured green / red).
 
@@ -257,6 +267,8 @@ element with `text-transform: uppercase`.
      while there are messages;
    - the primary visual (camera, with room and people in its top bar) next to
      the most-used controls;
+   - the media player at full width under that pair (Pandora and podcasts in
+     one card, with a source selector);
    - secondary actions;
    - Advanced and Engineering data at full width at the bottom.
 3. **Name the layout with grid areas.** Use `grid-template-areas` so the
@@ -266,7 +278,8 @@ element with `text-transform: uppercase`.
 4. **Match heights within a row.** Use `align-items: stretch` so cards in a
    row line up. Pair a hero visual with a companion control card of equal
    width (Home: Vision | Vision Control); the visual sets the row height and
-   the control card stretches to match.
+   the control card stretches to match. When the control card is the taller
+   one, the visual centres vertically in its frame.
 5. **Gate by mode, not by duplicate pages.** Mark advanced content with
    `data-min-mode="advanced"` and engineering content with
    `data-min-mode="engineering"`. Normal mode shows only everyday controls.

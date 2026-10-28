@@ -13,7 +13,7 @@
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&amp;display=swap" rel="stylesheet"/>
-<link href="/static/style.css?v=1.94.1" rel="stylesheet"/>
+<link href="/static/style.css?v=1.95.0" rel="stylesheet"/>
 </head>
 <body><a class="skip-link" href="#main-content">Skip to workspace</a>
 <!-- ── Header ──────────────────────────────────────────────── -->
@@ -65,7 +65,10 @@
 <div aria-labelledby="nav-home" class="tab-pane" data-description="At-a-glance status and the controls you use every day." data-title="Home" id="tab-home" role="tabpanel">
 <section aria-label="Alerts" class="lcars-alert-frame" data-level="warn" hidden="" id="card-home-alerts">
 <span aria-hidden="true" class="lcars-alert-title">Alerts</span>
+<div class="lcars-alert-body">
 <div aria-live="polite" class="home-alerts" id="home-alerts"></div>
+<button class="lcars-alert-ack" id="home-alerts-ack" title="Acknowledge these alerts and hide the bar until something changes" type="button">Acknowledge</button>
+</div>
 </section>
 <section aria-labelledby="home-vision-title" class="card lcars-sweep-card" id="card-home-camera">
 <span aria-hidden="true" class="frame-break frame-break-spine"></span>
@@ -87,12 +90,19 @@
 <span aria-hidden="true" class="frame-break frame-break-lower"></span>
 <a class="lcars-sweep-title" href="#/vision" id="home-control-title" title="Open Vision &amp; Motion">Vision Control</a>
 <div aria-hidden="true" class="lcars-sweep-bar lcars-sweep-bar-top"><span class="sweep-block"></span></div>
-<span class="lcars-group-label" id="home-scene-label">Scene</span>
-<dl aria-labelledby="home-scene-label" class="lcars-data-list">
+<div aria-labelledby="home-scene-label" class="lcars-subframe is-scene" id="home-scene-frame" role="group">
+<span class="lcars-subframe-title" id="home-scene-label">Scene</span>
+<div class="lcars-subframe-body has-cascade">
+<dl class="lcars-data-list">
 <div class="lcars-data-row"><dt>Room</dt><dd class="is-caps" id="home-control-room">—</dd></div>
+<div class="lcars-data-row"><dt>People</dt><dd id="home-control-people">—</dd></div>
 <div class="lcars-data-row"><dt>Objects</dt><dd id="home-objects">—</dd></div>
 </dl>
-<span class="lcars-group-label" id="home-behavior-label">Behavior</span>
+<div aria-hidden="true" class="lcars-data-cascade" id="home-scene-cascade"></div>
+</div>
+</div>
+<div class="lcars-subframe is-behavior" id="home-behavior-frame">
+<span class="lcars-subframe-title" id="home-behavior-label">Behavior</span>
 <div aria-labelledby="home-behavior-label" class="lcars-toggle-grid is-compact" role="group">
 <label class="lcars-toggle"><input id="home-toggle-motion" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Head motion</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
 <label class="lcars-toggle"><input id="home-toggle-privacy" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Privacy</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
@@ -100,10 +110,13 @@
 <label class="lcars-toggle"><input id="home-toggle-idle" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Idle motion</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
 <label class="lcars-toggle" title="Show confidence % on face and object overlays"><input id="home-toggle-confidence" type="checkbox"/><span class="lcars-toggle-face"><span class="lcars-toggle-name">Confidence %</span><span aria-hidden="true" class="lcars-toggle-state"></span></span></label>
 </div>
-<span class="lcars-group-label" id="home-head-label">Head position</span>
+</div>
+<div class="lcars-subframe is-head" id="home-head-frame">
+<span class="lcars-subframe-title" id="home-head-label">Head position</span>
 <div aria-labelledby="home-head-label" class="lcars-slider-group" role="group">
 <label class="lcars-slider" id="home-pan-row"><span class="lcars-slider-name">Pan</span><input id="home-pan-slider" max="215" min="135" step="1" type="range" value="175"/><output class="lcars-slider-value" for="home-pan-slider" id="home-pan-value">—</output></label>
 <label class="lcars-slider" id="home-tilt-row"><span class="lcars-slider-name">Tilt</span><input id="home-tilt-slider" max="110" min="70" step="1" type="range" value="90"/><output class="lcars-slider-value" for="home-tilt-slider" id="home-tilt-value">—</output></label>
+</div>
 </div>
 <p aria-live="polite" class="home-muted" id="home-control-status"></p>
 <div class="lcars-sweep-bar">
@@ -114,22 +127,45 @@
 </div>
 </div>
 </section>
-<section aria-label="Now playing" class="card" id="card-home-media">
-<h2>Now Playing<a class="card-link" href="#/media">Media ›</a></h2>
+<section aria-labelledby="home-media-heading" class="card" id="card-home-media">
+<h2 id="home-media-heading">Media Player<a class="card-link" href="#/media">Media ›</a></h2>
+<div aria-label="Media source" class="lcars-segmented home-media-source" role="group">
+<button aria-pressed="true" data-home-source="pandora" type="button">Pandora</button>
+<button aria-pressed="false" data-home-source="podcast" type="button">Podcast</button>
+</div>
+<div class="home-media-layout">
 <div class="home-media">
 <img alt="" class="home-media-art" hidden="" id="home-media-art"/>
 <div class="home-media-text">
 <span class="stat-label" id="home-media-source">—</span>
 <strong id="home-media-title">Nothing playing</strong>
 <span class="home-muted" id="home-media-subtitle"></span>
+<span class="home-media-time" id="home-media-time"></span>
 </div>
+</div>
+<div class="home-media-controls-col">
+<div class="lcars-select-group" id="home-pandora-panel">
+<label class="lcars-select"><span class="lcars-select-name">Station</span><select id="home-station-select"><option value="">— current station —</option></select></label>
+</div>
+<div class="lcars-select-group" hidden="" id="home-podcast-panel">
+<label class="lcars-select"><span class="lcars-select-name">Show</span><select id="home-podcast-select"><option value="">— no subscriptions —</option></select></label>
+<label class="lcars-select"><span class="lcars-select-name">Episode</span><select id="home-episode-select"><option value="0">— latest episode —</option></select></label>
 </div>
 <div class="btn-row home-media-controls">
 <button class="btn btn-primary" id="home-media-play" type="button">▶ Play</button>
-<button class="btn btn-secondary" id="home-media-next" type="button">⏭ Next</button>
+<button class="btn btn-secondary" data-pandora-only="" id="home-media-next" type="button">⏭ Next</button>
+<button class="btn btn-secondary" data-pandora-only="" id="home-media-like" title="Thumbs up" type="button">▲ Like</button>
+<button class="btn btn-secondary" data-pandora-only="" id="home-media-ban" title="Thumbs down — ban and skip" type="button">▼ Ban</button>
+<button class="btn btn-secondary" data-podcast-only="" hidden="" id="home-media-back" type="button">« 30s</button>
+<button class="btn btn-secondary" data-podcast-only="" hidden="" id="home-media-forward" type="button">30s »</button>
+<button class="btn btn-secondary" id="home-media-stop" type="button">■ Stop</button>
 <button class="btn btn-secondary" id="home-mute-btn" type="button">🔇 Mute</button>
 </div>
-<label class="home-volume"><span>Volume</span><input aria-label="Volume" id="home-volume" max="100" min="0" type="range" value="50"/><span id="home-volume-label">—</span></label>
+<div class="lcars-slider-group">
+<label class="lcars-slider"><span class="lcars-slider-name">Volume</span><input aria-label="Volume" id="home-volume" max="100" min="0" type="range" value="50"/><output class="lcars-slider-value" for="home-volume" id="home-volume-label">—</output></label>
+</div>
+</div>
+</div>
 </section>
 <section aria-label="Quick toggles" class="card" id="card-home-toggles">
 <h2>Quick Toggles</h2>
@@ -1348,8 +1384,8 @@ Face centering uses the visual controller; the sliders above tune legacy idle mo
 </div>
 </div>
 </section></div></main>
-<script src="/static/app.js?v=1.94.1"></script>
-<script src="/static/js/main.js?v=1.94.1" type="module"></script>
+<script src="/static/app.js?v=1.95.0"></script>
+<script src="/static/js/main.js?v=1.95.0" type="module"></script>
 <!-- ── Lightbox overlay ──────────────────────────────────────── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
 <div class="lightbox-inner" onclick="event.stopPropagation()">

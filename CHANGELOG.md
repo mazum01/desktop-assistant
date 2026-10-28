@@ -4,6 +4,23 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.95.0] - 2026-10-27
+### Added
+- Home media player: a full-width card under the Vision pair that covers both Pandora and podcasts. A Pandora/Podcast source selector switches between them, and the view follows whichever source starts playing. It shows now-playing details with elapsed/total time. Pandora: station picker, Play/Pause, Next, Like, Ban, Stop. Podcasts: show and episode pickers, Play/Pause, −30s/+30s, Stop. Both have volume and mute. Starting one source stops the other.
+- Alerts can be acknowledged: an Acknowledge button in the alert frame hides the current alerts and the bar. Acknowledgements are stored per browser by alert id and level, so an alert that is new, comes back after clearing, or escalates shows the bar again.
+- Vision Control: Scene now shows People (count and recognised names).
+- Vision Control: Scene, Behavior and Head position each sit in their own LCARS sub-frame (an inner elbow with the title cut into its bar, a different hue per group).
+- Scene sub-frame: a decorative LCARS data cascade (columns of random numbers in a stepped colour wash) inspired by thelcars.com's title area.
+- New LCARS components in the design guide: sub-frame, data cascade, LCARS select, alert acknowledge.
+
+### Changed
+- Home: the video is now vertically centred in the Vision frame when Vision Control is taller.
+- Home layout (wide): Alerts / Vision | Vision Control / Media player / Quick Toggles | Say / Environment.
+- Phone: LCARS name blocks are a little wider so labels like "Objects" and "Station" no longer clip.
+
+### Removed
+- The `.lcars-group-label` caption, which is replaced by the sub-frame title.
+
 ## [1.94.1] - 2026-10-27
 ### Changed
 - Home: the Vision Control Room readout is now uppercase (`dd.is-caps`), matching the LCARS readouts.

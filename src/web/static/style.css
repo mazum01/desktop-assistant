@@ -1423,11 +1423,69 @@ header .badge-unknown { background: var(--lcars-dim); }
 .is-mirrored .lcars-sweep-bar { left: -1px; right: auto; flex-direction: row-reverse; }
 .is-mirrored .lcars-sweep-bar > * { margin-left: 0; margin-right: var(--lcars-gap); }
 .is-mirrored .lcars-sweep-title { left: auto; right: 40px; }
-/* Group label: a small hue-coloured caption over a cluster of controls. */
-.lcars-group-label {
-  color: var(--panel-accent); font: 600 13px/1 var(--console-font);
-  letter-spacing: .08em; text-transform: uppercase;
+/* Sub-frame: an inner elbow (top bar + left spine) grouping one cluster inside
+   a larger frame, with its title cut into the bar. Hue per group. */
+.lcars-subframe {
+  --subframe-hue: var(--lcars-peach);
+  --subframe-bar: 14px;
+  --subframe-spine: 12px;
+  position: relative; min-width: 0;
+  padding: 8px 0 2px 10px;
+  border: solid var(--subframe-hue);
+  border-width: var(--subframe-bar) 0 0 var(--subframe-spine);
+  border-top-left-radius: 26px 20px;
 }
+.lcars-subframe.is-scene { --subframe-hue: var(--lcars-lilac); }
+.lcars-subframe.is-behavior { --subframe-hue: var(--blue); }
+.lcars-subframe.is-head { --subframe-hue: var(--lcars-peach); }
+.lcars-subframe-title {
+  position: absolute; top: calc(-1 * var(--subframe-bar)); left: 18px;
+  height: var(--subframe-bar); padding: 0 8px; background: #000; color: var(--subframe-hue);
+  font: 600 13px/var(--subframe-bar) var(--console-font); letter-spacing: .08em; text-transform: uppercase;
+}
+.lcars-subframe-body.has-cascade {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 38%); gap: 12px; align-items: stretch;
+}
+/* Data cascade: decorative columns of numbers washed through the palette.
+   Sized by its neighbours (contain: size) so it never grows the frame. */
+.lcars-data-cascade {
+  contain: size; overflow: hidden; min-width: 0;
+  display: flex; flex-wrap: wrap; justify-content: flex-end; align-content: flex-start; column-gap: 10px;
+  font: 500 14px/1.25 var(--console-font); font-variant-numeric: tabular-nums;
+}
+/* Each column is a full-height wrap line, so overflow columns drop out of view whole. */
+.lcars-cascade-col { display: flex; flex-direction: column; align-items: flex-end; height: 100%; overflow: hidden; }
+.lcars-cascade-col span {
+  color: var(--lcars-dim);
+  animation: lcars-cascade 6s steps(1, end) infinite;
+}
+.lcars-cascade-col span:nth-child(2) { animation-delay: -1s; }
+.lcars-cascade-col span:nth-child(3) { animation-delay: -2s; }
+.lcars-cascade-col span:nth-child(4) { animation-delay: -3s; }
+.lcars-cascade-col span:nth-child(5) { animation-delay: -4s; }
+.lcars-cascade-col span:nth-child(6) { animation-delay: -5s; }
+.lcars-cascade-col:nth-child(even) span { animation-duration: 7.5s; }
+@keyframes lcars-cascade {
+  0% { color: var(--lcars-dim); }
+  30% { color: var(--lcars-peach); }
+  45% { color: var(--lcars-ice); }
+  55% { color: var(--lcars-peach); }
+  70% { color: var(--text); }
+  85% { color: var(--lcars-lilac); }
+}
+/* LCARS select: name block | native select, one bar high. */
+.lcars-select-group { display: grid; gap: var(--lcars-gap); }
+.lcars-select-group[hidden] { display: none; }
+.lcars-select {
+  display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center;
+  gap: 10px; min-height: var(--lcars-bar-height);
+}
+.lcars-select-name {
+  align-self: stretch; display: flex; align-items: flex-end; justify-content: flex-end;
+  padding: 0 10px 4px; background: var(--lcars-lilac); color: #000;
+  font: 600 16px/1 var(--console-font); letter-spacing: .04em; text-transform: uppercase;
+}
+.lcars-select select { width: 100%; min-width: 0; }
 /* Compact toggle: bar-height blocks, name and ON/OFF on one line. */
 .lcars-toggle-grid.is-compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .is-compact .lcars-toggle-face {
@@ -1502,26 +1560,29 @@ header .badge-unknown { background: var(--lcars-dim); }
   align-items: stretch;
 }
 #tab-home.has-alerts { grid-template-areas: "alerts" "camera" "control" "media" "toggles" "say" "env"; }
+/* The media player runs full width under the Vision pair. */
 @container workspace (min-width: 840px) {
   #tab-home {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
-      "camera control"
-      "media  toggles"
-      "say    env";
+      "camera  control"
+      "media   media"
+      "toggles say"
+      "env     env";
   }
   #tab-home.has-alerts {
     grid-template-areas:
-      "alerts alerts"
-      "camera control"
-      "media  toggles"
-      "say    env";
+      "alerts  alerts"
+      "camera  control"
+      "media   media"
+      "toggles say"
+      "env     env";
   }
 }
 /* The frame hugs the 16:9 feed: slim top bar, thin black gap. */
 #card-home-camera {
   --sweep-top: 22px;
-  grid-area: camera; display: flex; flex-direction: column; padding: 8px;
+  grid-area: camera; display: flex; flex-direction: column; justify-content: center; padding: 8px;
 }
 #card-home-vision-control {
   --sweep-top: 22px;
@@ -1529,7 +1590,7 @@ header .badge-unknown { background: var(--lcars-dim); }
   padding: 10px 14px;
 }
 #home-control-status { min-height: 1.2em; margin-top: auto; }
-#card-home-media { grid-area: media; }
+#card-home-media { grid-area: media; container: home-media / inline-size; }
 #card-home-toggles { grid-area: toggles; }
 #card-home-say { grid-area: say; }
 #card-home-environment { grid-area: env; }
@@ -1555,7 +1616,17 @@ header .badge-unknown { background: var(--lcars-dim); }
   height: var(--alert-bar); padding: 0 10px; background: #000; color: var(--alert-hue);
   font: 600 15px/var(--alert-bar) var(--console-font); letter-spacing: .08em; text-transform: uppercase;
 }
-.home-alerts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lcars-alert-body { display: flex; align-items: center; gap: 12px; }
+.home-alerts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+/* Acknowledge: an alert-hue block with a rounded right end, at the bar's far side. */
+.lcars-alert-ack {
+  flex: none; margin-left: auto; min-height: var(--lcars-bar-height);
+  display: inline-flex; align-items: flex-end; padding: 0 16px 4px 12px;
+  border: 0; border-radius: 0 calc(var(--lcars-bar-height) / 2) calc(var(--lcars-bar-height) / 2) 0;
+  background: var(--alert-hue); color: #000; cursor: pointer;
+  font: 600 16px/1 var(--console-font); letter-spacing: .06em; text-transform: uppercase;
+}
+.lcars-alert-ack:hover { filter: brightness(1.12); }
 .home-alerts .pill { white-space: nowrap; }
 .home-alerts button.pill { cursor: pointer; font: inherit; }
 .home-muted { color: var(--text-dim); font-size: 12px; margin-top: 6px; }
@@ -1569,9 +1640,16 @@ header .badge-unknown { background: var(--lcars-dim); }
 .home-media-art { width: 64px; height: 64px; object-fit: cover; }
 .home-media-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .home-media-text strong { font-size: 16px; overflow-wrap: anywhere; }
-.home-media-controls { margin: 12px 0 8px; }
-.home-volume { display: flex; align-items: center; gap: 10px; color: var(--text-dim); font-size: 12px; }
-.home-volume input { flex: 1; }
+.home-media-time { color: var(--lcars-ice); font: 600 15px/1 var(--console-font); font-variant-numeric: tabular-nums; }
+.home-media-source { margin-bottom: 12px; }
+.home-media-layout { display: grid; gap: 14px; }
+.home-media-controls-col { display: grid; gap: 10px; min-width: 0; }
+.home-media-controls { margin: 0; }
+.home-media-controls .btn[hidden] { display: none; }
+@container home-media (min-width: 640px) {
+  .home-media-layout { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); align-items: start; }
+  .home-media-art { width: 96px; height: 96px; }
+}
 .home-last-spoken { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 14px; }
 .home-last-spoken p { margin-top: 4px; color: var(--text); overflow-wrap: anywhere; }
 .home-iot { display: grid; gap: 6px; }
@@ -1649,6 +1727,10 @@ header .badge-unknown { background: var(--lcars-dim); }
   .lcars-sweep-card.is-mirrored { border-left-width: 1px; border-right-width: var(--sweep-spine); border-top-left-radius: 0; border-bottom-left-radius: 0; border-top-right-radius: 40px 40px; border-bottom-right-radius: 40px 40px; }
   .is-mirrored .lcars-sweep-title { left: auto; right: 14px; }
   .is-compact .lcars-toggle-face { font-size: 14px; padding-inline: 8px 10px; }
-  .lcars-slider { grid-template-columns: 56px minmax(0, 1fr) 52px; }
-  .lcars-data-row { grid-template-columns: 56px minmax(0, 1fr); }
+  .lcars-slider { grid-template-columns: 64px minmax(0, 1fr) 52px; }
+  .lcars-data-row { grid-template-columns: 64px minmax(0, 1fr); }
+  .lcars-select { grid-template-columns: 64px minmax(0, 1fr); }
+  .lcars-data-row dt, .lcars-slider-name, .lcars-select-name { padding-inline: 6px; font-size: 14px; }
+  .lcars-subframe { padding-left: 6px; }
+  .lcars-alert-ack { padding-inline: 10px 12px; font-size: 14px; }
 }

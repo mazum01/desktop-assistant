@@ -342,7 +342,7 @@ def test_decorative_codes_are_sparse_and_hidden_from_assistive_technology(layout
         "home-media-play", "home-media-next", "home-volume", "home-mute-btn",
         "home-toggle-privacy", "home-toggle-quiet", "home-toggle-mute",
         "home-toggle-face", "home-toggle-idle", "home-toggle-motion", "home-toggle-confidence",
-        "home-control-room", "home-objects",
+        "home-control-room", "home-control-people", "home-objects", "home-alerts-ack",
         "home-pan-slider", "home-tilt-slider", "home-eye", "home-say-input", "home-repeat-btn",
         "home-iot", "home-temp-hailo", "home-fan", "home-scene-confidence", "home-eng-line",
     ]),
@@ -655,8 +655,9 @@ def test_home_toggles_are_lcars_lit_blocks_with_text_state(layout):
 
 def test_home_flow_uses_named_grid_areas_and_title_links(layout):
     css = (STATIC / "style.css").read_text()
-    assert '"camera control"' in css and '"say    env"' in css
-    assert '#tab-home.has-alerts {' in css and '"alerts alerts"' in css
+    assert '"camera  control"' in css and '"media   media"' in css
+    assert '"toggles say"' in css and '"env     env"' in css
+    assert '#tab-home.has-alerts {' in css and '"alerts  alerts"' in css
     links = {node["attrs"]["href"] for node in layout
              if "card-link" in node["attrs"].get("class", "").split()}
     assert {"#/media", "#/voice", "#/smart-home", "#/overview"} <= links
@@ -848,6 +849,85 @@ import(require('node:url').pathToFileURL(process.argv[2]).href).then(({computeAl
     _run_module_test(tmp_path, script, JS / "pages" / "home.js")
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for Home regression")
+def test_home_alert_acknowledgement_hides_until_alert_changes(tmp_path):
+    script = r"""
+const assert = require('node:assert/strict');
+globalThis.document = {getElementById: () => null};
+globalThis.window = {};
+import(require('node:url').pathToFileURL(process.argv[2]).href).then(({computeAlerts, alertAckKey, visibleAlerts, pruneAcks}) => {
+  const state = {status: {healthy: true, services: {}, last: {'thermal.hailo': {ok: false}}},
+    update: null, settings: {privacy: true, quiet: null, muted: false}};
+  const alerts = computeAlerts(state);
+  assert.deepEqual(alerts.map(a => a.id), ['hailo-unavailable', 'privacy']);
+  const acks = alerts.map(alertAckKey);
+  assert.deepEqual(visibleAlerts(alerts, acks), [], 'acknowledged alerts are hidden');
+  // A new alert shows on its own; acknowledged ones stay hidden.
+  const more = computeAlerts({...state, settings: {...state.settings, muted: true}});
+  assert.deepEqual(visibleAlerts(more, acks).map(a => a.id), ['muted']);
+  // Escalation (same id, new level) shows again.
+  assert.notEqual(alertAckKey({id: 'x', level: 'warn'}), alertAckKey({id: 'x', level: 'fail'}));
+  // Cleared alerts drop their acks so a recurrence shows again.
+  const calm = computeAlerts({...state, settings: {...state.settings, privacy: false}});
+  assert.deepEqual(pruneAcks(calm, acks), ['hailo-unavailable|warn']);
+}).catch(e => { console.error(e); process.exit(1); });
+"""
+    _run_module_test(tmp_path, script, JS / "pages" / "home.js")
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed for Home regression")
+def test_home_cascade_and_media_clock_helpers(tmp_path):
+    script = r"""
+const assert = require('node:assert/strict');
+globalThis.document = {getElementById: () => null};
+globalThis.window = {};
+import(require('node:url').pathToFileURL(process.argv[2]).href).then(({cascadeColumns, fmtClock}) => {
+  const cols = cascadeColumns(4, 6);
+  assert.equal(cols.length, 4);
+  for (const col of cols) {
+    assert.equal(col.length, 6);
+    for (const v of col) assert.match(v, /^[1-9][0-9]{1,6}$/);
+  }
+  assert.deepEqual(cascadeColumns(1, 1, () => 0), [['10']]);
+  assert.equal(fmtClock(0), '0:00');
+  assert.equal(fmtClock(75), '1:15');
+  assert.equal(fmtClock(3725), '1:02:05');
+}).catch(e => { console.error(e); process.exit(1); });
+"""
+    _run_module_test(tmp_path, script, JS / "pages" / "home.js")
+
+
+def test_home_scene_subframes_media_player_and_alert_ack(layout):
+    by_id = {node["attrs"]["id"]: node for node in layout if "id" in node["attrs"]}
+    control = by_id["card-home-vision-control"]
+    # Scene, Behavior and Head position each get their own sub-frame.
+    for frame_id, label_id, member in (("home-scene-frame", "home-scene-label", "home-control-people"),
+                                       ("home-behavior-frame", "home-behavior-label", "home-toggle-face"),
+                                       ("home-head-frame", "home-head-label", "home-pan-slider")):
+        frame = by_id[frame_id]
+        assert "lcars-subframe" in frame["attrs"]["class"].split()
+        assert control in frame["ancestors"]
+        assert frame in by_id[label_id]["ancestors"] and frame in by_id[member]["ancestors"]
+    cascade = by_id["home-scene-cascade"]
+    assert cascade["attrs"].get("aria-hidden") == "true"
+    assert by_id["home-scene-frame"] in cascade["ancestors"]
+    # The media player covers both Pandora and podcasts.
+    media = by_id["card-home-media"]
+    for value_id in ("home-station-select", "home-podcast-select", "home-episode-select",
+                     "home-media-play", "home-media-stop", "home-media-like", "home-media-ban",
+                     "home-media-back", "home-media-forward", "home-volume", "home-mute-btn"):
+        assert media in by_id[value_id]["ancestors"], value_id
+    sources = {n["attrs"].get("data-home-source") for n in layout if media in n["ancestors"]}
+    assert {"pandora", "podcast"} <= sources
+    # Alerts can be acknowledged from the frame.
+    assert by_id["card-home-alerts"] in by_id["home-alerts-ack"]["ancestors"]
+    css = (STATIC / "style.css").read_text()
+    assert "justify-content: center; padding: 8px;" in css  # video centred in its frame
+    assert ".lcars-subframe {" in css and ".lcars-data-cascade {" in css and "@keyframes lcars-cascade" in css
+    home = (JS / "pages" / "home.js").read_text()
+    assert "'vera-alert-acks'" in home and "'/api/podcasts/play'" in home
+
+
 def test_home_reuses_app_events_and_streams_camera_only_while_visible():
     source = (STATIC / "app.js").read_text()
     for event in ("vera:status", "vera:music", "vera:podcast", "vera:update"):
@@ -867,6 +947,7 @@ const listeners = {}, registered = [], store = {};
 const el = id => ({id, attrs: {}, alt: '', textContent: '', dataset: {}, style: {setProperty() {}},
   replaceChildren() {}, append() {},
   setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k]; },
+  removeAttribute(k) { delete this.attrs[k]; },
   addEventListener() {}, classList: {toggle() {}, add() {}, remove() {}}});
 const nodes = {};
 const buttons = ['1', '2'].map(n => Object.assign(el('cam' + n), {dataset: {homeCam: n}}));
