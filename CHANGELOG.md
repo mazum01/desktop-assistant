@@ -7,6 +7,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [1.98.2] - 2026-10-28
 ### Changed
 - The Home mini player shows "IDLE" instead of "Nothing playing" when Pandora or podcasts are inactive.
+- Aligned `config/deployment.json` with v1.98.2 so the automatic updater can validate and offer this release.
 
 ## [1.98.1] - 2026-10-28
 ### Added
