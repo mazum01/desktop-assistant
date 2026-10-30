@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.98.3] - 2026-10-30
+### Fixed
+- Corrected the dashboard API-key prompt to point to `config/assistant.yaml`, where the key is actually configured.
+- Aligned the updater deployment manifest with v1.98.3 so a release built from this version can pass updater validation.
+
+### Docs
+- Documented generating a random dashboard API key, restarting the web service, and entering the key in the browser prompt. Clarified that the key is stored in browser `localStorage` and that the public-repository updater does not need a GitHub token.
+
 ## [1.98.2] - 2026-10-28
 ### Changed
 - The Home mini player shows "IDLE" instead of "Nothing playing" when Pandora or podcasts are inactive.

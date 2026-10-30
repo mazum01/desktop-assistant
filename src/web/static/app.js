@@ -158,7 +158,7 @@ function _showKeyOverlay() {
   overlay.innerHTML = `
     <div style="background:#1e1e2e;padding:2rem;border-radius:12px;min-width:320px;text-align:center;border:1px solid #444;">
       <h2 style="color:#cdd6f4;margin-top:0">VERA Dashboard</h2>
-      <p style="color:#a6adc8">Enter the API key from <code>/etc/desktop-assistant/secrets.env</code></p>
+      <p style="color:#a6adc8">Enter the API key from VERA's <code>config/assistant.yaml</code></p>
       <input id="vera-key-input" type="password" placeholder="API key"
         style="width:100%;padding:.6rem;font-size:1rem;border-radius:6px;border:1px solid #555;background:#313244;color:#cdd6f4;box-sizing:border-box;margin-bottom:.8rem;" />
       <button onclick="_saveApiKey()"

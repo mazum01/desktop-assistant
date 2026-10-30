@@ -104,11 +104,44 @@ Polling occurs periodically, with release discovery throttled to hourly.
 The window gates starting an installation; it does not interrupt an ongoing
 package installation when the window ends.
 
-For web controls, set `api_key` in `config/assistant.yaml` and restart
-`desktop-assistant-web.service`; the dashboard's existing authentication
-mechanism (`X-API-Key` header or `?key=` query parameter) then covers the
-updater endpoints too. Updater endpoints refuse operation when no API key is
-configured, even if the rest of the dashboard is otherwise unauthenticated.
+For dashboard controls, set a top-level `api_key` in `config/assistant.yaml`
+and restart `desktop-assistant-web.service`. On the next API request, the
+dashboard prompts for that key. It sends the key in `X-API-Key` for API calls
+and over the WebSocket, and stores it in this browser's `localStorage` as
+`vera_api_key`. Use a unique random key; don't reuse a GitHub token. The key
+protects API endpoints (the HTML shell and static assets remain public).
+Updater endpoints refuse operation when no API key is configured, even if
+the rest of the dashboard is otherwise unauthenticated.
+
+On a VERA terminal, from the repository root, this command adds a random
+32-byte key without rewriting the rest of the YAML file, restricts the config
+file to its owner, and restarts the user web service. It prints the new key
+once so you can enter it into the browser prompt:
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+import json
+import re
+import secrets
+
+path = Path("config/assistant.yaml")
+text = path.read_text()
+if re.search(r"(?m)^api_key\s*:", text):
+    raise SystemExit("api_key already exists; edit or rotate it deliberately")
+key = secrets.token_urlsafe(32)
+path.write_text(f"api_key: {json.dumps(key)}\n" + text)
+path.chmod(0o600)
+print("Copy this API key into the VERA dashboard prompt:")
+print(key)
+PY
+systemctl --user restart desktop-assistant-web.service
+```
+
+Refresh the dashboard and enter the printed key when prompted. It will then be
+remembered by that browser profile. To authorize another browser, copy the key
+from the top-level `api_key` field on VERA and enter it there. The updater
+itself does not need a GitHub token for this public repository.
 
 ```bash
 vera update status

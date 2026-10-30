@@ -15,6 +15,14 @@ from src.services.web_service import WebService
 from src.updater import client as updater_client
 
 
+def test_dashboard_api_key_prompt_and_fetch_auth_are_wired():
+    app_js = (Path(__file__).resolve().parents[1] / "src/web/static/app.js").read_text()
+    assert "X-API-Key" in app_js
+    assert "localStorage.getItem('vera_api_key')" in app_js
+    assert "config/assistant.yaml" in app_js
+    assert "secrets.env" not in app_js
+
+
 @pytest.fixture
 def update_client(monkeypatch):
     request = MagicMock(return_value={"accepted": True, "status": {"phase": "checking"}})
