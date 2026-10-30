@@ -10,7 +10,7 @@
 <title>VERA</title>
 <polygon fill="white" stroke="transparent" points="-4,4 -4,-1126.5 10196,-1126.5 10196,4 -4,4"/>
 <text text-anchor="start" x="4808.5" y="-1106.7" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">VERA — Vision&#45;Enabled Reasoning Agent — System Architecture</text>
-<text text-anchor="start" x="5009" y="-1095.5" font-family="Helvetica,sans-Serif" font-size="10.00">v1.98.3 — Dashboard API key setup</text>
+<text text-anchor="start" x="4959.5" y="-1095.5" font-family="Helvetica,sans-Serif" font-size="10.00">v1.98.4 — Dashboard API key setup and PWM readiness</text>
 <g id="clust1" class="cluster">
 <title>cluster_matter</title>
 <path fill="#e4f4e4" stroke="black" d="M20,-258C20,-258 517,-258 517,-258 523,-258 529,-264 529,-270 529,-270 529,-752.5 529,-752.5 529,-758.5 523,-764.5 517,-764.5 517,-764.5 20,-764.5 20,-764.5 14,-764.5 8,-758.5 8,-752.5 8,-752.5 8,-270 8,-270 8,-264 14,-258 20,-258"/>

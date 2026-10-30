@@ -140,12 +140,13 @@ class FanController:
                 (chip_path / "export").write_text(f"{self._channel}\n")
                 just_exported = True
 
-            # After export the RP1 PWM driver needs a brief moment before
-            # the sysfs files accept writes (returns EBUSY/EACCES otherwise).
+            # Export creates attributes before udev grants the gpio group
+            # write access, so existence alone is not sufficient.
             if just_exported:
                 import time as _time
                 for _attempt in range(10):
-                    if pwm_path.is_dir() and (pwm_path / "period").exists():
+                    if all(os.access(pwm_path / name, os.W_OK)
+                           for name in ("period", "duty_cycle", "enable")):
                         break
                     _time.sleep(0.05)
 

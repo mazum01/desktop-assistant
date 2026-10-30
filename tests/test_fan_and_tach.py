@@ -91,6 +91,64 @@ def test_fan_falls_back_to_lgpio_when_sysfs_missing(monkeypatch, tmp_path):
     assert fan.duty == 42.0
 
 
+@pytest.mark.parametrize("permission_delay", [0, 3, None])
+def test_fan_waits_for_export_permissions(monkeypatch, tmp_path, permission_delay):
+    import src.thermal.fan as fan_mod
+
+    chip = tmp_path / "pwmchip0"
+    chip.mkdir()
+    (chip / "export").write_text("")
+    pwm = chip / "pwm1"
+    sleeps = []
+    fallbacks = []
+    real_path = Path
+    real_write = Path.write_text
+    real_access = fan_mod.os.access
+
+    def permissions_ready():
+        return permission_delay is not None and len(sleeps) >= permission_delay
+
+    def path_factory(path):
+        if str(path) == "/sys/class/pwm/pwmchip0":
+            return chip
+        return real_path(path)
+
+    def write_text(path, data, *args, **kwargs):
+        if path == chip / "export":
+            pwm.mkdir()
+            for name in ("period", "duty_cycle", "enable"):
+                real_write(pwm / name, "0\n")
+        if path.parent == pwm and not permissions_ready():
+            raise PermissionError("udev has not granted PWM access yet")
+        return real_write(path, data, *args, **kwargs)
+
+    def access(path, mode):
+        if real_path(path).parent == pwm:
+            assert mode == fan_mod.os.W_OK
+            return permissions_ready()
+        return real_access(path, mode)
+
+    monkeypatch.setattr(fan_mod, "Path", path_factory)
+    monkeypatch.setattr(Path, "write_text", write_text)
+    monkeypatch.setattr(fan_mod.os, "access", access)
+    monkeypatch.setattr(time, "sleep", sleeps.append)
+    monkeypatch.setattr(FanController, "_try_init_lgpio", lambda self: fallbacks.append(True))
+
+    fan = FanController()
+    if permission_delay is None:
+        assert fan.backend == "sim"
+        assert fallbacks == [True]
+        assert sleeps == [0.05] * 10
+    else:
+        assert fan.backend == "sysfs"
+        assert not fallbacks
+        assert sleeps == [0.05] * permission_delay
+        assert (pwm / "period").read_text().strip() == "40000"
+        assert (pwm / "duty_cycle").read_text().strip() == "40000"
+        assert (pwm / "enable").read_text().strip() == "1"
+    fan.close()
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Fan tach — pulse counting
 # ──────────────────────────────────────────────────────────────────────
