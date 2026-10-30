@@ -193,6 +193,14 @@ than claiming safe operation. Kernel PWM remains enabled at full duty when
 the thermal process exits; servo motion is not used as a deployment test.
 If a device currently uses only lgpio PWM, establish and verify kernel PWM
 through the normal hardware bring-up procedure before unattended deployment.
+If startup logs report `Permission denied` on a PWM attribute, check that
+the thermal account belongs to `gpio` and that the system's udev PWM rule
+grants that group write access. From v1.98.3, the fan waits briefly for
+those permissions after exporting its PWM channel. On an already running
+device where permissions are now correct, restarting the thermal service
+restores kernel PWM; verify `backend=sysfs` in `vera status` before relying
+on automatic updates. Persistent permission failures still select the
+fallback and block unattended thermal restarts.
 
 Required reboots are persisted before reboot and followed by readiness
 verification. Success requires the new revision loaded by fresh processes,

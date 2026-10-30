@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.98.3] - 2026-10-30
+### Fixed
+- Wait for udev to grant write access to newly exported PWM attributes before initializing the fan. This avoids a boot-time permission race that selected the software PWM fallback and blocked safe unattended updates.
+
 ## [1.98.2] - 2026-10-28
 ### Changed
 - The Home mini player shows "IDLE" instead of "Nothing playing" when Pandora or podcasts are inactive.
